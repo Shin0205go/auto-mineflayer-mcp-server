@@ -1,0 +1,31 @@
+{
+  "name": "mineflayer-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for visualizing AI agent thinking in Minecraft",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "minecraft",
+    "mineflayer",
+    "ai",
+    "visualization"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "mineflayer": "^4.20.1",
+    "vec3": "^0.1.10"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  }
+}
