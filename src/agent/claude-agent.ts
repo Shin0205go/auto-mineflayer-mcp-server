@@ -152,7 +152,7 @@ ${minecraftKnowledge}
 1. まずサーバーに接続してください（username: "${BOT_USERNAME}"）
 2. agent_board_read で掲示板を確認（前回の「次のアクション」があれば続行）
 3. 周囲を確認し、素材を集めてください
-4. 他のエージェント（Gemini等）と協力してください
+4. 他のエージェント（Claude2等）と協力してください
 5. **重要**: ターン終了前に「次のアクション: ○○」を掲示板に書く`;
 
     console.log("[Agent] Starting autonomous loop...");
