@@ -1,7 +1,7 @@
 {
   "name": "mineflayer-mcp-server",
   "version": "1.0.0",
-  "description": "MCP server for visualizing AI agent thinking in Minecraft",
+  "description": "MCP server for AI agents controlling Minecraft bots",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
@@ -9,36 +9,28 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.js",
-    "start:agent": "node dist/agent/index.js",
     "start:claude": "node dist/agent/claude-agent.js",
-    "start:gemini": "node dist/agent/gemini-autonomous.js",
-    "start:all": "./start-agents.sh",
     "start:mcp-ws": "node dist/mcp-ws-server.js",
-    "board": "node dist/realtime-board.js",
-    "gemini": "node dist/gemini-watcher.js"
+    "board": "node dist/realtime-board.js"
   },
   "keywords": [
     "mcp",
     "minecraft",
     "mineflayer",
     "ai",
-    "visualization"
+    "claude"
   ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.29",
     "@anthropic-ai/sdk": "^0.72.1",
-    "@google/gemini-cli": "^0.26.0",
-    "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "chokidar": "^5.0.0",
     "dotenv": "^16.3.1",
     "mineflayer": "^4.20.1",
     "mineflayer-pathfinder": "^2.4.5",
+    "minecraft-data": "^3.78.0",
     "node-fetch": "^3.3.2",
-    "screenshot-desktop": "^1.15.3",
-    "sharp": "^0.33.2",
     "vec3": "^0.1.10",
     "ws": "^8.19.0"
   },

@@ -2,9 +2,9 @@
 
 ## プロジェクト概要
 
-AIエージェントの思考と行動をMinecraft上で可視化するMCPサーバー。
-Mineflayerライブラリでボットを制御し、MCPプロトコルでClaudeやGeminiなどのAIエージェントと連携。
-マルチエージェント協調、BTC価格チャート表示、画面認識機能も搭載。
+Claude AIエージェントがMinecraftを自律的にプレイするためのMCPサーバー。
+Mineflayerライブラリでボットを制御し、MCPプロトコルでClaudeと連携。
+マルチボット対応、サバイバルモード、エージェント間協調機能を搭載。
 
 ## アーキテクチャ
 
@@ -15,13 +15,8 @@ Mineflayerライブラリでボットを制御し、MCPプロトコルでClaude�
 └─────────────────┘                     └────────┬─────────┘
                                                  │
 ┌─────────────────┐                     ┌────────▼─────────┐
-│  Gemini Agent   │ ──── WebSocket ──── │  WebSocket MCP   │
-│  (agent/)       │                     │  (mcp-ws-server) │
-└─────────────────┘                     └────────┬─────────┘
-                                                 │
-┌─────────────────┐                     ┌────────▼─────────┐
-│  Gemini Watcher │ ──── WebSocket ──── │  Realtime Board  │
-│  (画面監視)      │                     │  (realtime-board)│
+│  Claude Agent   │ ──── WebSocket ──── │  WebSocket MCP   │
+│  (claude-agent) │                     │  (mcp-ws-server) │
 └─────────────────┘                     └────────┬─────────┘
                                                  │
                                         ┌────────▼─────────┐
@@ -42,147 +37,104 @@ src/
 ├── index.ts              # MCPサーバー (stdio)
 ├── mcp-ws-server.ts      # MCPサーバー (WebSocket)
 ├── bot-manager.ts        # Mineflayerボット管理
+├── realtime-board.ts     # 掲示板サーバー
 │
 ├── tools/                # MCPツール実装
 │   ├── connection.ts     # 接続・切断
 │   ├── movement.ts       # 移動
 │   ├── environment.ts    # 環境認識
-│   ├── visualization.ts  # 思考可視化
 │   ├── building.ts       # 建築・ブロック操作
 │   ├── coordination.ts   # エージェント間連携（掲示板）
-│   └── trading.ts        # BTC価格表示
+│   ├── combat.ts         # 戦闘
+│   └── crafting.ts       # クラフト
 │
-├── agent/                # Gemini Liveエージェント
-│   ├── index.ts          # エージェントエントリポイント
-│   ├── gemini-live-client.ts
-│   ├── action-controller.ts
-│   ├── mcp-ws-transport.ts
-│   └── vision-provider.ts
-│
-├── bitflyer.ts           # BitFlyer API クライアント
-├── realtime-board.ts     # 掲示板 WebSocketサーバー
-├── gemini-watcher.ts     # Gemini画面監視
-├── gemini-voice.ts       # Gemini音声操作（CLI）
-│
-└── types/
-    └── screenshot-desktop.d.ts
+└── agent/                # Claudeエージェント
+    ├── claude-agent.ts   # 自律エージェント
+    ├── claude-client.ts  # Claude SDK クライアント
+    ├── mcp-bridge.ts     # stdio→WebSocket変換
+    └── mcp-ws-transport.ts
 ```
 
 ## 開発コマンド
 
 ```bash
-# 依存関係インストール
-npm install
-
-# ビルド
-npm run build
-
-# 開発モード（ウォッチ）
-npm run dev
-
-# 型チェック
-npm run typecheck
+npm install      # 依存関係インストール
+npm run build    # ビルド
+npm run dev      # 開発モード（ウォッチ）
+npm run typecheck # 型チェック
 ```
 
 ## 起動コマンド
 
 ```bash
-# MCPサーバー（stdio）
+# MCPサーバー（stdio）- Claude Desktop等から利用
 npm start
 
-# Gemini Liveエージェント
-npm run start:agent
+# Claudeエージェント起動
+npm run start:claude
 
-# WebSocket MCPサーバー
+# 2体目のClaude（別名）
+BOT_USERNAME=Claude2 MC_PORT=58896 npm run start:claude
+
+# WebSocket MCPサーバー（エージェント用）
 npm run start:mcp-ws
 
-# リアルタイム掲示板サーバー
+# 掲示板サーバー
 npm run board
-
-# Gemini画面監視
-npm run gemini
 ```
 
 ## MCPツール一覧
 
 ### 接続・基本
 - `minecraft_connect` - サーバーに接続
-- `minecraft_disconnect` - サーバーから切断
-- `minecraft_get_position` - 現在座標を取得
-- `minecraft_move_to` - 指定座標に移動
-- `minecraft_chat` - チャットメッセージ送信
-- `minecraft_get_chat_messages` - チャット取得
+- `minecraft_disconnect` - 切断
+- `minecraft_get_position` - 現在座標
+- `minecraft_move_to` - 移動
+- `minecraft_chat` - チャット送信
 
 ### 環境認識
-- `minecraft_look_around` - 周囲のブロックをスキャン
+- `minecraft_get_surroundings` - 周囲の状況（移動可能方向、近くの資源）
+- `minecraft_get_biome` - バイオーム確認
+- `minecraft_find_entities` - エンティティ検索（羊、ゾンビ等）
+- `minecraft_explore_for_biome` - バイオーム探索
 
-### 可視化
-- `minecraft_visualize_thinking` - 思考状態をパーティクルで表示
-  - `idle`: 灰色ダスト（待機中）
-  - `processing`: 炎（処理中）
-  - `searching`: エンチャント（情報収集中）
-  - `executing`: 緑の光（実行中）
-  - `error`: 赤い光（エラー）
+### サバイバル
+- `minecraft_dig_block` - ブロック破壊
+- `minecraft_get_inventory` - インベントリ確認
+- `minecraft_craft` - クラフト
+- `minecraft_equip_item` - アイテム装備
+- `minecraft_pillar_up` - ジャンプ設置で上昇
+
+### 戦闘
+- `minecraft_fight` - 敵と戦う（自動装備・攻撃・逃走）
+- `minecraft_attack` - 単発攻撃
+- `minecraft_flee` - 逃走
+- `minecraft_get_status` - HP/空腹確認
+- `minecraft_eat` - 食事
 
 ### 建築
-- `minecraft_place_block` - 単一ブロック設置
-- `minecraft_dig_block` - ブロック破壊
-- `minecraft_dig_area` - エリア破壊
-- `minecraft_build_structure` - プリセット構造物（house, tower, marker）
-- `minecraft_build_road` - 道路建築
-- `minecraft_build_village` - 村建築
+- `minecraft_place_block` - ブロック設置
+- `minecraft_build_structure` - 構造物（house, tower, marker）
+- `minecraft_build_road` - 道路
+- `minecraft_build_village` - 村
 
-### ワーカーボット
-- `minecraft_spawn_worker` - ワーカーボット生成
-- `minecraft_despawn_worker` - ワーカー削除
-- `minecraft_list_workers` - ワーカー一覧
-- `minecraft_assign_task` - タスク割り当て
-
-### エージェント間連携
+### エージェント連携
 - `agent_board_read` - 掲示板を読む
 - `agent_board_write` - 掲示板に書く
-- `agent_board_wait` - 新着メッセージを待つ
-- `agent_board_clear` - 掲示板クリア
-
-### BitFlyer価格表示
-- `minecraft_get_btc_price` - BTC/JPY価格取得
-- `minecraft_show_price_sign` - 看板に価格表示
-- `minecraft_draw_price_chart` - 価格チャート描画
-- `minecraft_draw_candlestick_chart` - ローソク足チャート
+- `agent_board_wait` - 新着を待つ
+- `agent_board_clear` - クリア
 
 ## 環境変数
 
 ```bash
-# .env.example 参照
-GEMINI_API_KEY=your_key_here
 MC_HOST=localhost
 MC_PORT=25565
+BOT_USERNAME=Claude    # ボット名（変更可能）
+MCP_WS_URL=ws://localhost:8765
 ```
-
-## MCPトランスポート
-
-### Stdio (標準)
-```
-Claude Desktop → stdio → index.ts → Bot Manager → Minecraft
-```
-- `npm start` で起動
-- Claude Desktop等のMCPクライアントから利用
-
-### WebSocket
-```
-Gemini Agent → WebSocket → mcp-ws-server.ts → Bot Manager → Minecraft
-```
-- `npm run start:mcp-ws` で起動（デフォルト: ws://localhost:8765）
-- JSON-RPC 2.0 over WebSocket
-- クライアント実装: `src/agent/mcp-ws-transport.ts`
-
-**メソッド:**
-- `tools/list` - ツール一覧取得
-- `tools/call` - ツール実行 (`{ name, arguments }`)
-- `ping` - ヘルスチェック
 
 ## 注意事項
 
-- Minecraftサーバーでボットにオペレーター権限が必要（`/op botname`）
-- `/setblock`, `/particle` コマンドを使用
+- Minecraftサーバーでボットに`/op botname`が必要
+- サバイバルモードで動作（自動切替）
 - シングルプレイの「LANに公開」でもテスト可能
