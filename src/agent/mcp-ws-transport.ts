@@ -119,6 +119,13 @@ export class MCPWebSocketClientTransport extends EventEmitter {
     // Emit notification for other messages
     if ('method' in message) {
       this.emit('notification', message);
+
+      // Emit specific gameEvent for easier handling
+      const notification = message as JSONRPCNotification;
+      if (notification.method === 'notifications/gameEvent' && notification.params) {
+        const params = notification.params as { username: string; event: { type: string; message: string; timestamp: number; data?: Record<string, unknown> } };
+        this.emit('gameEvent', params.event);
+      }
     }
   }
 

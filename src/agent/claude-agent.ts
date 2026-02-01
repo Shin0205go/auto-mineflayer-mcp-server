@@ -146,14 +146,19 @@ ${minecraftKnowledge}
 - port: ${MC_PORT}
 - username: ${BOT_USERNAME}
 
-**重要**: minecraft_connectを呼ぶ時は必ず username: "${BOT_USERNAME}" を使ってください。
+## サバイバルの基本
+1. 道具を作る（木→石→鉄→ダイヤ）
+2. 食料を確保する
+3. 夜に備える（ベッドまたは拠点）
+4. 装備を強化する
+
+## 最終目標
+エンダードラゴンを倒す
 
 ## 指示
-1. まずサーバーに接続してください（username: "${BOT_USERNAME}"）
-2. agent_board_read で掲示板を確認（前回の「次のアクション」があれば続行）
-3. 周囲を確認し、素材を集めてください
-4. 他のエージェント（Claude2等）と協力してください
-5. **重要**: ターン終了前に「次のアクション: ○○」を掲示板に書く`;
+1. minecraft_connect で接続（username: "${BOT_USERNAME}"）
+2. agent_board_read で掲示板を確認
+3. 状況を判断して行動`;
 
     console.log("[Agent] Starting autonomous loop...");
     await this.runLoop(initialPrompt);
@@ -170,6 +175,7 @@ ${minecraftKnowledge}
 
         const result = await this.claude.runQuery(currentPrompt);
 
+        let loopSummary = "";
         if (result.success) {
           console.log("[Agent] Turn completed successfully");
           if (result.usage) {
@@ -177,27 +183,33 @@ ${minecraftKnowledge}
               `[Agent] Tokens: ${result.usage.inputTokens} in / ${result.usage.outputTokens} out, Cost: $${result.usage.costUSD.toFixed(4)}`
             );
           }
+          // Extract summary from result (last 100 chars or full if shorter)
+          if (result.result) {
+            const summary = result.result.length > 100
+              ? result.result.slice(-100).replace(/\n/g, " ")
+              : result.result.replace(/\n/g, " ");
+            loopSummary = summary;
+          }
         } else {
           console.error("[Agent] Turn failed:", result.error);
+          loopSummary = `エラー: ${result.error?.slice(0, 50) || "unknown"}`;
         }
 
-        // Force board write at end of each loop (hook)
+        // Force board write at end of each loop with actual summary
         await this.claude.forceBoardWrite(
-          `ループ${loopCount}完了。次は掲示板を読んで継続予定。`
+          loopSummary || `ループ${loopCount}完了`
         );
 
-        // Next turn prompt - encourage coordination
+        // Get buffered events from last loop
+        const eventSection = this.claude.formatEventsForPrompt();
+
+        // Next turn prompt - include events and encourage coordination
         currentPrompt = `続けてください。
 
-まず掲示板を確認:
-1. agent_board_read で自分の前回の「次のアクション」や他エージェントのメッセージを読む
-2. 前回の計画があればそれを続行、なければ新しい目標を設定
+${eventSection}
 
-行動後、ループ終了前に必ず:
-- agent_board_write で「次のアクション: ○○をする予定」を書く（agent_name: "Claude"）
-- これで次のループで何をすべきか忘れない
-
-探索、採掘、建築など、自由に行動してください。`;
+状況を確認して、次に何をすべきか判断してください。
+掲示板に計画を書いてから行動。`;
 
         // Delay between turns
         await this.delay(5000);

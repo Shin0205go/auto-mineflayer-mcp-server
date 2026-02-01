@@ -1,5 +1,6 @@
 import mineflayer, { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
+import { EventEmitter } from "events";
 import pkg from "mineflayer-pathfinder";
 const { pathfinder, Movements, goals } = pkg;
 
@@ -48,9 +49,14 @@ export interface ManagedBot {
 /**
  * BotManager - Manages multiple Minecraft bots
  * Each bot is identified by username
+ * Emits 'gameEvent' when events occur (for WebSocket push)
  */
-export class BotManager {
+export class BotManager extends EventEmitter {
   private bots: Map<string, ManagedBot> = new Map();
+
+  constructor() {
+    super();
+  }
 
   isConnected(username?: string): boolean {
     if (username) {
@@ -133,11 +139,15 @@ export class BotManager {
         };
 
         // Helper to add event with max 50 events kept
+        // Also emits 'gameEvent' for WebSocket push notifications
         const addEvent = (type: string, message: string, data?: Record<string, unknown>) => {
-          managedBot.gameEvents.push({ type, message, timestamp: Date.now(), data });
+          const event: GameEvent = { type, message, timestamp: Date.now(), data };
+          managedBot.gameEvents.push(event);
           if (managedBot.gameEvents.length > 50) {
             managedBot.gameEvents.shift();
           }
+          // Emit for WebSocket push
+          this.emit("gameEvent", config.username, event);
         };
 
         // Set up chat listener
@@ -1061,6 +1071,194 @@ export class BotManager {
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       throw new Error(`Failed to craft ${itemName}: ${errMsg}. Inventory: ${inventory}`);
+    }
+  }
+
+  /**
+   * Smelt items in a furnace
+   */
+  async smeltItem(username: string, itemName: string, count: number = 1): Promise<string> {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+    const minecraftData = await import("minecraft-data");
+    const mcData = minecraftData.default(bot.version);
+
+    // Find a furnace nearby
+    const furnaceBlock = bot.findBlock({
+      matching: mcData.blocksByName.furnace?.id,
+      maxDistance: 4,
+    });
+
+    if (!furnaceBlock) {
+      throw new Error("No furnace found within 4 blocks. Craft one with 8 cobblestone.");
+    }
+
+    // Find the item to smelt in inventory
+    const itemToSmelt = bot.inventory.items().find(i => i.name === itemName);
+    if (!itemToSmelt) {
+      const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
+      throw new Error(`No ${itemName} in inventory. Have: ${inventory}`);
+    }
+
+    // Find fuel (coal, charcoal, wood, etc.)
+    const fuelItems = ["coal", "charcoal", "oak_log", "birch_log", "spruce_log", "oak_planks", "birch_planks", "spruce_planks"];
+    const fuel = bot.inventory.items().find(i => fuelItems.includes(i.name));
+    if (!fuel) {
+      throw new Error("No fuel in inventory. Need coal, charcoal, or wood.");
+    }
+
+    try {
+      const furnace = await bot.openFurnace(furnaceBlock);
+
+      // Put fuel if needed
+      if (!furnace.fuelItem()) {
+        await furnace.putFuel(fuel.type, null, Math.min(fuel.count, 8));
+      }
+
+      // Put item to smelt
+      const smeltCount = Math.min(count, itemToSmelt.count);
+      await furnace.putInput(itemToSmelt.type, null, smeltCount);
+
+      // Wait for smelting (roughly 10 seconds per item)
+      const waitTime = Math.min(smeltCount * 10000, 60000);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+
+      // Take output
+      const output = furnace.outputItem();
+      if (output) {
+        await furnace.takeOutput();
+      }
+
+      furnace.close();
+
+      const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
+      return `Smelted ${smeltCount}x ${itemName}. Inventory: ${newInventory}`;
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to smelt ${itemName}: ${errMsg}`);
+    }
+  }
+
+  /**
+   * Sleep in a bed to skip the night
+   */
+  async sleep(username: string): Promise<string> {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+    const minecraftData = await import("minecraft-data");
+    const mcData = minecraftData.default(bot.version);
+
+    // Check if it's night time
+    const time = bot.time.timeOfDay;
+    if (time < 12541 || time > 23458) {
+      return "Cannot sleep - it's not night time yet. Wait until dusk.";
+    }
+
+    // Find a bed nearby
+    const bedBlocks = ["white_bed", "orange_bed", "magenta_bed", "light_blue_bed", "yellow_bed",
+                       "lime_bed", "pink_bed", "gray_bed", "light_gray_bed", "cyan_bed",
+                       "purple_bed", "blue_bed", "brown_bed", "green_bed", "red_bed", "black_bed"];
+
+    let bedBlock = null;
+    for (const bedName of bedBlocks) {
+      const bedId = mcData.blocksByName[bedName]?.id;
+      if (bedId) {
+        bedBlock = bot.findBlock({
+          matching: bedId,
+          maxDistance: 4,
+        });
+        if (bedBlock) break;
+      }
+    }
+
+    if (!bedBlock) {
+      throw new Error("No bed found within 4 blocks. Craft a bed with 3 wool + 3 planks.");
+    }
+
+    try {
+      await bot.sleep(bedBlock);
+      // Wait a bit for the sleep to complete
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      return "Slept through the night. It's now morning!";
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg.includes("monsters")) {
+        return "Cannot sleep - there are monsters nearby!";
+      }
+      throw new Error(`Failed to sleep: ${errMsg}`);
+    }
+  }
+
+  /**
+   * Use an item (bucket, flint_and_steel, ender_eye, etc.)
+   */
+  async useItem(username: string, itemName?: string): Promise<string> {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+
+    // If item specified, equip it first
+    if (itemName) {
+      const item = bot.inventory.items().find(i => i.name === itemName);
+      if (!item) {
+        const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
+        throw new Error(`No ${itemName} in inventory. Have: ${inventory}`);
+      }
+      await bot.equip(item, "hand");
+    }
+
+    const heldItem = bot.heldItem;
+    if (!heldItem) {
+      throw new Error("No item in hand to use.");
+    }
+
+    try {
+      // Activate the item (right-click)
+      await bot.activateItem();
+      return `Used ${heldItem.name}`;
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to use ${heldItem.name}: ${errMsg}`);
+    }
+  }
+
+  /**
+   * Drop items from inventory
+   */
+  async dropItem(username: string, itemName: string, count?: number): Promise<string> {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+
+    const item = bot.inventory.items().find(i => i.name === itemName);
+    if (!item) {
+      const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
+      throw new Error(`No ${itemName} in inventory. Have: ${inventory}`);
+    }
+
+    const dropCount = count ? Math.min(count, item.count) : item.count;
+
+    try {
+      await bot.toss(item.type, null, dropCount);
+      const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
+      return `Dropped ${dropCount}x ${itemName}. Inventory: ${newInventory}`;
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to drop ${itemName}: ${errMsg}`);
     }
   }
 

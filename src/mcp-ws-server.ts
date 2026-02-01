@@ -9,7 +9,7 @@
 
 import { WebSocketServer, WebSocket } from 'ws';
 import { botManager } from "./bot-manager.js";
-import { readBoard, writeBoard, waitForNewMessage, clearBoard, logToBoard } from "./tools/coordination.js";
+import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
 
 interface JSONRPCRequest {
   jsonrpc: '2.0';
@@ -29,8 +29,45 @@ interface JSONRPCResponse {
   };
 }
 
-// Track which bot each connection is using
+// Track which bot each connection is using (for tool calls)
 const connectionBots = new WeakMap<WebSocket, string>();
+
+// Track which bots each connection is subscribed to (for event notifications)
+const connectionSubscriptions = new WeakMap<WebSocket, Set<string>>();
+
+// Track all active WebSocket connections for event broadcasting
+const activeConnections = new Set<WebSocket>();
+
+// Listen for game events from BotManager and push to clients
+botManager.on("gameEvent", (username: string, event: { type: string; message: string; timestamp: number; data?: Record<string, unknown> }) => {
+  const notification = {
+    jsonrpc: "2.0",
+    method: "notifications/gameEvent",
+    params: {
+      username,
+      event: {
+        type: event.type,
+        message: event.message,
+        timestamp: event.timestamp,
+        data: event.data,
+      },
+    },
+  };
+
+  const json = JSON.stringify(notification);
+
+  // Broadcast to all connections that own or are subscribed to this bot
+  activeConnections.forEach((ws) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      const botUsername = connectionBots.get(ws);
+      const subscriptions = connectionSubscriptions.get(ws);
+      const isSubscribed = subscriptions?.has(username) || false;
+      if (botUsername === username || isSubscribed) {
+        ws.send(json);
+      }
+    }
+  });
+});
 
 // Tool definitions
 const tools = {
@@ -136,15 +173,6 @@ const tools = {
     description: "Collect nearby dropped items by moving to them",
     inputSchema: { type: "object", properties: {} },
   },
-  minecraft_list_dropped_items: {
-    description: "List all dropped items nearby (for debugging pickup issues)",
-    inputSchema: {
-      type: "object",
-      properties: {
-        range: { type: "number", default: 10 },
-      },
-    },
-  },
   minecraft_get_inventory: {
     description: "Get bot's inventory",
     inputSchema: { type: "object", properties: {} },
@@ -156,6 +184,41 @@ const tools = {
       properties: {
         item_name: { type: "string" },
         count: { type: "number", default: 1 },
+      },
+      required: ["item_name"],
+    },
+  },
+  minecraft_smelt: {
+    description: "Smelt items in a furnace (ore to ingot, food to cooked). Needs furnace within 4 blocks and fuel in inventory.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        item_name: { type: "string", description: "Item to smelt (e.g., raw_iron, raw_beef)" },
+        count: { type: "number", default: 1 },
+      },
+      required: ["item_name"],
+    },
+  },
+  minecraft_sleep: {
+    description: "Sleep in a bed to skip the night. Needs bed within 4 blocks. Only works at night.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  minecraft_use_item: {
+    description: "Use/activate the held item (right-click). For bucket, flint_and_steel, ender_eye, etc.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        item_name: { type: "string", description: "Item to equip and use (optional, uses held item if not specified)" },
+      },
+    },
+  },
+  minecraft_drop_item: {
+    description: "Drop items from inventory onto the ground (for sharing with other bots)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        item_name: { type: "string", description: "Item to drop" },
+        count: { type: "number", description: "How many to drop (default: all)" },
       },
       required: ["item_name"],
     },
@@ -192,6 +255,17 @@ const tools = {
     description: "Clear the agent board",
     inputSchema: { type: "object", properties: {} },
   },
+  // Event subscription
+  subscribe_events: {
+    description: "Subscribe to game events for a bot (for receiving push notifications)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        username: { type: "string", description: "Bot username to subscribe to" },
+      },
+      required: ["username"],
+    },
+  },
   // Combat tools
   minecraft_get_status: {
     description: "Get bot's health, hunger, and equipment status",
@@ -204,15 +278,6 @@ const tools = {
       properties: {
         range: { type: "number", default: 16 },
         type: { type: "string", enum: ["all", "hostile", "passive", "player"] },
-      },
-    },
-  },
-  minecraft_attack: {
-    description: "Attack once. For continuous combat, use minecraft_fight instead",
-    inputSchema: {
-      type: "object",
-      properties: {
-        entity_name: { type: "string" },
       },
     },
   },
@@ -232,19 +297,6 @@ const tools = {
       type: "object",
       properties: {
         food_name: { type: "string" },
-      },
-    },
-  },
-  minecraft_equip_armor: {
-    description: "Equip armor from inventory",
-    inputSchema: { type: "object", properties: {} },
-  },
-  minecraft_equip_weapon: {
-    description: "Equip the best weapon from inventory",
-    inputSchema: {
-      type: "object",
-      properties: {
-        weapon_name: { type: "string" },
       },
     },
   },
@@ -420,12 +472,6 @@ async function handleTool(
       return await botManager.collectNearbyItems(username);
     }
 
-    case "minecraft_list_dropped_items": {
-      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      const range = (args.range as number) || 10;
-      return botManager.listDroppedItems(username, range);
-    }
-
     case "minecraft_get_inventory": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       const items = botManager.getInventory(username);
@@ -436,6 +482,26 @@ async function handleTool(
     case "minecraft_craft": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       return await botManager.craftItem(username, args.item_name as string, (args.count as number) || 1);
+    }
+
+    case "minecraft_smelt": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return await botManager.smeltItem(username, args.item_name as string, (args.count as number) || 1);
+    }
+
+    case "minecraft_sleep": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return await botManager.sleep(username);
+    }
+
+    case "minecraft_use_item": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return await botManager.useItem(username, args.item_name as string | undefined);
+    }
+
+    case "minecraft_drop_item": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return await botManager.dropItem(username, args.item_name as string, args.count as number | undefined);
     }
 
     case "agent_board_read": {
@@ -457,6 +523,20 @@ async function handleTool(
       return clearBoard();
     }
 
+    case "subscribe_events": {
+      const subUsername = args.username as string;
+      if (!subUsername) throw new Error("username is required");
+
+      let subs = connectionSubscriptions.get(ws);
+      if (!subs) {
+        subs = new Set();
+        connectionSubscriptions.set(ws, subs);
+      }
+      subs.add(subUsername);
+      console.log(`[MCP-WS-Server] Connection subscribed to events for: ${subUsername}`);
+      return `Subscribed to events for ${subUsername}`;
+    }
+
     // Combat tools
     case "minecraft_get_status": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
@@ -470,11 +550,6 @@ async function handleTool(
       return botManager.getNearbyEntities(username, range, type);
     }
 
-    case "minecraft_attack": {
-      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      return await botManager.attack(username, args.entity_name as string | undefined);
-    }
-
     case "minecraft_fight": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       const entityName = args.entity_name as string | undefined;
@@ -485,16 +560,6 @@ async function handleTool(
     case "minecraft_eat": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       return await botManager.eat(username, args.food_name as string | undefined);
-    }
-
-    case "minecraft_equip_armor": {
-      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      return await botManager.equipArmor(username);
-    }
-
-    case "minecraft_equip_weapon": {
-      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      return await botManager.equipWeapon(username, args.weapon_name as string | undefined);
     }
 
     case "minecraft_equip_item": {
@@ -566,48 +631,16 @@ async function handleRequest(ws: WebSocket, request: JSONRPCRequest): Promise<JS
           };
         }
 
-        // Get bot username for logging
-        const botUser = connectionBots.get(ws) || "?";
-
-        // Log tool call to board (skip board tools to avoid infinite loop)
-        const skipLogTools = ["agent_board_read", "agent_board_write", "agent_board_wait", "agent_board_clear"];
-        if (!skipLogTools.includes(toolName)) {
-          const argsStr = Object.keys(toolArgs).length > 0
-            ? ` ${JSON.stringify(toolArgs)}`.substring(0, 80)
-            : "";
-          logToBoard(botUser, `→ ${toolName}${argsStr}`);
-        }
-
         try {
           const result = await handleTool(ws, toolName, toolArgs);
-
-          // Log result (truncated)
-          if (!skipLogTools.includes(toolName)) {
-            const resultStr = result.substring(0, 100).replace(/\n/g, " ");
-            logToBoard(botUser, `← ${toolName}: ${resultStr}${result.length > 100 ? "..." : ""}`);
-          }
-
           return {
             jsonrpc: '2.0',
             id,
             result: { content: [{ type: 'text', text: result }] }
           };
         } catch (toolError) {
-          // Enhanced error logging for tool calls
           const errorMessage = toolError instanceof Error ? toolError.message : String(toolError);
-          const stack = toolError instanceof Error ? toolError.stack : undefined;
-          console.error(`[MCP-WS-Server] Tool error in ${toolName}:`);
-          console.error(`  Args: ${JSON.stringify(toolArgs)}`);
-          console.error(`  Error: ${errorMessage}`);
-          if (stack) {
-            console.error(`  Stack: ${stack.split('\n').slice(1, 4).join('\n        ')}`);
-          }
-
-          // Log error to board
-          if (!skipLogTools.includes(toolName)) {
-            logToBoard(botUser, `✗ ${toolName}: ERROR ${errorMessage.substring(0, 50)}`);
-          }
-
+          console.error(`[MCP-WS-Server] Tool error in ${toolName}: ${errorMessage}`);
           return {
             jsonrpc: '2.0',
             id,
@@ -647,6 +680,9 @@ function startServer(port: number = 8765) {
     const clientAddr = req.socket.remoteAddress;
     console.log(`[MCP-WS-Server] Client connected from ${clientAddr}`);
 
+    // Track connection for event broadcasting
+    activeConnections.add(ws);
+
     ws.on('message', async (data: Buffer) => {
       try {
         const request = JSON.parse(data.toString()) as JSONRPCRequest;
@@ -684,6 +720,8 @@ function startServer(port: number = 8765) {
     ws.on('close', () => {
       const username = connectionBots.get(ws);
       console.log(`[MCP-WS-Server] Client disconnected: ${clientAddr} (bot: ${username || 'none'})`);
+      // Remove from active connections
+      activeConnections.delete(ws);
       // Note: We don't disconnect the bot here - it persists for reconnection
     });
 
