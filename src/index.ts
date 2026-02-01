@@ -10,16 +10,20 @@ import {
 import { connectionTools, handleConnectionTool } from "./tools/connection.js";
 import { movementTools, handleMovementTool } from "./tools/movement.js";
 import { environmentTools, handleEnvironmentTool } from "./tools/environment.js";
-import { visualizationTools, handleVisualizationTool } from "./tools/visualization.js";
 import { buildingTools, handleBuildingTool } from "./tools/building.js";
+import { coordinationTools, handleCoordinationTool } from "./tools/coordination.js";
+import { craftingTools, handleCraftingTool } from "./tools/crafting.js";
+import { combatTools, handleCombatTool } from "./tools/combat.js";
 
 // Combine all tools
 const allTools = {
   ...connectionTools,
   ...movementTools,
   ...environmentTools,
-  ...visualizationTools,
   ...buildingTools,
+  ...coordinationTools,
+  ...craftingTools,
+  ...combatTools,
 };
 
 // Create MCP server
@@ -40,8 +44,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: Object.entries(allTools).map(([name, tool]) => ({
       name,
-      description: tool.description,
-      inputSchema: tool.inputSchema,
+      description: (tool as { description: string }).description,
+      inputSchema: (tool as { inputSchema: object }).inputSchema,
     })),
   };
 });
@@ -61,10 +65,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       result = await handleMovementTool(name, toolArgs);
     } else if (name in environmentTools) {
       result = await handleEnvironmentTool(name, toolArgs);
-    } else if (name in visualizationTools) {
-      result = await handleVisualizationTool(name, toolArgs);
     } else if (name in buildingTools) {
       result = await handleBuildingTool(name, toolArgs);
+    } else if (name in coordinationTools) {
+      result = await handleCoordinationTool(name, toolArgs);
+    } else if (name in craftingTools) {
+      result = await handleCraftingTool(name, toolArgs);
+    } else if (name in combatTools) {
+      result = await handleCombatTool(name, toolArgs);
     } else {
       throw new Error(`Unknown tool: ${name}`);
     }

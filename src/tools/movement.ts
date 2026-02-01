@@ -51,9 +51,11 @@ export async function handleMovementTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<string> {
+  const username = botManager.requireSingleBot();
+
   switch (name) {
     case "minecraft_get_position": {
-      const pos = botManager.getPosition();
+      const pos = botManager.getPosition(username);
       if (!pos) {
         throw new Error("Not connected to any server");
       }
@@ -69,8 +71,8 @@ export async function handleMovementTool(
       const y = args.y as number;
       const z = args.z as number;
 
-      await botManager.moveTo(x, y, z);
-      const newPos = botManager.getPosition();
+      await botManager.moveTo(username, x, y, z);
+      const newPos = botManager.getPosition(username);
       return `Moved to approximately (${newPos?.x.toFixed(1)}, ${newPos?.y.toFixed(1)}, ${newPos?.z.toFixed(1)})`;
     }
 
@@ -79,7 +81,21 @@ export async function handleMovementTool(
       if (!message) {
         throw new Error("Message is required");
       }
-      await botManager.chat(message);
+
+      // Block dangerous commands (tp, teleport, kill, etc.) - except for whitelisted bots
+      const whitelistedBots = ["Claude"];
+
+      if (!whitelistedBots.includes(username)) {
+        const blockedCommands = ["/tp", "/teleport", "/kill", "/gamemode", "/op", "/deop", "/ban", "/kick"];
+        const lowerMessage = message.toLowerCase().trim();
+        for (const cmd of blockedCommands) {
+          if (lowerMessage.startsWith(cmd + " ") || lowerMessage === cmd) {
+            throw new Error(`Command '${cmd}' is not allowed. Use move_to for movement.`);
+          }
+        }
+      }
+
+      await botManager.chat(username, message);
       return `Sent message: ${message}`;
     }
 

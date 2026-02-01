@@ -22,12 +22,14 @@ export async function handleEnvironmentTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<string> {
+  const username = botManager.requireSingleBot();
+
   switch (name) {
     case "minecraft_look_around": {
       let radius = (args.radius as number) || 5;
       radius = Math.min(radius, 10); // Limit to 10 blocks
 
-      const blocks = await botManager.lookAround(radius);
+      const blocks = await botManager.lookAround(username, radius);
 
       // Group blocks by type for easier reading
       const blockCounts: Record<string, number> = {};
