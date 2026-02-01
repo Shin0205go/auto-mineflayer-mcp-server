@@ -8,7 +8,9 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "start:agent": "node dist/agent/index.js",
+    "start:mcp-ws": "node dist/mcp-ws-server.js"
   },
   "keywords": [
     "mcp",
@@ -20,12 +22,18 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "dotenv": "^16.3.1",
     "mineflayer": "^4.20.1",
-    "vec3": "^0.1.10"
+    "screenshot-desktop": "^1.15.0",
+    "sharp": "^0.33.2",
+    "vec3": "^0.1.10",
+    "ws": "^8.16.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "@types/ws": "^8.5.10",
     "typescript": "^5.3.0"
   }
 }
