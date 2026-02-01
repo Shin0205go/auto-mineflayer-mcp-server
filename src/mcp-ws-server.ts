@@ -9,7 +9,7 @@
 
 import { WebSocketServer, WebSocket } from 'ws';
 import { botManager } from "./bot-manager.js";
-import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
+import { readBoard, writeBoard, waitForNewMessage, clearBoard, logToBoard } from "./tools/coordination.js";
 
 interface JSONRPCRequest {
   jsonrpc: '2.0';
@@ -92,36 +92,42 @@ const tools = {
       },
     },
   },
-  minecraft_look_around: {
-    description: "Scan surrounding blocks",
-    inputSchema: {
-      type: "object",
-      properties: { radius: { type: "number", default: 5 } },
-    },
+  minecraft_get_surroundings: {
+    description: "Get immediate surroundings - which directions are passable, blocked, what's above/below",
+    inputSchema: { type: "object", properties: {} },
   },
-  minecraft_place_block: {
-    description: "Place a block at position. In survival mode, requires the block in inventory.",
+  minecraft_find_block: {
+    description: "Find specific block type nearby and get its exact coordinates",
     inputSchema: {
       type: "object",
       properties: {
-        block_type: { type: "string", description: "Block type (e.g., 'cobblestone', 'oak_planks')" },
+        block_name: { type: "string", description: "Block to find (e.g., 'oak_planks', 'stone', 'iron_ore')" },
+        max_distance: { type: "number", default: 10 },
+      },
+      required: ["block_name"],
+    },
+  },
+  minecraft_place_block: {
+    description: "Place a block from your inventory at the specified position. You must have the block in your inventory first!",
+    inputSchema: {
+      type: "object",
+      properties: {
+        block_type: { type: "string", description: "Block type from your inventory (e.g., 'cobblestone', 'oak_planks')" },
         x: { type: "number" },
         y: { type: "number" },
         z: { type: "number" },
-        use_command: { type: "boolean", description: "Use /setblock command (requires OP). Default false for survival." },
       },
       required: ["block_type", "x", "y", "z"],
     },
   },
   minecraft_dig_block: {
-    description: "Dig a block at position. In survival mode, actually mines the block.",
+    description: "Mine/dig a block at the specified position. The block will drop as an item that you can collect.",
     inputSchema: {
       type: "object",
       properties: {
         x: { type: "number" },
         y: { type: "number" },
         z: { type: "number" },
-        use_command: { type: "boolean", description: "Use /setblock air (requires OP). Default false for survival." },
       },
       required: ["x", "y", "z"],
     },
@@ -202,11 +208,21 @@ const tools = {
     },
   },
   minecraft_attack: {
-    description: "Attack the nearest hostile mob or a specific entity",
+    description: "Attack once. For continuous combat, use minecraft_fight instead",
     inputSchema: {
       type: "object",
       properties: {
         entity_name: { type: "string" },
+      },
+    },
+  },
+  minecraft_fight: {
+    description: "Fight an entity until it dies or health is low. Auto-equips weapon, approaches, attacks repeatedly, and flees if HP drops below threshold",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity_name: { type: "string", description: "Entity to fight (e.g., 'zombie'). If not specified, fights nearest hostile" },
+        flee_health: { type: "number", default: 6, description: "Flee when HP drops to this (default: 6 = 3 hearts)" },
       },
     },
   },
@@ -232,6 +248,25 @@ const tools = {
       },
     },
   },
+  minecraft_equip_item: {
+    description: "Equip any item from inventory (pickaxe, axe, sword, etc.)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        item_name: { type: "string", description: "Item to equip (e.g., 'wooden_pickaxe', 'stone_axe')" },
+      },
+      required: ["item_name"],
+    },
+  },
+  minecraft_pillar_up: {
+    description: "Jump and place blocks below to climb up (useful when stuck or need to reach higher places)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        height: { type: "number", default: 1, description: "How many blocks to go up" },
+      },
+    },
+  },
   minecraft_flee: {
     description: "Run away from danger",
     inputSchema: {
@@ -239,6 +274,32 @@ const tools = {
       properties: {
         distance: { type: "number", default: 20 },
       },
+    },
+  },
+  minecraft_get_biome: {
+    description: "Get current biome information. Useful for finding where specific mobs spawn (e.g., sheep spawn in plains, meadow, forest)",
+    inputSchema: { type: "object", properties: {} },
+  },
+  minecraft_find_entities: {
+    description: "Find nearby entities (mobs, animals, players). Use to locate sheep, cows, pigs, etc.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity_type: { type: "string", description: "Filter by entity type (e.g., 'sheep', 'cow', 'zombie')" },
+        max_distance: { type: "number", default: 32, description: "Search radius in blocks" },
+      },
+    },
+  },
+  minecraft_explore_for_biome: {
+    description: "Walk in a direction looking for a specific biome type. Use when you need to find sheep (plains, meadow) or other biome-specific resources",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target_biome: { type: "string", description: "Biome to find (e.g., 'plains', 'forest', 'desert')" },
+        direction: { type: "string", enum: ["north", "south", "east", "west", "random"], default: "random" },
+        max_blocks: { type: "number", default: 200, description: "Maximum distance to explore" },
+      },
+      required: ["target_biome"],
     },
   },
 };
@@ -255,11 +316,19 @@ async function handleTool(
     case "minecraft_connect": {
       const host = (args.host as string) || process.env.MC_HOST || "localhost";
       const port = (args.port as number) || parseInt(process.env.MC_PORT || "25565");
-      const botUsername = args.username as string;
+      // Fixed username from env var (set by agent on startup)
+      const botUsername = process.env.BOT_USERNAME || (args.username as string);
       const version = args.version as string | undefined;
 
       if (!botUsername) {
-        throw new Error("username is required");
+        throw new Error("username is required (or set BOT_USERNAME env var)");
+      }
+
+      // Check if bot already exists (reconnection case)
+      if (botManager.isConnected(botUsername)) {
+        connectionBots.set(ws, botUsername);
+        console.error(`[MCP-WS-Server] Reconnected WebSocket to existing bot: ${botUsername}`);
+        return `Reconnected to existing bot ${botUsername}`;
       }
 
       const result = await botManager.connect({ host, port, username: botUsername, version });
@@ -283,9 +352,8 @@ async function handleTool(
 
     case "minecraft_move_to": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      await botManager.moveTo(username, args.x as number, args.y as number, args.z as number);
-      const newPos = botManager.getPosition(username);
-      return `Moved to (${newPos?.x.toFixed(1)}, ${newPos?.y.toFixed(1)}, ${newPos?.z.toFixed(1)})`;
+      const moveResult = await botManager.moveTo(username, args.x as number, args.y as number, args.z as number);
+      return moveResult;
     }
 
     case "minecraft_chat": {
@@ -315,39 +383,36 @@ async function handleTool(
       }).join("\n");
     }
 
-    case "minecraft_look_around": {
+    case "minecraft_get_surroundings": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      const radius = (args.radius as number) || 5;
-      const blocks = await botManager.lookAround(username, radius);
+      return botManager.getSurroundings(username);
+    }
 
-      // Summarize blocks
-      const counts: Record<string, number> = {};
-      for (const b of blocks) {
-        counts[b.name] = (counts[b.name] || 0) + 1;
-      }
-      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-      const summary = sorted.map(([name, count]) => `${name}: ${count}`).join("\n");
-      return `Found ${blocks.length} blocks within ${radius} block radius:\n\n${summary}`;
+    case "minecraft_find_block": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const blockName = args.block_name as string;
+      const maxDistance = (args.max_distance as number) || 10;
+      return botManager.findBlock(username, blockName, maxDistance);
     }
 
     case "minecraft_place_block": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      const useCommand = (args.use_command as boolean) || false;
+      // Always use survival mode (no /setblock command)
       const result = await botManager.placeBlock(
         username,
         args.block_type as string,
         args.x as number,
         args.y as number,
         args.z as number,
-        useCommand
+        false  // survival mode only
       );
       return result.message;
     }
 
     case "minecraft_dig_block": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      const useCommand = (args.use_command as boolean) || false;
-      return await botManager.digBlock(username, args.x as number, args.y as number, args.z as number, useCommand);
+      // Always use survival mode (actual mining)
+      return await botManager.digBlock(username, args.x as number, args.y as number, args.z as number, false);
     }
 
     case "minecraft_collect_items": {
@@ -410,6 +475,13 @@ async function handleTool(
       return await botManager.attack(username, args.entity_name as string | undefined);
     }
 
+    case "minecraft_fight": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const entityName = args.entity_name as string | undefined;
+      const fleeHealth = (args.flee_health as number) || 6;
+      return await botManager.fight(username, entityName, fleeHealth);
+    }
+
     case "minecraft_eat": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       return await botManager.eat(username, args.food_name as string | undefined);
@@ -425,10 +497,41 @@ async function handleTool(
       return await botManager.equipWeapon(username, args.weapon_name as string | undefined);
     }
 
+    case "minecraft_equip_item": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return await botManager.equipItem(username, args.item_name as string);
+    }
+
+    case "minecraft_pillar_up": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const height = (args.height as number) || 1;
+      return await botManager.pillarUp(username, height);
+    }
+
     case "minecraft_flee": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       const distance = (args.distance as number) || 20;
       return await botManager.flee(username, distance);
+    }
+
+    case "minecraft_get_biome": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return await botManager.getBiome(username);
+    }
+
+    case "minecraft_find_entities": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const entityType = args.entity_type as string | undefined;
+      const maxDistance = (args.max_distance as number) || 32;
+      return botManager.findEntities(username, entityType, maxDistance);
+    }
+
+    case "minecraft_explore_for_biome": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const targetBiome = args.target_biome as string;
+      const direction = (args.direction as "north" | "south" | "east" | "west" | "random") || "random";
+      const maxBlocks = (args.max_blocks as number) || 200;
+      return await botManager.exploreForBiome(username, targetBiome, direction, maxBlocks);
     }
 
     default:
@@ -463,12 +566,54 @@ async function handleRequest(ws: WebSocket, request: JSONRPCRequest): Promise<JS
           };
         }
 
-        const result = await handleTool(ws, toolName, toolArgs);
-        return {
-          jsonrpc: '2.0',
-          id,
-          result: { content: [{ type: 'text', text: result }] }
-        };
+        // Get bot username for logging
+        const botUser = connectionBots.get(ws) || "?";
+
+        // Log tool call to board (skip board tools to avoid infinite loop)
+        const skipLogTools = ["agent_board_read", "agent_board_write", "agent_board_wait", "agent_board_clear"];
+        if (!skipLogTools.includes(toolName)) {
+          const argsStr = Object.keys(toolArgs).length > 0
+            ? ` ${JSON.stringify(toolArgs)}`.substring(0, 80)
+            : "";
+          logToBoard(botUser, `→ ${toolName}${argsStr}`);
+        }
+
+        try {
+          const result = await handleTool(ws, toolName, toolArgs);
+
+          // Log result (truncated)
+          if (!skipLogTools.includes(toolName)) {
+            const resultStr = result.substring(0, 100).replace(/\n/g, " ");
+            logToBoard(botUser, `← ${toolName}: ${resultStr}${result.length > 100 ? "..." : ""}`);
+          }
+
+          return {
+            jsonrpc: '2.0',
+            id,
+            result: { content: [{ type: 'text', text: result }] }
+          };
+        } catch (toolError) {
+          // Enhanced error logging for tool calls
+          const errorMessage = toolError instanceof Error ? toolError.message : String(toolError);
+          const stack = toolError instanceof Error ? toolError.stack : undefined;
+          console.error(`[MCP-WS-Server] Tool error in ${toolName}:`);
+          console.error(`  Args: ${JSON.stringify(toolArgs)}`);
+          console.error(`  Error: ${errorMessage}`);
+          if (stack) {
+            console.error(`  Stack: ${stack.split('\n').slice(1, 4).join('\n        ')}`);
+          }
+
+          // Log error to board
+          if (!skipLogTools.includes(toolName)) {
+            logToBoard(botUser, `✗ ${toolName}: ERROR ${errorMessage.substring(0, 50)}`);
+          }
+
+          return {
+            jsonrpc: '2.0',
+            id,
+            error: { code: -32603, message: errorMessage, data: { tool: toolName, args: toolArgs } }
+          };
+        }
       }
 
       case 'ping': {
@@ -505,9 +650,25 @@ function startServer(port: number = 8765) {
     ws.on('message', async (data: Buffer) => {
       try {
         const request = JSON.parse(data.toString()) as JSONRPCRequest;
-        console.log(`[MCP-WS-Server] ${connectionBots.get(ws) || 'new'}: ${request.method}`);
+        const botName = connectionBots.get(ws) || 'new';
+        const timestamp = new Date().toLocaleTimeString('ja-JP');
+
+        // Log request
+        if (request.method === 'tools/call') {
+          const toolName = request.params?.name as string;
+          const toolArgs = request.params?.arguments;
+          console.log(`[${timestamp}] ${botName}: ${toolName} ${JSON.stringify(toolArgs)}`);
+        } else {
+          console.log(`[${timestamp}] ${botName}: ${request.method}`);
+        }
 
         const response = await handleRequest(ws, request);
+
+        // Log response status
+        if (response.error) {
+          console.log(`[${timestamp}] ${botName}: -> ERROR ${response.error.code}: ${response.error.message}`);
+        }
+
         ws.send(JSON.stringify(response));
       } catch (error) {
         console.error('[MCP-WS-Server] Parse error:', error);

@@ -31,6 +31,7 @@ import { ActionController, ActionControllerConfig, StateSnapshot } from './actio
 // Configuration from environment variables
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const MCP_WS_URL = process.env.MCP_WS_URL || 'ws://localhost:8765';
+const MC_PORT = process.env.MC_PORT || '25565';
 const VISION_FPS = parseFloat(process.env.VISION_FPS || '1.0');
 const VISION_WIDTH = parseInt(process.env.VISION_WIDTH || '768', 10);
 const VISION_HEIGHT = parseInt(process.env.VISION_HEIGHT || '768', 10);
@@ -81,11 +82,43 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Create system instruction with MC_PORT
+  const systemInstruction = `あなたはMinecraftを操作するAIエージェントです。
+
+## 重要な理解事項
+- 画面はプレイヤーの視点です。あなたが操作するボットは別のエンティティです
+- ボットの行動は画面にすぐ反映されないことがあります
+- アクションには時間がかかります。「同じ画面」でもボットは動いています
+- ツール実行中は画面更新が一時停止します
+
+## 接続情報
+- ホスト: localhost
+- ポート: ${MC_PORT}
+- 最初に minecraft_connect で接続してください
+
+## 利用可能なツール
+- minecraft_connect: サーバー接続 (port: ${MC_PORT})
+- minecraft_disconnect: 切断
+- minecraft_get_position: 現在座標取得
+- minecraft_move_to: 移動（時間がかかる）
+- minecraft_chat: チャット送信
+- minecraft_look_around: 周囲スキャン
+- minecraft_place_block: ブロック設置
+- minecraft_build_structure: 構造物建築 (house, tower, marker)
+
+## 行動ルール
+1. 接続は一度だけ。成功したら再接続しない
+2. 「Already connected」エラーは無視して続行
+3. move_toは完了まで待つ。繰り返し呼ばない
+4. 画面が変わらなくても、ツール結果を信じる
+5. 建築や移動後は get_position で確認`;
+
   // Create configuration
   const config: ActionControllerConfig = {
     gemini: {
       apiKey: GEMINI_API_KEY,
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-2.5-flash',
+      systemInstruction,
     },
     vision: {
       fps: VISION_FPS,
@@ -144,13 +177,16 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Auto-start vision loop
+  controller.startVisionLoop();
+  console.log('Vision capture started automatically.\n');
+  console.log('Commands: stop, status, say <msg>, quit\n');
+
   // Set up readline for interactive commands
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
   });
-
-  printHelp();
 
   const promptUser = (): void => {
     rl.question('> ', async (input) => {

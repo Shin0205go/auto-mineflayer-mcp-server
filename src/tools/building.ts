@@ -2,13 +2,13 @@ import { botManager } from "../bot-manager.js";
 
 export const buildingTools = {
   minecraft_place_block: {
-    description: "Place a block at specified coordinates. In survival mode, uses block from inventory.",
+    description: "Place a block from your inventory at the specified coordinates. You must have the block in your inventory!",
     inputSchema: {
       type: "object" as const,
       properties: {
         block_type: {
           type: "string",
-          description: "Minecraft block ID (e.g., 'stone', 'oak_planks', 'dirt')",
+          description: "Block from your inventory (e.g., 'cobblestone', 'oak_planks', 'dirt')",
         },
         x: {
           type: "number",
@@ -21,10 +21,6 @@ export const buildingTools = {
         z: {
           type: "number",
           description: "Z coordinate",
-        },
-        use_command: {
-          type: "boolean",
-          description: "Use /setblock command (requires OP). Default false for survival mode.",
         },
       },
       required: ["block_type", "x", "y", "z"],
@@ -32,7 +28,7 @@ export const buildingTools = {
   },
 
   minecraft_dig_block: {
-    description: "Dig/break a single block at specified coordinates. In survival, actually mines the block.",
+    description: "Mine/dig a block at the specified coordinates. The block drops as an item to collect.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -47,10 +43,6 @@ export const buildingTools = {
         z: {
           type: "number",
           description: "Z coordinate",
-        },
-        use_command: {
-          type: "boolean",
-          description: "Use /setblock air (requires OP). Default false for survival mode.",
         },
       },
       required: ["x", "y", "z"],
@@ -79,13 +71,13 @@ export async function handleBuildingTool(
       const x = args.x as number;
       const y = args.y as number;
       const z = args.z as number;
-      const useCommand = (args.use_command as boolean) || false;
 
       if (!blockType) {
         throw new Error("Block type is required");
       }
 
-      const result = await botManager.placeBlock(username, blockType, x, y, z, useCommand);
+      // Always survival mode - must have block in inventory
+      const result = await botManager.placeBlock(username, blockType, x, y, z, false);
       if (!result.success) {
         throw new Error(result.message);
       }
@@ -96,9 +88,9 @@ export async function handleBuildingTool(
       const x = args.x as number;
       const y = args.y as number;
       const z = args.z as number;
-      const useCommand = (args.use_command as boolean) || false;
 
-      const result = await botManager.digBlock(username, x, y, z, useCommand);
+      // Always survival mode - actually mine the block
+      const result = await botManager.digBlock(username, x, y, z, false);
       return result;
     }
 

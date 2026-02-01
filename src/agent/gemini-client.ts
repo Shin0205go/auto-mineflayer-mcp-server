@@ -15,6 +15,7 @@ export interface GeminiConfig {
   systemInstruction?: string;
   maxTurns?: number;
   mcpServerUrl?: string;
+  agentName?: string;  // For board write hook
 }
 
 export interface AgentResult {
@@ -227,6 +228,34 @@ export class GeminiClient extends EventEmitter {
         error: errorMsg,
       };
     }
+  }
+
+  /**
+   * Force write to agent board (called at end of each loop)
+   */
+  async forceBoardWrite(message: string): Promise<void> {
+    if (!this.isConnected) {
+      console.error("[Gemini] Cannot write to board - not connected");
+      return;
+    }
+
+    const agentName = this.config.agentName || "Gemini";
+    try {
+      console.log(`[Gemini] Force writing to board: ${message}`);
+      await this.mcp.callTool("agent_board_write", {
+        agent_name: agentName,
+        message: `[ループ終了] ${message}`,
+      });
+    } catch (error) {
+      console.error("[Gemini] Failed to write to board:", error);
+    }
+  }
+
+  /**
+   * Get MCP transport for direct tool calls
+   */
+  getMCP(): MCPWebSocketClientTransport {
+    return this.mcp;
   }
 
   /**

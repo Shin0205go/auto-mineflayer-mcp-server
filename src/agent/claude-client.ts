@@ -9,6 +9,7 @@ import { query, type SDKMessage, type Query, type Options } from "@anthropic-ai/
 import { EventEmitter } from "events";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { MCPWebSocketClientTransport } from "./mcp-ws-transport.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -22,6 +23,7 @@ export interface ClaudeConfig {
   model?: string;
   maxTurns?: number;
   mcpServerUrl?: string;
+  agentName?: string;  // For board write hook
 }
 
 export interface AgentResult {
@@ -85,6 +87,7 @@ type ContentBlock = TextBlock | ToolUseBlock | { type: string };
 export class ClaudeClient extends EventEmitter {
   private config: ClaudeConfig;
   private env: Record<string, string>;
+  private mcp: MCPWebSocketClientTransport | null = null;
 
   constructor(config: ClaudeConfig = {}) {
     super();
@@ -93,6 +96,7 @@ export class ClaudeClient extends EventEmitter {
       systemInstruction: DEFAULT_SYSTEM_INSTRUCTION,
       maxTurns: 20,
       mcpServerUrl: "ws://localhost:8765",
+      agentName: "Claude",
       ...config,
     };
 
@@ -107,6 +111,22 @@ export class ClaudeClient extends EventEmitter {
       console.log("[Claude] Removed ANTHROPIC_API_KEY to use Claude Code OAuth");
     }
     console.log("[Claude] Using Claude Code inherited authentication");
+
+    // Initialize MCP transport for hooks
+    this.initMCP();
+  }
+
+  /**
+   * Initialize MCP WebSocket connection for hooks
+   */
+  private async initMCP(): Promise<void> {
+    try {
+      this.mcp = new MCPWebSocketClientTransport(this.config.mcpServerUrl!);
+      await this.mcp.connect();
+      console.log("[Claude] MCP hook connection ready");
+    } catch (error) {
+      console.error("[Claude] Failed to init MCP hook:", error);
+    }
   }
 
   /**
@@ -215,5 +235,36 @@ export class ClaudeClient extends EventEmitter {
   createQuery(prompt: string): Query {
     const options = this.createOptions();
     return query({ prompt, options });
+  }
+
+  /**
+   * Force write to agent board (called at end of each loop)
+   */
+  async forceBoardWrite(message: string): Promise<void> {
+    if (!this.mcp) {
+      console.error("[Claude] Cannot write to board - MCP not connected");
+      return;
+    }
+
+    const agentName = this.config.agentName || "Claude";
+    try {
+      console.log(`[Claude] Force writing to board: ${message}`);
+      await this.mcp.callTool("agent_board_write", {
+        agent_name: agentName,
+        message: `[ループ終了] ${message}`,
+      });
+    } catch (error) {
+      console.error("[Claude] Failed to write to board:", error);
+    }
+  }
+
+  /**
+   * Disconnect MCP hook connection
+   */
+  disconnect(): void {
+    if (this.mcp) {
+      this.mcp.close();
+      this.mcp = null;
+    }
   }
 }

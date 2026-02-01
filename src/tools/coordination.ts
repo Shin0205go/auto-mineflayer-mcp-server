@@ -81,6 +81,17 @@ export function readBoard(lastNLines?: number): string {
   return content;
 }
 
+/**
+ * Log to board (for debugging/monitoring)
+ * Prefixes with LOG: to distinguish from agent messages
+ */
+export function logToBoard(source: string, message: string): void {
+  ensureBoardExists();
+  const timestamp = new Date().toLocaleTimeString("ja-JP");
+  const line = `[${timestamp}] [LOG:${source}] ${message}\n`;
+  fs.appendFileSync(BOARD_FILE, line);
+}
+
 export function writeBoard(agentName: string, message: string): string {
   ensureBoardExists();
   if (!agentName || !message) {

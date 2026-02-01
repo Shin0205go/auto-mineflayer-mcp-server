@@ -13,6 +13,7 @@ import "dotenv/config";
 import { spawn, ChildProcess } from "child_process";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { readFileSync } from "fs";
 import WebSocket from "ws";
 import { GeminiClient } from "./gemini-client.js";
 
@@ -27,6 +28,7 @@ const MC_PORT = parseInt(process.env.MC_PORT || "25565");
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const MCP_WS_URL = process.env.MCP_WS_URL || "ws://localhost:8765";
 const START_MCP_SERVER = process.env.START_MCP_SERVER !== "false";
+const BOT_USERNAME = "Gemini";  // Fixed username for Gemini agent
 
 let mcpServer: ChildProcess | null = null;
 
@@ -64,7 +66,7 @@ function startMCPServer(): Promise<void> {
 
     mcpServer = spawn("node", [MCP_WS_SERVER], {
       stdio: ["ignore", "pipe", "pipe"],
-      env: process.env,
+      env: { ...process.env, BOT_USERNAME },
     });
 
     mcpServer.stdout?.on("data", (data: Buffer) => {
@@ -106,6 +108,7 @@ class GeminiAgent {
       apiKey: GEMINI_API_KEY,
       maxTurns: 30,
       mcpServerUrl: MCP_WS_URL,
+      agentName: BOT_USERNAME,
     });
 
     this.setupEventHandlers();
@@ -134,16 +137,34 @@ class GeminiAgent {
 
     this.isRunning = true;
 
-    // Initial prompt
-    const initialPrompt = `Minecraftサーバーに接続して、自律的に探索を開始してください。
+    // Load Minecraft skill knowledge
+    let minecraftKnowledge = "";
+    try {
+      const skillPath = join(projectRoot, ".claude", "skills", "minecraft-survival", "SKILL.md");
+      minecraftKnowledge = readFileSync(skillPath, "utf-8");
+    } catch {
+      console.log("[Agent] Warning: Could not load minecraft-survival.md skill");
+    }
 
-サーバー情報:
+    // Initial prompt with Minecraft knowledge
+    const initialPrompt = `あなたはMinecraftサバイバルモードで自律的にプレイするAIエージェントです。
+
+## Minecraft基本知識
+${minecraftKnowledge}
+
+## 接続情報
 - host: ${MC_HOST}
 - port: ${MC_PORT}
-- username: GeminiBot
+- username: ${BOT_USERNAME}
 
-まず接続し、周囲を確認してから行動を開始してください。
-掲示板(agent_board_read)を確認して、他のエージェント（Claude等）がいれば協力してください。`;
+**重要**: minecraft_connectを呼ぶ時は必ず username: "${BOT_USERNAME}" を使ってください。
+
+## 指示
+1. まずサーバーに接続してください（username: "${BOT_USERNAME}"）
+2. agent_board_read で掲示板を確認（前回の「次のアクション」があれば続行）
+3. 周囲を確認し、素材を集めてください
+4. 他のエージェント（Claude等）と協力してください
+5. **重要**: ターン終了前に「次のアクション: ○○」を掲示板に書く`;
 
     console.log("[Agent] Starting autonomous loop...");
     await this.runLoop(initialPrompt);
@@ -164,13 +185,21 @@ class GeminiAgent {
           console.error("[Agent] Turn failed:", result.error);
         }
 
-        // Next turn prompt - encourage coordination
-        currentPrompt = `続けてください。現在の状況を確認し、次の行動を決めてください。
+        // Force board write at end of each loop (hook)
+        await this.gemini.forceBoardWrite(
+          `ターン完了。次は掲示板を読んで継続予定。`
+        );
 
-掲示板を確認して:
-1. agent_board_read で他のエージェントのメッセージを読む
-2. 自分の状況や計画を agent_board_write で共有する（agent_name: "Gemini"）
-3. Claudeと協力できることがあれば協力する
+        // Next turn prompt - encourage coordination
+        currentPrompt = `続けてください。
+
+まず掲示板を確認:
+1. agent_board_read で自分の前回の「次のアクション」や他エージェントのメッセージを読む
+2. 前回の計画があればそれを続行、なければ新しい目標を設定
+
+行動後、ループ終了前に必ず:
+- agent_board_write で「次のアクション: ○○をする予定」を書く（agent_name: "Gemini"）
+- これで次のループで何をすべきか忘れない
 
 探索、採掘、建築など、自由に行動してください。`;
 

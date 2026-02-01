@@ -11,6 +11,7 @@ import { EventEmitter } from 'events';
 import { VisionProvider, CapturedFrame, VisionConfig } from './vision-provider.js';
 import { GeminiLiveClient, ToolCall, ToolResult, GeminiConfig } from './gemini-live-client.js';
 import { MCPWebSocketClientTransport } from './mcp-ws-transport.js';
+import { RewardSystem } from './reward-system.js';
 
 export type AgentState = 'idle' | 'connecting' | 'processing' | 'executing' | 'error';
 
@@ -37,10 +38,12 @@ export class ActionController extends EventEmitter {
   private gemini: GeminiLiveClient;
   private vision: VisionProvider;
   private mcp: MCPWebSocketClientTransport;
+  private rewardSystem: RewardSystem;
   private state: AgentState = 'idle';
   private lastError: string | null = null;
   private frameQueue: CapturedFrame[] = [];
   private isProcessingFrame = false;
+  private isExecutingTools = false;  // Block frame processing during tool execution
   private autoAnalyzeInterval: NodeJS.Timeout | null = null;
 
   constructor(private config: ActionControllerConfig) {
@@ -48,6 +51,7 @@ export class ActionController extends EventEmitter {
     this.gemini = new GeminiLiveClient(config.gemini);
     this.vision = new VisionProvider(config.vision);
     this.mcp = new MCPWebSocketClientTransport(config.mcpServerUrl);
+    this.rewardSystem = new RewardSystem();
 
     this.setupEventHandlers();
   }
@@ -76,8 +80,8 @@ export class ActionController extends EventEmitter {
       this.emit('geminiDisconnected');
     });
 
-    this.gemini.on('toolCall', async (toolCall: ToolCall) => {
-      await this.handleToolCall(toolCall);
+    this.gemini.on('toolCallBatch', async (toolCalls: ToolCall[]) => {
+      await this.handleToolCallBatch(toolCalls);
     });
 
     this.gemini.on('text', (text: string) => {
@@ -180,7 +184,8 @@ export class ActionController extends EventEmitter {
    * Process the next frame in the queue
    */
   private async processNextFrame(): Promise<void> {
-    if (this.frameQueue.length === 0 || this.isProcessingFrame) {
+    // Block processing while tools are executing
+    if (this.frameQueue.length === 0 || this.isProcessingFrame || this.isExecutingTools) {
       return;
     }
 
@@ -190,7 +195,11 @@ export class ActionController extends EventEmitter {
     const frame = this.frameQueue.shift()!;
 
     try {
-      await this.gemini.sendFrame(frame.base64, frame.mimeType);
+      // Include reward summary in the prompt
+      const rewardSummary = this.rewardSystem.getStateSummary();
+      const prompt = `画面を分析し、次のアクションを決定してください。\n\n${rewardSummary}`;
+
+      await this.gemini.sendFrame(frame.base64, frame.mimeType, prompt);
       this.emit('frameProcessed', frame.frameNumber);
     } catch (error) {
       console.error('[Controller] Error processing frame:', error);
@@ -206,45 +215,78 @@ export class ActionController extends EventEmitter {
   }
 
   /**
-   * Handle a tool call from Gemini
+   * Handle a batch of tool calls from Gemini
+   * Execute all tools and send all results back together
    */
-  private async handleToolCall(toolCall: ToolCall): Promise<void> {
-    console.log(`[Controller] Tool call: ${toolCall.name}`, toolCall.args);
+  private async handleToolCallBatch(toolCalls: ToolCall[]): Promise<void> {
+    console.log(`[Controller] Tool call batch: ${toolCalls.length} tools`);
     this.setState('executing');
-    this.emit('toolCallReceived', toolCall);
 
-    try {
-      // Execute the tool via MCP
-      const result = await this.mcp.callTool(toolCall.name, toolCall.args);
-      const resultText = this.extractResultText(result);
+    // Block frame processing during tool execution
+    this.isExecutingTools = true;
 
-      console.log(`[Controller] Tool result: ${resultText.substring(0, 100)}...`);
-
-      // Send result back to Gemini
-      const toolResult: ToolResult = {
-        id: toolCall.id,
-        result: resultText,
-        isError: false,
-      };
-
-      await this.gemini.sendToolResult(toolResult);
-      this.emit('toolCallCompleted', { toolCall, result: resultText });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[Controller] Tool call error: ${errorMessage}`);
-
-      // Send error back to Gemini
-      const toolResult: ToolResult = {
-        id: toolCall.id,
-        result: `Error: ${errorMessage}`,
-        isError: true,
-      };
-
-      await this.gemini.sendToolResult(toolResult);
-      this.emit('toolCallError', { toolCall, error: errorMessage });
-    } finally {
-      this.setState('idle');
+    // Pause vision capture during tool execution to avoid confusing Gemini
+    const wasCapturing = this.vision.getStats().isCapturing;
+    if (wasCapturing) {
+      this.vision.stopCapture();
+      console.log('[Controller] Vision paused during tool execution');
     }
+
+    // Clear any queued frames to avoid processing stale data
+    this.frameQueue = [];
+
+    const results: ToolResult[] = [];
+
+    // Execute all tool calls
+    for (const toolCall of toolCalls) {
+      console.log(`[Controller] Executing: ${toolCall.name}`, toolCall.args);
+      this.emit('toolCallReceived', toolCall);
+
+      try {
+        const result = await this.mcp.callTool(toolCall.name, toolCall.args);
+        const resultText = this.extractResultText(result);
+        console.log(`[Controller] Result: ${resultText.substring(0, 100)}...`);
+
+        results.push({
+          id: toolCall.id,
+          result: resultText,
+          isError: false,
+        });
+
+        // Update reward system based on tool results
+        this.updateRewardsFromTool(toolCall.name, toolCall.args, resultText);
+
+        this.emit('toolCallCompleted', { toolCall, result: resultText });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`[Controller] Tool error: ${errorMessage}`);
+
+        results.push({
+          id: toolCall.id,
+          result: `Error: ${errorMessage}`,
+          isError: true,
+        });
+        this.emit('toolCallError', { toolCall, error: errorMessage });
+      }
+    }
+
+    // Send all results back to Gemini together
+    try {
+      await this.gemini.sendToolResults(results);
+    } catch (error) {
+      console.error('[Controller] Error sending tool results:', error);
+    }
+
+    // Unblock frame processing
+    this.isExecutingTools = false;
+
+    // Resume vision capture after tool execution
+    if (wasCapturing) {
+      this.vision.startCapture();
+      console.log('[Controller] Vision resumed');
+    }
+
+    this.setState('idle');
   }
 
   /**
@@ -266,6 +308,91 @@ export class ActionController extends EventEmitter {
       }
     }
     return JSON.stringify(result);
+  }
+
+  /**
+   * Update reward system based on tool execution results
+   */
+  private updateRewardsFromTool(
+    toolName: string,
+    args: Record<string, unknown>,
+    result: string
+  ): void {
+    try {
+      switch (toolName) {
+        case 'minecraft_get_position': {
+          // Parse position from result
+          const posMatch = result.match(/"x":([\d.-]+).*"y":([\d.-]+).*"z":([\d.-]+)/);
+          if (posMatch) {
+            const x = parseFloat(posMatch[1]);
+            const y = parseFloat(posMatch[2]);
+            const z = parseFloat(posMatch[3]);
+            this.rewardSystem.updatePosition(x, y, z);
+            console.log(`[Reward] Position updated: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
+          }
+          break;
+        }
+
+        case 'minecraft_move_to': {
+          // Extract final position from "Moved to approximately (x, y, z)"
+          const moveMatch = result.match(/\(([\d.-]+),\s*([\d.-]+),\s*([\d.-]+)\)/);
+          if (moveMatch) {
+            const x = parseFloat(moveMatch[1]);
+            const y = parseFloat(moveMatch[2]);
+            const z = parseFloat(moveMatch[3]);
+            if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+              this.rewardSystem.updatePosition(x, y, z);
+              console.log(`[Reward] Moved to: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
+            }
+          }
+          break;
+        }
+
+        case 'minecraft_look_around': {
+          // Extract block types from result
+          const blockMatches = result.matchAll(/^(\w+):\s*\d+/gm);
+          const blockTypes: string[] = [];
+          for (const match of blockMatches) {
+            blockTypes.push(match[1]);
+          }
+          if (blockTypes.length > 0) {
+            this.rewardSystem.updateDiscoveredBlocks(blockTypes);
+            console.log(`[Reward] Discovered ${blockTypes.length} block types`);
+          }
+          break;
+        }
+
+        case 'minecraft_place_block': {
+          if (!result.includes('Error')) {
+            this.rewardSystem.recordBlockPlaced();
+            console.log('[Reward] Block placed');
+          }
+          break;
+        }
+
+        case 'minecraft_build_structure': {
+          if (!result.includes('Error')) {
+            this.rewardSystem.recordStructureBuilt();
+            console.log('[Reward] Structure built');
+          }
+          break;
+        }
+      }
+
+      // Log current score
+      const reward = this.rewardSystem.calculateReward();
+      console.log(`[Reward] Current score: ${reward.total.toFixed(1)}`);
+
+    } catch (error) {
+      console.error('[Reward] Error updating rewards:', error);
+    }
+  }
+
+  /**
+   * Get the reward system for external access
+   */
+  getRewardSystem(): RewardSystem {
+    return this.rewardSystem;
   }
 
   /**

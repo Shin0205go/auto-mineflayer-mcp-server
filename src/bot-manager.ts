@@ -114,6 +114,14 @@ export class BotManager {
         movements.allowSprinting = true;
         bot.pathfinder.setMovements(movements);
 
+        // Check game mode - auto-switch to survival if not
+        const gameMode = bot.game?.gameMode;
+        console.error(`[BotManager] ${config.username} game mode: ${gameMode}`);
+        if (gameMode !== "survival") {
+          console.error(`[BotManager] Switching to survival mode...`);
+          bot.chat(`/gamemode survival ${config.username}`);
+        }
+
         const managedBot: ManagedBot = {
           bot,
           username: config.username,
@@ -196,7 +204,7 @@ export class BotManager {
             clearInterval(managedBot.particleInterval);
           }
           this.bots.delete(config.username);
-          console.log(`[BotManager] ${config.username} disconnected`);
+          console.error(`[BotManager] ${config.username} disconnected`);
         });
 
         bot.on("error", (err) => {
@@ -206,7 +214,7 @@ export class BotManager {
 
         // Auto-respawn on death
         bot.on("death", () => {
-          console.log(`[BotManager] ${config.username} died! Auto-respawning...`);
+          console.error(`[BotManager] ${config.username} died! Auto-respawning...`);
           addEvent("death", "Bot died! Respawning...");
           bot.chat("やられた！リスポーン中...");
           setTimeout(() => {
@@ -216,8 +224,14 @@ export class BotManager {
         });
 
         this.bots.set(config.username, managedBot);
-        console.log(`[BotManager] ${config.username} connected`);
-        resolve(`Connected as ${config.username}`);
+        console.error(`[BotManager] ${config.username} connected`);
+
+        // Return connection info with game mode warning
+        let result = `Connected as ${config.username} (${gameMode} mode)`;
+        if (gameMode !== "survival") {
+          result += `. WARNING: Not in survival mode! Run /gamemode survival ${config.username} for items to drop.`;
+        }
+        resolve(result);
       });
 
       bot.once("error", (err) => {
@@ -260,7 +274,7 @@ export class BotManager {
     return { x: pos.x, y: pos.y, z: pos.z };
   }
 
-  async moveTo(username: string, x: number, y: number, z: number): Promise<void> {
+  async moveTo(username: string, x: number, y: number, z: number): Promise<string> {
     const managed = this.bots.get(username);
     if (!managed) {
       throw new Error(`Bot '${username}' not found`);
@@ -271,11 +285,34 @@ export class BotManager {
     const start = bot.entity.position;
     const distance = start.distanceTo(targetPos);
 
+    console.error(`[Move] From (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)}) to (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
+
     const goal = new goals.GoalNear(x, y, z, 2);
-    bot.pathfinder.setGoal(goal);
 
     return new Promise((resolve) => {
       let resolved = false;
+      let noProgressCount = 0;
+      let lastPos = start.clone();
+
+      const cleanup = () => {
+        bot.pathfinder.setGoal(null);
+        bot.removeListener("path_reset", onPathReset);
+      };
+
+      const onPathReset = () => {
+        if (!resolved) {
+          resolved = true;
+          cleanup();
+          const finalPos = bot.entity.position;
+          const finalDist = finalPos.distanceTo(targetPos);
+          console.error(`[Move] Path reset - no path found. Distance remaining: ${finalDist.toFixed(1)}`);
+          resolve(`Cannot reach target - no path found. Stopped at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks away.`);
+        }
+      };
+
+      bot.once("path_reset", onPathReset);
+
+      bot.pathfinder.setGoal(goal);
 
       const checkInterval = setInterval(() => {
         if (resolved) {
@@ -286,23 +323,60 @@ export class BotManager {
         const currentPos = bot.entity.position;
         const currentDist = currentPos.distanceTo(targetPos);
 
-        if (currentDist < 3 || !bot.pathfinder.isMoving()) {
+        // Check if reached goal
+        if (currentDist < 3) {
           clearInterval(checkInterval);
           if (!resolved) {
             resolved = true;
-            bot.pathfinder.setGoal(null);
-            resolve();
+            cleanup();
+            resolve(`Reached destination (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)})`);
           }
+          return;
         }
-      }, 200);
 
-      const timeout = Math.max(30000, distance * 500);
+        // Check if stuck (no progress for 3 checks = 1.5 seconds)
+        const moved = currentPos.distanceTo(lastPos);
+        if (moved < 0.1) {
+          noProgressCount++;
+          if (noProgressCount >= 5) {
+            clearInterval(checkInterval);
+            if (!resolved) {
+              resolved = true;
+              cleanup();
+              console.error(`[Move] Stuck - no progress for ${noProgressCount * 300}ms`);
+              resolve(`Stuck at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Cannot reach target, ${currentDist.toFixed(1)} blocks away. Try moving around obstacles.`);
+            }
+            return;
+          }
+        } else {
+          noProgressCount = 0;
+          lastPos = currentPos.clone();
+        }
+
+        // Check if pathfinder stopped
+        if (!bot.pathfinder.isMoving() && currentDist > 3) {
+          clearInterval(checkInterval);
+          if (!resolved) {
+            resolved = true;
+            cleanup();
+            console.error(`[Move] Pathfinder stopped before reaching goal`);
+            resolve(`Pathfinder stopped at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). ${currentDist.toFixed(1)} blocks from target.`);
+          }
+          return;
+        }
+      }, 300);
+
+      // Timeout based on distance
+      const timeout = Math.max(15000, distance * 1000);
       setTimeout(() => {
         clearInterval(checkInterval);
         if (!resolved) {
           resolved = true;
-          bot.pathfinder.setGoal(null);
-          resolve();
+          cleanup();
+          const finalPos = bot.entity.position;
+          const finalDist = finalPos.distanceTo(targetPos);
+          console.error(`[Move] Timeout after ${timeout}ms`);
+          resolve(`Movement timeout. Stopped at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks from target.`);
         }
       }, timeout);
     });
@@ -341,36 +415,162 @@ export class BotManager {
     return events;
   }
 
-  async lookAround(username: string, radius: number = 5): Promise<BlockInfo[]> {
+  getSurroundings(username: string): string {
     const managed = this.bots.get(username);
     if (!managed) {
       throw new Error(`Bot '${username}' not found`);
     }
 
     const bot = managed.bot;
-    const blocks: BlockInfo[] = [];
     const pos = bot.entity.position;
+    const feetY = Math.floor(pos.y);
+    const headY = feetY + 1;
 
-    for (let x = -radius; x <= radius; x++) {
-      for (let y = -radius; y <= radius; y++) {
-        for (let z = -radius; z <= radius; z++) {
-          const blockPos = pos.offset(x, y, z);
-          const block = bot.blockAt(blockPos);
-          if (block && block.name !== "air") {
-            blocks.push({
-              name: block.name,
-              position: {
-                x: Math.floor(blockPos.x),
-                y: Math.floor(blockPos.y),
-                z: Math.floor(blockPos.z),
-              },
-            });
+    // Helper to get block at position
+    const getBlock = (x: number, y: number, z: number) => {
+      const block = bot.blockAt(new Vec3(x, y, z));
+      return block?.name || "unknown";
+    };
+
+    const x = Math.floor(pos.x);
+    const z = Math.floor(pos.z);
+
+    // Check all directions at feet and head level
+    const directions = {
+      north: { dx: 0, dz: -1 },
+      south: { dx: 0, dz: 1 },
+      east: { dx: 1, dz: 0 },
+      west: { dx: -1, dz: 0 },
+    };
+
+    const passable: string[] = [];
+    const blocked: string[] = [];
+
+    for (const [dir, { dx, dz }] of Object.entries(directions)) {
+      const feetBlock = getBlock(x + dx, feetY, z + dz);
+      const headBlock = getBlock(x + dx, headY, z + dz);
+      const groundBlock = getBlock(x + dx, feetY - 1, z + dz);
+
+      const canPass = (feetBlock === "air" || feetBlock === "water") &&
+                      (headBlock === "air" || headBlock === "water");
+      const hasGround = groundBlock !== "air" && groundBlock !== "water";
+
+      if (canPass && hasGround) {
+        passable.push(dir);
+      } else if (!canPass) {
+        blocked.push(`${dir}(${feetBlock})`);
+      } else {
+        blocked.push(`${dir}(no ground)`);
+      }
+    }
+
+    // Check above and below
+    const above = getBlock(x, headY + 1, z);
+    const below = getBlock(x, feetY - 1, z);
+    const twoBelow = getBlock(x, feetY - 2, z);
+
+    // Check what's at feet level (in water? in lava?)
+    const atFeet = getBlock(x, feetY, z);
+
+    // Build result
+    const lines = [
+      `Position: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`,
+      `Standing on: ${below}`,
+      `Above head: ${above}`,
+      `Can walk: ${passable.length > 0 ? passable.join(", ") : "nowhere"}`,
+      `Blocked: ${blocked.length > 0 ? blocked.join(", ") : "nothing"}`,
+    ];
+
+    if (atFeet !== "air") {
+      lines.push(`At feet: ${atFeet}`);
+    }
+
+    // Can jump up?
+    const canJumpUp = above === "air";
+
+    lines.push(`Can jump up: ${canJumpUp ? "yes" : "no (blocked)"}`);
+
+    if (below === "air") {
+      lines.push(`Warning: No ground below!`);
+    }
+
+    // Scan for nearby resources (radius 8)
+    const resourceCounts: Record<string, number> = {};
+    const interestingBlocks = [
+      "coal_ore", "iron_ore", "copper_ore", "gold_ore", "diamond_ore", "emerald_ore",
+      "deepslate_coal_ore", "deepslate_iron_ore", "deepslate_copper_ore", "deepslate_gold_ore", "deepslate_diamond_ore",
+      "oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log",
+      "crafting_table", "furnace", "chest",
+      "water", "lava",
+    ];
+
+    const radius = 8;
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+          const block = bot.blockAt(pos.offset(dx, dy, dz));
+          if (block && interestingBlocks.includes(block.name)) {
+            resourceCounts[block.name] = (resourceCounts[block.name] || 0) + 1;
           }
         }
       }
     }
 
-    return blocks;
+    if (Object.keys(resourceCounts).length > 0) {
+      const resources = Object.entries(resourceCounts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, count]) => `${name}: ${count}`)
+        .join(", ");
+      lines.push(`Nearby resources: ${resources}`);
+    } else {
+      lines.push(`Nearby resources: none found`);
+    }
+
+    return lines.join("\n");
+  }
+
+  findBlock(username: string, blockName: string, maxDistance: number = 10): string {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+    const pos = bot.entity.position;
+    const found: Array<{ x: number; y: number; z: number; distance: number }> = [];
+
+    // Search in a cube around the bot
+    for (let x = -maxDistance; x <= maxDistance; x++) {
+      for (let y = -maxDistance; y <= maxDistance; y++) {
+        for (let z = -maxDistance; z <= maxDistance; z++) {
+          const blockPos = pos.offset(x, y, z);
+          const block = bot.blockAt(blockPos);
+          if (block && block.name === blockName) {
+            const dist = pos.distanceTo(blockPos);
+            if (dist <= maxDistance) {
+              found.push({
+                x: Math.floor(blockPos.x),
+                y: Math.floor(blockPos.y),
+                z: Math.floor(blockPos.z),
+                distance: Math.round(dist * 10) / 10,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    if (found.length === 0) {
+      return `No ${blockName} found within ${maxDistance} blocks`;
+    }
+
+    // Sort by distance
+    found.sort((a, b) => a.distance - b.distance);
+
+    // Return up to 10 nearest
+    const nearest = found.slice(0, 10);
+    const result = nearest.map(b => `(${b.x}, ${b.y}, ${b.z}) - ${b.distance} blocks away`).join("\n");
+    return `Found ${found.length} ${blockName}. Nearest:\n${result}`;
   }
 
   async placeBlock(
@@ -493,16 +693,111 @@ export class BotManager {
     }
 
     // Survival mode: actually dig the block
-    const distance = bot.entity.position.distanceTo(blockPos);
-    if (distance > 4.5) {
-      return `Block is too far (${distance.toFixed(1)} blocks). Move closer first.`;
+    let distance = bot.entity.position.distanceTo(blockPos);
+    console.error(`[Dig] ${blockName} at (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
+
+    // Auto-move closer if too far (Minecraft survival reach is 4.5 blocks)
+    const REACH_DISTANCE = 4.5;
+    if (distance > REACH_DISTANCE) {
+      console.error(`[Dig] Too far, moving closer...`);
+      const goal = new goals.GoalNear(Math.floor(x), Math.floor(y), Math.floor(z), 3);
+      bot.pathfinder.setGoal(goal);
+
+      // Wait for movement (max 10 seconds)
+      const startTime = Date.now();
+      while (Date.now() - startTime < 10000) {
+        await this.delay(300);
+        distance = bot.entity.position.distanceTo(blockPos);
+        if (distance <= REACH_DISTANCE || !bot.pathfinder.isMoving()) {
+          break;
+        }
+      }
+      bot.pathfinder.setGoal(null);
+
+      distance = bot.entity.position.distanceTo(blockPos);
+      console.error(`[Dig] After moving, distance: ${distance.toFixed(1)}`);
+
+      if (distance > REACH_DISTANCE) {
+        return `Cannot reach block at (${x}, ${y}, ${z}). Stopped ${distance.toFixed(1)} blocks away. Block may be unreachable.`;
+      }
     }
 
+    // Check if block is diggable
+    if (block.hardness < 0) {
+      return `Cannot dig ${blockName} (unbreakable like bedrock)`;
+    }
+
+    const heldItem = bot.heldItem?.name || "empty hand";
+    const gameMode = bot.game?.gameMode || "unknown";
+    console.error(`[Dig] Held item: ${heldItem}, block hardness: ${block.hardness}, gameMode: ${gameMode}`);
+
     try {
-      await bot.dig(block);
-      return `Dug ${blockName} at (${x}, ${y}, ${z})`;
+      const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+
+      // Check if bot can dig this block
+      const canDig = bot.canDigBlock(block);
+      console.error(`[Dig] canDigBlock: ${canDig}`);
+
+      if (!canDig) {
+        return `Cannot dig ${blockName} - bot may be too far, block may be protected, or wrong tool equipped`;
+      }
+
+      // Look at the block first
+      await bot.lookAt(block.position.offset(0.5, 0.5, 0.5));
+
+      console.error(`[Dig] Starting to dig ${blockName}...`);
+      const digTime = bot.digTime(block);
+      console.error(`[Dig] Estimated dig time: ${digTime}ms`);
+
+      await bot.dig(block, true);  // forceLook = true
+      console.error(`[Dig] Finished digging ${blockName}`);
+
+      // Verify block is actually gone
+      const blockAfter = bot.blockAt(blockPos);
+      console.error(`[Dig] Block after dig: ${blockAfter?.name || "null"}`);
+      if (blockAfter && blockAfter.name !== "air") {
+        return `Dig seemed to complete but block is still there (${blockAfter.name}). May be protected area.`;
+      }
+
+      // Wait for item to spawn and fall
+      await this.delay(500);
+
+      // Move to the block position (or below if item fell) to auto-pickup
+      // Items often fall to y-1 after block breaks
+      const pickupY = Math.floor(y) - 1;
+      console.error(`[Dig] Moving to pickup location (${Math.floor(x)}, ${pickupY}, ${Math.floor(z)})`);
+      const goal = new goals.GoalNear(Math.floor(x), pickupY, Math.floor(z), 1);
+      bot.pathfinder.setGoal(goal);
+      await this.delay(1500);
+      bot.pathfinder.setGoal(null);
+
+      // Extra wait for pickup
+      await this.delay(300);
+
+      // Check if item was picked up
+      const inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+      const pickedUp = inventoryAfter - inventoryBefore;
+
+      if (pickedUp > 0) {
+        return `Dug ${blockName} and picked up ${pickedUp} item(s)! Inventory now has ${inventoryAfter} items.`;
+      }
+
+      // Look for dropped items nearby that weren't picked up
+      const droppedItems = Object.values(bot.entities).filter(e =>
+        e && e !== bot.entity &&
+        e.position.distanceTo(blockPos) < 5 &&
+        (e.name === "item" || e.type === "object" || e.displayName === "Item")
+      );
+
+      if (droppedItems.length > 0) {
+        return `Dug ${blockName} - ${droppedItems.length} item(s) nearby but couldn't pick up. Try collect_items.`;
+      } else {
+        return `Dug ${blockName}. Check inventory with get_inventory.`;
+      }
     } catch (err) {
-      return `Failed to dig: ${err}`;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[Dig] Error: ${errMsg}`);
+      return `Failed to dig ${blockName}: ${errMsg}`;
     }
   }
 
@@ -515,13 +810,36 @@ export class BotManager {
     const bot = managed.bot;
     const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
 
-    // Find dropped items (entity type "item")
-    const items = Object.values(bot.entities).filter(
-      (entity) => entity.name === "item" && entity.position.distanceTo(bot.entity.position) < 16
-    );
+    // Debug: log all nearby entities first
+    const allNearby = Object.values(bot.entities)
+      .filter(e => e && e !== bot.entity && e.position.distanceTo(bot.entity.position) < 16);
+    console.error(`[Collect] Total entities within 16 blocks: ${allNearby.length}`);
+    allNearby.slice(0, 5).forEach(e => {
+      console.error(`[Collect]   - name:${e.name}, displayName:${e.displayName}, type:${e.type}, dist:${e.position.distanceTo(bot.entity.position).toFixed(1)}`);
+    });
+
+    // Find dropped items - check both "item" name and displayName
+    const items = Object.values(bot.entities).filter((entity) => {
+      if (!entity || entity === bot.entity) return false;
+      const dist = entity.position.distanceTo(bot.entity.position);
+      if (dist > 16) return false;
+      // Items can be detected by name "item" or displayName "Item"
+      // Note: entity.objectType is deprecated, use displayName instead
+      return entity.name === "item" ||
+             entity.displayName === "Item" ||
+             entity.displayName === "Dropped Item" ||
+             entity.type === "object";  // Dropped items are "object" type in some versions
+    });
+
+    console.error(`[Collect] Found ${items.length} item entities`);
 
     if (items.length === 0) {
-      return "No items nearby to collect";
+      // Debug: show what entities ARE nearby
+      const nearbyEntities = Object.values(bot.entities)
+        .filter(e => e && e !== bot.entity && e.position.distanceTo(bot.entity.position) < 10)
+        .map(e => `${e.name || e.displayName || "unknown"}(type:${e.type})`)
+        .slice(0, 10);
+      return `No items nearby. Entities found: ${nearbyEntities.length > 0 ? nearbyEntities.join(", ") : "none"}`;
     }
 
     // Sort by distance
@@ -658,36 +976,92 @@ export class BotManager {
     }
 
     const bot = managed.bot;
-    const mcData = require("minecraft-data")(bot.version);
+
+    // Dynamic import of minecraft-data
+    const minecraftData = await import("minecraft-data");
+    const mcData = minecraftData.default(bot.version);
+
+    // Show what's in inventory for debugging
+    const inventoryItems = bot.inventory.items();
+    const inventory = inventoryItems.map(i => `${i.name}(${i.count})`).join(", ") || "empty";
 
     const item = mcData.itemsByName[itemName];
     if (!item) {
-      throw new Error(`Unknown item: ${itemName}`);
+      // Try to find similar items
+      const similar = Object.keys(mcData.itemsByName)
+        .filter(name => name.includes(itemName) || itemName.includes(name))
+        .slice(0, 5);
+      throw new Error(`Unknown item: ${itemName}. Similar: ${similar.join(", ")}. Inventory: ${inventory}`);
     }
 
-    const recipes = bot.recipesFor(item.id, null, 1, null);
+    console.error(`[Craft] MC version: ${bot.version}`);
+    console.error(`[Craft] Looking for recipes for ${itemName} (id: ${item.id})`);
+    console.error(`[Craft] Current inventory: ${inventory}`);
+
+    // Get recipes - try with and without crafting table
+    const craftingTableId = mcData.blocksByName.crafting_table?.id;
+    console.error(`[Craft] Crafting table block ID: ${craftingTableId}`);
+
+    let craftingTable = bot.findBlock({
+      matching: craftingTableId,
+      maxDistance: 4,
+    });
+    console.error(`[Craft] Crafting table found: ${craftingTable ? `yes at (${craftingTable.position.x}, ${craftingTable.position.y}, ${craftingTable.position.z})` : 'no'}`);
+
+    // Get available recipes - try both with and without table
+    let recipes = bot.recipesFor(item.id, null, 1, craftingTable);
+    console.error(`[Craft] Recipes with table: ${recipes.length}`);
+
+    if (recipes.length === 0 && !craftingTable) {
+      // Maybe try without table parameter
+      recipes = bot.recipesFor(item.id, null, 1, null);
+      console.error(`[Craft] Recipes without table: ${recipes.length}`);
+    }
+
     if (recipes.length === 0) {
-      throw new Error(`No recipe found for ${itemName}`);
+      // Try to get all recipes for this item (even if we can't craft them)
+      const allRecipes = bot.recipesAll(item.id, null, craftingTable);
+      console.error(`[Craft] Total possible recipes: ${allRecipes.length}`);
+
+      if (allRecipes.length > 0) {
+        // Show ALL possible ways to craft this item (up to 5)
+        const recipeOptions = allRecipes.slice(0, 5).map((recipe: { delta: Array<{ id: number; count: number }> }) => {
+          const ingredients = recipe.delta
+            .filter((d) => d.count < 0)
+            .map((d) => {
+              const ingredientItem = mcData.items[d.id];
+              return `${ingredientItem?.name || `id:${d.id}`} x${Math.abs(d.count)}`;
+            })
+            .join(" + ");
+          return ingredients;
+        });
+
+        // Remove duplicates and format
+        const uniqueOptions = [...new Set(recipeOptions)].slice(0, 3);
+        throw new Error(`Cannot craft ${itemName}: missing materials. Options: [${uniqueOptions.join("] or [")}]. Have: ${inventory}`);
+      }
+
+      throw new Error(`No recipe found for ${itemName}. Inventory: ${inventory}`);
     }
 
     const recipe = recipes[0];
-    let craftingTable = null;
+    console.error(`[Craft] Using recipe: requiresTable=${recipe.requiresTable}`);
 
-    if (recipe.requiresTable) {
-      craftingTable = bot.findBlock({
-        matching: mcData.blocksByName.crafting_table.id,
-        maxDistance: 4,
-      });
+    if (recipe.requiresTable && !craftingTable) {
+      throw new Error(`${itemName} requires a crafting table nearby (within 4 blocks). Inventory: ${inventory}`);
+    }
 
-      if (!craftingTable) {
-        throw new Error("This recipe requires a crafting table nearby (within 4 blocks)");
+    try {
+      for (let i = 0; i < count; i++) {
+        await bot.craft(recipe, 1, craftingTable || undefined);
       }
+      // Check new inventory
+      const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
+      return `Crafted ${count}x ${itemName}. Inventory: ${newInventory}`;
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Failed to craft ${itemName}: ${errMsg}. Inventory: ${inventory}`);
     }
-
-    for (let i = 0; i < count; i++) {
-      await bot.craft(recipe, 1, craftingTable ?? undefined);
-    }
-    return `Crafted ${count}x ${itemName}`;
   }
 
   // ============ Combat Methods ============
@@ -833,6 +1207,129 @@ export class BotManager {
     }
   }
 
+  /**
+   * Fight an entity until it dies or we need to flee
+   * Handles: equip weapon, approach, attack loop, health check
+   */
+  async fight(
+    username: string,
+    entityName?: string,
+    fleeHealthThreshold: number = 6
+  ): Promise<string> {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+    const hostileMobs = [
+      "zombie", "skeleton", "creeper", "spider", "cave_spider", "enderman",
+      "witch", "slime", "phantom", "drowned", "husk", "stray", "pillager",
+    ];
+
+    // Step 1: Equip best weapon
+    const weaponPriority = [
+      "netherite_sword", "diamond_sword", "iron_sword", "stone_sword", "wooden_sword",
+      "netherite_axe", "diamond_axe", "iron_axe", "stone_axe", "wooden_axe",
+    ];
+    const inventory = bot.inventory.items();
+    for (const weaponName of weaponPriority) {
+      const weapon = inventory.find(i => i.name === weaponName);
+      if (weapon) {
+        await bot.equip(weapon, "hand");
+        console.error(`[BotManager] Equipped ${weaponName}`);
+        break;
+      }
+    }
+
+    // Step 2: Find target
+    const findTarget = () => {
+      const entities = Object.values(bot.entities);
+      if (entityName) {
+        return entities.find(e =>
+          e.name?.toLowerCase() === entityName.toLowerCase() &&
+          e.position.distanceTo(bot.entity.position) < 20
+        ) || null;
+      }
+      return entities
+        .filter(e => hostileMobs.includes(e.name?.toLowerCase() || ""))
+        .sort((a, b) =>
+          a.position.distanceTo(bot.entity.position) -
+          b.position.distanceTo(bot.entity.position)
+        )[0] || null;
+    };
+
+    let target = findTarget();
+    if (!target) {
+      return entityName
+        ? `No ${entityName} found nearby`
+        : "No hostile mobs nearby";
+    }
+
+    const targetName = target.name || "entity";
+    const targetId = target.id;
+    let attackCount = 0;
+    const maxAttacks = 30; // Safety limit
+
+    console.error(`[BotManager] Starting fight with ${targetName}`);
+
+    // Step 3: Combat loop
+    while (attackCount < maxAttacks) {
+      // Check health - flee if low
+      const health = bot.health;
+      if (health <= fleeHealthThreshold) {
+        console.error(`[BotManager] Health low (${health}), fleeing!`);
+        bot.pathfinder.setGoal(null);
+        await this.flee(username, 20);
+        return `Fled! Health was ${health}. Attacked ${attackCount} times.`;
+      }
+
+      // Re-find target (it might have moved or died)
+      target = Object.values(bot.entities).find(e => e.id === targetId) || null;
+      if (!target) {
+        return `${targetName} defeated! Attacked ${attackCount} times.`;
+      }
+
+      const distance = target.position.distanceTo(bot.entity.position);
+
+      // Creeper special case - keep distance and use bow if available
+      if (target.name === "creeper" && distance < 4) {
+        console.error(`[BotManager] Creeper too close! Backing up.`);
+        const direction = bot.entity.position.minus(target.position).normalize();
+        const backupPos = bot.entity.position.plus(direction.scaled(6));
+        bot.pathfinder.setGoal(new goals.GoalNear(backupPos.x, backupPos.y, backupPos.z, 2));
+        await this.delay(1000);
+        continue;
+      }
+
+      // Move closer if needed
+      if (distance > 3.5) {
+        bot.pathfinder.setGoal(new goals.GoalNear(
+          target.position.x, target.position.y, target.position.z, 2
+        ));
+        await this.delay(500);
+        continue;
+      }
+
+      // Attack!
+      try {
+        bot.pathfinder.setGoal(null); // Stop moving during attack
+        await bot.lookAt(target.position.offset(0, target.height * 0.8, 0));
+        await bot.attack(target);
+        attackCount++;
+        console.error(`[BotManager] Hit ${targetName} (#${attackCount})`);
+      } catch (err) {
+        // Target might have died
+        console.error(`[BotManager] Attack error: ${err}`);
+      }
+
+      // Attack cooldown (Minecraft attack speed)
+      await this.delay(500);
+    }
+
+    return `Combat ended. Attacked ${attackCount} times. Target may still be alive.`;
+  }
+
   async eat(username: string, foodName?: string): Promise<string> {
     const managed = this.bots.get(username);
     if (!managed) {
@@ -953,6 +1450,95 @@ export class BotManager {
     }
   }
 
+  async equipItem(username: string, itemName: string): Promise<string> {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+    const item = bot.inventory.items().find(i =>
+      i.name.toLowerCase() === itemName.toLowerCase() ||
+      i.name.toLowerCase().includes(itemName.toLowerCase())
+    );
+
+    if (!item) {
+      const available = bot.inventory.items().map(i => i.name).join(", ");
+      return `No ${itemName} in inventory. Available: ${available || "nothing"}`;
+    }
+
+    try {
+      await bot.equip(item, "hand");
+      return `Equipped ${item.name}`;
+    } catch (err) {
+      return `Failed to equip ${item.name}: ${err}`;
+    }
+  }
+
+  async pillarUp(username: string, height: number = 1): Promise<string> {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+
+    // Find a block to place (dirt, cobblestone, etc.)
+    const buildBlocks = ["cobblestone", "dirt", "stone", "oak_planks", "spruce_planks", "birch_planks", "netherrack"];
+    let blockItem = null;
+    for (const blockName of buildBlocks) {
+      blockItem = bot.inventory.items().find(i => i.name === blockName);
+      if (blockItem) break;
+    }
+
+    if (!blockItem) {
+      const available = bot.inventory.items()
+        .filter(i => !i.name.includes("pickaxe") && !i.name.includes("sword"))
+        .map(i => i.name)
+        .slice(0, 5);
+      return `No blocks to pillar up with. Available: ${available.join(", ") || "nothing"}`;
+    }
+
+    // Equip the block
+    await bot.equip(blockItem, "hand");
+
+    let blocksPlaced = 0;
+    const startY = bot.entity.position.y;
+
+    for (let i = 0; i < height; i++) {
+      try {
+        // Jump
+        bot.setControlState("jump", true);
+        await this.delay(200);
+
+        // Place block below
+        const pos = bot.entity.position;
+        const belowPos = new Vec3(Math.floor(pos.x), Math.floor(pos.y) - 1, Math.floor(pos.z));
+        const blockBelow = bot.blockAt(belowPos);
+
+        if (blockBelow && blockBelow.name === "air") {
+          // Find adjacent block to place against
+          const groundBlock = bot.blockAt(belowPos.offset(0, -1, 0));
+          if (groundBlock && groundBlock.name !== "air") {
+            await bot.placeBlock(groundBlock, new Vec3(0, 1, 0));
+            blocksPlaced++;
+          }
+        }
+
+        bot.setControlState("jump", false);
+        await this.delay(300);
+      } catch (err) {
+        console.error(`[Pillar] Error: ${err}`);
+        bot.setControlState("jump", false);
+      }
+    }
+
+    bot.setControlState("jump", false);
+    const finalY = bot.entity.position.y;
+
+    return `Pillared up ${blocksPlaced} blocks (from Y:${startY.toFixed(1)} to Y:${finalY.toFixed(1)}) using ${blockItem.name}`;
+  }
+
   async flee(username: string, distance: number = 20): Promise<string> {
     const managed = this.bots.get(username);
     if (!managed) {
@@ -989,6 +1575,234 @@ export class BotManager {
 
     const newDist = bot.entity.position.distanceTo(hostile.position);
     return `Fled from ${hostile.name}! Now ${newDist.toFixed(1)} blocks away`;
+  }
+
+  /**
+   * Get current biome information
+   */
+  async getBiome(username: string): Promise<string> {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+    const pos = bot.entity.position;
+    const block = bot.blockAt(pos);
+
+    if (!block) {
+      return "Cannot determine biome - chunk not loaded";
+    }
+
+    const biome = block.biome;
+
+    if (!biome) {
+      return "Biome information not available";
+    }
+
+    // Get biome name from ID using minecraft-data
+    let biomeName = biome.name;
+    if (!biomeName && biome.id !== undefined) {
+      try {
+        const minecraftData = await import("minecraft-data");
+        const mcData = minecraftData.default(bot.version);
+        const biomeData = mcData.biomes?.[biome.id] || (mcData as any).biomesArray?.find((b: any) => b.id === biome.id);
+        biomeName = biomeData?.name || `biome_${biome.id}`;
+      } catch {
+        biomeName = `biome_${biome.id}`;
+      }
+    }
+    biomeName = biomeName || "unknown";
+
+    // Biome info
+    const lines = [
+      `Current biome: ${biomeName}`,
+      `Position: (${Math.floor(pos.x)}, ${Math.floor(pos.y)}, ${Math.floor(pos.z)})`,
+    ];
+
+    // Add biome characteristics if available
+    if (biome.temperature !== undefined) {
+      lines.push(`Temperature: ${biome.temperature}`);
+    }
+    if (biome.rainfall !== undefined) {
+      lines.push(`Rainfall: ${biome.rainfall}`);
+    }
+
+    // Sheep spawn biomes hint
+    const sheepBiomes = ["plains", "sunflower_plains", "meadow", "forest", "birch_forest", "flower_forest", "snowy_plains", "snowy_taiga"];
+    if (sheepBiomes.some(b => biomeName.includes(b))) {
+      lines.push("★ This biome can spawn sheep!");
+    } else {
+      lines.push(`Tip: Sheep spawn in plains, meadow, forest biomes. Try exploring in one direction.`);
+    }
+
+    return lines.join("\n");
+  }
+
+  /**
+   * Find nearby entities (mobs, animals, players)
+   */
+  findEntities(username: string, entityType?: string, maxDistance: number = 32): string {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+    const pos = bot.entity.position;
+
+    // Get all entities
+    const entities = Object.values(bot.entities)
+      .filter(e => {
+        if (!e || e === bot.entity) return false;
+        const dist = pos.distanceTo(e.position);
+        if (dist > maxDistance) return false;
+        if (entityType) {
+          const name = e.name?.toLowerCase() || e.displayName?.toLowerCase() || "";
+          return name.includes(entityType.toLowerCase());
+        }
+        return true;
+      })
+      .map(e => ({
+        name: e.name || e.displayName || "unknown",
+        type: e.type,
+        position: e.position,
+        distance: pos.distanceTo(e.position),
+      }))
+      .sort((a, b) => a.distance - b.distance);
+
+    if (entities.length === 0) {
+      if (entityType) {
+        return `No ${entityType} found within ${maxDistance} blocks`;
+      }
+      return `No entities found within ${maxDistance} blocks`;
+    }
+
+    // Group by type
+    const grouped: Record<string, typeof entities> = {};
+    for (const e of entities) {
+      const key = e.name;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(e);
+    }
+
+    const lines = [`Entities within ${maxDistance} blocks:`];
+    for (const [name, list] of Object.entries(grouped)) {
+      const nearest = list[0];
+      lines.push(`- ${name} x${list.length} (nearest: ${nearest.distance.toFixed(1)} blocks at ${Math.floor(nearest.position.x)}, ${Math.floor(nearest.position.y)}, ${Math.floor(nearest.position.z)})`);
+    }
+
+    return lines.join("\n");
+  }
+
+  /**
+   * Explore in a direction looking for a biome type
+   */
+  async exploreForBiome(
+    username: string,
+    targetBiome: string,
+    direction: "north" | "south" | "east" | "west" | "random",
+    maxBlocks: number = 200
+  ): Promise<string> {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+    const startPos = bot.entity.position.clone();
+
+    // Load minecraft-data for biome lookup
+    const minecraftData = await import("minecraft-data");
+    const mcData = minecraftData.default(bot.version);
+
+    // Helper to get biome name from ID
+    const getBiomeName = (biome: any): string => {
+      if (!biome) return "unknown";
+      if (biome.name) return biome.name;
+      if (biome.id !== undefined) {
+        const biomeData = mcData.biomes?.[biome.id] || (mcData as any).biomesArray?.find((b: any) => b.id === biome.id);
+        return biomeData?.name || `biome_${biome.id}`;
+      }
+      return "unknown";
+    };
+
+    // Determine direction vector
+    let dx = 0, dz = 0;
+    switch (direction) {
+      case "north": dz = -1; break;
+      case "south": dz = 1; break;
+      case "east": dx = 1; break;
+      case "west": dx = -1; break;
+      case "random":
+        const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        const picked = dirs[Math.floor(Math.random() * dirs.length)];
+        dx = picked[0];
+        dz = picked[1];
+        break;
+    }
+
+    console.error(`[BotManager] Exploring ${direction} looking for ${targetBiome}`);
+
+    // Walk in steps, checking biome
+    const stepSize = 50;
+    let traveled = 0;
+    let foundBiome: string | null = null;
+    let foundAt: Vec3 | null = null;
+
+    while (traveled < maxBlocks) {
+      const targetX = startPos.x + dx * (traveled + stepSize);
+      const targetZ = startPos.z + dz * (traveled + stepSize);
+
+      // Move to target
+      const goal = new goals.GoalNear(targetX, bot.entity.position.y, targetZ, 5);
+      bot.pathfinder.setGoal(goal);
+
+      // Wait for movement (with timeout)
+      const moveStart = Date.now();
+      while (Date.now() - moveStart < 15000) {
+        await this.delay(500);
+        const currentPos = bot.entity.position;
+        const distToGoal = Math.sqrt(
+          Math.pow(currentPos.x - targetX, 2) + Math.pow(currentPos.z - targetZ, 2)
+        );
+        if (distToGoal < 10) break;
+      }
+      bot.pathfinder.setGoal(null);
+
+      traveled += stepSize;
+
+      // Check current biome
+      const block = bot.blockAt(bot.entity.position);
+      const currentBiome = getBiomeName(block?.biome);
+
+      console.error(`[BotManager] At ${Math.floor(bot.entity.position.x)}, ${Math.floor(bot.entity.position.z)} - biome: ${currentBiome}`);
+
+      if (currentBiome.toLowerCase().includes(targetBiome.toLowerCase())) {
+        foundBiome = currentBiome;
+        foundAt = bot.entity.position.clone();
+        break;
+      }
+
+      // Also check for target entities while exploring (sheep in this case)
+      const sheep = Object.values(bot.entities).find(e =>
+        e && e.name?.toLowerCase() === "sheep" &&
+        bot.entity.position.distanceTo(e.position) < 30
+      );
+      if (sheep) {
+        return `Found sheep while exploring! At (${Math.floor(sheep.position.x)}, ${Math.floor(sheep.position.y)}, ${Math.floor(sheep.position.z)}) - current biome: ${currentBiome}`;
+      }
+    }
+
+    if (foundBiome && foundAt) {
+      return `Found ${foundBiome} biome at (${Math.floor(foundAt.x)}, ${Math.floor(foundAt.y)}, ${Math.floor(foundAt.z)}) after exploring ${traveled} blocks ${direction}`;
+    }
+
+    const finalPos = bot.entity.position;
+    const finalBlock = bot.blockAt(finalPos);
+    const finalBiome = getBiomeName(finalBlock?.biome);
+
+    return `Explored ${traveled} blocks ${direction}. Current biome: ${finalBiome}. Target biome '${targetBiome}' not found. Try another direction.`;
   }
 }
 

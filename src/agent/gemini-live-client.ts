@@ -11,7 +11,7 @@ import { EventEmitter } from 'events';
 export interface GeminiConfig {
   /** Gemini API key */
   apiKey: string;
-  /** Model name (default: gemini-2.0-flash-exp) */
+  /** Model name (default: gemini-2.0-flash) */
   model?: string;
   /** System instruction for the agent */
   systemInstruction?: string;
@@ -186,7 +186,7 @@ export class GeminiLiveClient extends EventEmitter {
   constructor(config: GeminiConfig) {
     super();
     this.config = {
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-2.0-flash',
       systemInstruction: DEFAULT_SYSTEM_INSTRUCTION,
       ...config,
     };
@@ -243,9 +243,10 @@ export class GeminiLiveClient extends EventEmitter {
       const result = await this.session.sendMessage([imagePart, textPart]);
       const response = result.response;
 
-      // Check for function calls
+      // Check for function calls - emit all together as a batch
       const functionCalls = response.functionCalls();
       if (functionCalls && functionCalls.length > 0) {
+        const toolCalls: ToolCall[] = [];
         for (const fc of functionCalls) {
           const toolCall: ToolCall = {
             id: `tc_${++this.toolCallIdCounter}`,
@@ -253,8 +254,10 @@ export class GeminiLiveClient extends EventEmitter {
             args: fc.args as Record<string, unknown>,
           };
           this.pendingToolCalls.set(toolCall.id, toolCall);
-          this.emit('toolCall', toolCall);
+          toolCalls.push(toolCall);
         }
+        // Emit all tool calls as a batch
+        this.emit('toolCallBatch', toolCalls);
       }
 
       // Check for text response
@@ -264,8 +267,35 @@ export class GeminiLiveClient extends EventEmitter {
       }
     } catch (error) {
       console.error('[Gemini] Error sending frame:', error);
+      // Check if session is corrupted (function response mismatch)
+      if (error instanceof Error && error.message.includes('function response parts')) {
+        console.log('[Gemini] Session corrupted, resetting...');
+        await this.resetSession();
+      }
       this.emit('error', error);
     }
+  }
+
+  /**
+   * Reset the chat session (clears history and pending tool calls)
+   */
+  async resetSession(): Promise<void> {
+    console.log('[Gemini] Resetting session...');
+    this.pendingToolCalls.clear();
+
+    // Reconnect to get a fresh session
+    const model = this.genAI.getGenerativeModel({
+      model: this.config.model!,
+      systemInstruction: this.config.systemInstruction,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tools: MCP_TOOLS as any,
+    });
+
+    this.session = model.startChat({
+      history: [],
+    });
+
+    console.log('[Gemini] Session reset complete');
   }
 
   /**
@@ -280,9 +310,10 @@ export class GeminiLiveClient extends EventEmitter {
       const result = await this.session.sendMessage(text);
       const response = result.response;
 
-      // Check for function calls
+      // Check for function calls - emit all together as a batch
       const functionCalls = response.functionCalls();
       if (functionCalls && functionCalls.length > 0) {
+        const toolCalls: ToolCall[] = [];
         for (const fc of functionCalls) {
           const toolCall: ToolCall = {
             id: `tc_${++this.toolCallIdCounter}`,
@@ -290,8 +321,9 @@ export class GeminiLiveClient extends EventEmitter {
             args: fc.args as Record<string, unknown>,
           };
           this.pendingToolCalls.set(toolCall.id, toolCall);
-          this.emit('toolCall', toolCall);
+          toolCalls.push(toolCall);
         }
+        this.emit('toolCallBatch', toolCalls);
       }
 
       // Check for text response
@@ -301,27 +333,36 @@ export class GeminiLiveClient extends EventEmitter {
       }
     } catch (error) {
       console.error('[Gemini] Error sending text:', error);
+      // Check if session is corrupted
+      if (error instanceof Error && error.message.includes('function response parts')) {
+        console.log('[Gemini] Session corrupted, resetting...');
+        await this.resetSession();
+      }
       this.emit('error', error);
     }
   }
 
   /**
-   * Send tool execution result back to Gemini
+   * Send multiple tool execution results back to Gemini at once
+   * Gemini API requires all function responses to be sent together
    */
-  async sendToolResult(result: ToolResult): Promise<void> {
+  async sendToolResults(results: ToolResult[]): Promise<void> {
     if (!this.isConnected || !this.session) {
       throw new Error('Not connected to Gemini');
     }
 
-    const toolCall = this.pendingToolCalls.get(result.id);
-    if (!toolCall) {
-      console.warn(`[Gemini] Unknown tool call ID: ${result.id}`);
+    if (results.length === 0) {
       return;
     }
 
-    try {
-      // Send function response back to Gemini
-      const functionResponse = {
+    // Build all function responses
+    const functionResponses = results.map(result => {
+      const toolCall = this.pendingToolCalls.get(result.id);
+      if (!toolCall) {
+        console.warn(`[Gemini] Unknown tool call ID: ${result.id}`);
+        return null;
+      }
+      return {
         functionResponse: {
           name: toolCall.name,
           response: {
@@ -330,13 +371,25 @@ export class GeminiLiveClient extends EventEmitter {
           },
         },
       };
+    }).filter(r => r !== null);
 
-      const response = await this.session.sendMessage([functionResponse]);
-      this.pendingToolCalls.delete(result.id);
+    if (functionResponses.length === 0) {
+      return;
+    }
+
+    try {
+      // Send all function responses together
+      const response = await this.session.sendMessage(functionResponses);
+
+      // Clear processed tool calls
+      for (const result of results) {
+        this.pendingToolCalls.delete(result.id);
+      }
 
       // Check for follow-up function calls
       const functionCalls = response.response.functionCalls();
       if (functionCalls && functionCalls.length > 0) {
+        const toolCalls: ToolCall[] = [];
         for (const fc of functionCalls) {
           const newToolCall: ToolCall = {
             id: `tc_${++this.toolCallIdCounter}`,
@@ -344,8 +397,9 @@ export class GeminiLiveClient extends EventEmitter {
             args: fc.args as Record<string, unknown>,
           };
           this.pendingToolCalls.set(newToolCall.id, newToolCall);
-          this.emit('toolCall', newToolCall);
+          toolCalls.push(newToolCall);
         }
+        this.emit('toolCallBatch', toolCalls);
       }
 
       // Check for text response
@@ -354,7 +408,12 @@ export class GeminiLiveClient extends EventEmitter {
         this.emit('text', text);
       }
     } catch (error) {
-      console.error('[Gemini] Error sending tool result:', error);
+      console.error('[Gemini] Error sending tool results:', error);
+      // Check if session is corrupted
+      if (error instanceof Error && error.message.includes('function response parts')) {
+        console.log('[Gemini] Session corrupted, resetting...');
+        await this.resetSession();
+      }
       this.emit('error', error);
     }
   }

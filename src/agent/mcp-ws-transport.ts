@@ -204,7 +204,8 @@ export class MCPWebSocketClientTransport extends EventEmitter {
    * Call an MCP tool
    */
   async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-    return this.request('tools/call', { name, arguments: args });
+    // Use longer timeout for tool calls (60s) as some operations like movement take time
+    return this.request('tools/call', { name, arguments: args }, 60000);
   }
 
   /**
