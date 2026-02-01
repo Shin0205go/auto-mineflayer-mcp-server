@@ -2,7 +2,7 @@
  * MCP WebSocket Transport
  *
  * Custom Transport implementation for MCP protocol over WebSocket.
- * Allows the Gemini agent to communicate with the MCP server via WebSocket.
+ * Allows agents to communicate with the MCP server via WebSocket.
  */
 
 import { WebSocket } from 'ws';

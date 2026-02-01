@@ -4,7 +4,7 @@
  * Claude Autonomous Agent
  *
  * Uses WebSocket MCP for persistent bot connection.
- * Same architecture as Gemini agent.
+ * Autonomous agent using WebSocket MCP.
  */
 
 import "dotenv/config";

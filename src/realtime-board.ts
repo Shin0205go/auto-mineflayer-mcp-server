@@ -2,7 +2,7 @@
  * リアルタイム掲示板 - WebSocket Server
  *
  * shared-board.txt の変更を監視してWebSocketで通知
- * Geminiからの書き込みも受け付ける
+ * 外部からの書き込みも受け付ける
  */
 
 import { WebSocketServer, WebSocket } from "ws";
@@ -61,7 +61,7 @@ export function startRealtimeBoard(): void {
       content: getBoardContent()
     }));
 
-    // メッセージ受信（Geminiからの書き込み等）
+    // メッセージ受信（外部からの書き込み等）
     ws.on("message", (data: Buffer) => {
       try {
         const msg = JSON.parse(data.toString());

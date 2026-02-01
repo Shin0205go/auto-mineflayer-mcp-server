@@ -26,7 +26,7 @@ export const coordinationTools = {
   },
 
   agent_board_wait: {
-    description: "掲示板に新しいメッセージが来るまで待機する。リアルタイムで他のエージェント(Gemini等)の更新を監視できる。",
+    description: "掲示板に新しいメッセージが来るまで待機する。リアルタイムで他のエージェントの更新を監視できる。",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -36,7 +36,7 @@ export const coordinationTools = {
         },
         filter: {
           type: "string",
-          description: "特定のエージェント名でフィルタ（例: 'Gemini'）",
+          description: "特定のエージェント名でフィルタ（例: 'Claude2'）",
         },
       },
       required: [],
