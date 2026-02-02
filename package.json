@@ -11,6 +11,7 @@
     "start": "node dist/index.js",
     "start:claude": "node dist/agent/claude-agent.js",
     "start:mcp-ws": "node dist/mcp-ws-server.js",
+    "start:dev-agent": "node dist/agent/dev-agent.js",
     "board": "node dist/realtime-board.js"
   },
   "keywords": [

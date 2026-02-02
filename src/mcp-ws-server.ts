@@ -10,6 +10,134 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { botManager } from "./bot-manager.js";
 import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
+import { appendFileSync, readFileSync, existsSync, writeFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+import type { ToolExecutionLog, ToolExecutionContext } from "./types/tool-log.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Tool execution log storage
+const TOOL_LOG_FILE = join(__dirname, "..", "logs", "tool-execution.jsonl");
+const toolExecutionLogs: ToolExecutionLog[] = [];
+const MAX_LOGS_IN_MEMORY = 500;
+
+// Dev Agent subscriptions (for receiving tool logs)
+const devAgentConnections = new Set<WebSocket>();
+
+// Ensure logs directory exists
+function ensureLogDir() {
+  const logDir = join(__dirname, "..", "logs");
+  if (!existsSync(logDir)) {
+    const { mkdirSync } = require("fs");
+    mkdirSync(logDir, { recursive: true });
+  }
+}
+
+// Generate unique ID
+function generateLogId(): string {
+  return `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Get current bot context for logging
+function getBotContext(username: string): ToolExecutionContext {
+  try {
+    const status = botManager.getStatus(username);
+    const statusObj = JSON.parse(status);
+    const pos = botManager.getPosition(username);
+    const inventory = botManager.getInventory(username);
+
+    return {
+      hp: statusObj.health,
+      food: statusObj.food,
+      position: pos ? [pos.x, pos.y, pos.z] : undefined,
+      inventory: inventory.slice(0, 10).map(i => ({ name: i.name, count: i.count })),
+    };
+  } catch {
+    return {};
+  }
+}
+
+// Record tool execution
+function recordToolExecution(
+  tool: string,
+  input: Record<string, unknown>,
+  result: "success" | "failure" | "timeout",
+  output: unknown,
+  error: string | undefined,
+  duration: number,
+  agentName: string
+): ToolExecutionLog {
+  const log: ToolExecutionLog = {
+    id: generateLogId(),
+    timestamp: Date.now(),
+    tool,
+    input,
+    result,
+    output: result === "success" ? output : undefined,
+    error,
+    duration,
+    context: getBotContext(agentName),
+    agentName,
+  };
+
+  // Store in memory
+  toolExecutionLogs.push(log);
+  if (toolExecutionLogs.length > MAX_LOGS_IN_MEMORY) {
+    toolExecutionLogs.shift();
+  }
+
+  // Persist to file
+  try {
+    ensureLogDir();
+    appendFileSync(TOOL_LOG_FILE, JSON.stringify(log) + "\n");
+  } catch (e) {
+    console.error("[MCP-WS-Server] Failed to write log:", e);
+  }
+
+  // Notify Dev Agents
+  const notification = {
+    jsonrpc: "2.0",
+    method: "notifications/toolLog",
+    params: log,
+  };
+  const json = JSON.stringify(notification);
+
+  devAgentConnections.forEach((ws) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(json);
+    }
+  });
+
+  return log;
+}
+
+// Get recent tool logs
+function getToolLogs(filter?: {
+  tool?: string;
+  result?: "success" | "failure" | "timeout";
+  since?: number;
+  limit?: number;
+}): ToolExecutionLog[] {
+  let logs = [...toolExecutionLogs];
+
+  if (filter?.tool) {
+    logs = logs.filter(l => l.tool === filter.tool);
+  }
+  if (filter?.result) {
+    logs = logs.filter(l => l.result === filter.result);
+  }
+  if (filter?.since) {
+    logs = logs.filter(l => l.timestamp > filter.since!);
+  }
+
+  if (filter?.limit) {
+    logs = logs.slice(-filter.limit);
+  }
+
+  return logs;
+}
 
 interface JSONRPCRequest {
   jsonrpc: '2.0';
@@ -354,6 +482,36 @@ const tools = {
       required: ["target_biome"],
     },
   },
+  // Dev Agent tools
+  dev_subscribe: {
+    description: "Subscribe as a Dev Agent to receive tool execution logs",
+    inputSchema: { type: "object", properties: {} },
+  },
+  dev_get_tool_logs: {
+    description: "Get tool execution logs for analysis",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool: { type: "string", description: "Filter by tool name" },
+        result: { type: "string", enum: ["success", "failure", "timeout"] },
+        since: { type: "number", description: "Timestamp to filter from" },
+        limit: { type: "number", default: 50 },
+      },
+    },
+  },
+  dev_get_failure_summary: {
+    description: "Get a summary of failed tool executions grouped by tool",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: { type: "number", description: "Timestamp to filter from" },
+      },
+    },
+  },
+  dev_clear_logs: {
+    description: "Clear tool execution logs",
+    inputSchema: { type: "object", properties: {} },
+  },
 };
 
 // Handle tool calls
@@ -599,6 +757,58 @@ async function handleTool(
       return await botManager.exploreForBiome(username, targetBiome, direction, maxBlocks);
     }
 
+    // Dev Agent tools
+    case "dev_subscribe": {
+      devAgentConnections.add(ws);
+      console.log(`[MCP-WS-Server] Dev Agent subscribed. Total: ${devAgentConnections.size}`);
+      return `Subscribed as Dev Agent. You will receive tool execution logs.`;
+    }
+
+    case "dev_get_tool_logs": {
+      const logs = getToolLogs({
+        tool: args.tool as string | undefined,
+        result: args.result as "success" | "failure" | "timeout" | undefined,
+        since: args.since as number | undefined,
+        limit: (args.limit as number) || 50,
+      });
+      return JSON.stringify(logs, null, 2);
+    }
+
+    case "dev_get_failure_summary": {
+      const since = args.since as number | undefined;
+      let logs = toolExecutionLogs.filter(l => l.result === "failure");
+      if (since) {
+        logs = logs.filter(l => l.timestamp > since);
+      }
+
+      // Group by tool
+      const summary: Record<string, { count: number; errors: string[]; examples: ToolExecutionLog[] }> = {};
+      for (const log of logs) {
+        if (!summary[log.tool]) {
+          summary[log.tool] = { count: 0, errors: [], examples: [] };
+        }
+        summary[log.tool].count++;
+        if (log.error && !summary[log.tool].errors.includes(log.error)) {
+          summary[log.tool].errors.push(log.error);
+        }
+        if (summary[log.tool].examples.length < 3) {
+          summary[log.tool].examples.push(log);
+        }
+      }
+
+      return JSON.stringify(summary, null, 2);
+    }
+
+    case "dev_clear_logs": {
+      toolExecutionLogs.length = 0;
+      try {
+        writeFileSync(TOOL_LOG_FILE, "");
+      } catch (e) {
+        // Ignore
+      }
+      return "Tool logs cleared";
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -631,16 +841,33 @@ async function handleRequest(ws: WebSocket, request: JSONRPCRequest): Promise<JS
           };
         }
 
+        const startTime = Date.now();
+        const agentName = connectionBots.get(ws) || "unknown";
+
         try {
           const result = await handleTool(ws, toolName, toolArgs);
+          const duration = Date.now() - startTime;
+
+          // Record successful execution (skip dev_* tools to avoid noise)
+          if (!toolName.startsWith("dev_") && !toolName.startsWith("subscribe_")) {
+            recordToolExecution(toolName, toolArgs, "success", result, undefined, duration, agentName);
+          }
+
           return {
             jsonrpc: '2.0',
             id,
             result: { content: [{ type: 'text', text: result }] }
           };
         } catch (toolError) {
+          const duration = Date.now() - startTime;
           const errorMessage = toolError instanceof Error ? toolError.message : String(toolError);
           console.error(`[MCP-WS-Server] Tool error in ${toolName}: ${errorMessage}`);
+
+          // Record failed execution
+          if (!toolName.startsWith("dev_")) {
+            recordToolExecution(toolName, toolArgs, "failure", undefined, errorMessage, duration, agentName);
+          }
+
           return {
             jsonrpc: '2.0',
             id,

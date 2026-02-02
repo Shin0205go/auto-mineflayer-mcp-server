@@ -48,11 +48,15 @@ src/
 │   ├── combat.ts         # 戦闘
 │   └── crafting.ts       # クラフト
 │
-└── agent/                # Claudeエージェント
-    ├── claude-agent.ts   # 自律エージェント
-    ├── claude-client.ts  # Claude SDK クライアント
-    ├── mcp-bridge.ts     # stdio→WebSocket変換
-    └── mcp-ws-transport.ts
+├── agent/                # Claudeエージェント
+│   ├── claude-agent.ts   # 自律エージェント（ゲームプレイ）
+│   ├── dev-agent.ts      # 自己改善エージェント（コード修正）
+│   ├── claude-client.ts  # Claude SDK クライアント
+│   ├── mcp-bridge.ts     # stdio→WebSocket変換
+│   └── mcp-ws-transport.ts
+│
+└── types/
+    └── tool-log.ts       # ツール実行ログの型定義
 ```
 
 ## 開発コマンド
@@ -79,9 +83,48 @@ BOT_USERNAME=Claude2 MC_PORT=58896 npm run start:claude
 # WebSocket MCPサーバー（エージェント用）
 npm run start:mcp-ws
 
+# Dev Agent（自己改善エージェント）
+npm run start:dev-agent
+
 # 掲示板サーバー
 npm run board
 ```
+
+## 自己改善システム（Dev Agent）
+
+ツール実行ログを監視し、失敗パターンを分析してソースコードを自動修正するエージェント。
+
+### アーキテクチャ
+
+```
+┌─────────────────────────────────────────────────────┐
+│              MCP WS Server                          │
+│         (ツール実行ログ収集・配信)                    │
+└───────────┬─────────────────────────┬───────────────┘
+            │                         │
+     WebSocket                   WebSocket
+            │                         │
+┌───────────▼───────────┐ ┌───────────▼───────────┐
+│   Minecraft Agent     │ │     Dev Agent         │
+│   (ゲームプレイ)       │ │   (コード修正)         │
+│                       │ │                       │
+│ - ツール実行          │ │ - ログ受信            │
+│ - 結果をログ送信      │ │ - 失敗パターン分析    │
+│                       │ │ - src/tools/*.ts 修正 │
+│                       │ │ - ビルド・再起動指示   │
+└───────────────────────┘ └───────────────────────┘
+```
+
+### Dev Agent用ツール
+
+- `dev_subscribe` - ツール実行ログの購読開始
+- `dev_get_tool_logs` - ログ取得（フィルタ可能）
+- `dev_get_failure_summary` - 失敗サマリー取得
+- `dev_clear_logs` - ログクリア
+
+### ログファイル
+
+ツール実行ログは `logs/tool-execution.jsonl` に保存される。
 
 ## MCPツール一覧
 
