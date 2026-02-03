@@ -596,6 +596,20 @@ ${buildError ? `
       const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[1]);
+
+        // Validate: if we know the function is implemented, reject "not implemented" analysis
+        if (found && parsed.problem) {
+          const problemLower = parsed.problem.toLowerCase();
+          if (problemLower.includes("実装されていない") ||
+              problemLower.includes("実装がない") ||
+              problemLower.includes("実装が存在しない") ||
+              problemLower.includes("not implemented") ||
+              problemLower.includes("未実装")) {
+            console.log(`${PREFIX} ${C.yellow}Invalid analysis - function IS implemented. Retrying...${C.reset}`);
+            return null;
+          }
+        }
+
         return {
           tool: toolName,
           problem: parsed.problem,
