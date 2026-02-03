@@ -11,7 +11,7 @@ export const craftingTools = {
   },
 
   minecraft_craft: {
-    description: "Craft an item. Requires a crafting table nearby for complex recipes.",
+    description: "Craft an item. Requires a crafting table nearby for complex recipes. IMPORTANT: Before crafting, call 'minecraft_check_infrastructure' to find existing crafting tables. If one exists at a saved location, go there instead of making a new one.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -66,7 +66,7 @@ export const craftingTools = {
   },
 
   minecraft_smelt: {
-    description: "Smelt items in a furnace. Requires a furnace nearby and fuel.",
+    description: "Smelt items in a furnace. Requires a furnace nearby and fuel. IMPORTANT: Before smelting (e.g., iron_ore), call 'minecraft_check_infrastructure' first. If a furnace exists at a saved location, go there. Don't mine more ore if you already have ore and a furnace is available.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -268,6 +268,40 @@ export async function handleCraftingTool(
         const errorMsg = error instanceof Error ? error.message : String(error);
         const inventory = botManager.getInventory(username);
         const inventoryStr = inventory.map(item => `${item.name}(${item.count})`).join(", ");
+        
+        if (errorMsg.includes("No fuel in inventory")) {
+          // Check for available fuel items
+          const coalCount = inventory.find(item => item.name === 'coal')?.count || 0;
+          const charcoalCount = inventory.find(item => item.name === 'charcoal')?.count || 0;
+          const woodItems = inventory.filter(item => 
+            item.name.includes('_log') || 
+            item.name.includes('_planks') || 
+            item.name.includes('wooden_') ||
+            item.name.includes('_wood') ||
+            item.name.includes('_slab') ||
+            item.name.includes('_stairs') ||
+            item.name.includes('_fence') ||
+            item.name.includes('_door') ||
+            item.name.includes('_trapdoor') ||
+            item.name === 'stick'
+          );
+          const totalWoodCount = woodItems.reduce((sum, item) => sum + item.count, 0);
+          const totalFuel = coalCount + charcoalCount + totalWoodCount;
+          
+          if (totalFuel === 0) {
+            return `Cannot smelt ${itemName}: No fuel available. Need coal, charcoal, or wood items (logs, planks, sticks, slabs, etc.). Current inventory: ${inventoryStr}`;
+          }
+          
+          const availableFuels = [];
+          if (coalCount > 0) availableFuels.push(`coal(${coalCount})`);
+          if (charcoalCount > 0) availableFuels.push(`charcoal(${charcoalCount})`);
+          if (totalWoodCount > 0) {
+            const woodList = woodItems.map(item => `${item.name}(${item.count})`).join(', ');
+            availableFuels.push(`wood items: ${woodList}`);
+          }
+          
+          return `Cannot smelt ${itemName}: Tool incorrectly reports no fuel but you have available fuel: ${availableFuels.join(', ')}. This is likely a MCP tool implementation issue. Try using coal or charcoal as fuel if available. Error: ${errorMsg}. Inventory: ${inventoryStr}`;
+        }
         
         if (errorMsg.includes("No furnace found")) {
           const cobblestoneCount = inventory.find(item => item.name === 'cobblestone')?.count || 0;

@@ -157,6 +157,7 @@ const FAILURE_PATTERNS = [
 ];
 
 // Tools that should NOT throw on "failure" patterns (informational tools)
+// Also includes search tools where "not found" is a valid, informational result
 const INFORMATIONAL_TOOLS = [
   "minecraft_get_surroundings",
   "minecraft_get_status",
@@ -165,6 +166,8 @@ const INFORMATIONAL_TOOLS = [
   "minecraft_get_events",
   "minecraft_look_around",
   "minecraft_get_entities",
+  "minecraft_find_entities",   // "No cow found" is valid info, not an error
+  "minecraft_find_block",      // "No oak_log found" is valid info, not an error
   "agent_board_read",
   "get_recent_experiences",
   "get_skills",
@@ -321,6 +324,15 @@ const tools = {
         max_distance: { type: "number", default: 10 },
       },
       required: ["block_name"],
+    },
+  },
+  minecraft_check_infrastructure: {
+    description: "Check for nearby crafting tables and furnaces + saved locations. CALL THIS FIRST before crafting complex items or smelting!",
+    inputSchema: {
+      type: "object",
+      properties: {
+        max_distance: { type: "number", description: "Search radius (default: 32)" },
+      },
     },
   },
   minecraft_place_block: {
@@ -678,6 +690,12 @@ async function handleTool(
       const blockName = args.block_name as string;
       const maxDistance = (args.max_distance as number) || 10;
       return botManager.findBlock(username, blockName, maxDistance);
+    }
+
+    case "minecraft_check_infrastructure": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const { handleEnvironmentTool } = await import("./tools/environment.js");
+      return handleEnvironmentTool("minecraft_check_infrastructure", args);
     }
 
     case "minecraft_place_block": {

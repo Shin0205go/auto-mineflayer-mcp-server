@@ -145,6 +145,25 @@ class ClaudeAgent {
       console.log(`${PREFIX} Warning: Could not load minecraft-survival.md skill`);
     }
 
+    // Load learned optimization rules
+    let learnedRules = "";
+    try {
+      const rulesPath = join(projectRoot, "learning", "rules.json");
+      const rulesData = JSON.parse(readFileSync(rulesPath, "utf-8"));
+      if (rulesData.rules && rulesData.rules.length > 0) {
+        learnedRules = rulesData.rules
+          .sort((a: any, b: any) => {
+            const priority: Record<string, number> = { high: 0, medium: 1, low: 2 };
+            return (priority[a.priority] || 2) - (priority[b.priority] || 2);
+          })
+          .map((r: any) => `- [${r.priority}] ${r.rule}`)
+          .join("\n");
+        console.log(`${PREFIX} Loaded ${rulesData.rules.length} optimization rules`);
+      }
+    } catch {
+      // Rules file doesn't exist yet - that's fine
+    }
+
     // Initial prompt with Minecraft knowledge
     const initialPrompt = `あなたはMinecraftサバイバルモードで自律的にプレイするAIエージェントです。
 
@@ -161,6 +180,9 @@ ${minecraftKnowledge}
 2. 食料を確保する
 3. 夜に備える（ベッドまたは拠点）
 4. 装備を強化する
+
+## 最適化ルール（過去の学習から）
+${learnedRules || "（まだルールなし）"}
 
 ## 最終目標
 エンダードラゴンを倒す
