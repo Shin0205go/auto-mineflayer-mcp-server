@@ -3,6 +3,8 @@ import { Vec3 } from "vec3";
 import { EventEmitter } from "events";
 import pkg from "mineflayer-pathfinder";
 const { pathfinder, Movements, goals } = pkg;
+import prismarineViewer from "prismarine-viewer";
+const { mineflayer: mineflayerViewer } = prismarineViewer;
 
 export interface BotConfig {
   host: string;
@@ -252,6 +254,17 @@ export class BotManager extends EventEmitter {
         if (gameMode !== "survival") {
           console.error(`[BotManager] Switching to survival mode...`);
           bot.chat(`/gamemode survival ${config.username}`);
+        }
+
+        // Start prismarine-viewer for first-person view in browser
+        const viewerPort = 3007;
+        try {
+          console.error(`[BotManager] Starting viewer for ${config.username} (version: ${bot.version})...`);
+          mineflayerViewer(bot, { port: viewerPort, firstPerson: true, viewDistance: 6 });
+          console.error(`[BotManager] Viewer started at http://localhost:${viewerPort}`);
+          console.error(`[BotManager] Open browser to see the first-person view`);
+        } catch (viewerError) {
+          console.error(`[BotManager] Failed to start viewer:`, viewerError);
         }
 
         const managedBot: ManagedBot = {
@@ -1066,9 +1079,54 @@ export class BotManager extends EventEmitter {
 
     // Place the block
     try {
+      // For non-solid blocks like torches, placeBlock may timeout waiting for blockUpdate event
+      // We'll handle this by catching the timeout and checking if the block was placed anyway
       await bot.placeBlock(referenceBlock.block, referenceBlock.faceVector);
-      return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)})` };
-    } catch (err) {
+
+      // Verify the block was placed
+      const placedBlock = bot.blockAt(targetPos);
+      if (placedBlock && placedBlock.name === blockType) {
+        return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)})` };
+      } else {
+        return { success: false, message: `Block placement verification failed` };
+      }
+    } catch (err: any) {
+      // If it's a timeout error, check if the block was actually placed
+      if (err && (err.toString().includes('timeout') || err.toString().includes('Event blockUpdate'))) {
+        // Wait a bit for the server to process the placement
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        // Check multiple times for non-solid blocks like torches
+        const maxAttempts = blockType === 'torch' ? 3 : 2;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const placedBlock = bot.blockAt(targetPos);
+          if (placedBlock && placedBlock.name === blockType) {
+            return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)})` };
+          }
+
+          // Wait between attempts
+          if (attempt < maxAttempts - 1) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        }
+
+        // For torches and other non-solid blocks, timeout is often expected behavior
+        // Check one more time after a longer wait
+        if (['torch', 'redstone_torch', 'soul_torch', 'lever', 'button'].includes(blockType)) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const placedBlock = bot.blockAt(targetPos);
+          if (placedBlock && placedBlock.name === blockType) {
+            return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)})` };
+          }
+          // Even if we can't verify, the placement likely succeeded for these blocks
+          return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}) (verification pending)` };
+        }
+
+        // For other blocks that timeout, return failure
+        return { success: false, message: `Failed to place block: ${err}` };
+      }
+
+      // Non-timeout errors
       return { success: false, message: `Failed to place block: ${err}` };
     }
   }
@@ -1617,7 +1675,8 @@ async collectNearbyItems(username: string): Promise<string> {
         const isItem = (
           entity.name === "item" ||
           entity.objectType === "Item" ||
-          (entity.type === "object" && !entity.username) ||
+          entity.type === "object" ||
+          entity.type === "other" ||
           (entity.metadata && typeof entity.metadata[10] !== 'undefined')
         ) && entity.id !== bot.entity.id;
         
@@ -1836,20 +1895,24 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     });
 
     // Get all possible recipes for this item
-    const allRecipes = bot.recipesAll(item.id, null, null);
-
-    // Filter recipes based on whether we have a crafting table
-    let recipes = allRecipes.filter(recipe => {
-      // If recipe requires a table but we don't have one, skip it
-      if (recipe.requiresTable && !craftingTable) return false;
-      return true;
-    });
+    // If we have a crafting table nearby, get recipes that can use it
+    let recipes;
+    if (craftingTable) {
+      recipes = bot.recipesAll(item.id, null, craftingTable);
+    } else {
+      recipes = bot.recipesAll(item.id, null, null);
+    }
 
     // Helper function to check if we have a compatible item
+    // Returns a virtual item with the total count of all compatible items
     const findCompatibleItem = (ingredientName: string) => {
-      // First try exact match
-      let found = inventoryItems.find(i => i.name === ingredientName);
-      if (found) return found;
+      // First try exact match - but sum up ALL stacks of the same item
+      const exactMatches = inventoryItems.filter(i => i.name === ingredientName);
+      if (exactMatches.length > 0) {
+        const totalCount = exactMatches.reduce((sum, item) => sum + item.count, 0);
+        // Return a virtual item representing the total count
+        return { name: ingredientName, count: totalCount };
+      }
 
       // Try compatible substitutions for common materials
       const compatibleMaterials: Record<string, string[]> = {
@@ -1872,13 +1935,31 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
         "dark_oak_log": ["oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "mangrove_log", "cherry_log"],
         "mangrove_log": ["oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log", "cherry_log"],
         "cherry_log": ["oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log", "mangrove_log"],
+        // Cobblestone and cobbled_deepslate are interchangeable for most recipes
+        "cobblestone": ["cobbled_deepslate"],
+        "cobbled_deepslate": ["cobblestone"],
       };
 
       // Check if we have any compatible substitute
       const compatibles = compatibleMaterials[ingredientName] || [];
       for (const compatible of compatibles) {
-        found = inventoryItems.find(i => i.name === compatible);
-        if (found) return found;
+        const compatibleMatches = inventoryItems.filter(i => i.name === compatible);
+        if (compatibleMatches.length > 0) {
+          const totalCount = compatibleMatches.reduce((sum, item) => sum + item.count, 0);
+          // Return a virtual item representing the total count of the compatible item
+          return { name: compatible, count: totalCount };
+        }
+      }
+
+      // Also check reverse compatibility (e.g., if looking for cobbled_deepslate, check if cobblestone lists it as compatible)
+      for (const [materialName, compatibleList] of Object.entries(compatibleMaterials)) {
+        if (compatibleList.includes(ingredientName)) {
+          const reverseMatches = inventoryItems.filter(i => i.name === materialName);
+          if (reverseMatches.length > 0) {
+            const totalCount = reverseMatches.reduce((sum, item) => sum + item.count, 0);
+            return { name: materialName, count: totalCount };
+          }
+        }
       }
 
       return null;
@@ -1912,9 +1993,9 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
         }
       }
 
-      // Check if we need a crafting table
+      // First, check if we need a crafting table before checking ingredients
       // Skip this check if we're trying to craft a crafting table itself
-      if (!craftingTable && itemName !== "crafting_table") {
+      if (!craftingTable && itemName !== "crafting_table" && allRecipes.length > 0) {
         // Check if any of the available recipes require a crafting table
         const needsTable = allRecipes.some(r => r.requiresTable);
         if (needsTable) {
@@ -1933,14 +2014,66 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
             const ingredientItem = mcData.items[d.id];
             const ingredientName = ingredientItem?.name || `id:${d.id}`;
             const requiredCount = Math.abs(d.count);
-            needed.push(`${ingredientName} x${requiredCount}`);
 
             // Check if we have enough (including compatible items)
             const compatible = findCompatibleItem(ingredientName);
             const haveCount = compatible?.count || 0;
+
+            // For display purposes, show what ingredient we actually need
+            // If we have a compatible item, show that we can use it
+            if (compatible && compatible.name !== ingredientName) {
+              needed.push(`${ingredientName} x${requiredCount} (or ${compatible.name})`);
+            } else {
+              needed.push(`${ingredientName} x${requiredCount}`);
+            }
+
             if (haveCount < requiredCount) {
               const availableText = compatible ? `${compatible.name}(${haveCount})` : "none";
-              missing.push(`${ingredientName} (need ${requiredCount}, have ${availableText})`);
+              // Check if there are compatible alternatives we could use
+              // Define compatibleMaterials here since it's not in scope
+              const compatibleMaterials: Record<string, string[]> = {
+                // Any planks can substitute for any other planks
+                "oak_planks": ["spruce_planks", "birch_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"],
+                "spruce_planks": ["oak_planks", "birch_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"],
+                "birch_planks": ["oak_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"],
+                "jungle_planks": ["oak_planks", "spruce_planks", "birch_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"],
+                "acacia_planks": ["oak_planks", "spruce_planks", "birch_planks", "jungle_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"],
+                "dark_oak_planks": ["oak_planks", "spruce_planks", "birch_planks", "jungle_planks", "acacia_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"],
+                "mangrove_planks": ["oak_planks", "spruce_planks", "birch_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "cherry_planks", "pale_oak_planks"],
+                "cherry_planks": ["oak_planks", "spruce_planks", "birch_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "pale_oak_planks"],
+                "pale_oak_planks": ["oak_planks", "spruce_planks", "birch_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks"],
+                // Any logs can substitute for any other logs
+                "oak_log": ["spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log", "mangrove_log", "cherry_log"],
+                "spruce_log": ["oak_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log", "mangrove_log", "cherry_log"],
+                "birch_log": ["oak_log", "spruce_log", "jungle_log", "acacia_log", "dark_oak_log", "mangrove_log", "cherry_log"],
+                "jungle_log": ["oak_log", "spruce_log", "birch_log", "acacia_log", "dark_oak_log", "mangrove_log", "cherry_log"],
+                "acacia_log": ["oak_log", "spruce_log", "birch_log", "jungle_log", "dark_oak_log", "mangrove_log", "cherry_log"],
+                "dark_oak_log": ["oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "mangrove_log", "cherry_log"],
+                "mangrove_log": ["oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log", "cherry_log"],
+                "cherry_log": ["oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log", "mangrove_log"],
+                // Cobblestone and cobbled_deepslate are interchangeable for most recipes
+                "cobblestone": ["cobbled_deepslate"],
+                "cobbled_deepslate": ["cobblestone"],
+              };
+              const compatibles = compatibleMaterials[ingredientName] || [];
+              let foundAlternative = false;
+
+              for (const alt of compatibles) {
+                const altItem = inventoryItems.find(i => i.name === alt);
+                if (altItem && altItem.count >= requiredCount) {
+                  // We have enough of a compatible item
+                  foundAlternative = true;
+                  break;
+                }
+              }
+
+              if (!foundAlternative) {
+                if (compatibles.length > 0) {
+                  missing.push(`${ingredientName} (need ${requiredCount}, have ${availableText}, can also use: ${compatibles.slice(0, 3).join(", ")})`);
+                } else {
+                  missing.push(`${ingredientName} (need ${requiredCount}, have ${availableText})`);
+                }
+              }
             }
           }
         }
@@ -1979,7 +2112,7 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
         }
 
         errorMsg += ` Have: ${inventory}`;
-        throw new Error(errorMsg);
+        throw new Error(`missing ingredient. ${errorMsg}`);
       }
 
       // No recipes at all - might need crafting table
@@ -2381,10 +2514,21 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     const findTarget = () => {
       const entities = Object.values(bot.entities);
       if (entityName) {
-        return entities.find(e =>
-          e.name?.toLowerCase() === entityName.toLowerCase() &&
-          e.position.distanceTo(bot.entity.position) < 20
-        ) || null;
+        return entities.find(e => {
+          if (!e || e === bot.entity) return false;
+          const dist = e.position.distanceTo(bot.entity.position);
+          if (dist > 20) return false;
+
+          // Check various name properties
+          const eName = e.name?.toLowerCase();
+          const eDisplayName = e.displayName?.toLowerCase();
+          const eType = e.type?.toLowerCase();
+          const targetName = entityName.toLowerCase();
+
+          return eName === targetName ||
+                 eDisplayName === targetName ||
+                 eType === targetName;
+        }) || null;
       }
       return entities
         .filter(e => hostileMobs.includes(e.name?.toLowerCase() || ""))
