@@ -384,8 +384,9 @@ ${C.yellow}╔══════════════════════
 
   /**
    * Dynamically find where a tool is implemented using grep
+   * Returns found: true if actually found, false if defaulted
    */
-  private async findToolImplementation(toolName: string): Promise<{ file: string; func: string } | null> {
+  private async findToolImplementation(toolName: string): Promise<{ file: string; func: string; found: boolean }> {
     // Convert tool name to likely function name
     // minecraft_smelt -> smeltItem, minecraft_craft -> craftItem, etc.
     const parts = toolName.replace("minecraft_", "").split("_");
@@ -416,7 +417,7 @@ ${C.yellow}╔══════════════════════
             const match = line.match(/^([^:]+):/);
             if (match) {
               console.log(`${PREFIX} Found implementation in: ${match[1]}`);
-              resolve({ file: match[1], func: funcName });
+              resolve({ file: match[1], func: funcName, found: true });
               return;
             }
           }
@@ -428,15 +429,15 @@ ${C.yellow}╔══════════════════════
             const match = line.match(/^([^:]+):/);
             if (match) {
               console.log(`${PREFIX} Found in: ${match[1]}`);
-              resolve({ file: match[1], func: funcName });
+              resolve({ file: match[1], func: funcName, found: true });
               return;
             }
           }
         }
 
-        // Default to bot-manager.ts
+        // Default to bot-manager.ts (not found)
         console.log(`${PREFIX} Not found, defaulting to bot-manager.ts`);
-        resolve({ file: "src/bot-manager.ts", func: funcName });
+        resolve({ file: "src/bot-manager.ts", func: funcName, found: false });
       });
     });
   }
@@ -483,13 +484,22 @@ ${C.yellow}╔══════════════════════
       ? `\n## 前回のビルドエラー:\n\`\`\`\n${buildError}\n\`\`\`\n\n**重要**: 前回の修正でビルドエラーが発生しました。このエラーを解決する修正を提案してください。\n`
       : "";
 
+    // Implementation status info for prompt
+    const implStatus = mapping.found
+      ? `✅ 実装確認済み: ${mapping.func}() が ${filePath} に存在します。エラーはランタイムの問題です。`
+      : `⚠️ 実装が見つかりません: ${mapping.func}() の実装を探しています。`;
+
     // Create analysis prompt
     const prompt = `あなたはMinecraft MCPツールのデバッガーです。
 
 ## 失敗しているツール: ${toolName}
+
+## 実装状況:
+${implStatus}
+
 ${buildErrorSection}
-## エラー内容:
-${failures.errors.map(e => `- ${e}`).join("\n")}
+## エラーメッセージ:
+${failures.errors.map(e => `- "${e}"`).join("\n")}
 
 ## 失敗例:
 ${JSON.stringify(failures.examples.slice(0, 2), null, 2)}
@@ -500,26 +510,27 @@ ${sourceCode}
 \`\`\`
 
 ## タスク
-1. 失敗の原因を分析してください
-2. 修正が必要な箇所を特定してください
-3. 具体的な修正コードを提案してください
+1. **エラーメッセージを分析** - 何が原因で失敗したか特定
+2. ソースコード内でその原因となっている箇所を特定
+3. 具体的な修正コードを提案
 
 以下のJSON形式で回答してください:
 \`\`\`json
 {
-  "problem": "問題の説明",
-  "location": "関数名や行の説明",
+  "problem": "エラーメッセージから読み取れる問題",
+  "location": "修正が必要な関数名や行",
   "fix": {
-    "before": "修正前のコード断片",
-    "after": "修正後のコード断片"
+    "before": "修正前のコード（ファイル内に実際に存在するもの）",
+    "after": "修正後のコード"
   }
 }
 \`\`\`
 
-注意:
-- before/afterは実際にファイル内に存在するコードを正確に指定してください
-- 小さな修正にとどめてください
-- 根本的な設計変更は避けてください`;
+重要:
+- **実装確認済みの場合、「実装されていない」という分析は誤りです**
+- エラーメッセージが出ている = ツールは動作している = ロジックの問題
+- before/afterはファイル内に実際に存在するコードを正確に
+- 小さな修正にとどめる`;
 
     try {
       const { ANTHROPIC_API_KEY, ...envWithoutKey } = process.env;
