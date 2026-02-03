@@ -332,12 +332,20 @@ ${C.yellow}╔══════════════════════
     let buildSuccess = false;
     let attempts = 0;
 
+    let lastModifiedFile: string | null = null;
+
     while (!buildSuccess) {
       attempts++;
       console.log(`${PREFIX} ${C.cyan}Improvement attempt ${attempts}${C.reset}`);
 
       // Generate improvement plan using Claude
-      const plan = await this.generateImprovementPlan(toolName, toolFailures, attempts > 1 ? this.lastBuildError : undefined);
+      // If we have a build error, pass the broken file path so we can re-read it
+      const plan = await this.generateImprovementPlan(
+        toolName,
+        toolFailures,
+        attempts > 1 ? this.lastBuildError : undefined,
+        lastModifiedFile  // Pass the file that was modified (may be broken)
+      );
 
       if (!plan) {
         console.log(`${PREFIX} ${C.red}Failed to generate improvement plan, retrying...${C.reset}`);
@@ -357,6 +365,9 @@ ${C.yellow}╔══════════════════════
         await this.sleep(3000);
         continue;
       }
+
+      // Track which file was modified
+      lastModifiedFile = plan.filePath;
 
       // Try to build
       buildSuccess = await this.rebuild();
@@ -445,18 +456,32 @@ ${C.yellow}╔══════════════════════
   private async generateImprovementPlan(
     toolName: string,
     failures: FailureSummary[string],
-    buildError?: string
+    buildError?: string,
+    brokenFilePath?: string | null  // File that was modified and may have broken code
   ): Promise<ImprovementPlan | null> {
-    // Dynamically find where the tool is implemented
-    const mapping = await this.findToolImplementation(toolName);
-    if (!mapping) {
-      console.log(`${PREFIX} Could not find implementation for: ${toolName}`);
-      return null;
+    let filePath: string;
+    let funcName: string | undefined;
+    let found: boolean;
+
+    // If we have a build error and know which file was modified, use that file
+    if (buildError && brokenFilePath) {
+      filePath = brokenFilePath;
+      funcName = undefined;  // Don't extract function - show the whole broken area
+      found = true;
+      console.log(`${PREFIX} Re-reading broken file: ${filePath}`);
+    } else {
+      // Dynamically find where the tool is implemented
+      const mapping = await this.findToolImplementation(toolName);
+      if (!mapping) {
+        console.log(`${PREFIX} Could not find implementation for: ${toolName}`);
+        return null;
+      }
+      filePath = mapping.file;
+      funcName = mapping.func;
+      found = mapping.found;
     }
 
-    const filePath = mapping.file;
-
-    // Read source file via MCP
+    // Read source file via MCP (this will read the current state, including any broken code)
     let sourceCode = await this.readFile(filePath);
     if (!sourceCode) {
       console.log(`${PREFIX} Source file not found: ${filePath}`);
@@ -464,10 +489,11 @@ ${C.yellow}╔══════════════════════
     }
 
     // If file is too large, try to extract just the relevant function
+    // But skip extraction if we're fixing a build error (need to see the broken code)
     const MAX_SOURCE_SIZE = 15000; // ~15KB limit
-    if (sourceCode.length > MAX_SOURCE_SIZE && mapping.func) {
-      console.log(`${PREFIX} File too large (${sourceCode.length} chars), extracting function: ${mapping.func}`);
-      const extracted = this.extractFunction(sourceCode, mapping.func);
+    if (sourceCode.length > MAX_SOURCE_SIZE && funcName && !buildError) {
+      console.log(`${PREFIX} File too large (${sourceCode.length} chars), extracting function: ${funcName}`);
+      const extracted = this.extractFunction(sourceCode, funcName);
       if (extracted) {
         sourceCode = `// Extracted function from ${filePath}\n\n${extracted}`;
         console.log(`${PREFIX} Extracted ${sourceCode.length} chars`);
@@ -479,26 +505,32 @@ ${C.yellow}╔══════════════════════
       sourceCode = sourceCode.slice(0, MAX_SOURCE_SIZE) + "\n// ... (truncated)";
     }
 
-    // Build error section (for retry attempts)
-    const buildErrorSection = buildError
-      ? `\n## 前回のビルドエラー:\n\`\`\`\n${buildError}\n\`\`\`\n\n**重要**: 前回の修正でビルドエラーが発生しました。このエラーを解決する修正を提案してください。\n`
-      : "";
-
     // Implementation status info for prompt
-    const implStatus = mapping.found
-      ? `✅ 実装確認済み: ${mapping.func}() が ${filePath} に存在します。エラーはランタイムの問題です。`
-      : `⚠️ 実装が見つかりません: ${mapping.func}() の実装を探しています。`;
+    const implStatus = found
+      ? `✅ 実装確認済み: ${funcName || "関数"}() が ${filePath} に存在します。`
+      : `⚠️ 実装が見つかりません: ${funcName || "関数"}() の実装を探しています。`;
+
+    // Build error takes priority - if there's a build error, focus on THAT
+    const buildErrorSection = buildError
+      ? `
+## 🚨 ビルドエラー（最優先で修正してください）:
+\`\`\`
+${buildError}
+\`\`\`
+
+**このビルドエラーを解決してください。** 元のランタイムエラーは後回しで構いません。
+`
+      : "";
 
     // Create analysis prompt
     const prompt = `あなたはMinecraft MCPツールのデバッガーです。
 
 ## 失敗しているツール: ${toolName}
-
+${buildErrorSection}
 ## 実装状況:
 ${implStatus}
 
-${buildErrorSection}
-## エラーメッセージ:
+## ランタイムエラー${buildError ? "（ビルドエラー解決後に対処）" : ""}:
 ${failures.errors.map(e => `- "${e}"`).join("\n")}
 
 ## 失敗例:
@@ -510,14 +542,19 @@ ${sourceCode}
 \`\`\`
 
 ## タスク
-1. **エラーメッセージを分析** - 何が原因で失敗したか特定
+${buildError ? `
+**ビルドエラーがあります！** まずビルドエラーを解決してください。
+1. ビルドエラーメッセージを読む（行番号、エラー内容）
+2. 該当箇所を特定して修正
+` : `
+1. エラーメッセージを分析 - 何が原因で失敗したか特定
 2. ソースコード内でその原因となっている箇所を特定
 3. 具体的な修正コードを提案
-
+`}
 以下のJSON形式で回答してください:
 \`\`\`json
 {
-  "problem": "エラーメッセージから読み取れる問題",
+  "problem": "${buildError ? "ビルドエラーの内容" : "エラーメッセージから読み取れる問題"}",
   "location": "修正が必要な関数名や行",
   "fix": {
     "before": "修正前のコード（ファイル内に実際に存在するもの）",
@@ -527,9 +564,8 @@ ${sourceCode}
 \`\`\`
 
 重要:
-- **実装確認済みの場合、「実装されていない」という分析は誤りです**
-- エラーメッセージが出ている = ツールは動作している = ロジックの問題
-- before/afterはファイル内に実際に存在するコードを正確に
+- **before/afterはファイル内に実際に存在するコードを正確に指定**
+- ${buildError ? "ビルドエラーの行番号を参考に修正箇所を特定" : "実装確認済みなら「実装されていない」は誤り"}
 - 小さな修正にとどめる`;
 
     try {
@@ -611,10 +647,14 @@ ${sourceCode}
         stdio: "pipe",
       });
 
-      let stderr = "";
+      let output = "";
 
+      // Capture both stdout and stderr (TypeScript errors go to stdout)
+      build.stdout.on("data", (data) => {
+        output += data.toString();
+      });
       build.stderr.on("data", (data) => {
-        stderr += data.toString();
+        output += data.toString();
       });
 
       build.on("close", (code) => {
@@ -624,9 +664,9 @@ ${sourceCode}
           resolve(true);
         } else {
           console.error(`${PREFIX} ${C.red}Build failed!${C.reset}`);
-          console.error(stderr);
+          console.error(output);
           // Store error for next improvement attempt
-          this.lastBuildError = stderr;
+          this.lastBuildError = output;
           resolve(false);
         }
       });
