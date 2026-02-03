@@ -328,13 +328,14 @@ ${C.yellow}╔══════════════════════
     console.log(`${PREFIX} Most failing tool: ${toolName} (${toolFailures.count} failures)`);
     console.log(`${PREFIX} Errors: ${toolFailures.errors.join(", ")}`);
 
-    // Keep trying until build succeeds (no limit)
+    // Keep trying until build succeeds (with limit to prevent infinite loop)
+    const MAX_ATTEMPTS = 20;
     let buildSuccess = false;
     let attempts = 0;
 
     let lastModifiedFile: string | null = null;
 
-    while (!buildSuccess) {
+    while (!buildSuccess && attempts < MAX_ATTEMPTS) {
       attempts++;
       console.log(`${PREFIX} ${C.cyan}Improvement attempt ${attempts}${C.reset}`);
 
@@ -381,7 +382,11 @@ ${C.yellow}╔══════════════════════
     // Clear analyzed logs
     this.recentLogs = this.recentLogs.filter(l => l.tool !== toolName);
 
-    console.log(`${PREFIX} ${C.green}=== Improvement Cycle Complete (${attempts} attempts) ===${C.reset}`);
+    if (buildSuccess) {
+      console.log(`${PREFIX} ${C.green}=== Improvement Cycle Complete (${attempts} attempts) ===${C.reset}`);
+    } else {
+      console.log(`${PREFIX} ${C.red}=== Gave up after ${MAX_ATTEMPTS} attempts. Please fix manually. ===${C.reset}`);
+    }
 
     // Restart Game Agent
     this.isImproving = false;
