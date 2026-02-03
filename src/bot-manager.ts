@@ -202,11 +202,6 @@ export class BotManager extends EventEmitter {
       }
     }
 
-    const posBlock = bot.blockAt(pos);
-    const posSkyLight = posBlock?.skyLight ?? 0;
-    const posBlockLight = posBlock?.light ?? 0;
-    // 1.18+: 敵モブは光レベル0でのみスポーン（ブロック光が0かつskyLight≤7）
-    if (posBlockLight === 0 && posSkyLight <= 7) dangers.push(`暗(光${posBlockLight})`);
     if (bot.health < 10) dangers.push(`HP低`);
     if (bot.food < 6) dangers.push(`空腹`);
 
@@ -801,18 +796,12 @@ export class BotManager extends EventEmitter {
     }
     lines.push(`地形: ${terrainType}`);
 
-    // 光レベル（モブスポーン判定）
-    // Minecraft 1.18以降: 敵モブは光レベル0でのみスポーン
-    // skyLight = 太陽光（昼間は15、夜間は4）、light = 松明等のブロック光源
+    // 光レベル（参考情報のみ）
     const lightBlock = bot.blockAt(pos);
     const currentSkyLight = lightBlock?.skyLight ?? 0;
     const currentBlockLight = lightBlock?.light ?? 0;
-    // 実効光レベル = max(skyLight, blockLight)
-    // ただし敵モブスポーンはblockLight=0かつskyLight≤7で発生
     const effectiveLight = Math.max(currentSkyLight, currentBlockLight);
-    // 1.18+: 敵モブは光レベル0でのみスポーン（ブロック光が0のとき）
-    const lightWarning = currentBlockLight === 0 && currentSkyLight <= 7 ? " ⚠️モブスポーン危険" : "";
-    lines.push(`光レベル: ${effectiveLight} (sky:${currentSkyLight}, block:${currentBlockLight})${lightWarning}`);
+    lines.push(`光レベル: ${effectiveLight}`);
 
     lines.push(``);
     lines.push(`## 移動可能方向`);
@@ -1136,25 +1125,83 @@ export class BotManager extends EventEmitter {
     const REACH_DISTANCE = 4.5;
     if (distance > REACH_DISTANCE) {
       console.error(`[Dig] Too far, moving closer...`);
-      const goal = new goals.GoalNear(Math.floor(x), Math.floor(y), Math.floor(z), 3);
+
+      // Try multiple movement strategies
+      let moved = false;
+
+      // Calculate target position considering Y difference
+      const yDiff = Math.abs(bot.entity.position.y - y);
+      let targetRange = 3;
+      if (yDiff > 2) {
+        // If there's significant Y difference, get closer horizontally
+        targetRange = 2;
+      }
+
+      // First try: Get close with pathfinder
+      const goal = new goals.GoalNear(Math.floor(x), Math.floor(y), Math.floor(z), targetRange);
       bot.pathfinder.setGoal(goal);
 
-      // Wait for movement (max 10 seconds)
+      // Wait for movement (max 15 seconds, increased from 10)
       const startTime = Date.now();
-      while (Date.now() - startTime < 10000) {
+      while (Date.now() - startTime < 15000) {
         await this.delay(300);
         distance = bot.entity.position.distanceTo(blockPos);
-        if (distance <= REACH_DISTANCE || !bot.pathfinder.isMoving()) {
+        if (distance <= REACH_DISTANCE) {
+          moved = true;
+          break;
+        }
+        if (!bot.pathfinder.isMoving()) {
           break;
         }
       }
       bot.pathfinder.setGoal(null);
 
+      // Second try: If still too far, try direct movement
+      if (!moved && distance > REACH_DISTANCE) {
+        console.error(`[Dig] Pathfinder failed, trying direct movement...`);
+        const direction = blockPos.minus(bot.entity.position).normalize();
+        const targetPos = blockPos.minus(direction.scaled(3));
+
+        try {
+          await this.moveToBasic(username, targetPos.x, targetPos.y, targetPos.z);
+          await this.delay(500);
+          distance = bot.entity.position.distanceTo(blockPos);
+          if (distance <= REACH_DISTANCE) {
+            moved = true;
+          }
+        } catch (e) {
+          console.error(`[Dig] Direct movement failed: ${e}`);
+        }
+      }
+
       distance = bot.entity.position.distanceTo(blockPos);
       console.error(`[Dig] After moving, distance: ${distance.toFixed(1)}`);
 
       if (distance > REACH_DISTANCE) {
-        return `Cannot reach block at (${x}, ${y}, ${z}). Stopped ${distance.toFixed(1)} blocks away. Block may be unreachable.`;
+        // Try to find adjacent reachable position
+        const offsets = [
+          new Vec3(1, 0, 0), new Vec3(-1, 0, 0),
+          new Vec3(0, 0, 1), new Vec3(0, 0, -1),
+          new Vec3(1, 0, 1), new Vec3(-1, 0, 1),
+          new Vec3(1, 0, -1), new Vec3(-1, 0, -1)
+        ];
+
+        for (const offset of offsets) {
+          const testPos = blockPos.plus(offset);
+          const testDistance = bot.entity.position.distanceTo(testPos);
+          if (testDistance <= REACH_DISTANCE) {
+            const adjacentBlock = bot.blockAt(testPos);
+            if (!adjacentBlock || adjacentBlock.name === "air") {
+              console.error(`[Dig] Found reachable adjacent position`);
+              distance = bot.entity.position.distanceTo(blockPos);
+              break;
+            }
+          }
+        }
+
+        if (distance > REACH_DISTANCE) {
+          return `Cannot reach block at (${x}, ${y}, ${z}). Stopped ${distance.toFixed(1)} blocks away. Block may be unreachable.`;
+        }
       }
     }
 
@@ -1222,10 +1269,28 @@ export class BotManager extends EventEmitter {
 
       // Check if bot can dig this block
       const canDig = bot.canDigBlock(block);
-      console.error(`[Dig] canDigBlock: ${canDig}`);
+      const currentDistance = bot.entity.position.distanceTo(blockPos);
+      console.error(`[Dig] canDigBlock: ${canDig}, current distance: ${currentDistance.toFixed(1)}`);
 
       if (!canDig) {
-        return `Cannot dig ${blockName} - bot may be too far, block may be protected, or wrong tool equipped`;
+        // Get more specific error information
+        const reasons = [];
+        if (currentDistance > REACH_DISTANCE) {
+          reasons.push(`too far (${currentDistance.toFixed(1)} blocks, max: ${REACH_DISTANCE})`);
+        }
+        if (block.shapes && block.shapes.length === 0) {
+          reasons.push(`block has no collision shape`);
+        }
+        const heldItem = bot.heldItem;
+        if (heldItem && block.drops && block.drops.length > 0) {
+          const drop = block.drops[0];
+          const dropItem = typeof drop === 'number' ? drop : (typeof drop === 'object' && 'item' in drop ? drop.item : null);
+          if (typeof dropItem === 'number' && !bot.recipesFor(dropItem, null, 1, null).length) {
+            reasons.push(`wrong tool equipped (${heldItem.name})`);
+          }
+        }
+
+        return `Cannot dig ${blockName} at (${x}, ${y}, ${z}) - ${reasons.length > 0 ? reasons.join(', ') : 'unknown reason (may be protected)'}`;
       }
 
       // Look at the block first
@@ -1235,8 +1300,13 @@ export class BotManager extends EventEmitter {
       const digTime = bot.digTime(block);
       console.error(`[Dig] Estimated dig time: ${digTime}ms`);
 
-      await bot.dig(block, true);  // forceLook = true
-      console.error(`[Dig] Finished digging ${blockName}`);
+      try {
+        await bot.dig(block, true);  // forceLook = true
+        console.error(`[Dig] Finished digging ${blockName}`);
+      } catch (digError: any) {
+        console.error(`[Dig] Dig failed: ${digError.message}`);
+        return `Failed to dig ${blockName}: ${digError.message}`;
+      }
 
       // Verify block is actually gone
       const blockAfter = bot.blockAt(blockPos);
@@ -1765,13 +1835,15 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       maxDistance: 4,
     });
 
-    // Get available recipes - try 2x2 (no table) first, then 3x3 (with table)
-    let recipes = bot.recipesFor(item.id, null, 1, null);
+    // Get all possible recipes for this item
+    const allRecipes = bot.recipesAll(item.id, null, null);
 
-    // If no 2x2 recipe found, try 3x3 recipes (need crafting table)
-    if (recipes.length === 0 && craftingTable) {
-      recipes = bot.recipesFor(item.id, null, 1, craftingTable);
-    }
+    // Filter recipes based on whether we have a crafting table
+    let recipes = allRecipes.filter(recipe => {
+      // If recipe requires a table but we don't have one, skip it
+      if (recipe.requiresTable && !craftingTable) return false;
+      return true;
+    });
 
     // Helper function to check if we have a compatible item
     const findCompatibleItem = (ingredientName: string) => {
@@ -1831,21 +1903,22 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     });
 
     if (craftableRecipes.length === 0) {
-      // Check if we need a crafting table
-      // Skip this check if we're trying to craft a crafting table itself
-      if (!craftingTable && itemName !== "crafting_table") {
-        const possible3x3 = bot.recipesAll(item.id, null, true as any);
-        if (possible3x3.length > 0) {
-          throw new Error(`${itemName} requires a crafting_table nearby. Place one first, then craft. Inventory: ${inventory}`);
-        }
-      }
-
       // Try to get all recipes for this item (even if we can't craft them)
       let allRecipes = bot.recipesAll(item.id, null, null);
       if (craftingTable) {
         const allRecipes3x3 = bot.recipesAll(item.id, null, craftingTable);
         if (allRecipes3x3.length > allRecipes.length) {
           allRecipes = allRecipes3x3;
+        }
+      }
+
+      // Check if we need a crafting table
+      // Skip this check if we're trying to craft a crafting table itself
+      if (!craftingTable && itemName !== "crafting_table") {
+        // Check if any of the available recipes require a crafting table
+        const needsTable = allRecipes.some(r => r.requiresTable);
+        if (needsTable) {
+          throw new Error(`${itemName} requires a crafting_table nearby. Place one first, then craft. Inventory: ${inventory}`);
         }
       }
 
@@ -1886,14 +1959,19 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
 
         // Add crafting chain hints for common tools
         const craftingHints: Record<string, string> = {
-          "wooden_pickaxe": "Craft order: oak_log → oak_planks (4) → stick (from 2 planks) → wooden_pickaxe",
-          "wooden_axe": "Craft order: oak_log → oak_planks (4) → stick (from 2 planks) → wooden_axe",
-          "wooden_sword": "Craft order: oak_log → oak_planks (4) → stick (from 2 planks) → wooden_sword",
-          "wooden_shovel": "Craft order: oak_log → oak_planks (4) → stick (from 2 planks) → wooden_shovel",
+          "wooden_pickaxe": "Craft order: log → planks (4) → stick (from 2 planks) → wooden_pickaxe",
+          "wooden_axe": "Craft order: log → planks (4) → stick (from 2 planks) → wooden_axe",
+          "wooden_sword": "Craft order: log → planks (4) → stick (from 2 planks) → wooden_sword",
+          "wooden_shovel": "Craft order: log → planks (4) → stick (from 2 planks) → wooden_shovel",
           "stone_pickaxe": "Need: cobblestone x3 + stick x2. Mine stone with wooden_pickaxe first.",
-          "crafting_table": "Craft order: oak_log → oak_planks (4) → crafting_table",
+          "crafting_table": "Craft order: log → planks (4) → crafting_table",
           "stick": "Craft from 2 planks (any wood type gives 4 sticks)",
           "oak_planks": "Craft from 1 oak_log (gives 4 planks)",
+          "spruce_planks": "Craft from 1 spruce_log (gives 4 planks)",
+          "birch_planks": "Craft from 1 birch_log (gives 4 planks)",
+          "jungle_planks": "Craft from 1 jungle_log (gives 4 planks)",
+          "acacia_planks": "Craft from 1 acacia_log (gives 4 planks)",
+          "dark_oak_planks": "Craft from 1 dark_oak_log (gives 4 planks)",
         };
 
         if (craftingHints[itemName]) {

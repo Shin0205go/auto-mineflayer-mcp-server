@@ -113,9 +113,11 @@ description: |
   - Needs fuel (coal, charcoal, wood) in inventory
 
 ### Living
-- `minecraft_sleep` - Sleep in bed to skip night
+- `minecraft_sleep` - Sleep in bed to skip night **(重要！夜をスキップできる)**
   - Only works at night
   - Needs bed within 4 blocks
+  - **ベッド作成を最優先**: 羊毛3個 + 板材3個 → `bed`
+  - 夜はモブがスポーンするので、ベッドで寝て朝にスキップするのが効率的
 - `minecraft_eat` - Eat food to restore hunger/health
 
 ### Item Management
@@ -141,7 +143,6 @@ description: |
 
 1. Secure footing first
 2. Spiral staircase for towers
-3. Torches prevent mob spawns
 
 ## Multi-Agent Coordination
 
@@ -195,7 +196,6 @@ Animals spawn in specific biomes. To find sheep:
 - Placing blocks not in inventory → mine first
 - Placing out of reach → move closer
 - Placing in mid-air → need adjacent block
-- Working in dark → mobs spawn, place torches
 - Searching for animals in wrong biome → check biome first
 
 ---
@@ -210,7 +210,7 @@ Animals spawn in specific biomes. To find sheep:
 3. **木のツール作成** - 木のピッケル、木の剣
 4. **羊を狩る** - 羊毛3個でベッド作成可能
 5. **ベッド作成** - 夜をスキップ（超重要！）
-6. **簡易拠点** - 穴掘りでもOK、松明で明るく
+6. **簡易拠点** - 穴掘りでもOK
 
 **夜が来る前に：**
 - ベッドがあれば寝て朝にスキップ
@@ -218,11 +218,10 @@ Animals spawn in specific biomes. To find sheep:
 
 ## フェーズ2: 石器時代
 
-1. **石炭を見つける** - 洞窟の入口や崖に露出
-2. **松明を量産** - 石炭+棒
-3. **石のツール** - 石のピッケル、石の剣、石の斧
-4. **かまどを作成** - 丸石8個
-5. **食料を安定確保** - 動物を狩って肉を焼く
+1. **石を採掘** - 木のピッケルで丸石を集める
+2. **石のツール** - 石のピッケル、石の剣、石の斧
+3. **かまどを作成** - 丸石8個
+4. **食料を安定確保** - 動物を狩って肉を焼く
 
 ## フェーズ3: 鉄器時代
 

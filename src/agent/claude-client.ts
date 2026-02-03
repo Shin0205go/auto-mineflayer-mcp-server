@@ -58,7 +58,7 @@ const DEFAULT_SYSTEM_INSTRUCTION = `あなたはMinecraftを自律的に操作�
 - minecraft_move_to: 指定座標に歩いて移動
 
 ### 状況確認（重要！毎ループ呼ぶ）
-- minecraft_get_surroundings: **最重要！** 周囲の詳細情報（移動方向、光、危険、資源座標、敵、動物）
+- minecraft_get_surroundings: **最重要！** 周囲の詳細情報（移動方向、危険、資源座標、敵、動物）
 - minecraft_get_status: HP/空腹度を確認
 - minecraft_get_events: ダメージ、敵スポーン等のイベントを取得
 - minecraft_get_inventory: 持ち物確認
@@ -99,11 +99,10 @@ const DEFAULT_SYSTEM_INSTRUCTION = `あなたはMinecraftを自律的に操作�
 5. HPが低い（10以下）なら安全な場所へ避難
 6. 敵を見つけたらminecraft_fightで戦うか逃げる
 7. 移動は歩いて行う（/tpコマンド禁止）
-8. **採掘時は松明を作って設置！** 光レベル7以下はモブスポーン危険
-9. **同じアプローチで3回失敗したら別の方法を試す！**
-10. **重要な行動後はlog_experienceで記録！** 成功も失敗も学びになる
-11. **10ループごとにreflect_and_learnで振り返り！**
-12. **作業台・かまど・チェスト設置後は必ずremember_location！** 場所を忘れない
+8. **同じアプローチで3回失敗したら別の方法を試す！**
+9. **重要な行動後はlog_experienceで記録！** 成功も失敗も学びになる
+10. **10ループごとにreflect_and_learnで振り返り！**
+11. **作業台・かまど・チェスト設置後は必ずremember_location！** 場所を忘れない
 
 ## 協調のヒント
 - agent_board_readで他エージェントのメッセージを確認
