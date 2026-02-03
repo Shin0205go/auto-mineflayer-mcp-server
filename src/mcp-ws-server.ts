@@ -649,7 +649,16 @@ async function handleTool(
 
     case "minecraft_move_to": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      const moveResult = await botManager.moveTo(username, args.x as number, args.y as number, args.z as number);
+      const targetY = args.y as number;
+      const bot = botManager.getBot(username);
+      if (bot) {
+        const currentY = bot.entity.position.y;
+        const heightDiff = targetY - currentY;
+        if (heightDiff > 10) {
+          return `Target is ${heightDiff.toFixed(0)} blocks higher than current position. Pathfinder cannot climb that high. Use minecraft_pillar_up with height=${Math.ceil(heightDiff)} to climb up first, then use move_to for horizontal movement.`;
+        }
+      }
+      const moveResult = await botManager.moveTo(username, args.x as number, targetY, args.z as number);
       return moveResult;
     }
 

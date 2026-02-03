@@ -666,7 +666,16 @@ export class BotManager extends EventEmitter {
     // All recovery attempts failed
     const finalPos = bot.entity.position;
     const finalDist = finalPos.distanceTo(targetPos);
-    return `Movement failed after recovery attempts. Final position: (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks from target. Reason: ${result.stuckReason}` + this.getBriefStatus(username);
+    const heightDiff = y - finalPos.y;
+
+    let failureMsg = `Movement failed after recovery attempts. Final position: (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks from target. Reason: ${result.stuckReason}`;
+
+    // Add guidance for upward movement
+    if (heightDiff > 3) {
+      failureMsg += ` TIP: Target is ${heightDiff.toFixed(0)} blocks higher. Use minecraft_pillar_up with height=${Math.ceil(heightDiff)} to climb up first.`;
+    }
+
+    return failureMsg + this.getBriefStatus(username);
   }
 
   async chat(username: string, message: string): Promise<void> {
@@ -1678,14 +1687,24 @@ async collectNearbyItems(username: string): Promise<string> {
         const dist = entity.position.distanceTo(bot.entity.position);
         if (dist > 10) return false; // Reasonable range for item collection
         
-        // More focused item detection - check for standard Minecraft item entity
-        const isItem = (
+        // More flexible item detection - check various possible item indicators
+        const isItem = entity.id !== bot.entity.id && (
           entity.name === "item" ||
+          entity.name === "Item" ||
           entity.objectType === "Item" ||
           entity.type === "object" ||
           entity.type === "other" ||
-          (entity.metadata && typeof entity.metadata[10] !== 'undefined')
-        ) && entity.id !== bot.entity.id;
+          entity.displayName === "Item" ||
+          (entity.metadata && (
+            typeof entity.metadata[10] !== 'undefined' ||
+            typeof entity.metadata[8] !== 'undefined' ||
+            Array.isArray(entity.metadata) && entity.metadata.some(m =>
+              m && typeof m === "object" && ("itemId" in m || "itemCount" in m)
+            )
+          )) ||
+          // Check if entity has item-like properties
+          (entity.onGround && !entity.username && !entity.type?.includes("mob"))
+        );
         
         return isItem;
       });
@@ -1901,22 +1920,13 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       maxDistance: 4,
     });
 
-    // Use recipesFor() to get recipes we can actually craft with current inventory
-    // This is more reliable than recipesAll() + manual filtering
+    // Always use recipesAll to get all possible recipes for this item
+    // recipesFor sometimes misses valid recipes due to ingredient matching issues
     let recipes;
     if (craftingTable) {
-      recipes = bot.recipesFor(item.id, null, 1, craftingTable);
+      recipes = bot.recipesAll(item.id, null, craftingTable);
     } else {
-      recipes = bot.recipesFor(item.id, null, 1, null);
-    }
-
-    // If recipesFor returns empty, try recipesAll
-    if (recipes.length === 0) {
-      if (craftingTable) {
-        recipes = bot.recipesAll(item.id, null, craftingTable);
-      } else {
-        recipes = bot.recipesAll(item.id, null, null);
-      }
+      recipes = bot.recipesAll(item.id, null, null);
     }
 
     // Helper function to check if we have a compatible item
@@ -2037,7 +2047,10 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
 
             // For display purposes, show what ingredient we actually need
             // If we have a compatible item, show that we can use it
-            if (compatible && compatible.name !== ingredientName) {
+            // Special case for cobblestone/cobbled_deepslate - show cobblestone as primary
+            if (ingredientName === "cobbled_deepslate" && findCompatibleItem("cobblestone")) {
+              needed.push(`cobblestone x${requiredCount} (or cobbled_deepslate)`);
+            } else if (compatible && compatible.name !== ingredientName) {
               needed.push(`${ingredientName} x${requiredCount} (or ${compatible.name})`);
             } else {
               needed.push(`${ingredientName} x${requiredCount}`);
@@ -2084,7 +2097,17 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
               }
 
               if (!foundAlternative) {
-                if (compatibles.length > 0) {
+                // Special handling for cobblestone/cobbled_deepslate
+                if (ingredientName === "cobbled_deepslate" && compatibles.includes("cobblestone")) {
+                  // Check cobblestone availability
+                  const cobblestoneItem = inventoryItems.filter(i => i.name === "cobblestone");
+                  const cobblestoneCount = cobblestoneItem.reduce((sum, item) => sum + item.count, 0);
+                  if (cobblestoneCount > 0) {
+                    missing.push(`cobblestone (need ${requiredCount}, have ${cobblestoneCount})`);
+                  } else {
+                    missing.push(`cobblestone or cobbled_deepslate (need ${requiredCount}, have none)`);
+                  }
+                } else if (compatibles.length > 0) {
                   missing.push(`${ingredientName} (need ${requiredCount}, have ${availableText}, can also use: ${compatibles.slice(0, 3).join(", ")})`);
                 } else {
                   missing.push(`${ingredientName} (need ${requiredCount}, have ${availableText})`);
@@ -2133,7 +2156,17 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
 
       // No recipes at all - might need crafting table
       let errorMsg = `No recipe found for ${itemName}.`;
-      if (!craftingTable) {
+
+      // Special handling for items that commonly require crafting table
+      const requiresTableItems = ["stone_pickaxe", "stone_axe", "stone_shovel", "stone_sword", "stone_hoe",
+                                   "iron_pickaxe", "iron_axe", "iron_shovel", "iron_sword", "iron_hoe",
+                                   "golden_pickaxe", "golden_axe", "golden_shovel", "golden_sword", "golden_hoe",
+                                   "diamond_pickaxe", "diamond_axe", "diamond_shovel", "diamond_sword", "diamond_hoe",
+                                   "netherite_pickaxe", "netherite_axe", "netherite_shovel", "netherite_sword", "netherite_hoe"];
+
+      if (!craftingTable && requiresTableItems.includes(itemName)) {
+        errorMsg = `${itemName} requires a crafting_table. Place one nearby first.`;
+      } else if (!craftingTable) {
         errorMsg += ` Try placing a crafting_table nearby for advanced recipes.`;
       }
       errorMsg += ` Inventory: ${inventory}`;
@@ -2148,8 +2181,38 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     }
 
     try {
+      // Before crafting, ensure we have the exact items needed
+      // Sometimes the bot needs specific item types even if we have compatible ones
+      // This is a workaround for mineflayer's strict recipe matching
       for (let i = 0; i < count; i++) {
-        await bot.craft(recipe, 1, craftingTable || undefined);
+        try {
+          await bot.craft(recipe, 1, craftingTable || undefined);
+        } catch (craftErr) {
+          // If the craft fails due to missing ingredients, try to find a different recipe
+          // that uses the materials we actually have
+          const craftErrMsg = craftErr instanceof Error ? craftErr.message : String(craftErr);
+          if (craftErrMsg.includes("missing ingredient")) {
+            // Try to find alternative recipes that use different wood types
+            const alternativeRecipes = craftableRecipes.slice(1); // Skip the first recipe we already tried
+            let crafted = false;
+
+            for (const altRecipe of alternativeRecipes) {
+              try {
+                await bot.craft(altRecipe, 1, craftingTable || undefined);
+                crafted = true;
+                break;
+              } catch {
+                // Continue trying other recipes
+              }
+            }
+
+            if (!crafted) {
+              throw craftErr; // Re-throw the original error if no alternatives work
+            }
+          } else {
+            throw craftErr;
+          }
+        }
       }
       // Check new inventory
       const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
