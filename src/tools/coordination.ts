@@ -75,8 +75,12 @@ export const coordinationTools = {
 export function readBoard(lastNLines?: number): string {
   ensureBoardExists();
   const content = fs.readFileSync(BOARD_FILE, "utf-8");
-  if (lastNLines && lastNLines > 0) {
-    return content.split("\n").slice(-lastNLines).join("\n");
+  const lines = content.split("\n");
+
+  // Default to last 30 lines to avoid overwhelming context
+  const limit = lastNLines || 30;
+  if (limit > 0 && lines.length > limit) {
+    return `(showing last ${limit} of ${lines.length} lines)\n` + lines.slice(-limit).join("\n");
   }
   return content;
 }
@@ -149,9 +153,10 @@ export async function handleCoordinationTool(
       const content = fs.readFileSync(BOARD_FILE, "utf-8");
       const lines = content.split("\n");
 
-      const lastN = args.last_n_lines as number | undefined;
-      if (lastN && lastN > 0) {
-        return lines.slice(-lastN).join("\n");
+      // Default to last 30 lines to avoid overwhelming context
+      const lastN = (args.last_n_lines as number | undefined) || 30;
+      if (lastN > 0 && lines.length > lastN) {
+        return `(showing last ${lastN} of ${lines.length} lines)\n` + lines.slice(-lastN).join("\n");
       }
       return content;
     }

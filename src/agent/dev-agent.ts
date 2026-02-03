@@ -24,6 +24,16 @@ const MCP_WS_URL = process.env.MCP_WS_URL || "ws://localhost:8765";
 const ANALYSIS_INTERVAL = 60000; // 1 minute
 const MIN_FAILURES_TO_ANALYZE = 3;
 
+// Colors for terminal output
+const C = {
+  yellow: "\x1b[33m",
+  green: "\x1b[32m",
+  red: "\x1b[31m",
+  cyan: "\x1b[36m",
+  reset: "\x1b[0m",
+};
+const PREFIX = `${C.yellow}[DevAgent]${C.reset}`;
+
 interface FailureSummary {
   [tool: string]: {
     count: number;
@@ -53,16 +63,18 @@ class DevAgent {
   private requestId = 0;
   private recentLogs: ToolExecutionLog[] = [];
   private lastAnalysisTime = 0;
+  private gameAgentProcess: ReturnType<typeof spawn> | null = null;
+  private manageGameAgent = process.env.MANAGE_GAME_AGENT === "true";
 
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(MCP_WS_URL);
 
       this.ws.on("open", async () => {
-        console.log("[DevAgent] Connected to MCP WS Server");
+        console.log(`${PREFIX} Connected to MCP WS Server`);
         // Subscribe as Dev Agent
         await this.callTool("dev_subscribe", {});
-        console.log("[DevAgent] Subscribed to tool execution logs");
+        console.log(`${PREFIX} Subscribed to tool execution logs`);
         resolve();
       });
 
@@ -89,17 +101,17 @@ class DevAgent {
             }
           }
         } catch (e) {
-          console.error("[DevAgent] Failed to parse message:", e);
+          console.error(`${PREFIX} Failed to parse message:`, e);
         }
       });
 
       this.ws.on("error", (error) => {
-        console.error("[DevAgent] WebSocket error:", error);
+        console.error(`${PREFIX} WebSocket error:`, error);
         reject(error);
       });
 
       this.ws.on("close", () => {
-        console.log("[DevAgent] WebSocket closed");
+        console.log(`${PREFIX} WebSocket closed`);
         this.ws = null;
       });
     });
@@ -133,12 +145,12 @@ class DevAgent {
 
   private handleToolLog(log: ToolExecutionLog): void {
     const time = new Date(log.timestamp).toLocaleTimeString("ja-JP");
-    const status = log.result === "success" ? "✓" : "✗";
+    const status = log.result === "success" ? `${C.green}✓${C.reset}` : `${C.red}✗${C.reset}`;
 
-    console.log(`[DevAgent] ${status} ${log.tool} (${log.duration}ms) - ${log.agentName}`);
+    console.log(`${PREFIX} [${time}] ${status} ${log.tool} (${log.duration}ms) - ${log.agentName}`);
 
     if (log.result === "failure") {
-      console.log(`[DevAgent]   Error: ${log.error}`);
+      console.log(`${PREFIX}   ${C.red}Error: ${log.error}${C.reset}`);
     }
 
     this.recentLogs.push(log);
@@ -151,14 +163,21 @@ class DevAgent {
 
   async start(): Promise<void> {
     console.log(`
-╔══════════════════════════════════════════════════════════════╗
+${C.yellow}╔══════════════════════════════════════════════════════════════╗
 ║              Dev Agent - Self-Improving System               ║
 ║         Monitors tool logs and fixes source code             ║
-╚══════════════════════════════════════════════════════════════╝
+╚══════════════════════════════════════════════════════════════╝${C.reset}
 `);
 
     await this.connect();
     this.isRunning = true;
+
+    // Start Game Agent if managed mode
+    if (this.manageGameAgent) {
+      console.log(`${PREFIX} Managed mode enabled - will control Game Agent lifecycle`);
+      await this.sleep(2000); // Wait for MCP server to be ready
+      this.startGameAgent();
+    }
 
     // Main loop - periodically analyze failures
     while (this.isRunning) {
@@ -177,11 +196,19 @@ class DevAgent {
     const failures = this.recentLogs.filter(l => l.result === "failure");
 
     if (failures.length < MIN_FAILURES_TO_ANALYZE) {
-      console.log(`[DevAgent] Not enough failures to analyze (${failures.length}/${MIN_FAILURES_TO_ANALYZE})`);
+      console.log(`${PREFIX} Not enough failures to analyze (${failures.length}/${MIN_FAILURES_TO_ANALYZE})`);
       return;
     }
 
-    console.log(`[DevAgent] Analyzing ${failures.length} failures...`);
+    console.log(`${PREFIX} ${C.yellow}=== Starting Improvement Cycle ===${C.reset}`);
+    console.log(`${PREFIX} Analyzing ${failures.length} failures...`);
+
+    // STOP Game Agent during improvement
+    if (this.manageGameAgent && this.gameAgentProcess) {
+      console.log(`${PREFIX} ${C.yellow}Pausing Game Agent for improvement...${C.reset}`);
+      this.stopGameAgent();
+      await this.sleep(2000);
+    }
 
     // Group by tool
     const summary: FailureSummary = {};
@@ -203,68 +230,141 @@ class DevAgent {
       .sort((a, b) => b[1].count - a[1].count);
 
     if (sortedTools.length === 0) {
+      // Restart Game Agent if no tools to fix
+      if (this.manageGameAgent) {
+        this.startGameAgent();
+      }
       return;
     }
 
     const [toolName, toolFailures] = sortedTools[0];
-    console.log(`[DevAgent] Most failing tool: ${toolName} (${toolFailures.count} failures)`);
-    console.log(`[DevAgent] Errors: ${toolFailures.errors.join(", ")}`);
+    console.log(`${PREFIX} Most failing tool: ${toolName} (${toolFailures.count} failures)`);
+    console.log(`${PREFIX} Errors: ${toolFailures.errors.join(", ")}`);
 
-    // Generate improvement plan using Claude
-    const plan = await this.generateImprovementPlan(toolName, toolFailures);
+    // Keep trying until build succeeds
+    let buildSuccess = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 5;
 
-    if (plan) {
-      console.log(`[DevAgent] Improvement plan generated for ${toolName}`);
-      console.log(`[DevAgent] Problem: ${plan.problem}`);
-      console.log(`[DevAgent] File: ${plan.filePath}`);
+    while (!buildSuccess && attempts < MAX_ATTEMPTS) {
+      attempts++;
+      console.log(`${PREFIX} ${C.cyan}Improvement attempt ${attempts}/${MAX_ATTEMPTS}${C.reset}`);
+
+      // Generate improvement plan using Claude
+      const plan = await this.generateImprovementPlan(toolName, toolFailures, attempts > 1 ? this.lastBuildError : undefined);
+
+      if (!plan) {
+        console.log(`${PREFIX} ${C.red}Failed to generate improvement plan${C.reset}`);
+        break;
+      }
+
+      console.log(`${PREFIX} Improvement plan generated for ${toolName}`);
+      console.log(`${PREFIX} Problem: ${plan.problem}`);
+      console.log(`${PREFIX} File: ${plan.filePath}`);
 
       // Apply the fix
       const applied = await this.applyFix(plan);
 
-      if (applied) {
-        // Clear analyzed logs
-        this.recentLogs = this.recentLogs.filter(l => l.tool !== toolName);
-
-        // Rebuild
-        await this.rebuild();
+      if (!applied) {
+        console.log(`${PREFIX} ${C.red}Failed to apply fix${C.reset}`);
+        continue;
       }
+
+      // Try to build
+      buildSuccess = await this.rebuild();
+
+      if (!buildSuccess) {
+        console.log(`${PREFIX} ${C.yellow}Build failed, will try again...${C.reset}`);
+        await this.sleep(2000);
+      }
+    }
+
+    // Clear analyzed logs
+    this.recentLogs = this.recentLogs.filter(l => l.tool !== toolName);
+
+    if (buildSuccess) {
+      console.log(`${PREFIX} ${C.green}=== Improvement Cycle Complete ===${C.reset}`);
+    } else {
+      console.log(`${PREFIX} ${C.red}=== Improvement Failed after ${MAX_ATTEMPTS} attempts ===${C.reset}`);
+      // Restore from backup
+      if (this.lastAppliedFixPath) {
+        const backupPath = this.lastAppliedFixPath + ".backup";
+        if (existsSync(backupPath)) {
+          console.log(`${PREFIX} Restoring from backup...`);
+          const backup = readFileSync(backupPath, "utf-8");
+          writeFileSync(this.lastAppliedFixPath, backup);
+          await this.rebuildAfterRollback();
+        }
+      }
+    }
+
+    // Restart Game Agent
+    if (this.manageGameAgent) {
+      console.log(`${PREFIX} ${C.green}Resuming Game Agent...${C.reset}`);
+      this.startGameAgent();
     }
   }
 
+  private lastBuildError: string | undefined = undefined;
+
   private async generateImprovementPlan(
     toolName: string,
-    failures: FailureSummary[string]
+    failures: FailureSummary[string],
+    buildError?: string
   ): Promise<ImprovementPlan | null> {
-    // Map tool name to source file
-    const toolToFile: Record<string, string> = {
-      minecraft_craft: "src/tools/crafting.ts",
-      minecraft_smelt: "src/tools/crafting.ts",
-      minecraft_fight: "src/tools/combat.ts",
-      minecraft_flee: "src/tools/combat.ts",
-      minecraft_eat: "src/tools/combat.ts",
-      minecraft_move_to: "src/tools/movement.ts",
-      minecraft_dig_block: "src/tools/building.ts",
-      minecraft_place_block: "src/tools/building.ts",
-      minecraft_get_surroundings: "src/tools/environment.ts",
-      minecraft_find_block: "src/tools/environment.ts",
-      minecraft_connect: "src/tools/connection.ts",
+    // Map tool name to source file and function name
+    const toolToFile: Record<string, { file: string; func?: string }> = {
+      minecraft_craft: { file: "src/tools/crafting.ts" },
+      minecraft_smelt: { file: "src/tools/crafting.ts" },
+      minecraft_fight: { file: "src/tools/combat.ts" },
+      minecraft_flee: { file: "src/tools/combat.ts" },
+      minecraft_eat: { file: "src/tools/combat.ts" },
+      minecraft_move_to: { file: "src/bot-manager.ts", func: "moveTo" },
+      minecraft_dig_block: { file: "src/tools/building.ts" },
+      minecraft_place_block: { file: "src/tools/building.ts" },
+      minecraft_get_surroundings: { file: "src/tools/environment.ts" },
+      minecraft_find_block: { file: "src/tools/environment.ts" },
+      minecraft_connect: { file: "src/tools/connection.ts" },
+      minecraft_collect_items: { file: "src/bot-manager.ts", func: "collectNearbyItems" },
     };
 
-    const filePath = toolToFile[toolName] || "src/bot-manager.ts";
+    const mapping = toolToFile[toolName] || { file: "src/bot-manager.ts" };
+    const filePath = mapping.file;
     const fullPath = join(projectRoot, filePath);
 
     if (!existsSync(fullPath)) {
-      console.log(`[DevAgent] Source file not found: ${filePath}`);
+      console.log(`${PREFIX} Source file not found: ${filePath}`);
       return null;
     }
 
-    const sourceCode = readFileSync(fullPath, "utf-8");
+    let sourceCode = readFileSync(fullPath, "utf-8");
+
+    // If file is too large, try to extract just the relevant function
+    const MAX_SOURCE_SIZE = 15000; // ~15KB limit
+    if (sourceCode.length > MAX_SOURCE_SIZE && mapping.func) {
+      console.log(`${PREFIX} File too large (${sourceCode.length} chars), extracting function: ${mapping.func}`);
+      const extracted = this.extractFunction(sourceCode, mapping.func);
+      if (extracted) {
+        sourceCode = `// Extracted function from ${filePath}\n\n${extracted}`;
+        console.log(`${PREFIX} Extracted ${sourceCode.length} chars`);
+      } else {
+        // Fall back to first part of file
+        sourceCode = sourceCode.slice(0, MAX_SOURCE_SIZE) + "\n// ... (truncated)";
+      }
+    } else if (sourceCode.length > MAX_SOURCE_SIZE) {
+      sourceCode = sourceCode.slice(0, MAX_SOURCE_SIZE) + "\n// ... (truncated)";
+    }
+
+    // Build error section (for retry attempts)
+    const buildErrorSection = buildError
+      ? `\n## 前回のビルドエラー:\n\`\`\`\n${buildError}\n\`\`\`\n\n**重要**: 前回の修正でビルドエラーが発生しました。このエラーを解決する修正を提案してください。\n`
+      : "";
 
     // Create analysis prompt
     const prompt = `あなたはMinecraft MCPツールのデバッガーです。
 
 ## 失敗しているツール: ${toolName}
-
+${buildErrorSection}
 ## エラー内容:
 ${failures.errors.map(e => `- ${e}`).join("\n")}
 
@@ -273,7 +373,7 @@ ${JSON.stringify(failures.examples.slice(0, 2), null, 2)}
 
 ## ソースコード (${filePath}):
 \`\`\`typescript
-${sourceCode.slice(0, 8000)}
+${sourceCode}
 \`\`\`
 
 ## タスク
@@ -303,7 +403,7 @@ ${sourceCode.slice(0, 8000)}
       const result = query({
         prompt,
         options: {
-          model: "claude-sonnet-4-20250514",
+          model: "claude-opus-4-20250514",
           maxTurns: 1,
           tools: [],
           env: envWithoutKey as Record<string, string>,
@@ -330,7 +430,7 @@ ${sourceCode.slice(0, 8000)}
         };
       }
     } catch (e) {
-      console.error("[DevAgent] Failed to generate improvement plan:", e);
+      console.error(`${PREFIX} Failed to generate improvement plan:`, e);
     }
 
     return null;
@@ -338,7 +438,7 @@ ${sourceCode.slice(0, 8000)}
 
   private async applyFix(plan: ImprovementPlan): Promise<boolean> {
     if (!plan.code?.before || !plan.code?.after) {
-      console.log("[DevAgent] No code changes specified");
+      console.log(`${PREFIX} No code changes specified`);
       return false;
     }
 
@@ -346,8 +446,8 @@ ${sourceCode.slice(0, 8000)}
     const currentCode = readFileSync(fullPath, "utf-8");
 
     if (!currentCode.includes(plan.code.before)) {
-      console.log("[DevAgent] Could not find code to replace");
-      console.log("[DevAgent] Looking for:", plan.code.before.slice(0, 100));
+      console.log(`${PREFIX} Could not find code to replace`);
+      console.log(`${PREFIX} Looking for:`, plan.code.before.slice(0, 100));
       return false;
     }
 
@@ -361,14 +461,19 @@ ${sourceCode.slice(0, 8000)}
     // Write new code
     writeFileSync(fullPath, newCode);
 
-    console.log(`[DevAgent] Applied fix to ${plan.filePath}`);
-    console.log(`[DevAgent] Backup saved to ${backupPath}`);
+    // Track for potential rollback
+    this.lastAppliedFixPath = fullPath;
+
+    console.log(`${PREFIX} ${C.green}Applied fix to ${plan.filePath}${C.reset}`);
+    console.log(`${PREFIX} Backup saved to ${backupPath}`);
 
     return true;
   }
 
+  private lastAppliedFixPath: string | null = null;
+
   private async rebuild(): Promise<boolean> {
-    console.log("[DevAgent] Rebuilding project...");
+    console.log(`${PREFIX} Rebuilding project...`);
 
     return new Promise((resolve) => {
       const build = spawn("npm", ["run", "build"], {
@@ -376,12 +481,7 @@ ${sourceCode.slice(0, 8000)}
         stdio: "pipe",
       });
 
-      let stdout = "";
       let stderr = "";
-
-      build.stdout.on("data", (data) => {
-        stdout += data.toString();
-      });
 
       build.stderr.on("data", (data) => {
         stderr += data.toString();
@@ -389,14 +489,30 @@ ${sourceCode.slice(0, 8000)}
 
       build.on("close", (code) => {
         if (code === 0) {
-          console.log("[DevAgent] Build successful!");
-          console.log("[DevAgent] Restart Minecraft agents to apply changes.");
+          console.log(`${PREFIX} ${C.green}Build successful!${C.reset}`);
+          this.lastBuildError = undefined;
+          this.lastAppliedFixPath = null;
           resolve(true);
         } else {
-          console.error("[DevAgent] Build failed!");
+          console.error(`${PREFIX} ${C.red}Build failed!${C.reset}`);
           console.error(stderr);
+          // Store error for next improvement attempt
+          this.lastBuildError = stderr;
           resolve(false);
         }
+      });
+    });
+  }
+
+  private async rebuildAfterRollback(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const build = spawn("npm", ["run", "build"], {
+        cwd: projectRoot,
+        stdio: "pipe",
+      });
+
+      build.on("close", (code) => {
+        resolve(code === 0);
       });
     });
   }
@@ -405,9 +521,135 @@ ${sourceCode.slice(0, 8000)}
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  /**
+   * Extract a function from source code by name
+   * Handles async functions, regular functions, and arrow function properties
+   */
+  private extractFunction(source: string, funcName: string): string | null {
+    // Try patterns: async funcName(, funcName(, funcName =, funcName:
+    const patterns = [
+      new RegExp(`(async\\s+${funcName}\\s*\\([^)]*\\)[^{]*\\{)`, "m"),
+      new RegExp(`(${funcName}\\s*\\([^)]*\\)[^{]*\\{)`, "m"),
+      new RegExp(`(${funcName}\\s*=\\s*async\\s*\\([^)]*\\)[^{]*\\{)`, "m"),
+      new RegExp(`(${funcName}\\s*:\\s*async\\s*\\([^)]*\\)[^{]*\\{)`, "m"),
+    ];
+
+    for (const pattern of patterns) {
+      const match = source.match(pattern);
+      if (match && match.index !== undefined) {
+        // Find the matching closing brace
+        const startIndex = match.index;
+        let braceCount = 0;
+        let inString = false;
+        let stringChar = "";
+        let endIndex = startIndex;
+
+        for (let i = startIndex; i < source.length; i++) {
+          const char = source[i];
+          const prevChar = i > 0 ? source[i - 1] : "";
+
+          // Handle strings
+          if ((char === '"' || char === "'" || char === "`") && prevChar !== "\\") {
+            if (!inString) {
+              inString = true;
+              stringChar = char;
+            } else if (char === stringChar) {
+              inString = false;
+            }
+          }
+
+          if (!inString) {
+            if (char === "{") braceCount++;
+            if (char === "}") {
+              braceCount--;
+              if (braceCount === 0) {
+                endIndex = i + 1;
+                break;
+              }
+            }
+          }
+        }
+
+        if (endIndex > startIndex) {
+          return source.slice(startIndex, endIndex);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Start the Game Agent as a child process
+   */
+  private startGameAgent(): void {
+    if (!this.manageGameAgent) {
+      console.log(`${PREFIX} Game Agent management disabled. Set MANAGE_GAME_AGENT=true to enable.`);
+      return;
+    }
+
+    if (this.gameAgentProcess) {
+      console.log(`${PREFIX} Game Agent already running`);
+      return;
+    }
+
+    console.log(`${PREFIX} Starting Game Agent...`);
+
+    // Use Node for claude-agent
+    const agentScript = join(projectRoot, "dist", "agent", "claude-agent.js");
+
+    this.gameAgentProcess = spawn("node", [agentScript], {
+      cwd: projectRoot,
+      stdio: "inherit",  // Inherit all stdio for OAuth to work
+      env: {
+        ...process.env,
+        BOT_USERNAME: process.env.BOT_USERNAME || "Claude",
+      },
+    });
+
+    this.gameAgentProcess.on("exit", (code) => {
+      console.log(`${PREFIX} Game Agent exited with code ${code}`);
+      this.gameAgentProcess = null;
+
+      // Auto-restart after 5 seconds if still running
+      if (this.isRunning) {
+        console.log(`${PREFIX} Restarting Game Agent in 5 seconds...`);
+        setTimeout(() => this.startGameAgent(), 5000);
+      }
+    });
+
+    console.log(`${PREFIX} Game Agent started (PID: ${this.gameAgentProcess.pid})`);
+  }
+
+  /**
+   * Stop the Game Agent
+   */
+  private stopGameAgent(): void {
+    if (this.gameAgentProcess) {
+      console.log(`${PREFIX} Stopping Game Agent...`);
+      this.gameAgentProcess.kill("SIGTERM");
+      this.gameAgentProcess = null;
+    }
+  }
+
+  /**
+   * Restart the Game Agent (stop + start)
+   */
+  private async restartGameAgent(): Promise<void> {
+    if (!this.manageGameAgent) {
+      console.log(`${PREFIX} Restart Minecraft agents manually to apply changes.`);
+      return;
+    }
+
+    this.stopGameAgent();
+    await this.sleep(2000); // Wait for graceful shutdown
+    this.startGameAgent();
+  }
+
   stop(): void {
-    console.log("[DevAgent] Stopping...");
+    console.log(`${PREFIX} Stopping...`);
     this.isRunning = false;
+    this.stopGameAgent();
     if (this.ws) {
       this.ws.close();
     }
@@ -431,7 +673,7 @@ async function main(): Promise<void> {
   try {
     await agent.start();
   } catch (error) {
-    console.error("[DevAgent] Fatal error:", error);
+    console.error(`${PREFIX} Fatal error:`, error);
     process.exit(1);
   }
 }

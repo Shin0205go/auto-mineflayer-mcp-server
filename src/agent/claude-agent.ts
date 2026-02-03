@@ -27,6 +27,16 @@ const MCP_WS_URL = process.env.MCP_WS_URL || "ws://localhost:8765";
 const START_MCP_SERVER = process.env.START_MCP_SERVER !== "false";
 const BOT_USERNAME = process.env.BOT_USERNAME || "Claude";  // Can override with env var
 
+// Colors for terminal output
+const C = {
+  cyan: "\x1b[36m",
+  green: "\x1b[32m",
+  red: "\x1b[31m",
+  dim: "\x1b[2m",
+  reset: "\x1b[0m",
+};
+const PREFIX = `${C.cyan}[Agent]${C.reset}`;
+
 let mcpServer: ChildProcess | null = null;
 
 async function checkMCPServerRunning(): Promise<boolean> {
@@ -46,7 +56,7 @@ async function checkMCPServerRunning(): Promise<boolean> {
 function startMCPServer(): Promise<void> {
   return new Promise(async (resolve, reject) => {
     if (!START_MCP_SERVER) {
-      console.log("[Agent] Skipping MCP server start (START_MCP_SERVER=false)");
+      console.log(`${PREFIX} Skipping MCP server start (START_MCP_SERVER=false)`);
       resolve();
       return;
     }
@@ -54,12 +64,12 @@ function startMCPServer(): Promise<void> {
     // Check if already running
     const alreadyRunning = await checkMCPServerRunning();
     if (alreadyRunning) {
-      console.log(`[Agent] MCP server already running at ${MCP_WS_URL}`);
+      console.log(`${PREFIX} MCP server already running at ${MCP_WS_URL}`);
       resolve();
       return;
     }
 
-    console.log("[Agent] Starting MCP WebSocket server...");
+    console.log(`${PREFIX} Starting MCP WebSocket server...`);
 
     mcpServer = spawn("node", [MCP_WS_SERVER], {
       stdio: ["ignore", "pipe", "pipe"],
@@ -98,7 +108,7 @@ class ClaudeAgent {
 
   constructor() {
     this.claude = new ClaudeClient({
-      maxTurns: 30,
+      maxTurns: 100,
       mcpServerUrl: MCP_WS_URL,
     });
 
@@ -115,14 +125,14 @@ class ClaudeAgent {
     });
 
     this.claude.on("error", (error: Error) => {
-      console.error("[Agent] Error:", error.message);
+      console.error(`${PREFIX} ${C.red}Error:${C.reset}`, error.message);
     });
   }
 
   async start(): Promise<void> {
-    console.log("[Agent] Starting Claude Agent...");
-    console.log(`[Agent] Target Minecraft server: ${MC_HOST}:${MC_PORT}`);
-    console.log(`[Agent] MCP Bridge will connect to: ${MCP_WS_URL}`);
+    console.log(`${PREFIX} Starting Claude Agent...`);
+    console.log(`${PREFIX} Target Minecraft server: ${MC_HOST}:${MC_PORT}`);
+    console.log(`${PREFIX} MCP Bridge will connect to: ${MCP_WS_URL}`);
 
     this.isRunning = true;
 
@@ -132,7 +142,7 @@ class ClaudeAgent {
       const skillPath = join(projectRoot, ".claude", "skills", "minecraft-survival", "SKILL.md");
       minecraftKnowledge = readFileSync(skillPath, "utf-8");
     } catch {
-      console.log("[Agent] Warning: Could not load minecraft-survival.md skill");
+      console.log(`${PREFIX} Warning: Could not load minecraft-survival.md skill`);
     }
 
     // Initial prompt with Minecraft knowledge
@@ -160,7 +170,7 @@ ${minecraftKnowledge}
 2. agent_board_read で掲示板を確認
 3. 状況を判断して行動`;
 
-    console.log("[Agent] Starting autonomous loop...");
+    console.log(`${PREFIX} Starting autonomous loop...`);
     await this.runLoop(initialPrompt);
   }
 
@@ -171,16 +181,16 @@ ${minecraftKnowledge}
     while (this.isRunning) {
       try {
         loopCount++;
-        console.log(`\n[Agent] === Loop ${loopCount} ===`);
+        console.log(`\n${PREFIX} ${C.cyan}=== Loop ${loopCount} ===${C.reset}`);
 
         const result = await this.claude.runQuery(currentPrompt);
 
         let loopSummary = "";
         if (result.success) {
-          console.log("[Agent] Turn completed successfully");
+          console.log(`${PREFIX} ${C.green}Turn completed successfully${C.reset}`);
           if (result.usage) {
             console.log(
-              `[Agent] Tokens: ${result.usage.inputTokens} in / ${result.usage.outputTokens} out, Cost: $${result.usage.costUSD.toFixed(4)}`
+              `${PREFIX} ${C.dim}Tokens: ${result.usage.inputTokens} in / ${result.usage.outputTokens} out, Cost: $${result.usage.costUSD.toFixed(4)}${C.reset}`
             );
           }
           // Extract summary from result (last 100 chars or full if shorter)
@@ -191,7 +201,7 @@ ${minecraftKnowledge}
             loopSummary = summary;
           }
         } else {
-          console.error("[Agent] Turn failed:", result.error);
+          console.error(`${PREFIX} ${C.red}Turn failed:${C.reset}`, result.error);
           loopSummary = `エラー: ${result.error?.slice(0, 50) || "unknown"}`;
         }
 
@@ -214,7 +224,7 @@ ${eventSection}
         // Delay between turns
         await this.delay(5000);
       } catch (error) {
-        console.error("[Agent] Error in loop:", error);
+        console.error(`${PREFIX} ${C.red}Error in loop:${C.reset}`, error);
         await this.delay(10000);
       }
     }
@@ -225,7 +235,7 @@ ${eventSection}
   }
 
   stop(): void {
-    console.log("[Agent] Stopping...");
+    console.log(`${PREFIX} Stopping...`);
     this.isRunning = false;
     this.claude.disconnect();
   }
@@ -234,10 +244,10 @@ ${eventSection}
 // Main entry point
 async function main(): Promise<void> {
   console.log(`
-╔══════════════════════════════════════════════════════════════╗
+${C.cyan}╔══════════════════════════════════════════════════════════════╗
 ║              Claude Autonomous Agent                         ║
 ║      (OAuth + MCP Bridge - Persistent Connection)            ║
-╚══════════════════════════════════════════════════════════════╝
+╚══════════════════════════════════════════════════════════════╝${C.reset}
 `);
 
   // Start MCP WebSocket server
@@ -248,7 +258,7 @@ async function main(): Promise<void> {
 
   // Graceful shutdown
   const cleanup = () => {
-    console.log("\n[Agent] Shutting down...");
+    console.log(`\n${PREFIX} Shutting down...`);
     agent.stop();
     if (mcpServer) {
       mcpServer.kill();
@@ -262,7 +272,7 @@ async function main(): Promise<void> {
   try {
     await agent.start();
   } catch (error) {
-    console.error("[Agent] Fatal error:", error);
+    console.error(`${PREFIX} ${C.red}Fatal error:${C.reset}`, error);
     cleanup();
   }
 }

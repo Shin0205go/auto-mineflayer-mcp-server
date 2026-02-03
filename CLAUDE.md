@@ -167,6 +167,19 @@ npm run board
 - `agent_board_wait` - 新着を待つ
 - `agent_board_clear` - クリア
 
+### 自己学習（Reflexion）
+- `log_experience` - 行動と結果を記録（成功・失敗問わず）
+- `get_recent_experiences` - 過去の経験を振り返る
+- `reflect_and_learn` - 経験からパターン分析、改善点抽出
+- `save_skill` - 成功手順をスキルとして保存
+- `get_skills` - 保存スキルを参照
+- `get_reflection_insights` - 振り返り知見を取得
+
+学習データは `learning/` ディレクトリに保存:
+- `experience.jsonl` - 経験ログ
+- `reflection.md` - 振り返りレポート
+- `skills.json` - スキルライブラリ
+
 ## 環境変数
 
 ```bash

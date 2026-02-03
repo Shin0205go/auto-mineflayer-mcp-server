@@ -96,6 +96,131 @@ export class BotManager extends EventEmitter {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  /**
+   * Get brief status after an action (HP, hunger, position, surroundings, dangers)
+   */
+  private getBriefStatus(username: string): string {
+    const managed = this.bots.get(username);
+    if (!managed) return "";
+
+    const bot = managed.bot;
+    const pos = bot.entity.position;
+    const hp = bot.health?.toFixed(1) ?? "?";
+    const food = bot.food ?? "?";
+    const x = Math.floor(pos.x);
+    const y = Math.floor(pos.y);
+    const z = Math.floor(pos.z);
+
+    const getBlock = (dx: number, dy: number, dz: number) => {
+      const block = bot.blockAt(new Vec3(x + dx, y + dy, z + dz));
+      return block?.name || "unknown";
+    };
+
+    // Check walkable directions
+    const dirs = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
+    const walkable: string[] = [];
+    const blocked: string[] = [];
+
+    for (const [dir, [dx, dz]] of Object.entries(dirs)) {
+      const feet = getBlock(dx, 0, dz);
+      const head = getBlock(dx, 1, dz);
+      const ground = getBlock(dx, -1, dz);
+      const canWalk = (feet === "air" || feet === "water") && (head === "air" || head === "water");
+      const hasGround = ground !== "air" && ground !== "water";
+
+      if (canWalk && hasGround) {
+        walkable.push(dir);
+      } else if (!canWalk) {
+        blocked.push(`${dir}:${feet}`);
+      }
+    }
+
+    // Quick resource scan (radius 5)
+    const resources: Record<string, number> = {};
+    const interestingBlocks = ["coal_ore", "iron_ore", "copper_ore", "gold_ore", "diamond_ore",
+      "deepslate_coal_ore", "deepslate_iron_ore", "deepslate_diamond_ore",
+      "oak_log", "birch_log", "spruce_log", "crafting_table", "furnace", "chest"];
+
+    for (let dx = -5; dx <= 5; dx++) {
+      for (let dy = -3; dy <= 3; dy++) {
+        for (let dz = -5; dz <= 5; dz++) {
+          const block = bot.blockAt(pos.offset(dx, dy, dz));
+          if (block && interestingBlocks.includes(block.name)) {
+            resources[block.name] = (resources[block.name] || 0) + 1;
+          }
+        }
+      }
+    }
+
+    // Dangers and nearby entities
+    const dangers: string[] = [];
+    const nearbyEntities: { [key: string]: number } = {};
+    const hostileMobs = ["zombie", "skeleton", "creeper", "spider", "enderman", "witch", "drowned"];
+    const passiveMobs = ["cow", "pig", "sheep", "chicken", "horse", "villager"];
+    
+    for (const entity of Object.values(bot.entities)) {
+      if (entity === bot.entity) continue;
+      const dist = entity.position.distanceTo(pos);
+      const entityName = entity.name || "unknown";
+      const entityType = entity.type || entityName;
+      const entityMobType = entity.mobType || "unknown";
+      const entityDisplayName = entity.displayName || "unknown";
+      
+      if (dist < 20) {
+        // Count all nearby entities using name, type, and mobType
+        // Prioritize mobType for passive mobs like cow, pig, sheep
+        let key = "unknown";
+        // Check all variations with case-insensitive comparison
+        const mobTypeLower = entityMobType.toLowerCase();
+        const nameLower = entityName.toLowerCase();
+        const displayNameLower = entityDisplayName.toLowerCase();
+        const typeLower = entityType.toLowerCase();
+        
+        // Check for passive mobs - prioritize name/mobType over type
+        // entity.name is most reliable for passive mobs
+        if (entity.name && passiveMobs.includes(entity.name.toLowerCase())) {
+          key = entity.name.toLowerCase();
+        } else if (entity.mobType && passiveMobs.includes(entity.mobType.toLowerCase())) {
+          key = entity.mobType.toLowerCase();
+        } else if (entity.displayName && passiveMobs.includes(entity.displayName.toLowerCase())) {
+          key = entity.displayName.toLowerCase();
+        } else if (typeof entity.type === 'string' && passiveMobs.includes(entity.type.toLowerCase())) {
+          key = entity.type.toLowerCase();
+        } else {
+          // For other entities, use whatever is available
+          key = entity.name?.toLowerCase() || entity.mobType?.toLowerCase() || entity.displayName?.toLowerCase() || entity.type?.toString().toLowerCase() || "unknown";
+        }
+        nearbyEntities[key] = (nearbyEntities[key] || 0) + 1;
+        
+        // Check for dangers (hostile mobs within 12 blocks)
+        if (dist < 12 && hostileMobs.includes(entityName)) {
+          dangers.push(`${entity.name}(${dist.toFixed(0)}m)`);
+        }
+      }
+    }
+
+    const posBlock = bot.blockAt(pos);
+    const posLight = Math.max(posBlock?.skyLight ?? 0, posBlock?.light ?? 0);
+    if (posLight < 8) dangers.push(`暗(光${posLight})`);
+    if (bot.health < 10) dangers.push(`HP低`);
+    if (bot.food < 6) dangers.push(`空腹`);
+
+    // Build status
+    let status = `\n---\n📍(${x},${y},${z}) ❤️${hp} 🍖${food}`;
+    status += `\n歩ける: ${walkable.join(",") || "なし"} | 壁: ${blocked.slice(0, 3).join(", ") || "なし"}`;
+
+    if (Object.keys(resources).length > 0) {
+      const res = Object.entries(resources).slice(0, 4).map(([k, v]) => `${k.replace("deepslate_", "").replace("_ore", "").replace("_log", "")}:${v}`).join(" ");
+      status += `\n近く: ${res}`;
+    }
+
+    if (dangers.length > 0) {
+      status += `\n⚠️ ${dangers.join(", ")}`;
+    }
+
+    return status;
+  }
+
   async connect(config: BotConfig): Promise<string> {
     if (this.bots.has(config.username)) {
       return `Bot '${config.username}' is already connected`;
@@ -118,6 +243,7 @@ export class BotManager extends EventEmitter {
         movements.allowFreeMotion = true;
         movements.allowParkour = true;
         movements.allowSprinting = true;
+        movements.maxDropDown = 4;  // 落下許容を4ブロックに緩和して探索効率を改善
         bot.pathfinder.setMovements(movements);
 
         // Check game mode - auto-switch to survival if not
@@ -143,11 +269,16 @@ export class BotManager extends EventEmitter {
         const addEvent = (type: string, message: string, data?: Record<string, unknown>) => {
           const event: GameEvent = { type, message, timestamp: Date.now(), data };
           managedBot.gameEvents.push(event);
-          if (managedBot.gameEvents.length > 50) {
-            managedBot.gameEvents.shift();
+          // Keep only 20 events instead of 50 to reduce memory usage
+          if (managedBot.gameEvents.length > 20) {
+            managedBot.gameEvents.splice(0, managedBot.gameEvents.length - 20);
           }
-          // Emit for WebSocket push
-          this.emit("gameEvent", config.username, event);
+          // Emit for WebSocket push with error handling
+          try {
+            this.emit("gameEvent", config.username, event);
+          } catch (error) {
+            console.error(`[BotManager] Failed to emit gameEvent:`, error);
+          }
         };
 
         // Set up chat listener
@@ -284,7 +415,10 @@ export class BotManager extends EventEmitter {
     return { x: pos.x, y: pos.y, z: pos.z };
   }
 
-  async moveTo(username: string, x: number, y: number, z: number): Promise<string> {
+  /**
+   * Basic pathfinding move (internal use)
+   */
+  private async moveToBasic(username: string, x: number, y: number, z: number): Promise<{ success: boolean; message: string; stuckReason?: string }> {
     const managed = this.bots.get(username);
     if (!managed) {
       throw new Error(`Bot '${username}' not found`);
@@ -294,8 +428,6 @@ export class BotManager extends EventEmitter {
     const targetPos = new Vec3(x, y, z);
     const start = bot.entity.position;
     const distance = start.distanceTo(targetPos);
-
-    console.error(`[Move] From (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)}) to (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
 
     const goal = new goals.GoalNear(x, y, z, 2);
 
@@ -315,13 +447,16 @@ export class BotManager extends EventEmitter {
           cleanup();
           const finalPos = bot.entity.position;
           const finalDist = finalPos.distanceTo(targetPos);
-          console.error(`[Move] Path reset - no path found. Distance remaining: ${finalDist.toFixed(1)}`);
-          resolve(`Cannot reach target - no path found. Stopped at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks away.`);
+          const yDiff = y - finalPos.y;
+          resolve({
+            success: false,
+            message: `Cannot reach target - no path found. Stopped at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks away.`,
+            stuckReason: Math.abs(yDiff) > 2 ? (yDiff > 0 ? "target_higher" : "target_lower") : "no_path"
+          });
         }
       };
 
       bot.once("path_reset", onPathReset);
-
       bot.pathfinder.setGoal(goal);
 
       const checkInterval = setInterval(() => {
@@ -333,18 +468,16 @@ export class BotManager extends EventEmitter {
         const currentPos = bot.entity.position;
         const currentDist = currentPos.distanceTo(targetPos);
 
-        // Check if reached goal
         if (currentDist < 3) {
           clearInterval(checkInterval);
           if (!resolved) {
             resolved = true;
             cleanup();
-            resolve(`Reached destination (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)})`);
+            resolve({ success: true, message: `Reached destination (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)})` });
           }
           return;
         }
 
-        // Check if stuck (no progress for 3 checks = 1.5 seconds)
         const moved = currentPos.distanceTo(lastPos);
         if (moved < 0.1) {
           noProgressCount++;
@@ -353,8 +486,12 @@ export class BotManager extends EventEmitter {
             if (!resolved) {
               resolved = true;
               cleanup();
-              console.error(`[Move] Stuck - no progress for ${noProgressCount * 300}ms`);
-              resolve(`Stuck at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Cannot reach target, ${currentDist.toFixed(1)} blocks away. Try moving around obstacles.`);
+              const yDiff = y - currentPos.y;
+              resolve({
+                success: false,
+                message: `Stuck at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). ${currentDist.toFixed(1)} blocks from target.`,
+                stuckReason: Math.abs(yDiff) > 2 ? (yDiff > 0 ? "target_higher" : "target_lower") : "obstacle"
+              });
             }
             return;
           }
@@ -363,21 +500,23 @@ export class BotManager extends EventEmitter {
           lastPos = currentPos.clone();
         }
 
-        // Check if pathfinder stopped
         if (!bot.pathfinder.isMoving() && currentDist > 3) {
           clearInterval(checkInterval);
           if (!resolved) {
             resolved = true;
             cleanup();
-            console.error(`[Move] Pathfinder stopped before reaching goal`);
-            resolve(`Pathfinder stopped at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). ${currentDist.toFixed(1)} blocks from target.`);
+            const yDiff = y - currentPos.y;
+            resolve({
+              success: false,
+              message: `Pathfinder stopped at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). ${currentDist.toFixed(1)} blocks from target.`,
+              stuckReason: Math.abs(yDiff) > 2 ? (yDiff > 0 ? "target_higher" : "target_lower") : "pathfinder_stopped"
+            });
           }
           return;
         }
       }, 300);
 
-      // Timeout based on distance
-      const timeout = Math.max(15000, distance * 1000);
+      const timeout = Math.max(10000, distance * 800);
       setTimeout(() => {
         clearInterval(checkInterval);
         if (!resolved) {
@@ -385,11 +524,136 @@ export class BotManager extends EventEmitter {
           cleanup();
           const finalPos = bot.entity.position;
           const finalDist = finalPos.distanceTo(targetPos);
-          console.error(`[Move] Timeout after ${timeout}ms`);
-          resolve(`Movement timeout. Stopped at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks from target.`);
+          resolve({
+            success: false,
+            message: `Movement timeout. Stopped at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks from target.`,
+            stuckReason: "timeout"
+          });
         }
       }, timeout);
     });
+  }
+
+  /**
+   * Smart moveTo with auto-recovery on stuck
+   */
+  async moveTo(username: string, x: number, y: number, z: number): Promise<string> {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+    const start = bot.entity.position;
+    const targetPos = new Vec3(x, y, z);
+    const distance = start.distanceTo(targetPos);
+
+    console.error(`[Move] From (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)}) to (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
+
+    // Try basic move first
+    let result = await this.moveToBasic(username, x, y, z);
+
+    if (result.success) {
+      return result.message + this.getBriefStatus(username);
+    }
+
+    // Auto-recovery based on stuck reason
+    console.error(`[Move] Stuck: ${result.stuckReason}. Attempting recovery...`);
+
+    const currentPos = bot.entity.position;
+    const yDiff = y - currentPos.y;
+
+    // Recovery strategy 1: Target is higher - try to pillar up
+    if (result.stuckReason === "target_higher" && yDiff > 0) {
+      console.error(`[Move] Target is ${yDiff.toFixed(1)} blocks higher. Trying pillar up...`);
+
+      // Check if we have blocks to pillar
+      const inventory = bot.inventory.items();
+      const placeableBlock = inventory.find(item =>
+        ["dirt", "cobblestone", "stone", "netherrack", "sand", "gravel"].some(b => item.name.includes(b))
+      );
+
+      if (placeableBlock) {
+        const pillarHeight = Math.min(Math.ceil(yDiff), 5);
+        try {
+          await this.pillarUp(username, pillarHeight, false);
+          // Retry move after pillar
+          result = await this.moveToBasic(username, x, y, z);
+          if (result.success) {
+            return `[Auto-recovery: pillared up ${pillarHeight}] ` + result.message + this.getBriefStatus(username);
+          }
+        } catch (e) {
+          console.error(`[Move] Pillar recovery failed:`, e);
+        }
+      }
+    }
+
+    // Recovery strategy 2: Try to dig obstacle in front
+    if (result.stuckReason === "obstacle" || result.stuckReason === "pathfinder_stopped") {
+      console.error(`[Move] Obstacle detected. Trying to dig through...`);
+
+      // Calculate direction to target
+      const dx = x - currentPos.x;
+      const dz = z - currentPos.z;
+      const len = Math.sqrt(dx * dx + dz * dz);
+
+      if (len > 0) {
+        const frontX = Math.floor(currentPos.x + dx / len);
+        const frontY = Math.floor(currentPos.y);
+        const frontZ = Math.floor(currentPos.z + dz / len);
+
+        try {
+          // Try to dig block in front
+          const blockInFront = bot.blockAt(new Vec3(frontX, frontY, frontZ));
+          if (blockInFront && blockInFront.name !== "air" && blockInFront.name !== "water" && blockInFront.name !== "lava") {
+            await this.digBlock(username, frontX, frontY, frontZ);
+            // Also try block above (head level)
+            const blockAbove = bot.blockAt(new Vec3(frontX, frontY + 1, frontZ));
+            if (blockAbove && blockAbove.name !== "air") {
+              await this.digBlock(username, frontX, frontY + 1, frontZ);
+            }
+            // Retry move
+            result = await this.moveToBasic(username, x, y, z);
+            if (result.success) {
+              return `[Auto-recovery: dug through obstacle] ` + result.message + this.getBriefStatus(username);
+            }
+          }
+        } catch (e) {
+          console.error(`[Move] Dig recovery failed:`, e);
+        }
+      }
+    }
+
+    // Recovery strategy 3: Try small random offset to unstick
+    if (!result.success) {
+      console.error(`[Move] Trying random offset to unstick...`);
+      const offsets = [
+        { x: 2, z: 0 }, { x: -2, z: 0 }, { x: 0, z: 2 }, { x: 0, z: -2 },
+        { x: 1, z: 1 }, { x: -1, z: -1 }, { x: 1, z: -1 }, { x: -1, z: 1 }
+      ];
+
+      for (const offset of offsets) {
+        const offsetResult = await this.moveToBasic(
+          username,
+          currentPos.x + offset.x,
+          currentPos.y,
+          currentPos.z + offset.z
+        );
+        if (offsetResult.success) {
+          // Now try original target again
+          result = await this.moveToBasic(username, x, y, z);
+          if (result.success) {
+            return `[Auto-recovery: detoured via offset] ` + result.message + this.getBriefStatus(username);
+          }
+          break;
+        }
+      }
+    }
+
+    // All recovery attempts failed
+    const finalPos = bot.entity.position;
+    const finalDist = finalPos.distanceTo(targetPos);
+    return `Movement failed after recovery attempts. Final position: (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks from target. Reason: ${result.stuckReason}` + this.getBriefStatus(username);
   }
 
   async chat(username: string, message: string): Promise<void> {
@@ -442,6 +706,18 @@ export class BotManager extends EventEmitter {
       return block?.name || "unknown";
     };
 
+    // Helper to get direction string
+    const getDirection = (dx: number, dy: number, dz: number): string => {
+      const parts: string[] = [];
+      if (dy > 0) parts.push("up");
+      if (dy < 0) parts.push("down");
+      if (dz < 0) parts.push("north");
+      if (dz > 0) parts.push("south");
+      if (dx > 0) parts.push("east");
+      if (dx < 0) parts.push("west");
+      return parts.join("-") || "here";
+    };
+
     const x = Math.floor(pos.x);
     const z = Math.floor(pos.z);
 
@@ -477,63 +753,205 @@ export class BotManager extends EventEmitter {
     // Check above and below
     const above = getBlock(x, headY + 1, z);
     const below = getBlock(x, feetY - 1, z);
-    const twoBelow = getBlock(x, feetY - 2, z);
 
     // Check what's at feet level (in water? in lava?)
     const atFeet = getBlock(x, feetY, z);
 
-    // Build result
-    const lines = [
-      `Position: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`,
-      `Standing on: ${below}`,
-      `Above head: ${above}`,
-      `Can walk: ${passable.length > 0 ? passable.join(", ") : "nowhere"}`,
-      `Blocked: ${blocked.length > 0 ? blocked.join(", ") : "nothing"}`,
-    ];
+    // === 環境情報 ===
+    const lines: string[] = [];
+
+    // 基本位置
+    lines.push(`## 現在地`);
+    lines.push(`座標: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`);
+
+    // バイオーム
+    try {
+      const biome = bot.blockAt(pos)?.biome?.name || "unknown";
+      lines.push(`バイオーム: ${biome}`);
+    } catch {
+      // biome not available
+    }
+
+    // 時刻と天気
+    const time = bot.time.timeOfDay;
+    const isDay = time < 12000 || time > 23000;
+    const timeStr = isDay ? "昼" : "夜";
+    lines.push(`時刻: ${timeStr} (${time})`);
+
+    if (bot.isRaining) {
+      lines.push(`天気: 雨${bot.thunderState > 0 ? "（雷雨）" : ""}`);
+    }
+
+    // 地形タイプ判定
+    let terrainType = "地表";
+    const skyLight = bot.blockAt(pos)?.skyLight ?? 15;
+    if (pos.y < 0) {
+      terrainType = "ディープダーク層";
+    } else if (pos.y < 60 && skyLight < 4) {
+      terrainType = "洞窟";
+    } else if (atFeet === "water") {
+      terrainType = "水中";
+    } else if (pos.y > 100) {
+      terrainType = "高所";
+    }
+    lines.push(`地形: ${terrainType}`);
+
+    // 光レベル（モブスポーン判定）
+    // skyLight = 太陽光、light = 松明等の光源
+    const lightBlock = bot.blockAt(pos);
+    const currentSkyLight = lightBlock?.skyLight ?? 0;
+    const currentBlockLight = lightBlock?.light ?? 0;
+    // 実効光レベル = max(skyLight, light) ※昼間は skyLight が高い
+    const effectiveLight = Math.max(currentSkyLight, currentBlockLight);
+    const lightWarning = effectiveLight < 8 ? " ⚠️モブスポーン危険" : "";
+    lines.push(`光レベル: ${effectiveLight} (sky:${currentSkyLight}, block:${currentBlockLight})${lightWarning}`);
+
+    lines.push(``);
+    lines.push(`## 移動可能方向`);
+    lines.push(`歩ける: ${passable.length > 0 ? passable.join(", ") : "なし"}`);
+    lines.push(`壁: ${blocked.length > 0 ? blocked.join(", ") : "なし"}`);
+    lines.push(`足元: ${below}, 頭上: ${above}`);
 
     if (atFeet !== "air") {
-      lines.push(`At feet: ${atFeet}`);
+      lines.push(`足の位置: ${atFeet}`);
     }
 
     // Can jump up?
     const canJumpUp = above === "air";
+    lines.push(`ジャンプ可: ${canJumpUp ? "はい" : "いいえ（頭上に障害物）"}`);
 
-    lines.push(`Can jump up: ${canJumpUp ? "yes" : "no (blocked)"}`);
+    // === 危険度評価 ===
+    const dangers: string[] = [];
 
+    // 落下危険
     if (below === "air") {
-      lines.push(`Warning: No ground below!`);
+      dangers.push("落下危険（足元が空）");
     }
 
-    // Scan for nearby resources (radius 8)
-    const resourceCounts: Record<string, number> = {};
-    const interestingBlocks = [
-      "coal_ore", "iron_ore", "copper_ore", "gold_ore", "diamond_ore", "emerald_ore",
-      "deepslate_coal_ore", "deepslate_iron_ore", "deepslate_copper_ore", "deepslate_gold_ore", "deepslate_diamond_ore",
-      "oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log",
-      "crafting_table", "furnace", "chest",
-      "water", "lava",
+    // 溶岩チェック（周囲5ブロック）
+    let lavaCount = 0;
+    let lavaDir = "";
+    for (let dx = -5; dx <= 5; dx++) {
+      for (let dy = -3; dy <= 3; dy++) {
+        for (let dz = -5; dz <= 5; dz++) {
+          const block = bot.blockAt(pos.offset(dx, dy, dz));
+          if (block?.name === "lava") {
+            lavaCount++;
+            if (!lavaDir) lavaDir = getDirection(dx, dy, dz);
+          }
+        }
+      }
+    }
+    if (lavaCount > 0) {
+      dangers.push(`溶岩あり (${lavaCount}ブロック, ${lavaDir}方向)`);
+    }
+
+    // 敵モブチェック
+    const hostileMobs = ["zombie", "skeleton", "creeper", "spider", "enderman", "witch", "drowned", "husk", "stray", "phantom", "pillager", "vindicator"];
+    const nearbyHostiles: string[] = [];
+    for (const entity of Object.values(bot.entities)) {
+      if (entity === bot.entity) continue;
+      const dist = entity.position.distanceTo(pos);
+      if (dist < 16 && hostileMobs.includes(entity.name?.toLowerCase() || "")) {
+        const dir = getDirection(
+          entity.position.x - pos.x,
+          entity.position.y - pos.y,
+          entity.position.z - pos.z
+        );
+        nearbyHostiles.push(`${entity.name}(${dist.toFixed(1)}m, ${dir})`);
+      }
+    }
+    if (nearbyHostiles.length > 0) {
+      dangers.push(`敵: ${nearbyHostiles.join(", ")}`);
+    }
+
+    if (dangers.length > 0) {
+      lines.push(``);
+      lines.push(`## ⚠️ 危険`);
+      for (const d of dangers) {
+        lines.push(`- ${d}`);
+      }
+    }
+
+    // === 近くのエンティティ（動物など） ===
+    const friendlyMobs = ["cow", "pig", "sheep", "chicken", "rabbit", "horse", "donkey", "llama", "villager", "wolf", "cat", "fox"];
+    const nearbyFriendly: string[] = [];
+    for (const entity of Object.values(bot.entities)) {
+      if (entity === bot.entity) continue;
+      const dist = entity.position.distanceTo(pos);
+      if (dist < 20 && friendlyMobs.includes(entity.name?.toLowerCase() || "")) {
+        const dir = getDirection(
+          entity.position.x - pos.x,
+          entity.position.y - pos.y,
+          entity.position.z - pos.z
+        );
+        nearbyFriendly.push(`${entity.name}(${dist.toFixed(1)}m, ${dir})`);
+      }
+    }
+    if (nearbyFriendly.length > 0) {
+      lines.push(``);
+      lines.push(`## 動物・村人`);
+      lines.push(nearbyFriendly.slice(0, 10).join(", "));
+    }
+
+    // === 近くの資源（位置情報付き） ===
+    const resourceBlocks = [
+      "coal_ore", "iron_ore", "copper_ore", "gold_ore", "diamond_ore", "emerald_ore", "lapis_ore", "redstone_ore",
+      "deepslate_coal_ore", "deepslate_iron_ore", "deepslate_copper_ore", "deepslate_gold_ore", "deepslate_diamond_ore", "deepslate_emerald_ore", "deepslate_lapis_ore", "deepslate_redstone_ore",
+      "oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log", "cherry_log", "mangrove_log",
+      "crafting_table", "furnace", "chest", "bed",
     ];
 
-    const radius = 8;
+    interface ResourceInfo {
+      count: number;
+      nearest: { dx: number; dy: number; dz: number; dist: number };
+    }
+    const resources: Record<string, ResourceInfo> = {};
+
+    const radius = 10;
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dy = -radius; dy <= radius; dy++) {
         for (let dz = -radius; dz <= radius; dz++) {
           const block = bot.blockAt(pos.offset(dx, dy, dz));
-          if (block && interestingBlocks.includes(block.name)) {
-            resourceCounts[block.name] = (resourceCounts[block.name] || 0) + 1;
+          if (block && resourceBlocks.includes(block.name)) {
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (!resources[block.name]) {
+              resources[block.name] = { count: 0, nearest: { dx, dy, dz, dist } };
+            }
+            resources[block.name].count++;
+            if (dist < resources[block.name].nearest.dist) {
+              resources[block.name].nearest = { dx, dy, dz, dist };
+            }
           }
         }
       }
     }
 
-    if (Object.keys(resourceCounts).length > 0) {
-      const resources = Object.entries(resourceCounts)
-        .sort((a, b) => b[1] - a[1])
-        .map(([name, count]) => `${name}: ${count}`)
-        .join(", ");
-      lines.push(`Nearby resources: ${resources}`);
+    if (Object.keys(resources).length > 0) {
+      lines.push(``);
+      lines.push(`## 近くの資源`);
+
+      // 優先度順にソート（鉱石 > 木 > 設備）
+      const oreOrder = ["diamond", "emerald", "gold", "iron", "copper", "coal", "lapis", "redstone"];
+      const sorted = Object.entries(resources).sort((a, b) => {
+        const aOre = oreOrder.findIndex(o => a[0].includes(o));
+        const bOre = oreOrder.findIndex(o => b[0].includes(o));
+        if (aOre !== -1 && bOre !== -1) return aOre - bOre;
+        if (aOre !== -1) return -1;
+        if (bOre !== -1) return 1;
+        return a[1].nearest.dist - b[1].nearest.dist;
+      });
+
+      for (const [name, info] of sorted.slice(0, 12)) {
+        const { dx, dy, dz, dist } = info.nearest;
+        const dir = getDirection(dx, dy, dz);
+        const coordStr = `(${Math.floor(pos.x + dx)}, ${Math.floor(pos.y + dy)}, ${Math.floor(pos.z + dz)})`;
+        lines.push(`- ${name}: ${info.count}個, 最寄り${dist.toFixed(1)}m ${dir} ${coordStr}`);
+      }
     } else {
-      lines.push(`Nearby resources: none found`);
+      lines.push(``);
+      lines.push(`## 近くの資源`);
+      lines.push(`特になし`);
     }
 
     return lines.join("\n");
@@ -737,6 +1155,56 @@ export class BotManager extends EventEmitter {
       return `Cannot dig ${blockName} (unbreakable like bedrock)`;
     }
 
+    // Auto-equip the best tool for this block type
+    const pickaxeBlocks = ["stone", "cobblestone", "coal_ore", "iron_ore", "copper_ore", "gold_ore", "diamond_ore",
+      "deepslate", "deepslate_coal_ore", "deepslate_iron_ore", "deepslate_copper_ore", "deepslate_gold_ore", "deepslate_diamond_ore",
+      "andesite", "diorite", "granite", "netherrack", "blackstone", "basalt", "obsidian", "furnace", "smooth_stone"];
+    const axeBlocks = ["oak_log", "birch_log", "spruce_log", "jungle_log", "acacia_log", "dark_oak_log",
+      "oak_planks", "birch_planks", "spruce_planks", "crafting_table", "chest", "oak_wood", "birch_wood"];
+    const shovelBlocks = ["dirt", "grass_block", "sand", "gravel", "clay", "soul_sand", "soul_soil", "snow"];
+
+    let toolType: "pickaxe" | "axe" | "shovel" | null = null;
+    if (pickaxeBlocks.some(b => blockName.includes(b) || blockName.endsWith("_ore"))) {
+      toolType = "pickaxe";
+    } else if (axeBlocks.some(b => blockName.includes(b) || blockName.endsWith("_log") || blockName.endsWith("_planks"))) {
+      toolType = "axe";
+    } else if (shovelBlocks.some(b => blockName.includes(b))) {
+      toolType = "shovel";
+    }
+
+    if (toolType) {
+      const toolPriority = [
+        `netherite_${toolType}`, `diamond_${toolType}`, `iron_${toolType}`, `stone_${toolType}`, `wooden_${toolType}`
+      ];
+      const inventory = bot.inventory.items();
+      let equippedTool: string | null = null;
+      for (const toolName of toolPriority) {
+        const tool = inventory.find(i => i.name === toolName);
+        if (tool) {
+          await bot.equip(tool, "hand");
+          equippedTool = toolName;
+          console.error(`[Dig] Auto-equipped ${toolName} for ${blockName}`);
+          break;
+        }
+      }
+
+      // Check if tool is sufficient for this block (ore tier requirements)
+      const needsStonePickaxe = ["iron_ore", "deepslate_iron_ore", "copper_ore", "deepslate_copper_ore",
+        "lapis_ore", "deepslate_lapis_ore", "gold_ore", "deepslate_gold_ore", "emerald_ore", "deepslate_emerald_ore",
+        "diamond_ore", "deepslate_diamond_ore", "redstone_ore", "deepslate_redstone_ore"];
+      const needsDiamondPickaxe = ["obsidian", "ancient_debris", "crying_obsidian"];
+
+      if (needsDiamondPickaxe.some(b => blockName.includes(b))) {
+        if (!equippedTool || !equippedTool.match(/^(netherite|diamond)_pickaxe$/)) {
+          return `Cannot mine ${blockName} - requires diamond pickaxe or better! You have: ${equippedTool || "no pickaxe"}. Craft diamond_pickaxe first.`;
+        }
+      } else if (needsStonePickaxe.some(b => blockName.includes(b))) {
+        if (!equippedTool || equippedTool === "wooden_pickaxe") {
+          return `Cannot mine ${blockName} - requires stone pickaxe or better! Wooden pickaxe won't drop items. Craft stone_pickaxe first (need 3 cobblestone + 2 sticks).`;
+        }
+      }
+    }
+
     const heldItem = bot.heldItem?.name || "empty hand";
     const gameMode = bot.game?.gameMode || "unknown";
     console.error(`[Dig] Held item: ${heldItem}, block hardness: ${block.hardness}, gameMode: ${gameMode}`);
@@ -769,27 +1237,53 @@ export class BotManager extends EventEmitter {
         return `Dig seemed to complete but block is still there (${blockAfter.name}). May be protected area.`;
       }
 
-      // Wait for item to spawn and fall
-      await this.delay(500);
+      // Wait for item to spawn (items spawn after ~100-200ms)
+      await this.delay(200);
 
-      // Move to the block position (or below if item fell) to auto-pickup
-      // Items often fall to y-1 after block breaks
-      const pickupY = Math.floor(y) - 1;
-      console.error(`[Dig] Moving to pickup location (${Math.floor(x)}, ${pickupY}, ${Math.floor(z)})`);
-      const goal = new goals.GoalNear(Math.floor(x), pickupY, Math.floor(z), 1);
-      bot.pathfinder.setGoal(goal);
-      await this.delay(1500);
-      bot.pathfinder.setGoal(null);
+      // Check inventory immediately - items within 1 block are auto-collected
+      let inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+      let pickedUp = inventoryAfter - inventoryBefore;
+      console.error(`[Dig] Inventory check 1: before=${inventoryBefore}, after=${inventoryAfter}, picked=${pickedUp}`);
 
-      // Extra wait for pickup
-      await this.delay(300);
+      // If nothing picked up yet, aggressively move to collect
+      if (pickedUp === 0) {
+        // Step 1: Walk directly through the block position
+        await bot.lookAt(blockPos.offset(0.5, 0, 0.5));
+        bot.setControlState("forward", true);
+        await this.delay(500);
+        bot.setControlState("forward", false);
 
-      // Check if item was picked up
-      const inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
-      const pickedUp = inventoryAfter - inventoryBefore;
+        inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+        pickedUp = inventoryAfter - inventoryBefore;
+        console.error(`[Dig] Inventory check 2 (walk through): picked=${pickedUp}`);
+      }
+
+      // Step 2: Try pathfinder if still nothing
+      if (pickedUp === 0) {
+        const goal = new goals.GoalNear(Math.floor(x), Math.floor(y), Math.floor(z), 0);
+        bot.pathfinder.setGoal(goal);
+        await this.delay(1500);
+        bot.pathfinder.setGoal(null);
+
+        inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+        pickedUp = inventoryAfter - inventoryBefore;
+        console.error(`[Dig] Inventory check 3 (pathfinder): picked=${pickedUp}`);
+      }
+
+      // Step 3: Jump in case item is slightly above
+      if (pickedUp === 0) {
+        bot.setControlState("jump", true);
+        await this.delay(300);
+        bot.setControlState("jump", false);
+        await this.delay(300);
+
+        inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+        pickedUp = inventoryAfter - inventoryBefore;
+        console.error(`[Dig] Inventory check 4 (jump): picked=${pickedUp}`);
+      }
 
       if (pickedUp > 0) {
-        return `Dug ${blockName} and picked up ${pickedUp} item(s)! Inventory now has ${inventoryAfter} items.`;
+        return `Dug ${blockName} with ${heldItem} and picked up ${pickedUp} item(s)!` + this.getBriefStatus(username);
       }
 
       // Look for dropped items nearby that weren't picked up
@@ -800,15 +1294,46 @@ export class BotManager extends EventEmitter {
       );
 
       if (droppedItems.length > 0) {
-        return `Dug ${blockName} - ${droppedItems.length} item(s) nearby but couldn't pick up. Try collect_items.`;
+        // Try one more aggressive collection
+        console.error(`[Dig] Found ${droppedItems.length} uncollected items, attempting pickup...`);
+        for (const item of droppedItems.slice(0, 3)) {
+          await bot.lookAt(item.position);
+          bot.setControlState("forward", true);
+          await this.delay(400);
+          bot.setControlState("forward", false);
+          await this.delay(200);
+        }
+
+        inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+        pickedUp = inventoryAfter - inventoryBefore;
+
+        if (pickedUp > 0) {
+          return `Dug ${blockName} and collected ${pickedUp} item(s) after extra effort!` + this.getBriefStatus(username);
+        }
+
+        return `Dug ${blockName} but ${droppedItems.length} item(s) couldn't be picked up (may be stuck in block)` + this.getBriefStatus(username);
       } else {
-        return `Dug ${blockName}. Check inventory with get_inventory.`;
+        // Check if we expected drops but got none (wrong tool warning)
+        const oresNeedingPickaxe = ["_ore", "stone", "cobblestone", "deepslate"];
+        const isOre = oresNeedingPickaxe.some(s => blockName.includes(s));
+        const hasPickaxe = heldItem.includes("pickaxe");
+
+        if (isOre && !hasPickaxe) {
+          return `WARNING: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED! Need pickaxe for ore/stone!` + this.getBriefStatus(username);
+        }
+
+        return `Dug ${blockName} with ${heldItem} (no drops or auto-collected).` + this.getBriefStatus(username);
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`[Dig] Error: ${errMsg}`);
       return `Failed to dig ${blockName}: ${errMsg}`;
     }
+  }
+
+  async minecraft_collect_items(username?: string): Promise<string> {
+    const actualUsername = username || this.requireSingleBot();
+    return this.collectNearbyItems(actualUsername);
   }
 
   async collectNearbyItems(username: string): Promise<string> {
@@ -820,31 +1345,52 @@ export class BotManager extends EventEmitter {
     const bot = managed.bot;
     const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
 
-    // Debug: log all nearby entities first
-    const allNearby = Object.values(bot.entities)
-      .filter(e => e && e !== bot.entity && e.position.distanceTo(bot.entity.position) < 16);
-    console.error(`[Collect] Total entities within 16 blocks: ${allNearby.length}`);
-    allNearby.slice(0, 5).forEach(e => {
-      console.error(`[Collect]   - name:${e.name}, displayName:${e.displayName}, type:${e.type}, dist:${e.position.distanceTo(bot.entity.position).toFixed(1)}`);
-    });
+    // Find dropped items with multiple detection strategies
+    const findItems = () => {
+      const allEntities = Object.values(bot.entities);
+      console.error(`[Collect] Scanning ${allEntities.length} total entities`);
+      
+      return allEntities.filter((entity) => {
+        if (!entity || entity === bot.entity || !entity.position) return false;
+        const dist = entity.position.distanceTo(bot.entity.position);
+        if (dist > 15) return false; // Reduced range for better detection
+        
+        // Log all entities for debugging
+        console.error(`[Collect] Entity: name="${entity.name}", displayName="${entity.displayName}", type="${entity.type}", id=${entity.id}, dist=${dist.toFixed(1)}`);
+        
+        const name = (entity.name || "").toLowerCase();
+        const displayName = (entity.displayName || "").toLowerCase();
+        const type = (entity.type || "").toLowerCase();
+        
+        // Simplified and more reliable item detection
+        const isItem = (
+          // Standard Minecraft item entity detection (cast to any to bypass strict type checking)
+          entity.name === "item" ||
+          entity.objectType === "Item" ||
+          entity.type === "object" ||
+          (entity as any).type === "item" ||
+          (entity.type && (entity.type as string).includes?.("item")) ||
+          // Additional detection for different server implementations
+          (entity.metadata && typeof entity.metadata[10] !== 'undefined') || // Item entity metadata check
+          (entity.entityType && entity.entityType === 2) || // Numeric entity type for items
+          // More lenient detection for unknown entity types
+          (!entity.username && !entity.type && entity.velocity && entity.onGround !== undefined) ||
+          // Check for typical item entity properties
+          ((entity as any).itemId !== undefined || (entity as any).itemCount !== undefined)
+        ) && !entity.username && entity.id !== undefined && entity.position && entity.id !== bot.entity.id
+        
+        if (isItem) {
+          console.error(`[Collect] Found item entity: ${entity.name || entity.displayName || entity.type} at dist ${dist.toFixed(1)}, id: ${entity.id}`);
+        }
+        
+        return isItem;
+      });
+    };
 
-    // Find dropped items - check both "item" name and displayName
-    const items = Object.values(bot.entities).filter((entity) => {
-      if (!entity || entity === bot.entity) return false;
-      const dist = entity.position.distanceTo(bot.entity.position);
-      if (dist > 16) return false;
-      // Items can be detected by name "item" or displayName "Item"
-      // Note: entity.objectType is deprecated, use displayName instead
-      return entity.name === "item" ||
-             entity.displayName === "Item" ||
-             entity.displayName === "Dropped Item" ||
-             entity.type === "object";  // Dropped items are "object" type in some versions
-    });
-
+    let items = findItems();
     console.error(`[Collect] Found ${items.length} item entities`);
 
     if (items.length === 0) {
-      // Debug: show what entities ARE nearby
       const nearbyEntities = Object.values(bot.entities)
         .filter(e => e && e !== bot.entity && e.position.distanceTo(bot.entity.position) < 10)
         .map(e => `${e.name || e.displayName || "unknown"}(type:${e.type})`)
@@ -859,48 +1405,94 @@ export class BotManager extends EventEmitter {
     );
 
     let collected = 0;
-    for (const item of items) {
+    let attempts = 0;
+    const maxAttempts = Math.min(items.length * 2, 10);
+
+    while (attempts < maxAttempts) {
+      attempts++;
+
+      // Re-find items (they may have been picked up or moved)
+      items = findItems().sort((a, b) =>
+        a.position.distanceTo(bot.entity.position) -
+        b.position.distanceTo(bot.entity.position)
+      );
+
+      if (items.length === 0) break;
+
+      const item = items[0];
+      const itemPos = item.position.clone();
+      const botPos = bot.entity.position;
+      const distance = botPos.distanceTo(itemPos);
+
+      console.error(`[Collect] Attempt ${attempts}: item at (${itemPos.x.toFixed(1)}, ${itemPos.y.toFixed(1)}, ${itemPos.z.toFixed(1)}), dist: ${distance.toFixed(1)}`);
+
       try {
-        // Check if item still exists
-        if (!bot.entities[item.id]) continue;
+        if (distance < 1.5) {
+          // Very close - just walk through
+          bot.setControlState("forward", true);
+          await this.delay(300);
+          bot.setControlState("forward", false);
+        } else if (distance < 3) {
+          // Close - walk directly without pathfinder
+          await bot.lookAt(itemPos);
+          bot.setControlState("forward", true);
 
-        const itemPos = item.position;
-        const distance = bot.entity.position.distanceTo(itemPos);
+          const startTime = Date.now();
+          while (Date.now() - startTime < 2000) {
+            await this.delay(100);
+            if (!bot.entities[item.id]) break;
+            const newDist = bot.entity.position.distanceTo(itemPos);
+            if (newDist < 0.5) break;
+          }
 
-        if (distance < 2) {
-          // Already close enough, just wait for pickup
-          await this.delay(500);
+          bot.setControlState("forward", false);
         } else {
-          // Move directly to item position (not "near" it)
-          const goal = new goals.GoalBlock(
+          // Far - use pathfinder
+          const goal = new goals.GoalNear(
             Math.floor(itemPos.x),
             Math.floor(itemPos.y),
-            Math.floor(itemPos.z)
+            Math.floor(itemPos.z),
+            1
           );
           bot.pathfinder.setGoal(goal);
 
-          // Wait for movement with timeout
           const startTime = Date.now();
           while (Date.now() - startTime < 5000) {
             await this.delay(200);
-            // Check if we reached the item or it was picked up
+            if (!bot.entities[item.id]) break;
             const currentDist = bot.entity.position.distanceTo(itemPos);
-            if (currentDist < 1.5 || !bot.entities[item.id]) {
+            if (currentDist < 1.5) {
+              // Close enough, walk through
+              bot.pathfinder.setGoal(null);
+              bot.setControlState("forward", true);
+              await this.delay(500);
+              bot.setControlState("forward", false);
               break;
             }
+            if (!bot.pathfinder.isMoving()) break;
           }
           bot.pathfinder.setGoal(null);
         }
 
-        // Wait a bit for auto-pickup
-        await this.delay(300);
+        // Check Y difference - try jumping if item is slightly above
+        const yDiff = itemPos.y - bot.entity.position.y;
+        if (yDiff > 0.5 && yDiff < 2 && bot.entities[item.id]) {
+          console.error(`[Collect] Item is ${yDiff.toFixed(1)} blocks above, trying jump...`);
+          bot.setControlState("jump", true);
+          await this.delay(300);
+          bot.setControlState("jump", false);
+          await this.delay(200);
+        }
 
-        // Check if item was collected
+        // Wait for auto-pickup
+        await this.delay(200);
+
         if (!bot.entities[item.id]) {
           collected++;
+          console.error(`[Collect] Item collected!`);
         }
-      } catch {
-        // Item might have been picked up or despawned
+      } catch (e) {
+        console.error(`[Collect] Error:`, e);
       }
     }
 
@@ -908,11 +1500,11 @@ export class BotManager extends EventEmitter {
     const actuallyCollected = inventoryAfter - inventoryBefore;
 
     if (actuallyCollected > 0) {
-      return `Collected ${actuallyCollected} items (inventory: ${inventoryAfter} total)`;
+      return `Collected ${actuallyCollected} items (inventory: ${inventoryAfter} total)` + this.getBriefStatus(username);
     } else if (collected > 0) {
-      return `Moved to ${collected} item locations, but couldn't pick them up (might need to break blocks above)`;
+      return `Approached ${collected} items but inventory unchanged. Items may have glitched or been blocked.`;
     } else {
-      return "No items collected - they may have despawned";
+      return `No items collected after ${attempts} attempts - they may have despawned or be unreachable`;
     }
   }
 
@@ -1018,40 +1610,98 @@ export class BotManager extends EventEmitter {
     });
     console.error(`[Craft] Crafting table found: ${craftingTable ? `yes at (${craftingTable.position.x}, ${craftingTable.position.y}, ${craftingTable.position.z})` : 'no'}`);
 
-    // Get available recipes - try both with and without table
-    let recipes = bot.recipesFor(item.id, null, 1, craftingTable);
-    console.error(`[Craft] Recipes with table: ${recipes.length}`);
+    // Get available recipes - try 2x2 (no table) first, then 3x3 (with table)
+    // This is important because simple recipes like planks are 2x2 and don't need a table
+    let recipes = bot.recipesFor(item.id, null, 1, null);
+    console.error(`[Craft] Recipes without table (2x2): ${recipes.length}`);
 
-    if (recipes.length === 0 && !craftingTable) {
-      // Maybe try without table parameter
-      recipes = bot.recipesFor(item.id, null, 1, null);
-      console.error(`[Craft] Recipes without table: ${recipes.length}`);
+    // If no 2x2 recipe found, try 3x3 recipes (need crafting table)
+    if (recipes.length === 0) {
+      if (craftingTable) {
+        recipes = bot.recipesFor(item.id, null, 1, craftingTable);
+        console.error(`[Craft] Recipes with table (3x3): ${recipes.length}`);
+      } else {
+        // Check if 3x3 recipes EXIST but we just don't have a table
+        const possible3x3 = bot.recipesAll(item.id, null, true as any);
+        if (possible3x3.length > 0) {
+          console.error(`[Craft] No crafting table nearby but 3x3 recipe exists`);
+          throw new Error(`${itemName} requires a crafting_table nearby. Place one first, then craft. Inventory: ${inventory}`);
+        }
+      }
     }
 
     if (recipes.length === 0) {
       // Try to get all recipes for this item (even if we can't craft them)
-      const allRecipes = bot.recipesAll(item.id, null, craftingTable);
+      // Must check both with and without crafting table to get all possible recipes
+      let allRecipes = bot.recipesAll(item.id, null, null);
+      // Also try with a "fake" crafting table to get 3x3 recipes
+      const allRecipes3x3 = bot.recipesAll(item.id, null, craftingTable || true as any);
+      if (allRecipes3x3.length > allRecipes.length) {
+        allRecipes = allRecipes3x3;
+      }
       console.error(`[Craft] Total possible recipes: ${allRecipes.length}`);
 
       if (allRecipes.length > 0) {
-        // Show ALL possible ways to craft this item (up to 5)
-        const recipeOptions = allRecipes.slice(0, 5).map((recipe: { delta: Array<{ id: number; count: number }> }) => {
-          const ingredients = recipe.delta
-            .filter((d) => d.count < 0)
-            .map((d) => {
-              const ingredientItem = mcData.items[d.id];
-              return `${ingredientItem?.name || `id:${d.id}`} x${Math.abs(d.count)}`;
-            })
-            .join(" + ");
-          return ingredients;
-        });
+        // Analyze what's missing for the first recipe
+        const recipe = allRecipes[0] as { delta: Array<{ id: number; count: number }>; requiresTable?: boolean };
+        const needed: string[] = [];
+        const missing: string[] = [];
 
-        // Remove duplicates and format
-        const uniqueOptions = [...new Set(recipeOptions)].slice(0, 3);
-        throw new Error(`Cannot craft ${itemName}: missing materials. Options: [${uniqueOptions.join("] or [")}]. Have: ${inventory}`);
+        for (const d of recipe.delta) {
+          if (d.count < 0) {
+            const ingredientItem = mcData.items[d.id];
+            const ingredientName = ingredientItem?.name || `id:${d.id}`;
+            const requiredCount = Math.abs(d.count);
+            needed.push(`${ingredientName} x${requiredCount}`);
+
+            // Check if we have enough
+            const inInventory = inventoryItems.find(i => i.name === ingredientName);
+            const haveCount = inInventory?.count || 0;
+            if (haveCount < requiredCount) {
+              missing.push(`${ingredientName} (need ${requiredCount}, have ${haveCount})`);
+            }
+          }
+        }
+
+        // Build helpful error message
+        let errorMsg = `Cannot craft ${itemName}.`;
+        errorMsg += ` Need: ${needed.join(" + ")}.`;
+        if (missing.length > 0) {
+          errorMsg += ` Missing: ${missing.join(", ")}.`;
+        }
+
+        // Check if crafting table is needed
+        if (recipe.requiresTable && !craftingTable) {
+          errorMsg += ` Also need crafting_table nearby.`;
+        }
+
+        // Add crafting chain hints for common tools
+        const craftingHints: Record<string, string> = {
+          "wooden_pickaxe": "Craft order: oak_log → oak_planks (4) → stick (from 2 planks) → wooden_pickaxe",
+          "wooden_axe": "Craft order: oak_log → oak_planks (4) → stick (from 2 planks) → wooden_axe",
+          "wooden_sword": "Craft order: oak_log → oak_planks (4) → stick (from 2 planks) → wooden_sword",
+          "wooden_shovel": "Craft order: oak_log → oak_planks (4) → stick (from 2 planks) → wooden_shovel",
+          "stone_pickaxe": "Need: cobblestone x3 + stick x2. Mine stone with wooden_pickaxe first.",
+          "crafting_table": "Craft order: oak_log → oak_planks (4) → crafting_table",
+          "stick": "Craft from 2 oak_planks (gives 4 sticks)",
+          "oak_planks": "Craft from 1 oak_log (gives 4 planks)",
+        };
+
+        if (craftingHints[itemName]) {
+          errorMsg += ` Hint: ${craftingHints[itemName]}`;
+        }
+
+        errorMsg += ` Have: ${inventory}`;
+        throw new Error(errorMsg);
       }
 
-      throw new Error(`No recipe found for ${itemName}. Inventory: ${inventory}`);
+      // No recipes at all - might need crafting table
+      let errorMsg = `No recipe found for ${itemName}.`;
+      if (!craftingTable) {
+        errorMsg += ` Try placing a crafting_table nearby for advanced recipes.`;
+      }
+      errorMsg += ` Inventory: ${inventory}`;
+      throw new Error(errorMsg);
     }
 
     const recipe = recipes[0];
@@ -1067,7 +1717,7 @@ export class BotManager extends EventEmitter {
       }
       // Check new inventory
       const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
-      return `Crafted ${count}x ${itemName}. Inventory: ${newInventory}`;
+      return `Crafted ${count}x ${itemName}. Inventory: ${newInventory}` + this.getBriefStatus(username);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       throw new Error(`Failed to craft ${itemName}: ${errMsg}. Inventory: ${inventory}`);
@@ -1479,13 +2129,13 @@ export class BotManager extends EventEmitter {
         console.error(`[BotManager] Health low (${health}), fleeing!`);
         bot.pathfinder.setGoal(null);
         await this.flee(username, 20);
-        return `Fled! Health was ${health}. Attacked ${attackCount} times.`;
+        return `Fled! Health was ${health}. Attacked ${attackCount} times.` + this.getBriefStatus(username);
       }
 
       // Re-find target (it might have moved or died)
       target = Object.values(bot.entities).find(e => e.id === targetId) || null;
       if (!target) {
-        return `${targetName} defeated! Attacked ${attackCount} times.`;
+        return `${targetName} defeated! Attacked ${attackCount} times.` + this.getBriefStatus(username);
       }
 
       const distance = target.position.distanceTo(bot.entity.position);
@@ -1525,7 +2175,7 @@ export class BotManager extends EventEmitter {
       await this.delay(500);
     }
 
-    return `Combat ended. Attacked ${attackCount} times. Target may still be alive.`;
+    return `Combat ended. Attacked ${attackCount} times. Target may still be alive.` + this.getBriefStatus(username);
   }
 
   async eat(username: string, foodName?: string): Promise<string> {
@@ -1566,7 +2216,7 @@ export class BotManager extends EventEmitter {
     try {
       await bot.equip(foodItem, "hand");
       await bot.consume();
-      return `Ate ${foodItem.name}. Hunger: ${bot.food}/20`;
+      return `Ate ${foodItem.name}. Hunger: ${bot.food}/20` + this.getBriefStatus(username);
     } catch (err) {
       return `Failed to eat: ${err}`;
     }
@@ -1661,8 +2311,8 @@ export class BotManager extends EventEmitter {
     );
 
     if (!item) {
-      const available = bot.inventory.items().map(i => i.name).join(", ");
-      return `No ${itemName} in inventory. Available: ${available || "nothing"}`;
+      const available = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
+      throw new Error(`No ${itemName} in inventory. Available: ${available || "nothing"}`);
     }
 
     try {
@@ -1673,49 +2323,99 @@ export class BotManager extends EventEmitter {
     }
   }
 
-  async pillarUp(username: string, height: number = 1): Promise<string> {
+  async pillarUp(username: string, height: number = 1, untilSky: boolean = false): Promise<string> {
     const managed = this.bots.get(username);
     if (!managed) {
       throw new Error(`Bot '${username}' not found`);
     }
 
     const bot = managed.bot;
+    const startY = bot.entity.position.y;
+    const maxHeight = untilSky ? 100 : height; // Safety limit
 
-    // Find a block to place (dirt, cobblestone, etc.)
-    const buildBlocks = ["cobblestone", "dirt", "stone", "oak_planks", "spruce_planks", "birch_planks", "netherrack"];
-    let blockItem = null;
-    for (const blockName of buildBlocks) {
-      blockItem = bot.inventory.items().find(i => i.name === blockName);
-      if (blockItem) break;
-    }
-
-    if (!blockItem) {
-      const available = bot.inventory.items()
-        .filter(i => !i.name.includes("pickaxe") && !i.name.includes("sword"))
-        .map(i => i.name)
-        .slice(0, 5);
-      return `No blocks to pillar up with. Available: ${available.join(", ") || "nothing"}`;
-    }
-
-    // Equip the block
-    await bot.equip(blockItem, "hand");
+    // Find placeable blocks
+    const buildBlocks = ["cobblestone", "dirt", "stone", "andesite", "diorite", "granite", "deepslate", "oak_planks", "spruce_planks", "birch_planks", "netherrack"];
 
     let blocksPlaced = 0;
-    const startY = bot.entity.position.y;
+    let blocksDug = 0;
+    let lastBlockUsed = "";
 
-    for (let i = 0; i < height; i++) {
+    console.error(`[Pillar] Starting from Y=${startY.toFixed(1)}, target height=${maxHeight}, untilSky=${untilSky}`);
+
+    for (let i = 0; i < maxHeight; i++) {
+      const pos = bot.entity.position;
+      const headPos = new Vec3(Math.floor(pos.x), Math.floor(pos.y) + 2, Math.floor(pos.z));
+      const blockAbove = bot.blockAt(headPos);
+
+      // Check if we reached sky (no solid block above for 3 blocks)
+      if (untilSky) {
+        let clearAbove = true;
+        for (let j = 1; j <= 3; j++) {
+          const checkBlock = bot.blockAt(new Vec3(Math.floor(pos.x), Math.floor(pos.y) + j, Math.floor(pos.z)));
+          if (checkBlock && checkBlock.name !== "air" && checkBlock.name !== "water") {
+            clearAbove = false;
+            break;
+          }
+        }
+        if (clearAbove) {
+          console.error(`[Pillar] Reached open sky at Y=${pos.y.toFixed(1)}`);
+          break;
+        }
+      }
+
+      // If there's a block above, dig it first
+      if (blockAbove && blockAbove.name !== "air" && blockAbove.name !== "water" && blockAbove.hardness >= 0) {
+        try {
+          // Equip pickaxe for digging
+          const pickaxes = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe", "wooden_pickaxe"];
+          for (const pickaxeName of pickaxes) {
+            const pickaxe = bot.inventory.items().find(item => item.name === pickaxeName);
+            if (pickaxe) {
+              await bot.equip(pickaxe, "hand");
+              break;
+            }
+          }
+
+          await bot.lookAt(headPos.offset(0.5, 0.5, 0.5));
+          await bot.dig(blockAbove, true);
+          blocksDug++;
+          console.error(`[Pillar] Dug ${blockAbove.name} above`);
+          await this.delay(200);
+        } catch (err) {
+          console.error(`[Pillar] Failed to dig ${blockAbove.name}: ${err}`);
+          // Can't dig, stop here
+          break;
+        }
+      }
+
+      // Find a block to place
+      let blockItem = null;
+      for (const blockName of buildBlocks) {
+        blockItem = bot.inventory.items().find(item => item.name === blockName);
+        if (blockItem) {
+          lastBlockUsed = blockItem.name;
+          break;
+        }
+      }
+
+      if (!blockItem) {
+        console.error(`[Pillar] No blocks left to place`);
+        break;
+      }
+
+      // Equip the block
+      await bot.equip(blockItem, "hand");
+
       try {
-        // Jump
+        // Jump and place
         bot.setControlState("jump", true);
-        await this.delay(200);
+        await this.delay(250);
 
-        // Place block below
-        const pos = bot.entity.position;
-        const belowPos = new Vec3(Math.floor(pos.x), Math.floor(pos.y) - 1, Math.floor(pos.z));
+        const currentPos = bot.entity.position;
+        const belowPos = new Vec3(Math.floor(currentPos.x), Math.floor(currentPos.y) - 1, Math.floor(currentPos.z));
         const blockBelow = bot.blockAt(belowPos);
 
         if (blockBelow && blockBelow.name === "air") {
-          // Find adjacent block to place against
           const groundBlock = bot.blockAt(belowPos.offset(0, -1, 0));
           if (groundBlock && groundBlock.name !== "air") {
             await bot.placeBlock(groundBlock, new Vec3(0, 1, 0));
@@ -1724,9 +2424,9 @@ export class BotManager extends EventEmitter {
         }
 
         bot.setControlState("jump", false);
-        await this.delay(300);
+        await this.delay(200);
       } catch (err) {
-        console.error(`[Pillar] Error: ${err}`);
+        console.error(`[Pillar] Place error: ${err}`);
         bot.setControlState("jump", false);
       }
     }
@@ -1734,7 +2434,9 @@ export class BotManager extends EventEmitter {
     bot.setControlState("jump", false);
     const finalY = bot.entity.position.y;
 
-    return `Pillared up ${blocksPlaced} blocks (from Y:${startY.toFixed(1)} to Y:${finalY.toFixed(1)}) using ${blockItem.name}`;
+    const dugInfo = blocksDug > 0 ? `, dug ${blocksDug} blocks above` : "";
+    const blockInfo = lastBlockUsed ? ` using ${lastBlockUsed}` : "";
+    return `Pillared up ${blocksPlaced} blocks (from Y:${startY.toFixed(1)} to Y:${finalY.toFixed(1)})${blockInfo}${dugInfo}`;
   }
 
   async flee(username: string, distance: number = 20): Promise<string> {
@@ -1856,8 +2558,32 @@ export class BotManager extends EventEmitter {
         const dist = pos.distanceTo(e.position);
         if (dist > maxDistance) return false;
         if (entityType) {
-          const name = e.name?.toLowerCase() || e.displayName?.toLowerCase() || "";
-          return name.includes(entityType.toLowerCase());
+          const name = (e.name || "").toLowerCase();
+          const displayName = (e.displayName || "").toLowerCase();
+          const type = (e.type || "").toLowerCase();
+          const searchType = entityType.toLowerCase();
+          
+          // より柔軟な検索: 複数のパターンを試す
+          const patterns = [
+            searchType,  // 完全一致
+            searchType.charAt(0).toUpperCase() + searchType.slice(1),  // 先頭大文字
+            `minecraft:${searchType}`,  // namespace付き
+            `entity.${searchType}.name`,  // display name形式
+          ];
+          
+          // name, displayName, typeのいずれかがパターンに一致するかチェック
+          return patterns.some(pattern => 
+            name === pattern.toLowerCase() || 
+            name.includes(pattern.toLowerCase()) ||
+            displayName === pattern.toLowerCase() || 
+            displayName.includes(pattern.toLowerCase()) ||
+            type === pattern.toLowerCase() || 
+            type.includes(pattern.toLowerCase())
+          ) || 
+          // 部分一致も試す（cowがcow_entityなどの場合に対応）
+          name.includes(searchType) || 
+          displayName.includes(searchType) || 
+          type.includes(searchType);
         }
         return true;
       })
@@ -1976,7 +2702,16 @@ export class BotManager extends EventEmitter {
 
       console.error(`[BotManager] At ${Math.floor(bot.entity.position.x)}, ${Math.floor(bot.entity.position.z)} - biome: ${currentBiome}`);
 
-      if (currentBiome.toLowerCase().includes(targetBiome.toLowerCase())) {
+      // More flexible biome matching
+      const biomeLower = currentBiome.toLowerCase();
+      const targetLower = targetBiome.toLowerCase();
+      const isMatch = biomeLower.includes(targetLower) || 
+                     targetLower.includes(biomeLower) ||
+                     (targetLower === 'plains' && (biomeLower.includes('plain') || biomeLower === 'meadow')) ||
+                     (targetLower === 'forest' && biomeLower.includes('forest')) ||
+                     (targetLower === 'desert' && biomeLower.includes('desert'));
+      
+      if (isMatch) {
         foundBiome = currentBiome;
         foundAt = bot.entity.position.clone();
         break;
@@ -2001,6 +2736,193 @@ export class BotManager extends EventEmitter {
     const finalBiome = getBiomeName(finalBlock?.biome);
 
     return `Explored ${traveled} blocks ${direction}. Current biome: ${finalBiome}. Target biome '${targetBiome}' not found. Try another direction.`;
+  }
+
+  /**
+   * Dig a 1x2 tunnel in a direction
+   * Auto-equips pickaxe, collects items, reports ores found
+   */
+  async digTunnel(
+    username: string,
+    direction: "north" | "south" | "east" | "west" | "up" | "down",
+    length: number = 10
+  ): Promise<string> {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+    const startPos = bot.entity.position.clone();
+    const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+
+    // Direction vectors
+    const dirVectors: Record<string, { dx: number; dy: number; dz: number }> = {
+      north: { dx: 0, dy: 0, dz: -1 },
+      south: { dx: 0, dy: 0, dz: 1 },
+      east: { dx: 1, dy: 0, dz: 0 },
+      west: { dx: -1, dy: 0, dz: 0 },
+      up: { dx: 0, dy: 1, dz: 0 },
+      down: { dx: 0, dy: -1, dz: 0 },
+    };
+
+    const dir = dirVectors[direction];
+    if (!dir) {
+      throw new Error(`Invalid direction: ${direction}. Use north/south/east/west/up/down`);
+    }
+
+    // Auto-equip best pickaxe
+    const pickaxePriority = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe", "wooden_pickaxe"];
+    let equippedTool = "empty hand";
+    for (const toolName of pickaxePriority) {
+      const tool = bot.inventory.items().find(i => i.name === toolName);
+      if (tool) {
+        await bot.equip(tool, "hand");
+        equippedTool = toolName;
+        console.error(`[Tunnel] Equipped ${toolName}`);
+        break;
+      }
+    }
+
+    let blocksDug = 0;
+    const oresFound: Record<string, number> = {};
+    const currentPos = {
+      x: Math.floor(startPos.x),
+      y: Math.floor(startPos.y),
+      z: Math.floor(startPos.z)
+    };
+
+    console.error(`[Tunnel] Starting ${direction} tunnel from (${currentPos.x}, ${currentPos.y}, ${currentPos.z}), length ${length}`);
+
+    for (let i = 0; i < length; i++) {
+      // Calculate next position
+      const nextX = currentPos.x + dir.dx;
+      const nextY = currentPos.y + dir.dy;
+      const nextZ = currentPos.z + dir.dz;
+
+      // For horizontal tunnels, dig 2 blocks high (feet and head level)
+      // For vertical tunnels, dig 1 block
+      const blocksToDig: Array<{ x: number; y: number; z: number }> = [];
+
+      if (direction === "up" || direction === "down") {
+        blocksToDig.push({ x: nextX, y: nextY, z: nextZ });
+      } else {
+        // Horizontal: dig at feet level and head level
+        blocksToDig.push({ x: nextX, y: nextY, z: nextZ });      // feet
+        blocksToDig.push({ x: nextX, y: nextY + 1, z: nextZ });  // head
+      }
+
+      for (const blockPos of blocksToDig) {
+        const block = bot.blockAt(new Vec3(blockPos.x, blockPos.y, blockPos.z));
+        if (!block || block.name === "air" || block.name === "water" || block.name === "lava") {
+          continue;
+        }
+
+        // Track ores
+        if (block.name.includes("_ore")) {
+          oresFound[block.name] = (oresFound[block.name] || 0) + 1;
+        }
+
+        // Check if unbreakable
+        if (block.hardness < 0) {
+          console.error(`[Tunnel] Hit unbreakable block: ${block.name}`);
+          continue;
+        }
+
+        try {
+          // Look at and dig the block
+          await bot.lookAt(new Vec3(blockPos.x + 0.5, blockPos.y + 0.5, blockPos.z + 0.5));
+          await bot.dig(block, true);
+          blocksDug++;
+
+          // Brief pause for item spawn
+          await this.delay(100);
+        } catch (err) {
+          console.error(`[Tunnel] Failed to dig ${block.name}: ${err}`);
+        }
+      }
+
+      // Move forward into the tunnel
+      if (direction !== "up" && direction !== "down") {
+        const goal = new goals.GoalBlock(nextX, nextY, nextZ);
+        bot.pathfinder.setGoal(goal);
+        await this.delay(500);
+        bot.pathfinder.setGoal(null);
+      } else if (direction === "down") {
+        // For down, just wait for gravity
+        await this.delay(300);
+      } else if (direction === "up") {
+        // For up, need to pillar or jump
+        // Just move up if possible
+        await this.delay(300);
+      }
+
+      // Update current position
+      currentPos.x = nextX;
+      currentPos.y = nextY;
+      currentPos.z = nextZ;
+
+      // Check HP periodically
+      if (bot.health < 8) {
+        console.error(`[Tunnel] HP low (${bot.health}), stopping`);
+        break;
+      }
+    }
+
+    // Final item collection
+    await this.delay(500);
+    const inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+    const itemsCollected = inventoryAfter - inventoryBefore;
+
+    // Build result message
+    const finalPos = bot.entity.position;
+    let result = `Tunneled ${blocksDug} blocks ${direction} with ${equippedTool}.`;
+    result += ` Position: (${Math.floor(finalPos.x)}, ${Math.floor(finalPos.y)}, ${Math.floor(finalPos.z)}).`;
+    result += ` Items collected: ${itemsCollected}.`;
+
+    if (Object.keys(oresFound).length > 0) {
+      const oreList = Object.entries(oresFound).map(([name, count]) => `${name}x${count}`).join(", ");
+      result += ` ORES FOUND: ${oreList}!`;
+    }
+
+    const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
+    result += ` Inventory: ${newInventory || "empty"}`;
+
+    return result;
+  }
+
+  /**
+   * Intentionally die and respawn (for hopeless situations)
+   * Use when: stuck underground with no food, low HP, no way out
+   */
+  async respawn(username: string, reason?: string): Promise<string> {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+    const oldPos = bot.entity.position.clone();
+    const oldHP = bot.health;
+    const oldFood = bot.food;
+
+    console.error(`[Respawn] Intentional death requested. Reason: ${reason || "unspecified"}`);
+    console.error(`[Respawn] Before: HP=${oldHP}, Food=${oldFood}, Pos=(${oldPos.x.toFixed(1)}, ${oldPos.y.toFixed(1)}, ${oldPos.z.toFixed(1)})`);
+
+    // Use /kill command
+    bot.chat(`/kill ${username}`);
+
+    // Wait for death and respawn
+    await this.delay(3000);
+
+    // Check new status
+    const newPos = bot.entity.position;
+    const newHP = bot.health;
+    const newFood = bot.food;
+
+    console.error(`[Respawn] After: HP=${newHP}, Food=${newFood}, Pos=(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}, ${newPos.z.toFixed(1)})`);
+
+    return `Respawned! Old: (${oldPos.x.toFixed(0)}, ${oldPos.y.toFixed(0)}, ${oldPos.z.toFixed(0)}) HP:${oldHP?.toFixed(0)}/20 Food:${oldFood}/20 → New: (${newPos.x.toFixed(0)}, ${newPos.y.toFixed(0)}, ${newPos.z.toFixed(0)}) HP:${newHP?.toFixed(0)}/20 Food:${newFood}/20. Reason: ${reason || "strategic reset"}. Inventory lost!`;
   }
 }
 

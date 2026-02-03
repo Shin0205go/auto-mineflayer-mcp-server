@@ -69,8 +69,13 @@ export async function handleConnectionTool(
         throw new Error("Username is required");
       }
 
-      await botManager.connect({ host, port, username, version });
-      return `Successfully connected to ${host}:${port} as ${username}`;
+      try {
+        await botManager.connect({ host, port, username, version });
+        return `Successfully connected to ${host}:${port} as ${username}`;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to connect to ${host}:${port}: ${errorMessage}`);
+      }
     }
 
     case "minecraft_disconnect": {

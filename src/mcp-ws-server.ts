@@ -10,7 +10,8 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { botManager } from "./bot-manager.js";
 import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
-import { appendFileSync, readFileSync, existsSync, writeFileSync } from "fs";
+import { learningTools, handleLearningTool } from "./tools/learning.js";
+import { appendFileSync, readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import type { ToolExecutionLog, ToolExecutionContext } from "./types/tool-log.js";
@@ -30,7 +31,6 @@ const devAgentConnections = new Set<WebSocket>();
 function ensureLogDir() {
   const logDir = join(__dirname, "..", "logs");
   if (!existsSync(logDir)) {
-    const { mkdirSync } = require("fs");
     mkdirSync(logDir, { recursive: true });
   }
 }
@@ -137,6 +137,57 @@ function getToolLogs(filter?: {
   }
 
   return logs;
+}
+
+// Failure patterns to detect in tool results
+const FAILURE_PATTERNS = [
+  /^No .+ found/i,
+  /^No .+ nearby/i,
+  /^No .+ in inventory/i,
+  /^Cannot /i,
+  /^Failed to /i,
+  /^Unable to /i,
+  /not found/i,
+  /not enough/i,
+  /missing/i,
+  /unreachable/i,
+  /too far/i,
+  /no path/i,
+  /blocked/i,
+];
+
+// Tools that should NOT throw on "failure" patterns (informational tools)
+const INFORMATIONAL_TOOLS = [
+  "minecraft_get_surroundings",
+  "minecraft_get_status",
+  "minecraft_get_position",
+  "minecraft_get_inventory",
+  "minecraft_get_events",
+  "minecraft_look_around",
+  "minecraft_get_entities",
+  "agent_board_read",
+  "get_recent_experiences",
+  "get_skills",
+  "recall_locations",
+];
+
+/**
+ * Check if a tool result indicates failure and throw if so
+ */
+function throwOnFailureResult(toolName: string, result: string): string {
+  // Skip informational tools
+  if (INFORMATIONAL_TOOLS.includes(toolName)) {
+    return result;
+  }
+
+  // Check for failure patterns
+  for (const pattern of FAILURE_PATTERNS) {
+    if (pattern.test(result)) {
+      throw new Error(result);
+    }
+  }
+
+  return result;
 }
 
 interface JSONRPCRequest {
@@ -258,7 +309,7 @@ const tools = {
     },
   },
   minecraft_get_surroundings: {
-    description: "Get immediate surroundings - which directions are passable, blocked, what's above/below",
+    description: "詳細な周囲情報を取得。移動可能方向、光レベル、時刻、天気、危険（溶岩/敵）、近くの資源（座標付き）、動物など。状況判断に重要！",
     inputSchema: { type: "object", properties: {} },
   },
   minecraft_find_block: {
@@ -439,12 +490,24 @@ const tools = {
     },
   },
   minecraft_pillar_up: {
-    description: "Jump and place blocks below to climb up (useful when stuck or need to reach higher places)",
+    description: "Jump and place blocks below to climb up. Auto-digs obstacles above. Use untilSky=true to escape caves/underground!",
     inputSchema: {
       type: "object",
       properties: {
-        height: { type: "number", default: 1, description: "How many blocks to go up" },
+        height: { type: "number", default: 1, description: "How many blocks to go up (ignored if untilSky=true)" },
+        untilSky: { type: "boolean", default: false, description: "Keep going up until reaching open sky (great for escaping caves)" },
       },
+    },
+  },
+  minecraft_tunnel: {
+    description: "Dig a 1x2 tunnel in a direction. Efficient for mining, escaping underground, or creating paths. Auto-equips pickaxe and collects items. Reports ores found!",
+    inputSchema: {
+      type: "object",
+      properties: {
+        direction: { type: "string", enum: ["north", "south", "east", "west", "up", "down"], description: "Direction to dig" },
+        length: { type: "number", default: 10, description: "How many blocks to dig (default: 10)" },
+      },
+      required: ["direction"],
     },
   },
   minecraft_flee: {
@@ -453,6 +516,15 @@ const tools = {
       type: "object",
       properties: {
         distance: { type: "number", default: 20 },
+      },
+    },
+  },
+  minecraft_respawn: {
+    description: "Intentionally die and respawn. Use when situation is HOPELESS: stuck underground with no food, very low HP, no escape route. Loses all inventory but gets fresh start at spawn!",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reason: { type: "string", description: "Why respawning (e.g., 'stuck underground no food')" },
       },
     },
   },
@@ -512,6 +584,9 @@ const tools = {
     description: "Clear tool execution logs",
     inputSchema: { type: "object", properties: {} },
   },
+
+  // === 自己学習ツール ===
+  ...learningTools,
 };
 
 // Handle tool calls
@@ -728,13 +803,27 @@ async function handleTool(
     case "minecraft_pillar_up": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       const height = (args.height as number) || 1;
-      return await botManager.pillarUp(username, height);
+      const untilSky = (args.untilSky as boolean) || false;
+      return await botManager.pillarUp(username, height, untilSky);
+    }
+
+    case "minecraft_tunnel": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const direction = args.direction as "north" | "south" | "east" | "west" | "up" | "down";
+      const length = (args.length as number) || 10;
+      return await botManager.digTunnel(username, direction, length);
     }
 
     case "minecraft_flee": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       const distance = (args.distance as number) || 20;
       return await botManager.flee(username, distance);
+    }
+
+    case "minecraft_respawn": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const reason = args.reason as string | undefined;
+      return await botManager.respawn(username, reason);
     }
 
     case "minecraft_get_biome": {
@@ -809,6 +898,19 @@ async function handleTool(
       return "Tool logs cleared";
     }
 
+    // === 自己学習ツール ===
+    case "log_experience":
+    case "get_recent_experiences":
+    case "reflect_and_learn":
+    case "save_skill":
+    case "get_skills":
+    case "get_reflection_insights":
+    case "remember_location":
+    case "recall_locations":
+    case "forget_location": {
+      return await handleLearningTool(name, args);
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -845,7 +947,9 @@ async function handleRequest(ws: WebSocket, request: JSONRPCRequest): Promise<JS
         const agentName = connectionBots.get(ws) || "unknown";
 
         try {
-          const result = await handleTool(ws, toolName, toolArgs);
+          const rawResult = await handleTool(ws, toolName, toolArgs);
+          // Check for failure patterns and throw if detected
+          const result = throwOnFailureResult(toolName, rawResult);
           const duration = Date.now() - startTime;
 
           // Record successful execution (skip dev_* tools to avoid noise)
