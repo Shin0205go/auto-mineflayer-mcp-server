@@ -2874,8 +2874,6 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
 
     for (let i = 0; i < maxHeight; i++) {
       const pos = bot.entity.position;
-      const headPos = new Vec3(Math.floor(pos.x), Math.floor(pos.y) + 2, Math.floor(pos.z));
-      const blockAbove = bot.blockAt(headPos);
 
       // Check if we reached sky (no solid block above for 3 blocks)
       if (untilSky) {
@@ -2893,28 +2891,37 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
         }
       }
 
-      // If there's a block above, dig it first
-      if (blockAbove && blockAbove.name !== "air" && blockAbove.name !== "water" && blockAbove.hardness >= 0) {
-        try {
-          // Equip pickaxe for digging
-          const pickaxes = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe", "wooden_pickaxe"];
-          for (const pickaxeName of pickaxes) {
-            const pickaxe = bot.inventory.items().find(item => item.name === pickaxeName);
-            if (pickaxe) {
-              await bot.equip(pickaxe, "hand");
+      // Dig blocks above (need 2 blocks clearance: y+2 for head after jump, y+3 for space to land)
+      // Equip pickaxe once before digging
+      const pickaxes = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe", "wooden_pickaxe"];
+      for (const pickaxeName of pickaxes) {
+        const pickaxe = bot.inventory.items().find(item => item.name === pickaxeName);
+        if (pickaxe) {
+          await bot.equip(pickaxe, "hand");
+          break;
+        }
+      }
+
+      // Check and dig blocks at y+2 and y+3 (need space to jump into)
+      for (let yOffset = 2; yOffset <= 3; yOffset++) {
+        const checkPos = new Vec3(Math.floor(pos.x), Math.floor(pos.y) + yOffset, Math.floor(pos.z));
+        const blockToDig = bot.blockAt(checkPos);
+
+        if (blockToDig && blockToDig.name !== "air" && blockToDig.name !== "water" && blockToDig.hardness >= 0) {
+          try {
+            await bot.lookAt(checkPos.offset(0.5, 0.5, 0.5));
+            await bot.dig(blockToDig, true);
+            blocksDug++;
+            console.error(`[Pillar] Dug ${blockToDig.name} at y+${yOffset}`);
+            await this.delay(150);
+          } catch (err) {
+            console.error(`[Pillar] Failed to dig ${blockToDig.name}: ${err}`);
+            // If we can't dig, check if it's bedrock or unbreakable
+            if (blockToDig.hardness < 0) {
+              console.error(`[Pillar] Hit unbreakable block (${blockToDig.name}), stopping`);
               break;
             }
           }
-
-          await bot.lookAt(headPos.offset(0.5, 0.5, 0.5));
-          await bot.dig(blockAbove, true);
-          blocksDug++;
-          console.error(`[Pillar] Dug ${blockAbove.name} above`);
-          await this.delay(200);
-        } catch (err) {
-          console.error(`[Pillar] Failed to dig ${blockAbove.name}: ${err}`);
-          // Can't dig, stop here
-          break;
         }
       }
 
