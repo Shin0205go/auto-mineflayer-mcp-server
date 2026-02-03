@@ -1894,13 +1894,13 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       maxDistance: 4,
     });
 
-    // Get all possible recipes for this item
-    // If we have a crafting table nearby, get recipes that can use it
+    // Use recipesFor() to get recipes we can actually craft with current inventory
+    // This is more reliable than recipesAll() + manual filtering
     let recipes;
     if (craftingTable) {
-      recipes = bot.recipesAll(item.id, null, craftingTable);
+      recipes = bot.recipesFor(item.id, null, 1, craftingTable);
     } else {
-      recipes = bot.recipesAll(item.id, null, null);
+      recipes = bot.recipesFor(item.id, null, 1, null);
     }
 
     // Helper function to check if we have a compatible item
@@ -1970,15 +1970,15 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       const delta = recipe.delta as Array<{ id: number; count: number }>;
       return delta.every(d => {
         if (d.count >= 0) return true; // Output items, always ok
-        
+
         const ingredientItem = mcData.items[d.id];
         const ingredientName = ingredientItem?.name;
         if (!ingredientName) return false;
-        
+
         const requiredCount = Math.abs(d.count);
         const compatible = findCompatibleItem(ingredientName);
         const haveCount = compatible?.count || 0;
-        
+
         return haveCount >= requiredCount;
       });
     });
@@ -2112,7 +2112,7 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
         }
 
         errorMsg += ` Have: ${inventory}`;
-        throw new Error(`missing ingredient. ${errorMsg}`);
+        throw new Error(errorMsg);
       }
 
       // No recipes at all - might need crafting table
