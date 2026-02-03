@@ -1085,7 +1085,7 @@ export class BotManager extends EventEmitter {
 
       // Verify the block was placed
       const placedBlock = bot.blockAt(targetPos);
-      if (placedBlock && placedBlock.name === blockType) {
+      if (placedBlock && (placedBlock.name === blockType || placedBlock.name === blockType.replace("minecraft:", ""))) {
         return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)})` };
       } else {
         return { success: false, message: `Block placement verification failed` };
@@ -1122,7 +1122,14 @@ export class BotManager extends EventEmitter {
           return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}) (verification pending)` };
         }
 
-        // For other blocks that timeout, return failure
+        // For other blocks that timeout, check one more time with longer wait
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const placedBlock = bot.blockAt(targetPos);
+        if (placedBlock && (placedBlock.name === blockType || placedBlock.name === blockType.replace("minecraft:", ""))) {
+          return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)})` };
+        }
+
+        // If still not placed, return failure
         return { success: false, message: `Failed to place block: ${err}` };
       }
 
@@ -1903,6 +1910,15 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       recipes = bot.recipesFor(item.id, null, 1, null);
     }
 
+    // If recipesFor returns empty, try recipesAll
+    if (recipes.length === 0) {
+      if (craftingTable) {
+        recipes = bot.recipesAll(item.id, null, craftingTable);
+      } else {
+        recipes = bot.recipesAll(item.id, null, null);
+      }
+    }
+
     // Helper function to check if we have a compatible item
     // Returns a virtual item with the total count of all compatible items
     const findCompatibleItem = (ingredientName: string) => {
@@ -2140,6 +2156,26 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       return `Crafted ${count}x ${itemName}. Inventory: ${newInventory}` + this.getBriefStatus(username);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
+
+      // If error is about missing ingredients, add more context
+      if (errMsg.includes("missing ingredient")) {
+        // Extract recipe ingredients
+        const delta = recipe.delta as Array<{ id: number; count: number }>;
+        const needed: string[] = [];
+
+        for (const d of delta) {
+          if (d.count < 0) {
+            const ingredientItem = mcData.items[d.id];
+            const ingredientName = ingredientItem?.name || `id:${d.id}`;
+            const requiredCount = Math.abs(d.count);
+            needed.push(`${ingredientName}(need ${requiredCount})`);
+          }
+        }
+
+        const tableInfo = craftingTable ? `table@(${craftingTable.position.x},${craftingTable.position.y},${craftingTable.position.z})` : "2x2 grid";
+        throw new Error(`Failed to craft ${itemName}: ${errMsg}. Recipe needs: ${needed.join(", ")}. ${tableInfo}. Inventory: ${inventory}`);
+      }
+
       throw new Error(`Failed to craft ${itemName}: ${errMsg}. Inventory: ${inventory}`);
     }
   }
@@ -2837,28 +2873,63 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       // Equip the block
       await bot.equip(blockItem, "hand");
 
+      // Get current ground position before jumping
+      const groundY = Math.floor(bot.entity.position.y);
+      const groundPos = new Vec3(Math.floor(bot.entity.position.x), groundY, Math.floor(bot.entity.position.z));
+      const groundBlock = bot.blockAt(groundPos.offset(0, -1, 0));
+
+      if (!groundBlock || groundBlock.name === "air" || groundBlock.name === "water") {
+        console.error(`[Pillar] No solid ground to build from`);
+        break;
+      }
+
       try {
-        // Jump and place
+        // Jump
         bot.setControlState("jump", true);
-        await this.delay(250);
 
-        const currentPos = bot.entity.position;
-        const belowPos = new Vec3(Math.floor(currentPos.x), Math.floor(currentPos.y) - 1, Math.floor(currentPos.z));
-        const blockBelow = bot.blockAt(belowPos);
+        // Wait until we're high enough (at peak of jump or above the block we want to place on)
+        let jumpAttempts = 0;
+        while (bot.entity.position.y < groundY + 1.0 && jumpAttempts < 20) {
+          await this.delay(50);
+          jumpAttempts++;
+        }
 
-        if (blockBelow && blockBelow.name === "air") {
-          const groundBlock = bot.blockAt(belowPos.offset(0, -1, 0));
-          if (groundBlock && groundBlock.name !== "air") {
-            await bot.placeBlock(groundBlock, new Vec3(0, 1, 0));
+        // Now try to place block below us
+        const referenceBlock = bot.blockAt(groundPos.offset(0, -1, 0));
+        if (referenceBlock && referenceBlock.name !== "air") {
+          try {
+            await bot.placeBlock(referenceBlock, new Vec3(0, 1, 0));
             blocksPlaced++;
+          } catch (placeErr) {
+            // Sometimes placement fails due to timing, try once more
+            await this.delay(100);
+            try {
+              const retryRef = bot.blockAt(groundPos.offset(0, -1, 0));
+              if (retryRef && retryRef.name !== "air") {
+                await bot.placeBlock(retryRef, new Vec3(0, 1, 0));
+                blocksPlaced++;
+              }
+            } catch {
+              // Give up on this block
+            }
           }
         }
 
         bot.setControlState("jump", false);
-        await this.delay(200);
+
+        // Wait to land on the new block
+        await this.delay(300);
+
+        // Verify we actually moved up
+        if (bot.entity.position.y < groundY + 0.5) {
+          console.error(`[Pillar] Failed to gain height, retrying...`);
+          // Didn't move up, block might not have been placed
+          continue;
+        }
       } catch (err) {
         console.error(`[Pillar] Place error: ${err}`);
         bot.setControlState("jump", false);
+        await this.delay(200);
       }
     }
 
@@ -3175,7 +3246,7 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
    */
   async digTunnel(
     username: string,
-    direction: "north" | "south" | "east" | "west" | "up" | "down",
+    direction: "north" | "south" | "east" | "west" | "down",
     length: number = 10
   ): Promise<string> {
     const managed = this.bots.get(username);
@@ -3187,19 +3258,18 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     const startPos = bot.entity.position.clone();
     const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
 
-    // Direction vectors
+    // Direction vectors (no "up" - use pillar_up for that)
     const dirVectors: Record<string, { dx: number; dy: number; dz: number }> = {
       north: { dx: 0, dy: 0, dz: -1 },
       south: { dx: 0, dy: 0, dz: 1 },
       east: { dx: 1, dy: 0, dz: 0 },
       west: { dx: -1, dy: 0, dz: 0 },
-      up: { dx: 0, dy: 1, dz: 0 },
       down: { dx: 0, dy: -1, dz: 0 },
     };
 
     const dir = dirVectors[direction];
     if (!dir) {
-      throw new Error(`Invalid direction: ${direction}. Use north/south/east/west/up/down`);
+      throw new Error(`Invalid direction: ${direction}. Use north/south/east/west/down (for up, use pillar_up)`);
     }
 
     // Auto-equip best pickaxe
@@ -3232,10 +3302,10 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       const nextZ = currentPos.z + dir.dz;
 
       // For horizontal tunnels, dig 2 blocks high (feet and head level)
-      // For vertical tunnels, dig 1 block
+      // For down tunnels (stairs), dig 1 block
       const blocksToDig: Array<{ x: number; y: number; z: number }> = [];
 
-      if (direction === "up" || direction === "down") {
+      if (direction === "down") {
         blocksToDig.push({ x: nextX, y: nextY, z: nextZ });
       } else {
         // Horizontal: dig at feet level and head level
@@ -3274,18 +3344,15 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       }
 
       // Move forward into the tunnel
-      if (direction !== "up" && direction !== "down") {
+      if (direction === "down") {
+        // For down, just wait for gravity
+        await this.delay(300);
+      } else {
+        // Horizontal: use pathfinder to move into the tunnel
         const goal = new goals.GoalBlock(nextX, nextY, nextZ);
         bot.pathfinder.setGoal(goal);
         await this.delay(500);
         bot.pathfinder.setGoal(null);
-      } else if (direction === "down") {
-        // For down, just wait for gravity
-        await this.delay(300);
-      } else if (direction === "up") {
-        // For up, need to pillar or jump
-        // Just move up if possible
-        await this.delay(300);
       }
 
       // Update current position

@@ -502,21 +502,21 @@ const tools = {
     },
   },
   minecraft_pillar_up: {
-    description: "Jump and place blocks below to climb up. Auto-digs obstacles above. Use untilSky=true to escape caves/underground!",
+    description: "Jump and place blocks below to climb up continuously. Auto-digs obstacles above and auto-equips pickaxe. Use for escaping caves, climbing cliffs, or reaching heights. Uses cobblestone/dirt/stone from inventory.",
     inputSchema: {
       type: "object",
       properties: {
-        height: { type: "number", default: 1, description: "How many blocks to go up (ignored if untilSky=true)" },
-        untilSky: { type: "boolean", default: false, description: "Keep going up until reaching open sky (great for escaping caves)" },
+        height: { type: "number", default: 10, description: "How many blocks to go up (default: 10, max recommended: 50)" },
+        untilSky: { type: "boolean", default: false, description: "Keep going up until reaching open sky (ignores height, great for escaping deep caves)" },
       },
     },
   },
   minecraft_tunnel: {
-    description: "Dig a 1x2 tunnel in a direction. Efficient for mining, escaping underground, or creating paths. Auto-equips pickaxe and collects items. Reports ores found!",
+    description: "Dig a 1x2 tunnel in a direction. Efficient for mining, escaping underground, or creating paths. Auto-equips pickaxe and collects items. Reports ores found! Note: For going UP, use minecraft_pillar_up instead.",
     inputSchema: {
       type: "object",
       properties: {
-        direction: { type: "string", enum: ["north", "south", "east", "west", "up", "down"], description: "Direction to dig" },
+        direction: { type: "string", enum: ["north", "south", "east", "west", "down"], description: "Direction to dig (for up, use minecraft_pillar_up)" },
         length: { type: "number", default: 10, description: "How many blocks to dig (default: 10)" },
       },
       required: ["direction"],
@@ -827,7 +827,10 @@ async function handleTool(
 
     case "minecraft_tunnel": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      const direction = args.direction as "north" | "south" | "east" | "west" | "up" | "down";
+      const direction = args.direction as "north" | "south" | "east" | "west" | "down";
+      if (direction === "up" as string) {
+        throw new Error("For going up, use minecraft_pillar_up instead of tunnel.");
+      }
       const length = (args.length as number) || 10;
       return await botManager.digTunnel(username, direction, length);
     }
