@@ -176,12 +176,23 @@ export class BotManager extends EventEmitter {
         const displayNameLower = entityDisplayName.toLowerCase();
         const typeLower = entityType.toLowerCase();
         
-        // Check for passive mobs - prioritize name/mobType over type
-        // entity.name is most reliable for passive mobs
-        if (entity.name && passiveMobs.includes(entity.name.toLowerCase())) {
+        // Check for passive mobs - handle various naming conventions
+        // entity.mobType is often capitalized (e.g., 'Cow', 'Pig', 'Chicken')
+        if (entity.mobType) {
+          const mobTypeLower = entity.mobType.toLowerCase();
+          if (passiveMobs.includes(mobTypeLower)) {
+            key = mobTypeLower;
+          } else if (entity.mobType === 'Cow') {
+            key = 'cow';
+          } else if (entity.mobType === 'Pig') {
+            key = 'pig';
+          } else if (entity.mobType === 'Chicken') {
+            key = 'chicken';
+          } else if (entity.mobType === 'Sheep') {
+            key = 'sheep';
+          }
+        } else if (entity.name && passiveMobs.includes(entity.name.toLowerCase())) {
           key = entity.name.toLowerCase();
-        } else if (entity.mobType && passiveMobs.includes(entity.mobType.toLowerCase())) {
-          key = entity.mobType.toLowerCase();
         } else if (entity.displayName && passiveMobs.includes(entity.displayName.toLowerCase())) {
           key = entity.displayName.toLowerCase();
         } else if (typeof entity.type === 'string' && passiveMobs.includes(entity.type.toLowerCase())) {
@@ -1351,12 +1362,22 @@ export class BotManager extends EventEmitter {
       console.error(`[Collect] Scanning ${allEntities.length} total entities`);
       
       return allEntities.filter((entity) => {
-        if (!entity || entity === bot.entity || !entity.position) return false;
-        const dist = entity.position.distanceTo(bot.entity.position);
-        if (dist > 15) return false; // Reduced range for better detection
+        if (!entity || entity === bot.entity) return false;
         
-        // Log all entities for debugging
-        console.error(`[Collect] Entity: name="${entity.name}", displayName="${entity.displayName}", type="${entity.type}", id=${entity.id}, dist=${dist.toFixed(1)}`);
+        // Check position validity before distance calculation
+        if (!entity.position || !bot.entity.position) {
+          console.error(`[Collect] Entity without valid position: id=${entity.id}, name="${entity.name}"`);
+          return false;
+        }
+        
+        const dist = entity.position.distanceTo(bot.entity.position);
+        
+        // Log all entities within extended range for debugging
+        if (dist <= 30) {
+          console.error(`[Collect] Entity: name="${entity.name}", displayName="${entity.displayName}", type="${entity.type}", id=${entity.id}, dist=${dist.toFixed(1)}`);
+        }
+        
+        if (dist > 15) return false; // Reduced range for better detection
         
         const name = (entity.name || "").toLowerCase();
         const displayName = (entity.displayName || "").toLowerCase();

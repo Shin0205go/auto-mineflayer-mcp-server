@@ -5,14 +5,16 @@
  *
  * Monitors tool execution logs from Minecraft agents,
  * analyzes failure patterns, and modifies source code to fix issues.
+ * Uses MCP filesystem server for file operations.
  */
 
 import "dotenv/config";
-import { spawn } from "child_process";
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { spawn, ChildProcess } from "child_process";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { ToolExecutionLog } from "../types/tool-log.js";
 
@@ -63,8 +65,89 @@ class DevAgent {
   private requestId = 0;
   private recentLogs: ToolExecutionLog[] = [];
   private lastAnalysisTime = 0;
-  private gameAgentProcess: ReturnType<typeof spawn> | null = null;
+  private gameAgentProcess: ChildProcess | null = null;
   private manageGameAgent = process.env.MANAGE_GAME_AGENT === "true";
+  private isImproving = false;  // Flag to prevent auto-restart during improvement
+
+  // MCP Filesystem client
+  private fsClient: Client | null = null;
+  private fsTransport: StdioClientTransport | null = null;
+
+  /**
+   * Connect to MCP Filesystem server via stdio
+   */
+  async connectFilesystem(): Promise<void> {
+    console.log(`${PREFIX} Starting MCP Filesystem server...`);
+
+    this.fsTransport = new StdioClientTransport({
+      command: "npx",
+      args: ["-y", "@modelcontextprotocol/server-filesystem", projectRoot],
+    });
+
+    this.fsClient = new Client({
+      name: "dev-agent",
+      version: "1.0.0",
+    }, {
+      capabilities: {},
+    });
+
+    await this.fsClient.connect(this.fsTransport);
+    console.log(`${PREFIX} ${C.green}Connected to MCP Filesystem server${C.reset}`);
+  }
+
+  /**
+   * Read file via MCP filesystem server
+   */
+  async readFile(relativePath: string): Promise<string | null> {
+    if (!this.fsClient) {
+      console.error(`${PREFIX} Filesystem client not connected`);
+      return null;
+    }
+
+    try {
+      const result = await this.fsClient.callTool({
+        name: "read_text_file",
+        arguments: { path: join(projectRoot, relativePath) },
+      });
+
+      // Extract text content from result
+      if (result.content && Array.isArray(result.content)) {
+        for (const item of result.content) {
+          if (item.type === "text") {
+            return item.text;
+          }
+        }
+      }
+      return null;
+    } catch (e) {
+      console.error(`${PREFIX} Failed to read file ${relativePath}:`, e);
+      return null;
+    }
+  }
+
+  /**
+   * Write file via MCP filesystem server
+   */
+  async writeFile(relativePath: string, content: string): Promise<boolean> {
+    if (!this.fsClient) {
+      console.error(`${PREFIX} Filesystem client not connected`);
+      return false;
+    }
+
+    try {
+      await this.fsClient.callTool({
+        name: "write_file",
+        arguments: {
+          path: join(projectRoot, relativePath),
+          content,
+        },
+      });
+      return true;
+    } catch (e) {
+      console.error(`${PREFIX} Failed to write file ${relativePath}:`, e);
+      return false;
+    }
+  }
 
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -169,6 +252,9 @@ ${C.yellow}╔══════════════════════
 ╚══════════════════════════════════════════════════════════════╝${C.reset}
 `);
 
+    // Connect to MCP Filesystem server first
+    await this.connectFilesystem();
+
     await this.connect();
     this.isRunning = true;
 
@@ -204,6 +290,7 @@ ${C.yellow}╔══════════════════════
     console.log(`${PREFIX} Analyzing ${failures.length} failures...`);
 
     // STOP Game Agent during improvement
+    this.isImproving = true;
     if (this.manageGameAgent && this.gameAgentProcess) {
       console.log(`${PREFIX} ${C.yellow}Pausing Game Agent for improvement...${C.reset}`);
       this.stopGameAgent();
@@ -241,32 +328,33 @@ ${C.yellow}╔══════════════════════
     console.log(`${PREFIX} Most failing tool: ${toolName} (${toolFailures.count} failures)`);
     console.log(`${PREFIX} Errors: ${toolFailures.errors.join(", ")}`);
 
-    // Keep trying until build succeeds
+    // Keep trying until build succeeds (no limit)
     let buildSuccess = false;
     let attempts = 0;
-    const MAX_ATTEMPTS = 5;
 
-    while (!buildSuccess && attempts < MAX_ATTEMPTS) {
+    while (!buildSuccess) {
       attempts++;
-      console.log(`${PREFIX} ${C.cyan}Improvement attempt ${attempts}/${MAX_ATTEMPTS}${C.reset}`);
+      console.log(`${PREFIX} ${C.cyan}Improvement attempt ${attempts}${C.reset}`);
 
       // Generate improvement plan using Claude
       const plan = await this.generateImprovementPlan(toolName, toolFailures, attempts > 1 ? this.lastBuildError : undefined);
 
       if (!plan) {
-        console.log(`${PREFIX} ${C.red}Failed to generate improvement plan${C.reset}`);
-        break;
+        console.log(`${PREFIX} ${C.red}Failed to generate improvement plan, retrying...${C.reset}`);
+        await this.sleep(5000);
+        continue;
       }
 
       console.log(`${PREFIX} Improvement plan generated for ${toolName}`);
       console.log(`${PREFIX} Problem: ${plan.problem}`);
       console.log(`${PREFIX} File: ${plan.filePath}`);
 
-      // Apply the fix
+      // Apply the fix using MCP filesystem
       const applied = await this.applyFix(plan);
 
       if (!applied) {
-        console.log(`${PREFIX} ${C.red}Failed to apply fix${C.reset}`);
+        console.log(`${PREFIX} ${C.red}Failed to apply fix, retrying...${C.reset}`);
+        await this.sleep(3000);
         continue;
       }
 
@@ -282,23 +370,10 @@ ${C.yellow}╔══════════════════════
     // Clear analyzed logs
     this.recentLogs = this.recentLogs.filter(l => l.tool !== toolName);
 
-    if (buildSuccess) {
-      console.log(`${PREFIX} ${C.green}=== Improvement Cycle Complete ===${C.reset}`);
-    } else {
-      console.log(`${PREFIX} ${C.red}=== Improvement Failed after ${MAX_ATTEMPTS} attempts ===${C.reset}`);
-      // Restore from backup
-      if (this.lastAppliedFixPath) {
-        const backupPath = this.lastAppliedFixPath + ".backup";
-        if (existsSync(backupPath)) {
-          console.log(`${PREFIX} Restoring from backup...`);
-          const backup = readFileSync(backupPath, "utf-8");
-          writeFileSync(this.lastAppliedFixPath, backup);
-          await this.rebuildAfterRollback();
-        }
-      }
-    }
+    console.log(`${PREFIX} ${C.green}=== Improvement Cycle Complete (${attempts} attempts) ===${C.reset}`);
 
     // Restart Game Agent
+    this.isImproving = false;
     if (this.manageGameAgent) {
       console.log(`${PREFIX} ${C.green}Resuming Game Agent...${C.reset}`);
       this.startGameAgent();
@@ -324,20 +399,20 @@ ${C.yellow}╔══════════════════════
       minecraft_place_block: { file: "src/tools/building.ts" },
       minecraft_get_surroundings: { file: "src/tools/environment.ts" },
       minecraft_find_block: { file: "src/tools/environment.ts" },
+      minecraft_explore_for_biome: { file: "src/tools/environment.ts" },
       minecraft_connect: { file: "src/tools/connection.ts" },
       minecraft_collect_items: { file: "src/bot-manager.ts", func: "collectNearbyItems" },
     };
 
     const mapping = toolToFile[toolName] || { file: "src/bot-manager.ts" };
     const filePath = mapping.file;
-    const fullPath = join(projectRoot, filePath);
 
-    if (!existsSync(fullPath)) {
+    // Read source file via MCP
+    let sourceCode = await this.readFile(filePath);
+    if (!sourceCode) {
       console.log(`${PREFIX} Source file not found: ${filePath}`);
       return null;
     }
-
-    let sourceCode = readFileSync(fullPath, "utf-8");
 
     // If file is too large, try to extract just the relevant function
     const MAX_SOURCE_SIZE = 15000; // ~15KB limit
@@ -403,7 +478,7 @@ ${sourceCode}
       const result = query({
         prompt,
         options: {
-          model: "claude-opus-4-20250514",
+          model: "claude-sonnet-4-20250514",
           maxTurns: 1,
           tools: [],
           env: envWithoutKey as Record<string, string>,
@@ -442,8 +517,12 @@ ${sourceCode}
       return false;
     }
 
-    const fullPath = join(projectRoot, plan.filePath);
-    const currentCode = readFileSync(fullPath, "utf-8");
+    // Read current file via MCP
+    const currentCode = await this.readFile(plan.filePath);
+    if (!currentCode) {
+      console.log(`${PREFIX} Could not read file: ${plan.filePath}`);
+      return false;
+    }
 
     if (!currentCode.includes(plan.code.before)) {
       console.log(`${PREFIX} Could not find code to replace`);
@@ -454,23 +533,15 @@ ${sourceCode}
     // Apply the fix
     const newCode = currentCode.replace(plan.code.before, plan.code.after);
 
-    // Backup original
-    const backupPath = fullPath + ".backup";
-    writeFileSync(backupPath, currentCode);
+    // Write via MCP (no backup)
+    const success = await this.writeFile(plan.filePath, newCode);
 
-    // Write new code
-    writeFileSync(fullPath, newCode);
+    if (success) {
+      console.log(`${PREFIX} ${C.green}Applied fix to ${plan.filePath}${C.reset}`);
+    }
 
-    // Track for potential rollback
-    this.lastAppliedFixPath = fullPath;
-
-    console.log(`${PREFIX} ${C.green}Applied fix to ${plan.filePath}${C.reset}`);
-    console.log(`${PREFIX} Backup saved to ${backupPath}`);
-
-    return true;
+    return success;
   }
-
-  private lastAppliedFixPath: string | null = null;
 
   private async rebuild(): Promise<boolean> {
     console.log(`${PREFIX} Rebuilding project...`);
@@ -491,7 +562,6 @@ ${sourceCode}
         if (code === 0) {
           console.log(`${PREFIX} ${C.green}Build successful!${C.reset}`);
           this.lastBuildError = undefined;
-          this.lastAppliedFixPath = null;
           resolve(true);
         } else {
           console.error(`${PREFIX} ${C.red}Build failed!${C.reset}`);
@@ -500,19 +570,6 @@ ${sourceCode}
           this.lastBuildError = stderr;
           resolve(false);
         }
-      });
-    });
-  }
-
-  private async rebuildAfterRollback(): Promise<boolean> {
-    return new Promise((resolve) => {
-      const build = spawn("npm", ["run", "build"], {
-        cwd: projectRoot,
-        stdio: "pipe",
-      });
-
-      build.on("close", (code) => {
-        resolve(code === 0);
       });
     });
   }
@@ -611,8 +668,8 @@ ${sourceCode}
       console.log(`${PREFIX} Game Agent exited with code ${code}`);
       this.gameAgentProcess = null;
 
-      // Auto-restart after 5 seconds if still running
-      if (this.isRunning) {
+      // Auto-restart after 5 seconds if still running and not improving
+      if (this.isRunning && !this.isImproving) {
         console.log(`${PREFIX} Restarting Game Agent in 5 seconds...`);
         setTimeout(() => this.startGameAgent(), 5000);
       }
@@ -632,26 +689,15 @@ ${sourceCode}
     }
   }
 
-  /**
-   * Restart the Game Agent (stop + start)
-   */
-  private async restartGameAgent(): Promise<void> {
-    if (!this.manageGameAgent) {
-      console.log(`${PREFIX} Restart Minecraft agents manually to apply changes.`);
-      return;
-    }
-
-    this.stopGameAgent();
-    await this.sleep(2000); // Wait for graceful shutdown
-    this.startGameAgent();
-  }
-
   stop(): void {
     console.log(`${PREFIX} Stopping...`);
     this.isRunning = false;
     this.stopGameAgent();
     if (this.ws) {
       this.ws.close();
+    }
+    if (this.fsClient) {
+      this.fsClient.close();
     }
   }
 }

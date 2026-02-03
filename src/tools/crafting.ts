@@ -119,6 +119,12 @@ export async function handleCraftingTool(
         console.log(`Craft error for ${itemName}: ${errorMsg}`);
         console.log(`Current inventory: ${inventoryStr}`);
         
+        // Check if we already have enough of the item first
+        const existingCount = inventory.find(item => item.name === itemName)?.count || 0;
+        if (existingCount >= count) {
+          return `Already have ${existingCount} ${itemName}(s). Requested to craft ${count}, but you already have enough. Inventory: ${inventoryStr}`;
+        }
+        
         // Check for stick crafting specific issues
         if (itemName === 'stick') {
           const plankTypes = ['oak_planks', 'spruce_planks', 'birch_planks', 'jungle_planks', 'acacia_planks', 'dark_oak_planks', 'pale_oak_planks'];

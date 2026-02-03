@@ -63,9 +63,14 @@ export async function handleEnvironmentTool(
         const uniqueVariants = [...new Set(searchVariants)];
         
         for (const variant of uniqueVariants) {
-          const result = await botManager.findBlock(username, variant, max_distance);
-          if (result && typeof result === 'string' && !result.startsWith('No ') && !result.includes('not found')) {
-            return result;
+          try {
+            const result = await botManager.findBlock(username, variant, max_distance);
+            if (result && typeof result === 'string' && !result.startsWith('No ') && !result.includes('not found')) {
+              return result;
+            }
+          } catch (innerError) {
+            // 個別のvariantでエラーが発生しても続行
+            continue;
           }
         }
         

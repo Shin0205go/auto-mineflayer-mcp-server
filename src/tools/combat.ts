@@ -121,7 +121,14 @@ export async function handleCombatTool(
 
     case "minecraft_eat": {
       const foodName = args.food_name as string | undefined;
-      return await botManager.eat(username, foodName);
+      try {
+        return await botManager.eat(username, foodName);
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('Promise timed out')) {
+          throw new Error(`Failed to eat${foodName ? ` ${foodName}` : ''}: Item not found in inventory or not edible`);
+        }
+        throw error;
+      }
     }
 
     case "minecraft_equip_armor": {
