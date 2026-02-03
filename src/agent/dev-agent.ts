@@ -382,29 +382,77 @@ ${C.yellow}╔══════════════════════
 
   private lastBuildError: string | undefined = undefined;
 
+  /**
+   * Dynamically find where a tool is implemented using grep
+   */
+  private async findToolImplementation(toolName: string): Promise<{ file: string; func: string } | null> {
+    // Convert tool name to likely function name
+    // minecraft_smelt -> smeltItem, minecraft_craft -> craftItem, etc.
+    const parts = toolName.replace("minecraft_", "").split("_");
+    const funcName = parts[0] + parts.slice(1).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join("");
+
+    // Also try: minecraft_get_surroundings -> getSurroundings
+    const altFuncName = parts.map((p, i) => i === 0 ? p : p.charAt(0).toUpperCase() + p.slice(1)).join("");
+
+    console.log(`${PREFIX} Searching for function: ${funcName} or ${altFuncName}`);
+
+    return new Promise((resolve) => {
+      // Search for function definition in src/
+      const grep = spawn("grep", ["-rn", "-E", `(async\\s+)?(${funcName}|${altFuncName})\\s*\\(`, "src/"], {
+        cwd: projectRoot,
+      });
+
+      let output = "";
+      grep.stdout.on("data", (data) => {
+        output += data.toString();
+      });
+
+      grep.on("close", () => {
+        const lines = output.trim().split("\n").filter(l => l);
+
+        // Prioritize bot-manager.ts results (actual implementation)
+        for (const line of lines) {
+          if (line.includes("bot-manager.ts") && !line.includes("//")) {
+            const match = line.match(/^([^:]+):/);
+            if (match) {
+              console.log(`${PREFIX} Found implementation in: ${match[1]}`);
+              resolve({ file: match[1], func: funcName });
+              return;
+            }
+          }
+        }
+
+        // Fall back to first .ts file found
+        for (const line of lines) {
+          if (line.includes(".ts:") && !line.includes("//")) {
+            const match = line.match(/^([^:]+):/);
+            if (match) {
+              console.log(`${PREFIX} Found in: ${match[1]}`);
+              resolve({ file: match[1], func: funcName });
+              return;
+            }
+          }
+        }
+
+        // Default to bot-manager.ts
+        console.log(`${PREFIX} Not found, defaulting to bot-manager.ts`);
+        resolve({ file: "src/bot-manager.ts", func: funcName });
+      });
+    });
+  }
+
   private async generateImprovementPlan(
     toolName: string,
     failures: FailureSummary[string],
     buildError?: string
   ): Promise<ImprovementPlan | null> {
-    // Map tool name to source file and function name
-    const toolToFile: Record<string, { file: string; func?: string }> = {
-      minecraft_craft: { file: "src/tools/crafting.ts" },
-      minecraft_smelt: { file: "src/tools/crafting.ts" },
-      minecraft_fight: { file: "src/tools/combat.ts" },
-      minecraft_flee: { file: "src/tools/combat.ts" },
-      minecraft_eat: { file: "src/tools/combat.ts" },
-      minecraft_move_to: { file: "src/bot-manager.ts", func: "moveTo" },
-      minecraft_dig_block: { file: "src/tools/building.ts" },
-      minecraft_place_block: { file: "src/tools/building.ts" },
-      minecraft_get_surroundings: { file: "src/tools/environment.ts" },
-      minecraft_find_block: { file: "src/tools/environment.ts" },
-      minecraft_explore_for_biome: { file: "src/tools/environment.ts" },
-      minecraft_connect: { file: "src/tools/connection.ts" },
-      minecraft_collect_items: { file: "src/bot-manager.ts", func: "collectNearbyItems" },
-    };
+    // Dynamically find where the tool is implemented
+    const mapping = await this.findToolImplementation(toolName);
+    if (!mapping) {
+      console.log(`${PREFIX} Could not find implementation for: ${toolName}`);
+      return null;
+    }
 
-    const mapping = toolToFile[toolName] || { file: "src/bot-manager.ts" };
     const filePath = mapping.file;
 
     // Read source file via MCP
