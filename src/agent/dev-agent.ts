@@ -13,6 +13,7 @@ import { spawn, ChildProcess } from "child_process";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
+import ts from "typescript";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -49,6 +50,10 @@ interface ImprovementPlan {
   problem: string;
   filePath: string;
   suggestedFix: string;
+  functionName?: string;
+  fixedFunction?: string;
+  alreadyApplied?: boolean;  // Set when Claude applied fix directly via Edit tool
+  // Legacy: before/after approach (deprecated)
   code?: {
     before: string;
     after: string;
@@ -149,6 +154,52 @@ class DevAgent {
     }
   }
 
+  /**
+   * Edit file via MCP filesystem server (pattern-based edit)
+   * Uses MCP's edit_file which has whitespace normalization and better matching
+   */
+  async editFile(relativePath: string, oldText: string, newText: string): Promise<{ success: boolean; error?: string }> {
+    // Use safer read → replace → write approach instead of MCP edit_file
+    // This ensures exact string matching and prevents corruption
+
+    const content = await this.readFile(relativePath);
+    if (content === null) {
+      return { success: false, error: `Failed to read file: ${relativePath}` };
+    }
+
+    // Check if oldText exists in file
+    if (!content.includes(oldText)) {
+      // Try with normalized whitespace
+      const normalizedContent = content.replace(/\r\n/g, '\n');
+      const normalizedOldText = oldText.replace(/\r\n/g, '\n');
+
+      if (!normalizedContent.includes(normalizedOldText)) {
+        return { success: false, error: `Old text not found in file (${oldText.length} chars)` };
+      }
+
+      // Use normalized versions
+      const newContent = normalizedContent.replace(normalizedOldText, newText);
+      const writeSuccess = await this.writeFile(relativePath, newContent);
+      return writeSuccess
+        ? { success: true }
+        : { success: false, error: "Failed to write file" };
+    }
+
+    // Check for multiple matches (dangerous - could replace wrong one)
+    const matchCount = content.split(oldText).length - 1;
+    if (matchCount > 1) {
+      console.log(`${PREFIX} ${C.yellow}Warning: ${matchCount} matches found, replacing first only${C.reset}`);
+    }
+
+    // Replace and write
+    const newContent = content.replace(oldText, newText);
+    const writeSuccess = await this.writeFile(relativePath, newContent);
+
+    return writeSuccess
+      ? { success: true }
+      : { success: false, error: "Failed to write file" };
+  }
+
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(MCP_WS_URL);
@@ -224,6 +275,20 @@ class DevAgent {
         }
       }, 30000);
     });
+  }
+
+  /**
+   * Write a message to the agent bulletin board
+   */
+  private async writeToBoard(message: string): Promise<void> {
+    try {
+      await this.callTool("agent_board_write", {
+        agent_name: "DevAgent",
+        message,
+      });
+    } catch (e) {
+      console.error(`${PREFIX} Failed to write to board:`, e);
+    }
   }
 
   private handleToolLog(log: ToolExecutionLog): void {
@@ -330,10 +395,13 @@ ${C.yellow}╔══════════════════════
 
     // Keep trying until build succeeds (with limit to prevent infinite loop)
     const MAX_ATTEMPTS = 20;
+    const MAX_SAME_ERROR_RETRIES = 3;  // Give up if same error repeats this many times
     let buildSuccess = false;
     let attempts = 0;
 
     let lastModifiedFile: string | null = null;
+    let lastErrorLine: string | null = null;
+    let sameErrorCount = 0;
 
     while (!buildSuccess && attempts < MAX_ATTEMPTS) {
       attempts++;
@@ -358,8 +426,13 @@ ${C.yellow}╔══════════════════════
       console.log(`${PREFIX} Problem: ${plan.problem}`);
       console.log(`${PREFIX} File: ${plan.filePath}`);
 
-      // Apply the fix using MCP filesystem
-      const applied = await this.applyFix(plan);
+      // Apply the fix (skip if Claude already applied via Edit tool)
+      let applied = plan.alreadyApplied || false;
+      if (!applied) {
+        applied = await this.applyFix(plan);
+      } else {
+        console.log(`${PREFIX} ${C.green}Fix already applied by Claude${C.reset}`);
+      }
 
       if (!applied) {
         console.log(`${PREFIX} ${C.red}Failed to apply fix, retrying...${C.reset}`);
@@ -367,13 +440,39 @@ ${C.yellow}╔══════════════════════
         continue;
       }
 
-      // Track which file was modified
+      // Track which file was modified and the fix details
       lastModifiedFile = plan.filePath;
+      const fixDescription = `${plan.functionName || plan.suggestedFix}: ${plan.problem}`;
 
       // Try to build
       buildSuccess = await this.rebuild();
 
+      // If successful, notify via board
+      if (buildSuccess) {
+        await this.writeToBoard(`🔧 コード修正完了: ${toolName} - ${fixDescription.slice(0, 100)}`);
+      }
+
       if (!buildSuccess) {
+        // Extract error line from build error to detect same error loop
+        const errorLineMatch = this.lastBuildError?.match(/:(\d+):/);
+        const currentErrorLine = errorLineMatch ? errorLineMatch[1] : null;
+
+        if (currentErrorLine && currentErrorLine === lastErrorLine) {
+          sameErrorCount++;
+          console.log(`${PREFIX} ${C.yellow}Same error line ${currentErrorLine} (${sameErrorCount}/${MAX_SAME_ERROR_RETRIES})${C.reset}`);
+
+          if (sameErrorCount >= MAX_SAME_ERROR_RETRIES) {
+            console.log(`${PREFIX} ${C.red}Same build error repeated ${MAX_SAME_ERROR_RETRIES} times. Restoring from git...${C.reset}`);
+            if (lastModifiedFile) {
+              await this.restoreFromGit(lastModifiedFile);
+            }
+            break;  // Give up on this improvement cycle
+          }
+        } else {
+          sameErrorCount = 1;
+          lastErrorLine = currentErrorLine;
+        }
+
         console.log(`${PREFIX} ${C.yellow}Build failed, will try again...${C.reset}`);
         await this.sleep(2000);
       }
@@ -386,6 +485,7 @@ ${C.yellow}╔══════════════════════
       console.log(`${PREFIX} ${C.green}=== Improvement Cycle Complete (${attempts} attempts) ===${C.reset}`);
     } else {
       console.log(`${PREFIX} ${C.red}=== Gave up after ${MAX_ATTEMPTS} attempts. Please fix manually. ===${C.reset}`);
+      await this.writeToBoard(`⚠️ コード修正失敗: ${toolName} - ${attempts}回試行後に断念。手動修正が必要です。`);
     }
 
     // Restart Game Agent
@@ -403,19 +503,13 @@ ${C.yellow}╔══════════════════════
    * Returns found: true if actually found, false if defaulted
    */
   private async findToolImplementation(toolName: string): Promise<{ file: string; func: string; found: boolean }> {
-    // Convert tool name to likely function name
-    // minecraft_smelt -> smeltItem, minecraft_craft -> craftItem, etc.
-    const parts = toolName.replace("minecraft_", "").split("_");
-    const funcName = parts[0] + parts.slice(1).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join("");
-
-    // Also try: minecraft_get_surroundings -> getSurroundings
-    const altFuncName = parts.map((p, i) => i === 0 ? p : p.charAt(0).toUpperCase() + p.slice(1)).join("");
-
-    console.log(`${PREFIX} Searching for function: ${funcName} or ${altFuncName}`);
+    // Search for the tool name directly in the codebase
+    // This finds where the tool is handled (case "minecraft_xxx":) and its implementation
+    console.log(`${PREFIX} Searching for tool: ${toolName}`);
 
     return new Promise((resolve) => {
-      // Search for function definition in src/
-      const grep = spawn("grep", ["-rn", "-E", `(async\\s+)?(${funcName}|${altFuncName})\\s*\\(`, "src/"], {
+      // Simple grep for the tool name - no shell escaping issues
+      const grep = spawn("grep", ["-rn", toolName, "src/"], {
         cwd: projectRoot,
       });
 
@@ -425,35 +519,54 @@ ${C.yellow}╔══════════════════════
       });
 
       grep.on("close", () => {
-        const lines = output.trim().split("\n").filter(l => l);
+        const lines = output.trim().split("\n").filter(l => l && !l.includes("//"));
 
-        // Prioritize bot-manager.ts results (actual implementation)
+        // Find the case handler in tools/*.ts (preferred) or mcp-ws-server.ts
+        let handlerFile: string | null = null;
         for (const line of lines) {
-          if (line.includes("bot-manager.ts") && !line.includes("//")) {
+          // Look for case statements with the tool name
+          if (line.includes("case") && (line.includes(`"${toolName}"`) || line.includes(`'${toolName}'`))) {
             const match = line.match(/^([^:]+):/);
             if (match) {
-              console.log(`${PREFIX} Found implementation in: ${match[1]}`);
-              resolve({ file: match[1], func: funcName, found: true });
-              return;
+              handlerFile = match[1];
+              console.log(`${PREFIX} Found case handler: ${line.slice(0, 100)}`);
+              break;
             }
           }
         }
 
-        // Fall back to first .ts file found
-        for (const line of lines) {
-          if (line.includes(".ts:") && !line.includes("//")) {
-            const match = line.match(/^([^:]+):/);
-            if (match) {
-              console.log(`${PREFIX} Found in: ${match[1]}`);
-              resolve({ file: match[1], func: funcName, found: true });
-              return;
-            }
-          }
+        if (!handlerFile) {
+          console.log(`${PREFIX} Tool handler not found in case statements, defaulting to bot-manager.ts`);
+          resolve({ file: "src/bot-manager.ts", func: toolName, found: false });
+          return;
         }
 
-        // Default to bot-manager.ts (not found)
-        console.log(`${PREFIX} Not found, defaulting to bot-manager.ts`);
-        resolve({ file: "src/bot-manager.ts", func: funcName, found: false });
+        console.log(`${PREFIX} Found tool handler in: ${handlerFile}`);
+
+        // Now search for the actual implementation call in that handler
+        // Read the handler file and find the case block
+        const grepImpl = spawn("grep", ["-A", "15", toolName, handlerFile], {
+          cwd: projectRoot,
+        });
+
+        let implOutput = "";
+        grepImpl.stdout.on("data", (data) => {
+          implOutput += data.toString();
+        });
+
+        grepImpl.on("close", () => {
+          // Extract the function being called (botManager.xxx or handleXxxTool)
+          const funcMatch = implOutput.match(/botManager\.(\w+)|await\s+(\w+)\(|return\s+(\w+)\(/);
+          if (funcMatch) {
+            const funcName = funcMatch[1] || funcMatch[2] || funcMatch[3];
+            console.log(`${PREFIX} Found implementation function: ${funcName}`);
+            resolve({ file: "src/bot-manager.ts", func: funcName, found: true });
+          } else {
+            // Just use the tool name as the function name
+            console.log(`${PREFIX} Using tool name as function: ${toolName}`);
+            resolve({ file: handlerFile, func: toolName, found: true });
+          }
+        });
       });
     });
   }
@@ -493,21 +606,20 @@ ${C.yellow}╔══════════════════════
       return null;
     }
 
-    // If file is too large, try to extract just the relevant function
-    // But skip extraction if we're fixing a build error (need to see the broken code)
-    const MAX_SOURCE_SIZE = 15000; // ~15KB limit
-    if (sourceCode.length > MAX_SOURCE_SIZE && funcName && !buildError) {
-      console.log(`${PREFIX} File too large (${sourceCode.length} chars), extracting function: ${funcName}`);
-      const extracted = this.extractFunction(sourceCode, funcName);
-      if (extracted) {
-        sourceCode = `// Extracted function from ${filePath}\n\n${extracted}`;
-        console.log(`${PREFIX} Extracted ${sourceCode.length} chars`);
+    // Read entire file - Claude can handle large files
+    // Only truncate for extremely large files (>200KB)
+    const MAX_SOURCE_SIZE = 200000; // 200KB limit
+    if (sourceCode.length > MAX_SOURCE_SIZE) {
+      console.log(`${PREFIX} File very large (${sourceCode.length} chars), truncating...`);
+      // Try to show area around the function or error
+      const targetIndex = funcName ? sourceCode.indexOf(funcName) : -1;
+      if (targetIndex > 0) {
+        const start = Math.max(0, targetIndex - 50000);
+        const end = Math.min(sourceCode.length, targetIndex + 150000);
+        sourceCode = `// ... (truncated before line ${sourceCode.slice(0, start).split('\n').length})\n${sourceCode.slice(start, end)}\n// ... (truncated after)`;
       } else {
-        // Fall back to first part of file
         sourceCode = sourceCode.slice(0, MAX_SOURCE_SIZE) + "\n// ... (truncated)";
       }
-    } else if (sourceCode.length > MAX_SOURCE_SIZE) {
-      sourceCode = sourceCode.slice(0, MAX_SOURCE_SIZE) + "\n// ... (truncated)";
     }
 
     // Implementation status info for prompt
@@ -527,7 +639,7 @@ ${buildError}
 `
       : "";
 
-    // Create analysis prompt
+    // Create analysis prompt - Claude will use Edit tool directly
     const prompt = `あなたはMinecraft MCPツールのデバッガーです。
 
 ## 失敗しているツール: ${toolName}
@@ -541,83 +653,75 @@ ${failures.errors.map(e => `- "${e}"`).join("\n")}
 ## 失敗例:
 ${JSON.stringify(failures.examples.slice(0, 2), null, 2)}
 
-## ソースコード (${filePath}):
-\`\`\`typescript
-${sourceCode}
-\`\`\`
+## 修正対象ファイル: ${filePath}
 
 ## タスク
 ${buildError ? `
 **ビルドエラーがあります！** まずビルドエラーを解決してください。
-1. ビルドエラーメッセージを読む（行番号、エラー内容）
-2. 該当箇所を特定して修正
 ` : `
-1. エラーメッセージを分析 - 何が原因で失敗したか特定
-2. ソースコード内でその原因となっている箇所を特定
-3. 具体的な修正コードを提案
+エラーの原因を分析し、修正してください。
 `}
-以下のJSON形式で回答してください:
-\`\`\`json
-{
-  "problem": "${buildError ? "ビルドエラーの内容" : "エラーメッセージから読み取れる問題"}",
-  "location": "修正が必要な関数名や行",
-  "fix": {
-    "before": "修正前のコード（ファイル内に実際に存在するもの）",
-    "after": "修正後のコード"
-  }
-}
-\`\`\`
+**Editツールを使って直接ファイルを修正してください。**
 
 重要:
-- **before/afterはファイル内に実際に存在するコードを正確に指定**
-- ${buildError ? "ビルドエラーの行番号を参考に修正箇所を特定" : "実装確認済みなら「実装されていない」は誤り"}
-- 小さな修正にとどめる`;
+- まずReadツールでファイルを読んで問題箇所を確認
+- Editツールで最小限の修正を適用
+- **console.log() を追加しない**
+- ${buildError ? "ビルドエラーの行番号を参考に修正箇所を特定" : "実装確認済みなら「実装されていない」は誤り"}`;
 
     try {
       const { ANTHROPIC_API_KEY, ...envWithoutKey } = process.env;
       const result = query({
         prompt,
         options: {
-          model: "claude-sonnet-4-20250514",
-          maxTurns: 1,
-          tools: [],
+          model: "claude-opus-4-20250514",
+          maxTurns: 10,
+          allowedTools: ["Read", "Edit", "Grep", "Glob"],
+          permissionMode: "acceptEdits",
+          cwd: projectRoot,
           env: envWithoutKey as Record<string, string>,
         },
       });
 
-      let responseText = "";
+      let editApplied = false;
+
       for await (const msg of result) {
-        if (msg.type === "result" && msg.subtype === "success") {
-          responseText = msg.result || "";
-        }
-      }
-
-      // Parse JSON from response
-      const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[1]);
-
-        // Validate: if we know the function is implemented, reject "not implemented" analysis
-        if (found && parsed.problem) {
-          const problemLower = parsed.problem.toLowerCase();
-          if (problemLower.includes("実装されていない") ||
-              problemLower.includes("実装がない") ||
-              problemLower.includes("実装が存在しない") ||
-              problemLower.includes("not implemented") ||
-              problemLower.includes("未実装")) {
-            console.log(`${PREFIX} ${C.yellow}Invalid analysis - function IS implemented. Retrying...${C.reset}`);
-            return null;
+        // Track if Edit tool was used via tool_use_summary
+        if (msg.type === "tool_use_summary") {
+          const summary = msg as { type: string; toolName?: string; success?: boolean };
+          if (summary.toolName === "Edit" && summary.success) {
+            editApplied = true;
+            console.log(`${PREFIX} ${C.green}Edit applied successfully${C.reset}`);
           }
         }
 
+        // Also check assistant messages for Edit tool use
+        if (msg.type === "assistant" && msg.message) {
+          const content = msg.message.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === "tool_use" && (block as { name?: string }).name === "Edit") {
+                console.log(`${PREFIX} ${C.cyan}Edit tool invoked${C.reset}`);
+                editApplied = true;  // Assume success if Edit was called
+              }
+            }
+          }
+        }
+      }
+
+      if (editApplied) {
+        // Claude already applied the fix using Edit tool
         return {
           tool: toolName,
-          problem: parsed.problem,
+          problem: "Fixed by Claude using Edit tool",
           filePath,
-          suggestedFix: parsed.location,
-          code: parsed.fix,
+          suggestedFix: "Applied directly",
+          alreadyApplied: true,  // Flag to skip applyFix
         };
       }
+
+      console.log(`${PREFIX} ${C.yellow}No edit was applied${C.reset}`);
+      return null;
     } catch (e) {
       console.error(`${PREFIX} Failed to generate improvement plan:`, e);
     }
@@ -626,34 +730,104 @@ ${buildError ? `
   }
 
   private async applyFix(plan: ImprovementPlan): Promise<boolean> {
+    // New approach: replace entire function
+    if (plan.functionName && plan.fixedFunction) {
+      return this.replaceFunction(plan.filePath, plan.functionName, plan.fixedFunction);
+    }
+
+    // Legacy fallback: before/after approach
     if (!plan.code?.before || !plan.code?.after) {
       console.log(`${PREFIX} No code changes specified`);
       return false;
     }
 
-    // Read current file via MCP
-    const currentCode = await this.readFile(plan.filePath);
-    if (!currentCode) {
-      console.log(`${PREFIX} Could not read file: ${plan.filePath}`);
-      return false;
-    }
+    const result = await this.editFile(plan.filePath, plan.code.before, plan.code.after);
 
-    if (!currentCode.includes(plan.code.before)) {
-      console.log(`${PREFIX} Could not find code to replace`);
+    if (result.success) {
+      console.log(`${PREFIX} ${C.green}Applied fix to ${plan.filePath}${C.reset}`);
+      return true;
+    } else {
+      console.log(`${PREFIX} ${C.red}Failed to apply fix: ${result.error}${C.reset}`);
       console.log(`${PREFIX} Looking for:`, plan.code.before.slice(0, 100));
       return false;
     }
+  }
 
-    // Apply the fix
-    const newCode = currentCode.replace(plan.code.before, plan.code.after);
+  /**
+   * Validate TypeScript syntax before applying changes
+   * Returns { valid: true } or { valid: false, errors: [...] }
+   */
+  private validateTypeScriptSyntax(code: string, filename: string = "temp.ts"): { valid: boolean; errors: string[] } {
+    const sourceFile = ts.createSourceFile(
+      filename,
+      code,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS
+    );
 
-    // Write via MCP (no backup)
-    const success = await this.writeFile(plan.filePath, newCode);
+    const errors: string[] = [];
 
-    if (success) {
-      console.log(`${PREFIX} ${C.green}Applied fix to ${plan.filePath}${C.reset}`);
+    // Check for parse errors (syntax errors)
+    const parseErrors = (sourceFile as any).parseDiagnostics;
+    if (parseErrors && parseErrors.length > 0) {
+      for (const diag of parseErrors) {
+        const message = ts.flattenDiagnosticMessageText(diag.messageText, "\n");
+        const pos = diag.start !== undefined
+          ? sourceFile.getLineAndCharacterOfPosition(diag.start)
+          : { line: 0, character: 0 };
+        errors.push(`Line ${pos.line + 1}: ${message}`);
+      }
     }
 
+    return { valid: errors.length === 0, errors };
+  }
+
+  /**
+   * Replace an entire function in a file
+   */
+  private async replaceFunction(filePath: string, functionName: string, newFunction: string): Promise<boolean> {
+    const content = await this.readFile(filePath);
+    if (!content) {
+      console.log(`${PREFIX} ${C.red}Failed to read file: ${filePath}${C.reset}`);
+      return false;
+    }
+
+    // Find the existing function using extractFunction logic
+    const existingFunction = this.extractFunction(content, functionName);
+    if (!existingFunction) {
+      console.log(`${PREFIX} ${C.red}Function not found: ${functionName}${C.reset}`);
+      return false;
+    }
+
+    console.log(`${PREFIX} Found function ${functionName} (${existingFunction.length} chars)`);
+    console.log(`${PREFIX} Replacing with new version (${newFunction.length} chars)`);
+
+    // Replace the function
+    const newContent = content.replace(existingFunction, newFunction);
+
+    if (newContent === content) {
+      console.log(`${PREFIX} ${C.red}Replace failed - content unchanged${C.reset}`);
+      return false;
+    }
+
+    // Validate syntax BEFORE writing
+    const syntaxCheck = this.validateTypeScriptSyntax(newContent, filePath);
+    if (!syntaxCheck.valid) {
+      console.log(`${PREFIX} ${C.red}Syntax error in generated code - rejecting fix${C.reset}`);
+      syntaxCheck.errors.slice(0, 5).forEach(err => {
+        console.log(`${PREFIX}   ${C.red}${err}${C.reset}`);
+      });
+      return false;
+    }
+
+    console.log(`${PREFIX} ${C.green}Syntax check passed${C.reset}`);
+
+    // Write back
+    const success = await this.writeFile(filePath, newContent);
+    if (success) {
+      console.log(`${PREFIX} ${C.green}Replaced function ${functionName} in ${filePath}${C.reset}`);
+    }
     return success;
   }
 
@@ -697,61 +871,101 @@ ${buildError ? `
   }
 
   /**
+   * Restore a file from git when build errors can't be fixed
+   */
+  private async restoreFromGit(filePath: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const relativePath = filePath.startsWith(projectRoot)
+        ? filePath.slice(projectRoot.length + 1)
+        : filePath;
+
+      console.log(`${PREFIX} Restoring ${relativePath} from git...`);
+
+      const git = spawn("git", ["checkout", relativePath], {
+        cwd: projectRoot,
+        stdio: "pipe",
+      });
+
+      git.on("close", async (code) => {
+        if (code === 0) {
+          console.log(`${PREFIX} ${C.green}Restored ${relativePath} from git${C.reset}`);
+          // Verify build works after restore
+          const buildOk = await this.rebuild();
+          resolve(buildOk);
+        } else {
+          console.error(`${PREFIX} ${C.red}Failed to restore from git${C.reset}`);
+          resolve(false);
+        }
+      });
+    });
+  }
+
+  /**
    * Extract a function from source code by name
-   * Handles async functions, regular functions, and arrow function properties
+   * Uses indentation-based extraction for reliability (works with well-formatted TypeScript)
+   * Falls back to brace counting if indentation method fails
    */
   private extractFunction(source: string, funcName: string): string | null {
-    // Try patterns: async funcName(, funcName(, funcName =, funcName:
-    const patterns = [
-      new RegExp(`(async\\s+${funcName}\\s*\\([^)]*\\)[^{]*\\{)`, "m"),
-      new RegExp(`(${funcName}\\s*\\([^)]*\\)[^{]*\\{)`, "m"),
-      new RegExp(`(${funcName}\\s*=\\s*async\\s*\\([^)]*\\)[^{]*\\{)`, "m"),
-      new RegExp(`(${funcName}\\s*:\\s*async\\s*\\([^)]*\\)[^{]*\\{)`, "m"),
+    const lines = source.split("\n");
+
+    // Find the function definition line
+    // Match patterns like "  async funcName(" or "  funcName(" at class method level (2 spaces)
+    const funcPatterns = [
+      new RegExp(`^  async\\s+${funcName}\\s*\\(`),
+      new RegExp(`^  ${funcName}\\s*\\(`),
+      new RegExp(`^  ${funcName}\\s*=\\s*async`),
     ];
 
-    for (const pattern of patterns) {
-      const match = source.match(pattern);
-      if (match && match.index !== undefined) {
-        // Find the matching closing brace
-        const startIndex = match.index;
-        let braceCount = 0;
-        let inString = false;
-        let stringChar = "";
-        let endIndex = startIndex;
-
-        for (let i = startIndex; i < source.length; i++) {
-          const char = source[i];
-          const prevChar = i > 0 ? source[i - 1] : "";
-
-          // Handle strings
-          if ((char === '"' || char === "'" || char === "`") && prevChar !== "\\") {
-            if (!inString) {
-              inString = true;
-              stringChar = char;
-            } else if (char === stringChar) {
-              inString = false;
-            }
-          }
-
-          if (!inString) {
-            if (char === "{") braceCount++;
-            if (char === "}") {
-              braceCount--;
-              if (braceCount === 0) {
-                endIndex = i + 1;
-                break;
-              }
-            }
-          }
+    let funcStartLine = -1;
+    for (let i = 0; i < lines.length; i++) {
+      for (const pattern of funcPatterns) {
+        if (pattern.test(lines[i])) {
+          funcStartLine = i;
+          break;
         }
+      }
+      if (funcStartLine !== -1) break;
+    }
 
-        if (endIndex > startIndex) {
-          return source.slice(startIndex, endIndex);
+    if (funcStartLine === -1) {
+      // Try without indentation requirement (for nested functions or different formatting)
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].match(new RegExp(`async\\s+${funcName}\\s*\\(`)) ||
+            lines[i].match(new RegExp(`${funcName}\\s*\\(`))) {
+          // Make sure it's not a call (no . or await before)
+          const trimmed = lines[i].trimStart();
+          if (trimmed.startsWith("async") || trimmed.startsWith(funcName)) {
+            funcStartLine = i;
+            break;
+          }
         }
       }
     }
 
-    return null;
+    if (funcStartLine === -1) return null;
+
+    // Detect indentation of the function definition
+    const funcIndent = lines[funcStartLine].match(/^(\s*)/)?.[1] || "";
+    const closingPattern = new RegExp(`^${funcIndent}}\\s*$`);
+
+    // Find the closing brace at the same indentation level
+    let funcEndLine = -1;
+    for (let i = funcStartLine + 1; i < lines.length; i++) {
+      if (closingPattern.test(lines[i])) {
+        funcEndLine = i;
+        break;
+      }
+      // Safety: if we hit a line with less indentation that's not empty, stop
+      const lineIndent = lines[i].match(/^(\s*)/)?.[1] || "";
+      if (lines[i].trim() && lineIndent.length < funcIndent.length) {
+        break;
+      }
+    }
+
+    if (funcEndLine === -1) return null;
+
+    // Extract the function
+    return lines.slice(funcStartLine, funcEndLine + 1).join("\n");
   }
 
   /**
