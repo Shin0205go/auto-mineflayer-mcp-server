@@ -181,7 +181,7 @@ ${logContent.slice(-15000)}  // 最新15000文字
       const result = query({
         prompt,
         options: {
-          model: "claude-opus-4-5-20251101",
+          model: "claude-opus-4-6",
           maxTurns: 1,
           tools: [],
         },
