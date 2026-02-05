@@ -5,3 +5,5 @@ dist/
 .DS_Store
 learning/
 shared-board.txt
+logs/
+.claude/settings.local.json
