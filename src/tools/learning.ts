@@ -143,13 +143,14 @@ export const learningTools = {
   },
 
   recall_locations: {
-    description: "保存した場所を思い出す。作業台やかまどの場所を確認できる。",
+    description: "保存した場所を思い出す。作業台やかまどの場所を確認できる。デフォルト20件まで。",
     inputSchema: {
       type: "object" as const,
       properties: {
         type_filter: { type: "string", description: "タイプでフィルタ（crafting_table, furnace, chest等）" },
         nearest_to_x: { type: "number", description: "この座標に近い順にソート（X）" },
         nearest_to_z: { type: "number", description: "この座標に近い順にソート（Z）" },
+        limit: { type: "number", description: "最大件数（デフォルト20）" },
       },
     },
   },
@@ -654,13 +655,18 @@ export async function handleLearningTool(
       const typeFilter = args.type_filter as string | undefined;
       const nearX = args.nearest_to_x as number | undefined;
       const nearZ = args.nearest_to_z as number | undefined;
-      const locations = recallLocations(typeFilter, nearX, nearZ);
+      const limit = (args.limit as number) || 20; // Default limit to prevent huge responses
+      let locations = recallLocations(typeFilter, nearX, nearZ);
 
       if (locations.length === 0) {
         return typeFilter
           ? `タイプ「${typeFilter}」の場所は保存されていません。`
           : "保存された場所はありません。";
       }
+
+      const totalCount = locations.length;
+      const wasLimited = totalCount > limit;
+      locations = locations.slice(0, limit);
 
       const lines = locations.map(l => {
         const dist = nearX !== undefined && nearZ !== undefined
@@ -669,7 +675,11 @@ export async function handleLearningTool(
         return `- ${l.name} [${l.type}]: (${l.x}, ${l.y}, ${l.z})${dist}${l.note ? ` - ${l.note}` : ""}`;
       });
 
-      return `保存された場所 (${locations.length}件):\n${lines.join("\n")}`;
+      let result = `保存された場所 (${locations.length}/${totalCount}件):\n${lines.join("\n")}`;
+      if (wasLimited) {
+        result += `\n\n※ ${totalCount - limit}件省略。type_filterで絞り込むか、limitを増やしてください。`;
+      }
+      return result;
     }
 
     case "forget_location": {
