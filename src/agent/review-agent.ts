@@ -48,7 +48,6 @@ const C = {
 };
 
 class ReviewAgent {
-  private lastReviewedLine: number = 0;
   private isRunning: boolean = false;
 
   async start(): Promise<void> {
@@ -80,38 +79,29 @@ class ReviewAgent {
   private async reviewCycle(): Promise<void> {
     console.log(`${PREFIX} ${C.cyan}=== Starting Review Cycle ===${C.reset}`);
 
-    // 1. 掲示板を読む
+    // 1. 掲示板の最新200行を読む
     const logs = this.readBoardLogs();
     if (!logs || logs.length < MIN_LOG_LINES) {
       console.log(`${PREFIX} Not enough logs to analyze (${logs?.length || 0} lines)`);
       return;
     }
 
-    // 2. 新しいログだけ抽出
-    const newLogs = logs.slice(this.lastReviewedLine);
-    if (newLogs.length < MIN_LOG_LINES) {
-      console.log(`${PREFIX} Not enough new logs (${newLogs.length} lines since last review)`);
-      return;
-    }
+    console.log(`${PREFIX} Analyzing ${logs.length} recent log lines...`);
 
-    console.log(`${PREFIX} Analyzing ${newLogs.length} new log lines...`);
-
-    // 3. パターン分析
-    const analysis = await this.analyzePatterns(newLogs.join("\n"));
+    // 2. パターン分析
+    const analysis = await this.analyzePatterns(logs.join("\n"));
     if (!analysis) {
       console.log(`${PREFIX} No patterns detected`);
-      this.lastReviewedLine = logs.length;
       return;
     }
 
-    // 4. ルール生成・保存
+    // 3. ルール生成・保存
     if (analysis.newRules && analysis.newRules.length > 0) {
       console.log(`${PREFIX} ${C.green}Generated ${analysis.newRules.length} new rules${C.reset}`);
       await this.saveRules(analysis.newRules);
       this.logReview(analysis);
     }
 
-    this.lastReviewedLine = logs.length;
     console.log(`${PREFIX} ${C.cyan}=== Review Cycle Complete ===${C.reset}`);
   }
 
@@ -121,7 +111,10 @@ class ReviewAgent {
         return null;
       }
       const content = fs.readFileSync(BOARD_FILE, "utf-8");
-      return content.split("\n").filter(line => line.trim());
+      const lines = content.split("\n").filter(line => line.trim());
+      // Only return last 200 lines to avoid overwhelming analysis
+      const MAX_LINES = 200;
+      return lines.slice(-MAX_LINES);
     } catch (e) {
       console.error(`${PREFIX} Failed to read board:`, e);
       return null;
@@ -140,7 +133,9 @@ class ReviewAgent {
 
     const prompt = `あなたはMinecraftエージェントの行動分析AIです。
 
-## 既存ルール
+## ★重要: 既存ルール（${existingRules.rules.length}件）
+以下のルールは既に登録済みです。**これらと重複・類似するルールは絶対に生成しないでください**。
+
 ${existingRulesSummary || "(なし)"}
 
 ## 行動ログ
@@ -149,7 +144,7 @@ ${logContent.slice(-15000)}  // 最新15000文字
 \`\`\`
 
 ## タスク
-ログを分析し、以下を特定してください：
+ログを分析し、**既存ルールでカバーされていない**新しい問題パターンを特定してください：
 
 1. **非効率パターン**: 同じ失敗の繰り返し、無駄な行動
 2. **成功パターン**: うまくいった行動シーケンス
@@ -164,7 +159,7 @@ ${logContent.slice(-15000)}  // 最新15000文字
   ],
   "newRules": [
     {
-      "category": "movement|crafting|combat|resource|infrastructure|safety",
+      "category": "movement|crafting|combat|resource|infrastructure|safety|storage",
       "pattern": "このルールが適用される状況",
       "rule": "推奨される行動（具体的に）",
       "priority": "high|medium|low"
@@ -174,18 +169,19 @@ ${logContent.slice(-15000)}  // 最新15000文字
 }
 \`\`\`
 
-注意:
-- 既存ルールと重複するものは生成しない
+## 重要な制約
+- **既存ルールと意味的に重複するものは生成禁止**（表現が違っても同じ内容ならNG）
 - 具体的で実行可能なルールにする
-- 1-3個の重要なルールに絞る
+- **本当に新しい知見のみ**1-3個に絞る
 - パターンが見つからなければ空配列を返す
-- **松明・光レベル・暗闘に関するルールは生成しない**（エージェントは光を気にしない）`;
+- 松明・光レベルに関するルールは不要（エージェントは光を気にしない）
+- 既存ルールで十分カバーされている場合は newRules: [] を返す`;
 
     try {
       const result = query({
         prompt,
         options: {
-          model: "claude-sonnet-4-20250514",
+          model: "claude-opus-4-5-20251101",
           maxTurns: 1,
           tools: [],
         },
@@ -246,12 +242,31 @@ ${logContent.slice(-15000)}  // 最新15000文字
   private async saveRules(newRules: OptimizationRule[]): Promise<void> {
     const existing = this.loadRules();
 
-    // 重複チェック（同じruleテキストは追加しない）
-    const uniqueNewRules = newRules.filter(newRule =>
-      !existing.rules.some(existingRule =>
-        existingRule.rule.toLowerCase() === newRule.rule.toLowerCase()
-      )
-    );
+    // 重複チェック（類似ルールも除外）
+    const uniqueNewRules = newRules.filter(newRule => {
+      const newRuleLower = newRule.rule.toLowerCase();
+      const newRuleWords = new Set(newRuleLower.split(/\s+/).filter(w => w.length > 3));
+
+      return !existing.rules.some(existingRule => {
+        const existingLower = existingRule.rule.toLowerCase();
+
+        // 完全一致チェック
+        if (existingLower === newRuleLower) return true;
+
+        // 同じカテゴリで単語の重複が多い場合は類似と判定
+        if (existingRule.category === newRule.category) {
+          const existingWords = new Set(existingLower.split(/\s+/).filter(w => w.length > 3));
+          const overlap = [...newRuleWords].filter(w => existingWords.has(w)).length;
+          const similarity = overlap / Math.max(newRuleWords.size, existingWords.size);
+          if (similarity > 0.5) {
+            console.log(`${PREFIX} Skipping similar rule: "${newRule.rule}" (similar to "${existingRule.rule}")`);
+            return true;
+          }
+        }
+
+        return false;
+      });
+    });
 
     if (uniqueNewRules.length === 0) {
       console.log(`${PREFIX} No unique new rules to add`);

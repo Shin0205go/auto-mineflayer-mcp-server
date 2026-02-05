@@ -10,7 +10,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { botManager } from "./bot-manager.js";
 import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
-import { learningTools, handleLearningTool } from "./tools/learning.js";
+import { learningTools, handleLearningTool, getAgentSkill } from "./tools/learning.js";
 import { appendFileSync, readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -163,11 +163,12 @@ const INFORMATIONAL_TOOLS = [
   "minecraft_get_status",
   "minecraft_get_position",
   "minecraft_get_inventory",
-  "minecraft_get_events",
   "minecraft_look_around",
   "minecraft_get_entities",
   "minecraft_find_entities",   // "No cow found" is valid info, not an error
   "minecraft_find_block",      // "No oak_log found" is valid info, not an error
+  "minecraft_craft",           // Missing materials is info, not error
+  "minecraft_smelt",           // Missing furnace/fuel is info, not error
   "agent_board_read",
   "get_recent_experiences",
   "get_skills",
@@ -239,6 +240,7 @@ botManager.on("gameEvent", (username: string, event: { type: string; message: st
   const json = JSON.stringify(notification);
 
   // Broadcast to all connections that own or are subscribed to this bot
+  let sentCount = 0;
   activeConnections.forEach((ws) => {
     if (ws.readyState === WebSocket.OPEN) {
       const botUsername = connectionBots.get(ws);
@@ -246,9 +248,13 @@ botManager.on("gameEvent", (username: string, event: { type: string; message: st
       const isSubscribed = subscriptions?.has(username) || false;
       if (botUsername === username || isSubscribed) {
         ws.send(json);
+        sentCount++;
       }
     }
   });
+  if (sentCount > 0) {
+    console.log(`[MCP-WS-Server] Pushed ${event.type} event for ${username} to ${sentCount} clients`);
+  }
 });
 
 // Tool definitions
@@ -301,16 +307,6 @@ const tools = {
       properties: { clear: { type: "boolean", default: true } },
     },
   },
-  minecraft_get_events: {
-    description: "Get recent game events (damage, item pickup, hostile spawns, etc.)",
-    inputSchema: {
-      type: "object",
-      properties: {
-        clear: { type: "boolean", default: true, description: "Clear events after reading" },
-        last_n: { type: "number", description: "Only get last N events" },
-      },
-    },
-  },
   minecraft_get_surroundings: {
     description: "詳細な周囲情報を取得。移動可能方向、光レベル、時刻、天気、危険（溶岩/敵）、近くの資源（座標付き）、動物など。状況判断に重要！",
     inputSchema: { type: "object", properties: {} },
@@ -321,7 +317,7 @@ const tools = {
       type: "object",
       properties: {
         block_name: { type: "string", description: "Block to find (e.g., 'oak_planks', 'stone', 'iron_ore')" },
-        max_distance: { type: "number", default: 10 },
+        max_distance: { type: "number", default: 64, description: "Search radius (default: 64)" },
       },
       required: ["block_name"],
     },
@@ -331,7 +327,7 @@ const tools = {
     inputSchema: {
       type: "object",
       properties: {
-        max_distance: { type: "number", description: "Search radius (default: 32)" },
+        max_distance: { type: "number", description: "Search radius (default: 64)" },
       },
     },
   },
@@ -467,7 +463,7 @@ const tools = {
     inputSchema: {
       type: "object",
       properties: {
-        range: { type: "number", default: 16 },
+        range: { type: "number", default: 32, description: "Detection range (default: 32)" },
         type: { type: "string", enum: ["all", "hostile", "passive", "player"] },
       },
     },
@@ -502,12 +498,11 @@ const tools = {
     },
   },
   minecraft_pillar_up: {
-    description: "Jump and place blocks below to climb up continuously. Auto-digs obstacles above and auto-equips pickaxe. Use for escaping caves, climbing cliffs, or reaching heights. Uses cobblestone/dirt/stone from inventory.",
+    description: "Jump and place blocks below to climb up. Uses cobblestone/dirt/stone from inventory. Max 20 blocks.",
     inputSchema: {
       type: "object",
       properties: {
-        height: { type: "number", default: 10, description: "How many blocks to go up (default: 10, max recommended: 50)" },
-        untilSky: { type: "boolean", default: false, description: "Keep going up until reaching open sky (ignores height, great for escaping deep caves)" },
+        height: { type: "number", default: 5, description: "How many blocks to go up (default: 5, max: 20)" },
       },
     },
   },
@@ -516,7 +511,7 @@ const tools = {
     inputSchema: {
       type: "object",
       properties: {
-        direction: { type: "string", enum: ["north", "south", "east", "west", "down"], description: "Direction to dig (for up, use minecraft_pillar_up)" },
+        direction: { type: "string", enum: ["north", "south", "east", "west", "down", "up"], description: "Direction to dig (for up, use minecraft_pillar_up)" },
         length: { type: "number", default: 10, description: "How many blocks to dig (default: 10)" },
       },
       required: ["direction"],
@@ -531,8 +526,26 @@ const tools = {
       },
     },
   },
+  minecraft_fish: {
+    description: "Fish using a fishing rod. Great for getting food (cod, salmon) and treasure (enchanted books, bows). Requires: fishing rod (3 sticks + 2 string) and nearby water.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        duration: { type: "number", default: 30, description: "How long to fish in seconds (default: 30)" },
+      },
+    },
+  },
+  minecraft_trade_villager: {
+    description: "Trade with a nearby villager or wandering trader. Without tradeIndex, lists available trades. With tradeIndex, executes that trade.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tradeIndex: { type: "number", description: "Index of trade to execute (0-based). Omit to list trades." },
+      },
+    },
+  },
   minecraft_respawn: {
-    description: "Intentionally die and respawn. Use when situation is HOPELESS: stuck underground with no food, very low HP, no escape route. Loses all inventory but gets fresh start at spawn!",
+    description: "LAST RESORT ONLY! Intentionally die and respawn. Use ONLY when: HP <= 2 (1 heart) AND no food AND no escape possible. Loses ALL inventory! Try eating, fleeing, or pillar_up first.",
     inputSchema: {
       type: "object",
       properties: {
@@ -550,7 +563,7 @@ const tools = {
       type: "object",
       properties: {
         entity_type: { type: "string", description: "Filter by entity type (e.g., 'sheep', 'cow', 'zombie')" },
-        max_distance: { type: "number", default: 32, description: "Search radius in blocks" },
+        max_distance: { type: "number", default: 64, description: "Search radius in blocks (default: 64)" },
       },
     },
   },
@@ -561,9 +574,119 @@ const tools = {
       properties: {
         target_biome: { type: "string", description: "Biome to find (e.g., 'plains', 'forest', 'desert')" },
         direction: { type: "string", enum: ["north", "south", "east", "west", "random"], default: "random" },
-        max_blocks: { type: "number", default: 200, description: "Maximum distance to explore" },
+        max_blocks: { type: "number", default: 256, description: "Maximum distance to explore (default: 256)" },
       },
       required: ["target_biome"],
+    },
+  },
+  minecraft_list_recipes: {
+    description: "Get all craftable item recipes by category. Use this to learn what you can make in Minecraft. Categories: tools, weapons, armor, basics, food, building",
+    inputSchema: {
+      type: "object",
+      properties: {
+        category: { type: "string", description: "Filter by category: tools, weapons, armor, basics, food, building (omit for all)" },
+      },
+    },
+  },
+  minecraft_list_craftable: {
+    description: "Check what you can craft RIGHT NOW with current inventory. Shows: (1) items you can craft immediately, (2) items you're 1 material away from crafting. Use this to decide what to make next!",
+    inputSchema: { type: "object", properties: {} },
+  },
+  minecraft_list_chest: {
+    description: "Check what's in nearest chest. Use after respawn to see what you saved, or before crafting to check materials.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  minecraft_store_in_chest: {
+    description: "Store items in a chest. WHEN TO USE: (1) After crafting backup tools - store spares, (2) After mining ores/ingots - store what you don't need now, (3) Before going far from base, (4) Before fighting mobs, (5) Before going underground. TIP: Craft chest (8 planks) near spawn first!",
+    inputSchema: {
+      type: "object",
+      properties: {
+        item_name: { type: "string", description: "Item to store (e.g., 'iron_ingot', 'diamond', 'stone_pickaxe')" },
+        count: { type: "number", description: "How many to store (default: all)" },
+      },
+      required: ["item_name"],
+    },
+  },
+  minecraft_take_from_chest: {
+    description: "Take items from chest. Use after respawn to get back your stored tools! Also use when you need a specific item for crafting.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        item_name: { type: "string", description: "Item to take (e.g., 'stone_pickaxe', 'food')" },
+        count: { type: "number", description: "How many to take (default: all)" },
+      },
+      required: ["item_name"],
+    },
+  },
+  // === Additional Mineflayer API Tools ===
+  minecraft_wake: {
+    description: "Wake up from bed. Use when bot is sleeping and you need to act.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  minecraft_elytra_fly: {
+    description: "Start elytra flying. Must be falling/gliding with elytra equipped. Use firework rockets for boost.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  minecraft_mount: {
+    description: "Mount an entity (horse, donkey, pig, boat, minecart). Entity must be within 5 blocks.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entity_name: { type: "string", description: "Entity to mount (e.g., 'horse', 'boat'). If omitted, mounts nearest mountable." },
+      },
+    },
+  },
+  minecraft_dismount: {
+    description: "Dismount from current vehicle (horse, boat, minecart, etc.)",
+    inputSchema: { type: "object", properties: {} },
+  },
+  minecraft_activate_block: {
+    description: "Activate a block (button, lever, door, trapdoor, gate, etc.). Right-click action.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        x: { type: "number", description: "Block X coordinate" },
+        y: { type: "number", description: "Block Y coordinate" },
+        z: { type: "number", description: "Block Z coordinate" },
+      },
+      required: ["x", "y", "z"],
+    },
+  },
+  minecraft_enchant: {
+    description: "Enchant an item using enchanting table. Requires lapis lazuli and XP levels.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        item_name: { type: "string", description: "Item to enchant (e.g., 'diamond_sword', 'iron_pickaxe')" },
+        level: { type: "number", default: 1, description: "Enchantment level (1-3)" },
+      },
+      required: ["item_name"],
+    },
+  },
+  minecraft_use_anvil: {
+    description: "Use anvil to repair, combine, or rename items. Costs XP levels.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target_item: { type: "string", description: "Item to repair/rename (e.g., 'diamond_pickaxe')" },
+        material_item: { type: "string", description: "Material for repair (e.g., 'diamond') or item to combine" },
+        new_name: { type: "string", description: "New name for the item (optional)" },
+      },
+      required: ["target_item"],
+    },
+  },
+  minecraft_update_sign: {
+    description: "Write text on a sign. Sign must be within 4 blocks. Use newlines to separate lines.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        x: { type: "number", description: "Sign X coordinate" },
+        y: { type: "number", description: "Sign Y coordinate" },
+        z: { type: "number", description: "Sign Z coordinate" },
+        text: { type: "string", description: "Text to write (use newlines for multiple lines)" },
+        back: { type: "boolean", default: false, description: "Write on back of sign (1.20+)" },
+      },
+      required: ["x", "y", "z", "text"],
     },
   },
   // Dev Agent tools
@@ -625,7 +748,12 @@ async function handleTool(
       if (botManager.isConnected(botUsername)) {
         connectionBots.set(ws, botUsername);
         console.error(`[MCP-WS-Server] Reconnected WebSocket to existing bot: ${botUsername}`);
-        return `Reconnected to existing bot ${botUsername}`;
+
+        // Ensure viewer is running for this bot
+        const viewerPort = botManager.getViewerPort(botUsername) || botManager.startViewer(botUsername);
+        const viewerInfo = viewerPort ? ` (viewer: http://localhost:${viewerPort})` : "";
+
+        return `Reconnected to existing bot ${botUsername}${viewerInfo}`;
       }
 
       const result = await botManager.connect({ host, port, username: botUsername, version });
@@ -675,29 +803,25 @@ async function handleTool(
       return JSON.stringify(messages);
     }
 
-    case "minecraft_get_events": {
-      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      const clear = args.clear !== false;
-      const lastN = args.last_n as number | undefined;
-      const events = botManager.getGameEvents(username, clear, lastN);
-      if (events.length === 0) {
-        return "No recent events";
-      }
-      return events.map(e => {
-        const time = new Date(e.timestamp).toLocaleTimeString("ja-JP");
-        return `[${time}] ${e.type}: ${e.message}`;
-      }).join("\n");
-    }
-
     case "minecraft_get_surroundings": {
-      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      if (!username) {
+        // Try to find any connected bot
+        const connectedBots = botManager.getAllBots();
+        if (connectedBots.length === 0) {
+          throw new Error("Not connected. Call minecraft_connect first.");
+        }
+        // Use the first connected bot
+        const botUsername = connectedBots[0];
+        connectionBots.set(ws, botUsername);
+        return botManager.getSurroundings(botUsername);
+      }
       return botManager.getSurroundings(username);
     }
 
     case "minecraft_find_block": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       const blockName = args.block_name as string;
-      const maxDistance = (args.max_distance as number) || 10;
+      const maxDistance = (args.max_distance as number) || 64;
       return botManager.findBlock(username, blockName, maxDistance);
     }
 
@@ -741,12 +865,26 @@ async function handleTool(
 
     case "minecraft_craft": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      return await botManager.craftItem(username, args.item_name as string, (args.count as number) || 1);
+      try {
+        return await botManager.craftItem(username, args.item_name as string, (args.count as number) || 1);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        const inventory = botManager.getInventory(username);
+        const inventoryStr = inventory.map(item => `${item.name}(${item.count})`).join(", ");
+        return `Cannot craft ${args.item_name}: ${errorMsg}. Inventory: ${inventoryStr}`;
+      }
     }
 
     case "minecraft_smelt": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      return await botManager.smeltItem(username, args.item_name as string, (args.count as number) || 1);
+      try {
+        return await botManager.smeltItem(username, args.item_name as string, (args.count as number) || 1);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        const inventory = botManager.getInventory(username);
+        const inventoryStr = inventory.map(item => `${item.name}(${item.count})`).join(", ");
+        return `Cannot smelt ${args.item_name}: ${errorMsg}. Inventory: ${inventoryStr}`;
+      }
     }
 
     case "minecraft_sleep": {
@@ -805,7 +943,7 @@ async function handleTool(
 
     case "minecraft_get_nearby_entities": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      const range = (args.range as number) || 16;
+      const range = (args.range as number) || 32;
       const type = (args.type as string) || "all";
       return botManager.getNearbyEntities(username, range, type);
     }
@@ -829,15 +967,14 @@ async function handleTool(
 
     case "minecraft_pillar_up": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      const height = (args.height as number) || 1;
-      const untilSky = (args.untilSky as boolean) || false;
-      return await botManager.pillarUp(username, height, untilSky);
+      const height = (args.height as number) || 5;
+      return await botManager.pillarUp(username, height);
     }
 
     case "minecraft_tunnel": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
-      const direction = args.direction as "north" | "south" | "east" | "west" | "down";
-      if (direction === "up" as string) {
+      const direction = args.direction as "north" | "south" | "east" | "west" | "down" | "up";
+      if (direction === "up") {
         throw new Error("For going up, use minecraft_pillar_up instead of tunnel.");
       }
       const length = (args.length as number) || 10;
@@ -848,6 +985,18 @@ async function handleTool(
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       const distance = (args.distance as number) || 20;
       return await botManager.flee(username, distance);
+    }
+
+    case "minecraft_fish": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const duration = (args.duration as number) || 30;
+      return await botManager.fish(username, duration);
+    }
+
+    case "minecraft_trade_villager": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const tradeIndex = args.tradeIndex as number | undefined;
+      return await botManager.tradeWithVillager(username, tradeIndex);
     }
 
     case "minecraft_respawn": {
@@ -864,7 +1013,7 @@ async function handleTool(
     case "minecraft_find_entities": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       const entityType = args.entity_type as string | undefined;
-      const maxDistance = (args.max_distance as number) || 32;
+      const maxDistance = (args.max_distance as number) || 64;
       return botManager.findEntities(username, entityType, maxDistance);
     }
 
@@ -872,8 +1021,38 @@ async function handleTool(
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       const targetBiome = args.target_biome as string;
       const direction = (args.direction as "north" | "south" | "east" | "west" | "random") || "random";
-      const maxBlocks = (args.max_blocks as number) || 200;
+      const maxBlocks = (args.max_blocks as number) || 256;
       return await botManager.exploreForBiome(username, targetBiome, direction, maxBlocks);
+    }
+
+    case "minecraft_list_recipes": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const category = args.category as string | undefined;
+      return await botManager.listAllRecipes(username, category);
+    }
+
+    case "minecraft_list_craftable": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return await botManager.listCraftableNow(username);
+    }
+
+    case "minecraft_list_chest": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return await botManager.listChest(username);
+    }
+
+    case "minecraft_store_in_chest": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const itemName = args.item_name as string;
+      const count = args.count as number | undefined;
+      return await botManager.storeInChest(username, itemName, count);
+    }
+
+    case "minecraft_take_from_chest": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const itemName = args.item_name as string;
+      const count = args.count as number | undefined;
+      return await botManager.takeFromChest(username, itemName, count);
     }
 
     // Dev Agent tools
@@ -928,16 +1107,72 @@ async function handleTool(
       return "Tool logs cleared";
     }
 
+    // === Additional Mineflayer API Tools ===
+    case "minecraft_wake": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return await botManager.wake(username);
+    }
+
+    case "minecraft_elytra_fly": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return await botManager.elytraFly(username);
+    }
+
+    case "minecraft_mount": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return await botManager.mount(username, args.entity_name as string | undefined);
+    }
+
+    case "minecraft_dismount": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return await botManager.dismount(username);
+    }
+
+    case "minecraft_activate_block": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const x = args.x as number;
+      const y = args.y as number;
+      const z = args.z as number;
+      return await botManager.activateBlock(username, x, y, z);
+    }
+
+    case "minecraft_enchant": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const itemName = args.item_name as string;
+      const level = (args.level as number) || 1;
+      return await botManager.enchant(username, itemName, level);
+    }
+
+    case "minecraft_use_anvil": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const targetItem = args.target_item as string;
+      const materialItem = args.material_item as string | undefined;
+      const newName = args.new_name as string | undefined;
+      return await botManager.useAnvil(username, targetItem, materialItem, newName);
+    }
+
+    case "minecraft_update_sign": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const x = args.x as number;
+      const y = args.y as number;
+      const z = args.z as number;
+      const text = args.text as string;
+      const back = (args.back as boolean) || false;
+      return await botManager.updateSign(username, x, y, z, text, back);
+    }
+
     // === 自己学習ツール ===
     case "log_experience":
     case "get_recent_experiences":
     case "reflect_and_learn":
-    case "save_skill":
-    case "get_skills":
+    case "save_rule":
+    case "get_rules":
     case "get_reflection_insights":
     case "remember_location":
     case "recall_locations":
-    case "forget_location": {
+    case "forget_location":
+    case "list_agent_skills":
+    case "get_agent_skill": {
       return await handleLearningTool(name, args);
     }
 

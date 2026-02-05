@@ -47,68 +47,49 @@ export interface AgentResult {
   };
 }
 
-const DEFAULT_SYSTEM_INSTRUCTION = `あなたはMinecraftを自律的に操作するAIエージェント「Claude」です。
+const DEFAULT_SYSTEM_INSTRUCTION = `Minecraftサバイバルエージェント。自律的に行動。
 
-## 利用可能なツール（MCP経由）
+## 利用可能スキル（get_agent_skill で詳細取得可能）
 
-### 接続・移動
-- minecraft_connect: サーバーに接続
-- minecraft_disconnect: 切断
-- minecraft_get_position: 現在位置を確認
-- minecraft_move_to: 指定座標に歩いて移動
+| 状況 | 推奨スキル |
+|------|-----------|
+| 夜を安全に過ごしたい | bed-crafting |
+| 鉄を効率的に掘りたい | iron-mining |
+| ダイヤを掘りたい | diamond-mining |
+| ネザーに行きたい | nether-gate → nether-fortress |
+| 装備を強化したい | enchanting, potion-brewing |
+| 自動化したい | auto-farm, iron-golem-trap, mob-farm |
+| 村人と取引したい | villager-trading |
+| レッドストーン回路 | redstone-basics |
+| エンドラ討伐 | ender-dragon |
 
-### 状況確認（重要！毎ループ呼ぶ）
-- minecraft_get_surroundings: **最重要！** 周囲の詳細情報（移動方向、危険、資源座標、敵、動物）
-- minecraft_get_status: HP/空腹度を確認
-- minecraft_get_events: ダメージ、敵スポーン等のイベントを取得
-- minecraft_get_inventory: 持ち物確認
+詳細が必要なら: get_agent_skill { skill_name: "スキル名" }
 
-### サバイバル
-- minecraft_dig_block: ブロックを掘る
-- minecraft_place_block: ブロックを置く
-- minecraft_collect_items: 近くのアイテムを拾う
-- minecraft_get_inventory: インベントリを確認
-- minecraft_craft: アイテムをクラフト
-- minecraft_eat: 食べ物を食べる（空腹時に重要！）
-- minecraft_equip_item: アイテムを装備
+## 基本ルール
 
-### 戦闘
-- minecraft_fight: 敵と戦う（自動装備・攻撃・HP低下時逃走）
+### 毎ターン最初に
+1. minecraft_get_surroundings で状況確認
+2. minecraft_get_status でHP・空腹確認
+3. minecraft_get_inventory で所持品確認
 
-### コミュニケーション
-- minecraft_chat: チャットを送信
-- agent_board_read/write: 掲示板で他エージェントと連携
+### 優先順位
+1. **生存**: HP低い→食事/逃走、溺れ→上へ移動
+2. **食料確保**: 空腹10以下→動物狩り/農作物
+3. **装備強化**: 木→石→鉄→ダイヤ
+4. **インフラ**: 拠点、農場、かまど
 
-### 自己学習（重要！）
-- log_experience: 重要な行動の結果を記録（成功・失敗問わず）
-- get_recent_experiences: 過去の経験を振り返る
-- reflect_and_learn: 経験からパターンを分析、改善点を抽出
-- save_skill: 成功した手順をスキルとして保存
-- get_skills: 保存したスキルを参照
+### 緊急時（最優先）
+- **HP5以下** → 即逃走、食事
+- **溺れ中** → pillar_up または上へ泳ぐ
+- **敵に囲まれた** → flee → 安全確保後に食事
 
-### 場所記憶（重要！）
-- remember_location: **作業台・かまど・チェスト・拠点を設置したら必ず記憶！**
-- recall_locations: 保存した場所を思い出す（タイプや距離でフィルタ可能）
-- forget_location: 不要な場所を削除
+## 禁止事項
+- 接続エラー時に別名を試さない
+- HP低い状態で採掘継続しない
+- 食料0で探索に出ない
 
-## 行動ルール
-1. 接続は最初に一度だけ
-2. **毎ターン最初にminecraft_get_surroundingsを呼ぶ！** 周囲状況を把握してから行動
-3. minecraft_get_statusでHP/空腹を確認
-4. 空腹度が低い（6以下）なら食べ物を食べる
-5. HPが低い（10以下）なら安全な場所へ避難
-6. 敵を見つけたらminecraft_fightで戦うか逃げる
-7. 移動は歩いて行う（/tpコマンド禁止）
-8. **同じアプローチで3回失敗したら別の方法を試す！**
-9. **重要な行動後はlog_experienceで記録！** 成功も失敗も学びになる
-10. **10ループごとにreflect_and_learnで振り返り！**
-11. **作業台・かまど・チェスト設置後は必ずremember_location！** 場所を忘れない
+出力: 簡潔に。`;
 
-## 協調のヒント
-- agent_board_readで他エージェントのメッセージを確認
-- agent_board_writeで自分の状況や計画を共有
-
-自律的に探索、採掘、建築を行い、サバイバルしてください。`;
 
 // Content block types
 interface TextBlock {
@@ -144,9 +125,9 @@ export class ClaudeClient extends EventEmitter {
   constructor(config: ClaudeConfig = {}) {
     super();
     this.config = {
-      model: "claude-sonnet-4-20250514",
+      model: "claude-opus-4-6",
       systemInstruction: DEFAULT_SYSTEM_INSTRUCTION,
-      maxTurns: 100,
+      maxTurns: 50,
       mcpServerUrl: "ws://localhost:8765",
       agentName: "Claude",
       ...config,
@@ -234,6 +215,9 @@ export class ClaudeClient extends EventEmitter {
       model: this.config.model,
       systemPrompt: this.config.systemInstruction,
       maxTurns: this.config.maxTurns,
+
+      // Load skills from project directory
+      settingSources: ["project"],
 
       // Bypass permissions for MCP tools
       permissionMode: "bypassPermissions",

@@ -108,7 +108,7 @@ class ClaudeAgent {
 
   constructor() {
     this.claude = new ClaudeClient({
-      maxTurns: 100,
+      maxTurns: 50,
       mcpServerUrl: MCP_WS_URL,
     });
 
@@ -136,61 +136,38 @@ class ClaudeAgent {
 
     this.isRunning = true;
 
-    // Load Minecraft skill knowledge
-    let minecraftKnowledge = "";
-    try {
-      const skillPath = join(projectRoot, ".claude", "skills", "minecraft-survival", "SKILL.md");
-      minecraftKnowledge = readFileSync(skillPath, "utf-8");
-    } catch {
-      console.log(`${PREFIX} Warning: Could not load minecraft-survival.md skill`);
-    }
-
-    // Load learned optimization rules
+    // Load learned optimization rules (high priority only, max 30)
     let learnedRules = "";
     try {
       const rulesPath = join(projectRoot, "learning", "rules.json");
       const rulesData = JSON.parse(readFileSync(rulesPath, "utf-8"));
       if (rulesData.rules && rulesData.rules.length > 0) {
-        learnedRules = rulesData.rules
-          .sort((a: any, b: any) => {
-            const priority: Record<string, number> = { high: 0, medium: 1, low: 2 };
-            return (priority[a.priority] || 2) - (priority[b.priority] || 2);
-          })
-          .map((r: any) => `- [${r.priority}] ${r.rule}`)
-          .join("\n");
-        console.log(`${PREFIX} Loaded ${rulesData.rules.length} optimization rules`);
+        const MAX_RULES = 30;
+        const filteredRules = rulesData.rules
+          .filter((r: any) => r.priority === "high")
+          .slice(0, MAX_RULES);
+
+        if (filteredRules.length > 0) {
+          learnedRules = filteredRules
+            .map((r: any) => `- ${r.rule}`)
+            .join("\n");
+          console.log(`${PREFIX} Loaded ${filteredRules.length} high-priority rules`);
+        }
       }
     } catch {
       // Rules file doesn't exist yet - that's fine
     }
 
-    // Initial prompt with Minecraft knowledge
-    const initialPrompt = `あなたはMinecraftサバイバルモードで自律的にプレイするAIエージェントです。
+    // Initial prompt - simple autonomous mode
+    const initialPrompt = `接続: host=${MC_HOST}, port=${MC_PORT}, username=${BOT_USERNAME}（変更禁止）
 
-## Minecraft基本知識
-${minecraftKnowledge}
+起動手順:
+1. minecraft_connect → 接続エラー時は minecraft_get_surroundings で確認
+2. minecraft_get_inventory, minecraft_get_surroundings, minecraft_get_status で状況把握
+3. recall_locations で記憶済みの場所確認
 
-## 接続情報
-- host: ${MC_HOST}
-- port: ${MC_PORT}
-- username: ${BOT_USERNAME}
-
-## サバイバルの基本
-1. 道具を作る（木→石→鉄→ダイヤ）
-2. 食料を確保する
-3. 夜に備える（ベッドまたは拠点）
-4. 装備を強化する
-
-## 最適化ルール（過去の学習から）
-${learnedRules || "（まだルールなし）"}
-
-## 最終目標
-エンダードラゴンを倒す
-
-## 指示
-1. minecraft_connect で接続（username: "${BOT_USERNAME}"）
-2. agent_board_read で掲示板を確認
-3. 状況を判断して行動`;
+${learnedRules ? `## 学習ルール:\n${learnedRules}\n` : ""}
+状況を把握して、足りないものを優先して行動。`;
 
     console.log(`${PREFIX} Starting autonomous loop...`);
     await this.runLoop(initialPrompt);
@@ -205,6 +182,7 @@ ${learnedRules || "（まだルールなし）"}
         loopCount++;
         console.log(`\n${PREFIX} ${C.cyan}=== Loop ${loopCount} ===${C.reset}`);
 
+        // Events are now injected per tool call via MCP Bridge
         const result = await this.claude.runQuery(currentPrompt);
 
         let loopSummary = "";
@@ -232,16 +210,9 @@ ${learnedRules || "（まだルールなし）"}
           loopSummary || `ループ${loopCount}完了`
         );
 
-        // Get buffered events from last loop
-        const eventSection = this.claude.formatEventsForPrompt();
-
-        // Next turn prompt - include events and encourage coordination
-        currentPrompt = `続けてください。
-
-${eventSection}
-
-状況を確認して、次に何をすべきか判断してください。
-掲示板に計画を書いてから行動。`;
+        // Next turn prompt - simple continuation
+        // Events are injected per tool call via MCP Bridge
+        currentPrompt = `続行。状況確認→行動。`;
 
         // Delay between turns
         await this.delay(5000);

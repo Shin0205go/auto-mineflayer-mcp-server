@@ -53,7 +53,7 @@ export async function handleEnvironmentTool(
 
   switch (name) {
     case "minecraft_check_infrastructure": {
-      const maxDistance = (_args.max_distance as number) || 32;
+      const maxDistance = (_args.max_distance as number) || 64;
       const results: string[] = [];
       const pos = botManager.getPosition(username);
 

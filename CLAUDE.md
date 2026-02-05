@@ -189,6 +189,112 @@ BOT_USERNAME=Claude    # ボット名（変更可能）
 MCP_WS_URL=ws://localhost:8765
 ```
 
+## イベントプッシュシステム
+
+WebSocket MCPサーバーはゲームイベントをクライアントにプッシュ配信する。
+
+### 発行されるイベント
+
+| イベント | 発生条件 | 優先度 |
+|---------|---------|--------|
+| `damaged` | ダメージを受けた | 高 |
+| `hostile_spawn` | 敵モブが20ブロック内にスポーン | 高 |
+| `death` | 死亡 | 高 |
+| `health_changed` | HP/空腹度変化 | 中 |
+| `time_night` | 夜になった（13000 tick） | 中 |
+| `time_dusk` | 夕暮れ（12000 tick） | 中 |
+| `time_dawn` | 夜明け（23000 tick） | 低 |
+| `entity_gone` | 敵モブが消滅 | 低 |
+| `block_broken` | 6ブロック内でブロック破壊 | 低 |
+| `item_collected` | アイテム拾得 | 低 |
+| `chat` | チャットメッセージ | 低 |
+| `heartbeat` | 5秒間イベントなし | 最低 |
+
+### イベント購読
+
+```javascript
+// WebSocket接続後
+await callTool("subscribe_events", { username: "BotName" });
+
+// イベント受信
+ws.on("message", (data) => {
+  const msg = JSON.parse(data);
+  if (msg.method === "notifications/gameEvent") {
+    const { username, event } = msg.params;
+    console.log(`[${username}] ${event.type}: ${event.message}`);
+  }
+});
+```
+
+## Mamba Agent（ローカルAI）
+
+Apple Silicon上でローカル動作するMamba2モデルを使用した軽量エージェント。
+**Claudeと同じ64個のMCPツールを使用**する。
+
+### 特徴
+
+- **同じMCPツール**: Claudeと同じツールセットを共有
+- **イベント駆動**: ポーリングではなくイベント受信で行動
+- **ローカル推論**: API不要、~0.3秒で判断
+- **日本語プロンプト**: Claudeと同じスタイル
+- **学習ルール共有**: `learning/rules.json`から読み込み
+
+### 起動
+
+```bash
+# 別プロジェクト
+cd /Users/shingo/Develop/mamba-agent
+./run.sh
+```
+
+### アーキテクチャ
+
+```
+┌──────────────────────────────────────────────┐
+│        MCP WebSocket Server (port 8765)       │
+│                                               │
+│    64 tools (両エージェント共通)               │
+│    - minecraft_dig_block                      │
+│    - minecraft_craft                          │
+│    - minecraft_fight                          │
+│    - agent_board_read/write                   │
+│    - ...                                      │
+└───────────┬───────────────────┬───────────────┘
+            │                   │
+   ┌────────▼────────┐ ┌────────▼────────┐
+   │  Claude Agent   │ │  Mamba Agent    │
+   │  (API)          │ │  (Local)        │
+   │                 │ │                 │
+   │  call_tool()    │ │  call_tool()    │
+   │  同じIF         │ │  同じIF         │
+   └─────────────────┘ └─────────────────┘
+```
+
+### 比較
+
+| 項目 | Claude Agent | Mamba Agent |
+|------|-------------|-------------|
+| 推論場所 | クラウドAPI | ローカルGPU |
+| MCPツール | 64個 | 64個（同じ） |
+| 駆動方式 | ループ | イベント駆動 |
+| 推論速度 | 2-5秒 | 0.3秒 |
+| コスト | API課金 | 電気代のみ |
+| 思考深度 | 深い戦略 | 即時反応 |
+| 学習ルール | あり | あり（共有） |
+| 掲示板 | 読み書き | 読み書き |
+
+### 今後の拡張
+
+```
+階層型エージェント構造:
+
+イベント → Mamba判定 → 重要？ ─Yes→ Claude起動（戦略）
+                         │
+                        No → Mamba自己処理（反射）
+```
+
+詳細は `/Users/shingo/Develop/mamba-agent/README.md` 参照。
+
 ## 注意事項
 
 - Minecraftサーバーでボットに`/op botname`が必要

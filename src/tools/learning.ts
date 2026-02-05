@@ -93,13 +93,13 @@ export const learningTools = {
     },
   },
 
-  save_skill: {
-    description: "成功した手順をスキルとして保存。再利用可能にする。",
+  save_rule: {
+    description: "成功した手順を学習ルールとして保存。再利用可能にする。",
     inputSchema: {
       type: "object" as const,
       properties: {
-        name: { type: "string", description: "スキル名（例: 'かまど作成'）" },
-        description: { type: "string", description: "スキルの説明" },
+        name: { type: "string", description: "ルール名（例: 'かまど作成'）" },
+        description: { type: "string", description: "ルールの説明" },
         steps: { type: "array", items: { type: "string" }, description: "手順リスト" },
         prerequisites: { type: "array", items: { type: "string" }, description: "前提条件" },
       },
@@ -107,12 +107,12 @@ export const learningTools = {
     },
   },
 
-  get_skills: {
-    description: "保存されたスキルを取得。",
+  get_rules: {
+    description: "保存された学習ルールを取得。",
     inputSchema: {
       type: "object" as const,
       properties: {
-        name_filter: { type: "string", description: "スキル名でフィルタ" },
+        name_filter: { type: "string", description: "ルール名でフィルタ" },
       },
     },
   },
@@ -162,6 +162,26 @@ export const learningTools = {
         name: { type: "string", description: "削除する場所の名前" },
       },
       required: ["name"],
+    },
+  },
+
+  // === Agent Skills ===
+  list_agent_skills: {
+    description: "利用可能なエージェントスキル一覧を取得。状況に応じて適切なスキルを選ぶ参考に。",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+
+  get_agent_skill: {
+    description: "指定したスキルの詳細を取得。スキルの知識に従って行動するために使用。",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        skill_name: { type: "string", description: "スキル名（例: 'iron-mining', 'food-hunting', 'combat-basics'）" },
+      },
+      required: ["skill_name"],
     },
   },
 };
@@ -480,6 +500,74 @@ export function forgetLocation(name: string): string {
   }
 }
 
+// === Agent Skills ===
+const SKILLS_DIR = path.join(process.cwd(), ".claude", "skills");
+
+interface AgentSkillInfo {
+  name: string;
+  description: string;
+}
+
+/**
+ * .claude/skills/ から利用可能なスキル一覧を取得
+ */
+export function listAgentSkills(): AgentSkillInfo[] {
+  if (!fs.existsSync(SKILLS_DIR)) {
+    return [];
+  }
+
+  const skills: AgentSkillInfo[] = [];
+  const dirs = fs.readdirSync(SKILLS_DIR, { withFileTypes: true });
+
+  for (const dir of dirs) {
+    if (!dir.isDirectory()) continue;
+
+    const skillPath = path.join(SKILLS_DIR, dir.name, "SKILL.md");
+    if (!fs.existsSync(skillPath)) continue;
+
+    try {
+      const content = fs.readFileSync(skillPath, "utf-8");
+      // YAML frontmatter から description を抽出
+      const yamlMatch = content.match(/^---\n([\s\S]*?)\n---/);
+      if (yamlMatch) {
+        const descMatch = yamlMatch[1].match(/description:\s*\|?\s*\n?\s*(.+?)(?:\n\s{2,}|$)/s);
+        const desc = descMatch ? descMatch[1].trim().split("\n")[0] : "";
+        skills.push({ name: dir.name, description: desc });
+      } else {
+        skills.push({ name: dir.name, description: "" });
+      }
+    } catch {
+      skills.push({ name: dir.name, description: "" });
+    }
+  }
+
+  return skills;
+}
+
+/**
+ * 指定したスキルの内容を取得
+ */
+export function getAgentSkill(skillName: string): string {
+  const skillPath = path.join(SKILLS_DIR, skillName, "SKILL.md");
+
+  if (!fs.existsSync(skillPath)) {
+    // 部分一致を試す
+    if (fs.existsSync(SKILLS_DIR)) {
+      const dirs = fs.readdirSync(SKILLS_DIR);
+      const match = dirs.find(d => d.includes(skillName) || skillName.includes(d));
+      if (match) {
+        const matchPath = path.join(SKILLS_DIR, match, "SKILL.md");
+        if (fs.existsSync(matchPath)) {
+          return fs.readFileSync(matchPath, "utf-8");
+        }
+      }
+    }
+    return `スキル「${skillName}」が見つかりません。list_agent_skills で一覧を確認してください。`;
+  }
+
+  return fs.readFileSync(skillPath, "utf-8");
+}
+
 /**
  * 学習ツールのハンドラー
  */
@@ -522,7 +610,7 @@ export async function handleLearningTool(
       return reflectAndLearn(focusArea);
     }
 
-    case "save_skill": {
+    case "save_rule": {
       return saveSkill({
         name: args.name as string,
         description: args.description as string,
@@ -531,15 +619,15 @@ export async function handleLearningTool(
       });
     }
 
-    case "get_skills": {
+    case "get_rules": {
       const nameFilter = args.name_filter as string | undefined;
-      const skills = getSkills(nameFilter);
+      const rules = getSkills(nameFilter);
 
-      if (skills.length === 0) {
-        return "保存されたスキルがありません。";
+      if (rules.length === 0) {
+        return "保存された学習ルールがありません。";
       }
 
-      const lines = skills.map(s =>
+      const lines = rules.map(s =>
         `## ${s.name} (使用${s.successCount}回)\n${s.description}\n手順:\n${s.steps.map((st, i) => `  ${i + 1}. ${st}`).join("\n")}`
       );
 
@@ -586,6 +674,21 @@ export async function handleLearningTool(
 
     case "forget_location": {
       return forgetLocation(args.name as string);
+    }
+
+    // === Agent Skills ===
+    case "list_agent_skills": {
+      const skills = listAgentSkills();
+      if (skills.length === 0) {
+        return "エージェントスキルがありません。";
+      }
+      const lines = skills.map(s => `- **${s.name}**: ${s.description}`);
+      return `利用可能なスキル (${skills.length}個):\n${lines.join("\n")}\n\n使用例: get_agent_skill { skill_name: "iron-mining" }`;
+    }
+
+    case "get_agent_skill": {
+      const skillName = args.skill_name as string;
+      return getAgentSkill(skillName);
     }
 
     default:

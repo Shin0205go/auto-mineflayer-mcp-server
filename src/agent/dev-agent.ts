@@ -674,7 +674,7 @@ ${buildError ? `
       const result = query({
         prompt,
         options: {
-          model: "claude-opus-4-20250514",
+          model: "claude-opus-4-5-20251101",
           maxTurns: 10,
           allowedTools: ["Read", "Edit", "Grep", "Glob"],
           permissionMode: "acceptEdits",
