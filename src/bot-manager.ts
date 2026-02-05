@@ -1754,27 +1754,21 @@ export class BotManager extends EventEmitter {
           reasons.push(`block has no collision shape`);
         }
 
-        // Check tool requirements based on block type
+        // Check tool requirements dynamically using registry
         const heldItem = bot.heldItem;
-        const needsStonePickaxe = ["copper_ore", "deepslate_copper_ore",
-          "lapis_ore", "deepslate_lapis_ore", "iron_ore", "deepslate_iron_ore"];
-        const needsIronPickaxe = ["gold_ore", "deepslate_gold_ore",
-          "emerald_ore", "deepslate_emerald_ore", "diamond_ore", "deepslate_diamond_ore",
-          "redstone_ore", "deepslate_redstone_ore"];
-        const needsDiamondPickaxe = ["obsidian", "ancient_debris", "crying_obsidian"];
+        const requiredTier = getRequiredPickaxeTier(bot, blockName);
 
-        if (needsDiamondPickaxe.some(b => blockName.includes(b))) {
-          if (!heldItem || !heldItem.name.match(/^(netherite|diamond)_pickaxe$/)) {
-            reasons.push(`requires diamond pickaxe or better (have: ${heldItem?.name || 'empty hand'})`);
+        if (requiredTier && heldItem) {
+          // Check if held pickaxe can harvest this block
+          if (heldItem.name.includes("pickaxe")) {
+            if (!canPickaxeHarvest(bot, blockName, heldItem.name)) {
+              reasons.push(`requires ${requiredTier} or better (have: ${heldItem.name})`);
+            }
+          } else {
+            reasons.push(`requires pickaxe (have: ${heldItem.name})`);
           }
-        } else if (needsIronPickaxe.some(b => blockName.includes(b))) {
-          if (!heldItem || heldItem.name === "wooden_pickaxe" || heldItem.name === "stone_pickaxe") {
-            reasons.push(`wrong tool equipped (${heldItem?.name || 'empty hand'}) - requires iron pickaxe or better`);
-          }
-        } else if (needsStonePickaxe.some(b => blockName.includes(b))) {
-          if (!heldItem || heldItem.name === "wooden_pickaxe") {
-            reasons.push(`requires stone pickaxe or better (have: ${heldItem?.name || 'empty hand'})`);
-          }
+        } else if (requiredTier && !heldItem) {
+          reasons.push(`requires ${requiredTier} (have: empty hand)`);
         }
 
         // If the only reason is distance or tool, we might still be able to dig
@@ -3456,26 +3450,30 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     }
 
     const bot = managed.bot;
-    const foods = [
-      "cooked_beef", "cooked_porkchop", "cooked_mutton", "cooked_chicken",
-      "cooked_rabbit", "cooked_salmon", "cooked_cod", "bread", "apple",
-      "golden_apple", "enchanted_golden_apple", "carrot", "baked_potato",
-      "beetroot", "melon_slice", "sweet_berries", "cookie", "pumpkin_pie",
-      "beef", "porkchop", "mutton", "chicken", "rabbit", "salmon", "cod",
-    ];
 
-    // Find food in inventory
+    // Find food in inventory using dynamic detection
     let foodItem = null;
     if (foodName) {
       foodItem = bot.inventory.items().find(item =>
         item.name.toLowerCase() === foodName.toLowerCase()
       );
     } else {
-      // Find best available food
-      for (const food of foods) {
-        foodItem = bot.inventory.items().find(item => item.name === food);
-        if (foodItem) break;
-      }
+      // Find all food items, prioritize by saturation (cooked > raw > other)
+      const allFoods = bot.inventory.items().filter(item => isFoodItem(bot, item.name));
+
+      // Sort by priority: cooked meats first, then bread/apples, then raw
+      allFoods.sort((a, b) => {
+        const getPriority = (name: string) => {
+          if (name.startsWith("cooked_")) return 0;
+          if (name === "golden_apple" || name === "enchanted_golden_apple") return 1;
+          if (name === "bread" || name === "baked_potato") return 2;
+          if (["apple", "carrot", "melon_slice"].includes(name)) return 3;
+          return 4; // raw or other foods
+        };
+        return getPriority(a.name) - getPriority(b.name);
+      });
+
+      foodItem = allFoods[0] || null;
     }
 
     if (!foodItem) {
@@ -4036,9 +4034,16 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       lines.push(`Rainfall: ${biome.rainfall}`);
     }
 
-    // Sheep spawn biomes hint
-    const sheepBiomes = ["plains", "sunflower_plains", "meadow", "forest", "birch_forest", "flower_forest", "snowy_plains", "snowy_taiga"];
-    if (sheepBiomes.some(b => biomeName.includes(b))) {
+    // Sheep spawn biomes hint - use pattern matching for grass/forest biomes
+    // Sheep spawn in grassy biomes with moderate temperature
+    const isSheepBiome = (name: string): boolean => {
+      const grassyPatterns = ["plains", "meadow", "forest", "taiga", "savanna", "grove"];
+      const excludePatterns = ["desert", "badlands", "ocean", "swamp", "jungle", "dark_forest"];
+      if (excludePatterns.some(p => name.includes(p))) return false;
+      return grassyPatterns.some(p => name.includes(p));
+    };
+
+    if (isSheepBiome(biomeName)) {
       lines.push("★ This biome can spawn sheep!");
     } else {
       lines.push(`Tip: Sheep spawn in plains, meadow, forest biomes. Try exploring in one direction.`);
@@ -4678,8 +4683,13 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
 
     const bot = managed.bot;
 
-    // Find mountable entity
-    const mountableEntities = ["horse", "donkey", "mule", "pig", "strider", "boat", "minecart"];
+    // Check if entity is mountable using pattern matching
+    // Includes: horses, donkeys, mules, pigs (with saddle), striders, boats, minecarts, camels, llamas
+    const isMountable = (name: string): boolean => {
+      const patterns = ["horse", "donkey", "mule", "pig", "strider", "boat", "minecart", "camel", "llama"];
+      return patterns.some(p => name.includes(p));
+    };
+
     const searchName = entityName?.toLowerCase();
 
     const entity = Object.values(bot.entities)
@@ -4692,7 +4702,7 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
         if (searchName) {
           return name.includes(searchName);
         }
-        return mountableEntities.some(m => name.includes(m));
+        return isMountable(name);
       })
       .sort((a, b) =>
         bot.entity.position.distanceTo(a.position) -
@@ -4700,7 +4710,7 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       )[0];
 
     if (!entity) {
-      const hint = entityName ? entityName : "horse, donkey, pig, boat, minecart";
+      const hint = entityName ? entityName : "horse, donkey, pig, boat, minecart, camel, llama";
       throw new Error(`No mountable entity (${hint}) found within 5 blocks.`);
     }
 
