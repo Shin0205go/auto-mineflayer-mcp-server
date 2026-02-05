@@ -4318,7 +4318,7 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     } catch {
       // Ignore if not digging
     }
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 150));
 
     // Auto-equip best pickaxe
     const pickaxePriority = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe", "wooden_pickaxe"];
@@ -4399,7 +4399,7 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
         // Horizontal: use pathfinder to move into the tunnel
         const goal = new goals.GoalBlock(nextX, nextY, nextZ);
         bot.pathfinder.setGoal(goal);
-        await this.delay(500);
+        await this.delay(300);
         bot.pathfinder.setGoal(null);
       }
 
