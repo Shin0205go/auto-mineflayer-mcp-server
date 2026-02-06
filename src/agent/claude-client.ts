@@ -49,23 +49,29 @@ export interface AgentResult {
 
 const DEFAULT_SYSTEM_INSTRUCTION = `Minecraftサバイバルエージェント。自律的に行動。
 
-## 利用可能スキル（get_agent_skill で詳細取得可能）
+## スキル専門サブエージェント（Task tool で呼び出し）
 
-| 状況 | 推奨スキル |
-|------|-----------|
-| 夜を安全に過ごしたい | bed-crafting |
-| 鉄を効率的に掘りたい | iron-mining |
-| ダイヤを掘りたい | diamond-mining |
+複雑なタスクは専門サブエージェントに委譲:
+
+| 状況 | サブエージェント名 |
+|------|-------------------|
+| 鉄装備が必要 | iron-mining |
+| ダイヤが必要 | diamond-mining |
+| ベッドが必要 | bed-crafting |
 | ネザーに行きたい | nether-gate → nether-fortress |
-| 装備を強化したい | enchanting, potion-brewing |
-| 自動化したい | auto-farm, iron-golem-trap, mob-farm |
+| エンチャントしたい | enchanting |
+| 自動農場を作りたい | auto-farm |
+| モブトラップを作りたい | mob-farm |
+| 鉄無限化したい | iron-golem-trap |
 | 村人と取引したい | villager-trading |
+| ポーションが必要 | potion-brewing |
 | レッドストーン回路 | redstone-basics |
 | エンドラ討伐 | ender-dragon |
 
-詳細が必要なら: get_agent_skill { skill_name: "スキル名" }
+使い方: Task tool で subagent_type にスキル名を指定
+例: { "subagent_type": "iron-mining", "prompt": "鉄を32個集めて" }
 
-## 基本ルール
+## 基本ルール（自分で処理）
 
 ### 毎ターン最初に
 1. minecraft_get_surroundings で状況確認
@@ -75,10 +81,10 @@ const DEFAULT_SYSTEM_INSTRUCTION = `Minecraftサバイバルエージェント�
 ### 優先順位
 1. **生存**: HP低い→食事/逃走、溺れ→上へ移動
 2. **食料確保**: 空腹10以下→動物狩り/農作物
-3. **装備強化**: 木→石→鉄→ダイヤ
-4. **インフラ**: 拠点、農場、かまど
+3. **装備強化**: 木→石→鉄→ダイヤ（サブエージェントに委譲可）
+4. **インフラ**: 拠点、農場、かまど（サブエージェントに委譲可）
 
-### 緊急時（最優先）
+### 緊急時（最優先・自分で処理）
 - **HP5以下** → 即逃走、食事
 - **溺れ中** → pillar_up または上へ泳ぐ
 - **敵に囲まれた** → flee → 安全確保後に食事
@@ -194,7 +200,7 @@ export class ClaudeClient extends EventEmitter {
    */
   private createOptions(): Options {
     return {
-      // No built-in tools
+      // No built-in tools, but enable Task for subagents
       tools: [],
 
       // Use Claude Code OAuth
@@ -210,6 +216,9 @@ export class ClaudeClient extends EventEmitter {
           },
         },
       },
+
+      // Skill-based subagents
+      agents: this.createSkillAgents(),
 
       // Configuration
       model: this.config.model,
@@ -229,6 +238,50 @@ export class ClaudeClient extends EventEmitter {
       // Don't persist sessions
       persistSession: false,
     };
+  }
+
+  /**
+   * Create skill-based subagent definitions
+   */
+  private createSkillAgents(): Record<string, { description: string; prompt: string }> {
+    const skills = [
+      { name: "iron-mining", description: "鉄鉱石採掘・精錬の専門家" },
+      { name: "diamond-mining", description: "ダイヤモンド採掘の専門家" },
+      { name: "bed-crafting", description: "ベッド作成（羊毛収集含む）の専門家" },
+      { name: "nether-gate", description: "ネザーポータル建設の専門家" },
+      { name: "nether-fortress", description: "ネザー要塞探索の専門家" },
+      { name: "enchanting", description: "エンチャント・XPファームの専門家" },
+      { name: "auto-farm", description: "自動農場建設の専門家" },
+      { name: "mob-farm", description: "モブトラップ建設の専門家" },
+      { name: "iron-golem-trap", description: "アイアンゴーレムトラップ建設の専門家" },
+      { name: "villager-trading", description: "村人取引・繁殖の専門家" },
+      { name: "potion-brewing", description: "ポーション醸造の専門家" },
+      { name: "redstone-basics", description: "レッドストーン回路の専門家" },
+      { name: "ender-dragon", description: "エンダードラゴン討伐の専門家" },
+    ];
+
+    const agents: Record<string, { description: string; prompt: string }> = {};
+
+    for (const skill of skills) {
+      agents[skill.name] = {
+        description: skill.description,
+        prompt: `あなたは「${skill.name}」スキルの専門エージェントです。
+
+## 手順
+1. まず get_agent_skill { skill_name: "${skill.name}" } でスキル詳細を取得
+2. スキルの手順に従って実行
+3. 完了したら結果を報告
+
+## 重要
+- 毎ターン minecraft_get_status でHP確認、HP5以下なら中断して報告
+- 必要なツールや素材が足りない場合は報告
+- 完了条件を満たしたら終了
+
+実行開始してください。`,
+      };
+    }
+
+    return agents;
   }
 
   /**
