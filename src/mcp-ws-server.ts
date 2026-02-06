@@ -11,6 +11,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { botManager } from "./bot-manager.js";
 import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
 import { learningTools, handleLearningTool, getAgentSkill } from "./tools/learning.js";
+import { teamTools, handleTeamTool } from "./tools/team.js";
 import { appendFileSync, readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -173,6 +174,9 @@ const INFORMATIONAL_TOOLS = [
   "get_recent_experiences",
   "get_skills",
   "recall_locations",
+  "team_list",
+  "team_task_list",
+  "team_message_read",
 ];
 
 /**
@@ -722,6 +726,9 @@ const tools = {
 
   // === 自己学習ツール ===
   ...learningTools,
+
+  // === エージェントチーム ===
+  ...teamTools,
 };
 
 // Handle tool calls
@@ -1174,6 +1181,23 @@ async function handleTool(
     case "list_agent_skills":
     case "get_agent_skill": {
       return await handleLearningTool(name, args);
+    }
+
+    // === エージェントチーム ===
+    case "team_create":
+    case "team_join":
+    case "team_leave":
+    case "team_list":
+    case "team_dissolve":
+    case "team_task_create":
+    case "team_task_claim":
+    case "team_task_complete":
+    case "team_task_list":
+    case "team_task_update":
+    case "team_message_send":
+    case "team_message_broadcast":
+    case "team_message_read": {
+      return await handleTeamTool(name, args);
     }
 
     default:
