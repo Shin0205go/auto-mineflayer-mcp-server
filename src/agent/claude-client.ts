@@ -36,18 +36,6 @@ export interface ClaudeConfig {
   agentName?: string;  // For board write hook
 }
 
-// Supported models (cost order: low → high)
-const SUPPORTED_MODELS: Record<string, string> = {
-  "sonnet": "claude-sonnet-4-20250514",
-  "opus": "claude-opus-4-6",
-  "haiku": "claude-haiku-3-5-20241022",
-};
-
-// Default to Sonnet for cost efficiency
-const DEFAULT_MODEL = process.env.CLAUDE_MODEL
-  ? (SUPPORTED_MODELS[process.env.CLAUDE_MODEL.toLowerCase()] || process.env.CLAUDE_MODEL)
-  : "claude-sonnet-4-20250514";
-
 export interface AgentResult {
   success: boolean;
   result?: string;
@@ -95,18 +83,6 @@ const DEFAULT_SYSTEM_INSTRUCTION = `Minecraftサバイバルエージェント�
 - **溺れ中** → pillar_up または上へ泳ぐ
 - **敵に囲まれた** → flee → 安全確保後に食事
 
-## チーム協調ツール（team_* ツール）
-
-チームモード時に使用可能:
-- team_join / team_leave: チームの参加・離脱
-- team_task_list: タスク一覧確認
-- team_task_claim: 未割り当てタスクを自分が取得
-- team_task_complete: タスク完了報告
-- team_task_create: 新タスク作成（リード推奨）
-- team_message_read: 未読メッセージ確認
-- team_message_send: 特定メンバーにDM
-- team_message_broadcast: 全員にメッセージ
-
 ## 禁止事項
 - 接続エラー時に別名を試さない
 - HP低い状態で採掘継続しない
@@ -149,7 +125,7 @@ export class ClaudeClient extends EventEmitter {
   constructor(config: ClaudeConfig = {}) {
     super();
     this.config = {
-      model: DEFAULT_MODEL,
+      model: "claude-opus-4-6",
       systemInstruction: DEFAULT_SYSTEM_INSTRUCTION,
       maxTurns: 50,
       mcpServerUrl: "ws://localhost:8765",
@@ -168,7 +144,6 @@ export class ClaudeClient extends EventEmitter {
       console.log(`${PREFIX} Removed ANTHROPIC_API_KEY to use Claude Code OAuth`);
     }
     console.log(`${PREFIX} Using Claude Code inherited authentication`);
-    console.log(`${PREFIX} Model: ${this.config.model} (env CLAUDE_MODEL to change)`);
 
     // Initialize MCP transport for hooks
     this.initMCP();

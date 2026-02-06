@@ -187,13 +187,6 @@ MC_HOST=localhost
 MC_PORT=25565
 BOT_USERNAME=Claude    # ボット名（変更可能）
 MCP_WS_URL=ws://localhost:8765
-
-# モデル選択（コスト順: haiku < sonnet < opus）
-CLAUDE_MODEL=sonnet    # sonnet（デフォルト）, opus, haiku, または完全モデルID
-REVIEW_MODEL=sonnet    # Review Agent用（省略時CLAUDE_MODELを使用）
-
-# チーム起動時のエージェントごとモデル指定
-AGENT_MODELS=opus,sonnet,sonnet  # リードがOpus、メンバーがSonnet
 ```
 
 ## イベントプッシュシステム
