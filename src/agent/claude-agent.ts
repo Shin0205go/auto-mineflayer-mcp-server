@@ -27,6 +27,11 @@ const MCP_WS_URL = process.env.MCP_WS_URL || "ws://localhost:8765";
 const START_MCP_SERVER = process.env.START_MCP_SERVER !== "false";
 const BOT_USERNAME = process.env.BOT_USERNAME || "Claude";  // Can override with env var
 
+// Team mode env vars (set by team-launcher.ts)
+const TEAM_NAME = process.env.TEAM_NAME || "";
+const TEAM_ROLE = process.env.TEAM_ROLE || "";  // "lead" or "member"
+const TEAM_MISSION = process.env.TEAM_MISSION || "";
+
 // Colors for terminal output
 const C = {
   cyan: "\x1b[36m",
@@ -110,6 +115,7 @@ class ClaudeAgent {
     this.claude = new ClaudeClient({
       maxTurns: 50,
       mcpServerUrl: MCP_WS_URL,
+      agentName: BOT_USERNAME,
     });
 
     this.setupEventHandlers();
@@ -158,14 +164,67 @@ class ClaudeAgent {
       // Rules file doesn't exist yet - that's fine
     }
 
-    // Initial prompt - simple autonomous mode
+    // Team mode instructions
+    let teamInstructions = "";
+    if (TEAM_NAME) {
+      console.log(`${PREFIX} Team mode: ${TEAM_NAME} (${TEAM_ROLE})`);
+
+      if (TEAM_ROLE === "lead") {
+        teamInstructions = `
+## チームモード（リード）
+チーム名: ${TEAM_NAME}
+あなたの名前: ${BOT_USERNAME}
+役割: リード（チームリーダー）
+ミッション: ${TEAM_MISSION}
+
+### リードの起動手順（接続後に実行）:
+1. team_join で自分のチームに参加確認
+2. team_task_list でタスク一覧を確認
+3. タスクがなければ、状況を分析して team_task_create でタスクを作成
+   - ミッションを具体的なサブタスクに分解
+   - 依存関係がある場合は depends_on を設定
+   - 可能なら担当者を assignee で指定
+4. 自分もタスクを team_task_claim して作業する
+
+### リードの毎ターン:
+- team_message_read で未読メッセージ確認
+- team_task_list で進捗確認
+- 必要に応じてタスク追加・再割り当て
+- 自分の担当タスクも進める
+`;
+      } else {
+        teamInstructions = `
+## チームモード（メンバー）
+チーム名: ${TEAM_NAME}
+あなたの名前: ${BOT_USERNAME}
+役割: メンバー
+ミッション: ${TEAM_MISSION}
+
+### メンバーの起動手順（接続後に実行）:
+1. team_join でチームに参加
+2. team_message_read で指示を確認
+3. team_task_list でタスク一覧を確認
+4. team_task_claim で未割り当てタスクを取得
+5. タスクに取り組む
+
+### メンバーの毎ターン:
+- team_message_read で未読メッセージ確認
+- 担当タスクを進める
+- タスク完了したら team_task_complete で報告
+- 次のタスクを team_task_claim で取得
+- 困ったらリードに team_message_send で相談
+`;
+      }
+    }
+
+    // Initial prompt
     const initialPrompt = `接続: host=${MC_HOST}, port=${MC_PORT}, username=${BOT_USERNAME}（変更禁止）
 
 起動手順:
 1. minecraft_connect → 接続エラー時は minecraft_get_surroundings で確認
 2. minecraft_get_inventory, minecraft_get_surroundings, minecraft_get_status で状況把握
 3. recall_locations で記憶済みの場所確認
-
+${teamInstructions}
 ${learnedRules ? `## 学習ルール:\n${learnedRules}\n` : ""}
 状況を把握して、足りないものを優先して行動。`;
 
@@ -210,9 +269,12 @@ ${learnedRules ? `## 学習ルール:\n${learnedRules}\n` : ""}
           loopSummary || `ループ${loopCount}完了`
         );
 
-        // Next turn prompt - simple continuation
-        // Events are injected per tool call via MCP Bridge
-        currentPrompt = `続行。状況確認→行動。`;
+        // Next turn prompt - include team check if in team mode
+        if (TEAM_NAME) {
+          currentPrompt = `続行。team_message_read→状況確認→担当タスク進行。`;
+        } else {
+          currentPrompt = `続行。状況確認→行動。`;
+        }
 
         // Delay between turns
         await this.delay(5000);

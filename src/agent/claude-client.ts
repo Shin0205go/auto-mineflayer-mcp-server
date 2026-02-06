@@ -83,6 +83,18 @@ const DEFAULT_SYSTEM_INSTRUCTION = `Minecraftサバイバルエージェント�
 - **溺れ中** → pillar_up または上へ泳ぐ
 - **敵に囲まれた** → flee → 安全確保後に食事
 
+## チーム協調ツール（team_* ツール）
+
+チームモード時に使用可能:
+- team_join / team_leave: チームの参加・離脱
+- team_task_list: タスク一覧確認
+- team_task_claim: 未割り当てタスクを自分が取得
+- team_task_complete: タスク完了報告
+- team_task_create: 新タスク作成（リード推奨）
+- team_message_read: 未読メッセージ確認
+- team_message_send: 特定メンバーにDM
+- team_message_broadcast: 全員にメッセージ
+
 ## 禁止事項
 - 接続エラー時に別名を試さない
 - HP低い状態で採掘継続しない
