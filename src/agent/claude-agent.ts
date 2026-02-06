@@ -158,16 +158,23 @@ class ClaudeAgent {
       // Rules file doesn't exist yet - that's fine
     }
 
-    // Initial prompt - simple autonomous mode
+    // Initial prompt with mission goal
+    const missionGoal = process.env.MISSION_GOAL || "鉄装備を揃える";
     const initialPrompt = `接続: host=${MC_HOST}, port=${MC_PORT}, username=${BOT_USERNAME}（変更禁止）
+
+## ミッション目標: ${missionGoal}
 
 起動手順:
 1. minecraft_connect → 接続エラー時は minecraft_get_surroundings で確認
 2. minecraft_get_inventory, minecraft_get_surroundings, minecraft_get_status で状況把握
 3. recall_locations で記憶済みの場所確認
 
+## 重要: サブエージェント活用
+複雑な作業（採掘、建築）はTask toolでサブエージェントに委譲すること。
+例: 鉄が必要 → Task { subagent_type: "iron-mining", prompt: "鉄インゴットを32個集めて" }
+
 ${learnedRules ? `## 学習ルール:\n${learnedRules}\n` : ""}
-状況を把握して、足りないものを優先して行動。`;
+状況を把握し、ミッション目標に向けて行動。必要に応じてサブエージェントを活用。`;
 
     console.log(`${PREFIX} Starting autonomous loop...`);
     await this.runLoop(initialPrompt);

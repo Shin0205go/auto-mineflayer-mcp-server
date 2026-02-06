@@ -49,50 +49,33 @@ export interface AgentResult {
 
 const DEFAULT_SYSTEM_INSTRUCTION = `Minecraftサバイバルエージェント。自律的に行動。
 
-## スキル専門サブエージェント（Task tool で呼び出し）
+## 重要: 専門タスクはサブエージェントに委譲
 
-複雑なタスクは専門サブエージェントに委譲:
+以下のタスクは**必ずTask toolでサブエージェントを呼び出して委譲**すること:
 
-| 状況 | サブエージェント名 |
-|------|-------------------|
-| 鉄装備が必要 | iron-mining |
-| ダイヤが必要 | diamond-mining |
-| ベッドが必要 | bed-crafting |
-| ネザーに行きたい | nether-gate → nether-fortress |
-| エンチャントしたい | enchanting |
-| 自動農場を作りたい | auto-farm |
-| モブトラップを作りたい | mob-farm |
-| 鉄無限化したい | iron-golem-trap |
-| 村人と取引したい | villager-trading |
-| ポーションが必要 | potion-brewing |
-| レッドストーン回路 | redstone-basics |
-| エンドラ討伐 | ender-dragon |
+- 鉄鉱石を掘る → Task { subagent_type: "iron-mining", prompt: "鉄インゴットを集めて" }
+- ダイヤを掘る → Task { subagent_type: "diamond-mining", prompt: "ダイヤを探して" }
+- ベッドを作る → Task { subagent_type: "bed-crafting", prompt: "ベッドを作って" }
+- ネザーに行く → Task { subagent_type: "nether-gate", prompt: "ネザーポータルを作って" }
 
-使い方: Task tool で subagent_type にスキル名を指定
-例: { "subagent_type": "iron-mining", "prompt": "鉄を32個集めて" }
+自分でやるのは: 移動、簡単なクラフト、食事、戦闘回避のみ。
+複雑な採掘・建築は全てサブエージェントに任せる。
 
-## 基本ルール（自分で処理）
+## 基本ルール
 
 ### 毎ターン最初に
 1. minecraft_get_surroundings で状況確認
 2. minecraft_get_status でHP・空腹確認
 3. minecraft_get_inventory で所持品確認
 
-### 優先順位
-1. **生存**: HP低い→食事/逃走、溺れ→上へ移動
-2. **食料確保**: 空腹10以下→動物狩り/農作物
-3. **装備強化**: 木→石→鉄→ダイヤ（サブエージェントに委譲可）
-4. **インフラ**: 拠点、農場、かまど（サブエージェントに委譲可）
+### 判断基準
+- 石ピッケルがない & 鉄が必要 → まず木・石ツールを自分で作る
+- 石ピッケルがある & 鉄が必要 → **iron-mining サブエージェントに委譲**
+- ベッドがない & 夜 → **bed-crafting サブエージェントに委譲**
 
-### 緊急時（最優先・自分で処理）
-- **HP5以下** → 即逃走、食事
-- **溺れ中** → pillar_up または上へ泳ぐ
-- **敵に囲まれた** → flee → 安全確保後に食事
-
-## 禁止事項
-- 接続エラー時に別名を試さない
-- HP低い状態で採掘継続しない
-- 食料0で探索に出ない
+### 緊急時（自分で即対応）
+- HP5以下 → 食事/逃走
+- 敵が近い → flee
 
 出力: 簡潔に。`;
 
@@ -203,6 +186,9 @@ export class ClaudeClient extends EventEmitter {
       // No built-in tools, but enable Task for subagents
       tools: [],
 
+      // Allow Task tool for subagent invocation + MCP tools
+      allowedTools: ["Task", "mcp__minecraft-mcp__*"],
+
       // Use Claude Code OAuth
       env: this.env,
 
@@ -242,42 +228,68 @@ export class ClaudeClient extends EventEmitter {
 
   /**
    * Create skill-based subagent definitions
+   * Each subagent has its own MCP server access
    */
-  private createSkillAgents(): Record<string, { description: string; prompt: string }> {
+  private createSkillAgents(): Record<string, {
+    description: string;
+    prompt: string;
+    model?: "sonnet" | "opus" | "haiku" | "inherit";
+    mcpServers?: Array<string | Record<string, { command: string; args: string[]; env?: Record<string, string> }>>;
+  }> {
     const skills = [
-      { name: "iron-mining", description: "鉄鉱石採掘・精錬の専門家" },
-      { name: "diamond-mining", description: "ダイヤモンド採掘の専門家" },
-      { name: "bed-crafting", description: "ベッド作成（羊毛収集含む）の専門家" },
-      { name: "nether-gate", description: "ネザーポータル建設の専門家" },
-      { name: "nether-fortress", description: "ネザー要塞探索の専門家" },
-      { name: "enchanting", description: "エンチャント・XPファームの専門家" },
-      { name: "auto-farm", description: "自動農場建設の専門家" },
-      { name: "mob-farm", description: "モブトラップ建設の専門家" },
-      { name: "iron-golem-trap", description: "アイアンゴーレムトラップ建設の専門家" },
-      { name: "villager-trading", description: "村人取引・繁殖の専門家" },
-      { name: "potion-brewing", description: "ポーション醸造の専門家" },
-      { name: "redstone-basics", description: "レッドストーン回路の専門家" },
-      { name: "ender-dragon", description: "エンダードラゴン討伐の専門家" },
+      { name: "iron-mining", description: "鉄鉱石採掘・精錬の専門家。鉄装備が必要な時に使う。" },
+      { name: "diamond-mining", description: "ダイヤモンド採掘の専門家。ダイヤ装備が必要な時に使う。" },
+      { name: "bed-crafting", description: "ベッド作成（羊毛収集含む）の専門家。夜をスキップしたい時に使う。" },
+      { name: "nether-gate", description: "ネザーポータル建設の専門家。ネザーに行きたい時に使う。" },
+      { name: "nether-fortress", description: "ネザー要塞探索の専門家。ブレイズロッドが必要な時に使う。" },
+      { name: "enchanting", description: "エンチャント・XPファームの専門家。装備を強化したい時に使う。" },
+      { name: "auto-farm", description: "自動農場建設の専門家。食料を自動化したい時に使う。" },
+      { name: "mob-farm", description: "モブトラップ建設の専門家。経験値・ドロップを自動化したい時に使う。" },
+      { name: "iron-golem-trap", description: "アイアンゴーレムトラップ建設の専門家。鉄を無限化したい時に使う。" },
+      { name: "villager-trading", description: "村人取引・繁殖の専門家。エメラルドやレアアイテムが欲しい時に使う。" },
+      { name: "potion-brewing", description: "ポーション醸造の専門家。バフポーションが必要な時に使う。" },
+      { name: "redstone-basics", description: "レッドストーン回路の専門家。自動化装置を作りたい時に使う。" },
+      { name: "ender-dragon", description: "エンダードラゴン討伐の専門家。エンドに行ってボスを倒したい時に使う。" },
     ];
 
-    const agents: Record<string, { description: string; prompt: string }> = {};
+    const agents: Record<string, {
+      description: string;
+      prompt: string;
+      model?: "sonnet" | "opus" | "haiku" | "inherit";
+      mcpServers?: Array<string | Record<string, { command: string; args: string[]; env?: Record<string, string> }>>;
+    }> = {};
+
+    // MCP server config for subagents
+    const mcpServerConfig = {
+      "minecraft-mcp": {
+        command: "node",
+        args: [MCP_BRIDGE_PATH],
+        env: {
+          MCP_WS_URL: this.config.mcpServerUrl!,
+        },
+      },
+    };
 
     for (const skill of skills) {
       agents[skill.name] = {
         description: skill.description,
-        prompt: `あなたは「${skill.name}」スキルの専門エージェントです。
+        prompt: `あなたは「${skill.name}」スキルの専門サブエージェントです。
 
-## 手順
-1. まず get_agent_skill { skill_name: "${skill.name}" } でスキル詳細を取得
+## 最初にやること
+1. mcp__minecraft-mcp__get_agent_skill で skill_name: "${skill.name}" のスキル詳細を取得
 2. スキルの手順に従って実行
-3. 完了したら結果を報告
 
-## 重要
-- 毎ターン minecraft_get_status でHP確認、HP5以下なら中断して報告
-- 必要なツールや素材が足りない場合は報告
-- 完了条件を満たしたら終了
+## 実行中のルール
+- 毎ターン mcp__minecraft-mcp__minecraft_get_status でHP確認
+- HP5以下なら即座に中断して報告
+- 必要な素材が足りない場合は報告
 
-実行開始してください。`,
+## 完了条件
+- スキルの目標を達成したら結果を報告して終了
+
+では、まずスキル詳細を取得してください。`,
+        model: "sonnet",
+        mcpServers: [mcpServerConfig],
       };
     }
 
