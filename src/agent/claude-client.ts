@@ -36,6 +36,18 @@ export interface ClaudeConfig {
   agentName?: string;  // For board write hook
 }
 
+// Supported models (cost order: low → high)
+const SUPPORTED_MODELS: Record<string, string> = {
+  "sonnet": "claude-sonnet-4-20250514",
+  "opus": "claude-opus-4-6",
+  "haiku": "claude-haiku-3-5-20241022",
+};
+
+// Default to Sonnet for cost efficiency
+const DEFAULT_MODEL = process.env.CLAUDE_MODEL
+  ? (SUPPORTED_MODELS[process.env.CLAUDE_MODEL.toLowerCase()] || process.env.CLAUDE_MODEL)
+  : "claude-sonnet-4-20250514";
+
 export interface AgentResult {
   success: boolean;
   result?: string;
@@ -137,7 +149,7 @@ export class ClaudeClient extends EventEmitter {
   constructor(config: ClaudeConfig = {}) {
     super();
     this.config = {
-      model: "claude-opus-4-6",
+      model: DEFAULT_MODEL,
       systemInstruction: DEFAULT_SYSTEM_INSTRUCTION,
       maxTurns: 50,
       mcpServerUrl: "ws://localhost:8765",
@@ -156,6 +168,7 @@ export class ClaudeClient extends EventEmitter {
       console.log(`${PREFIX} Removed ANTHROPIC_API_KEY to use Claude Code OAuth`);
     }
     console.log(`${PREFIX} Using Claude Code inherited authentication`);
+    console.log(`${PREFIX} Model: ${this.config.model} (env CLAUDE_MODEL to change)`);
 
     // Initialize MCP transport for hooks
     this.initMCP();

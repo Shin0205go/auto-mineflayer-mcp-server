@@ -13,6 +13,8 @@
  * 環境変数:
  *   TEAM_NAME      - チーム名（デフォルト: survival-team）
  *   AGENT_NAMES    - カンマ区切りのエージェント名（デフォルト: Claude,Claude2）
+ *   AGENT_MODELS   - カンマ区切りのモデル指定（デフォルト: 全員sonnet）
+ *                    例: "opus,sonnet,sonnet" → リードがOpus、メンバーがSonnet
  *   TEAM_MISSION   - チームのミッション（任意）
  *   MC_HOST        - Minecraftサーバーホスト
  *   MC_PORT        - Minecraftサーバーポート
@@ -36,11 +38,13 @@ const CLAUDE_AGENT = join(projectRoot, "dist", "agent", "claude-agent.js");
 // Configuration
 const TEAM_NAME = process.env.TEAM_NAME || "survival-team";
 const AGENT_NAMES = (process.env.AGENT_NAMES || "Claude,Claude2").split(",").map(s => s.trim());
+const AGENT_MODELS = (process.env.AGENT_MODELS || "").split(",").map(s => s.trim().toLowerCase());
 const TEAM_MISSION = process.env.TEAM_MISSION || "サバイバルモードで協力して生き残り、装備を整える";
 const MC_HOST = process.env.MC_HOST || "localhost";
 const MC_PORT = process.env.MC_PORT || "25565";
 const MCP_WS_URL = process.env.MCP_WS_URL || "ws://localhost:8765";
 const STAGGER_DELAY = parseInt(process.env.STAGGER_DELAY || "8000");
+const DEFAULT_MODEL = "sonnet"; // コスト効率のためSonnetをデフォルト
 
 // Colors
 const C = {
@@ -192,8 +196,10 @@ async function setupTeamViaWS(leadName: string): Promise<void> {
 function spawnAgent(name: string, index: number): ChildProcess {
   const isLead = index === 0;
   const prefix = getPrefix(name, index);
+  // Get model for this agent (fallback to DEFAULT_MODEL)
+  const model = AGENT_MODELS[index] || DEFAULT_MODEL;
 
-  console.log(`${LAUNCHER} Spawning ${isLead ? "lead" : "member"}: ${name}`);
+  console.log(`${LAUNCHER} Spawning ${isLead ? "lead" : "member"}: ${name} (model: ${model})`);
 
   const child = spawn("node", [CLAUDE_AGENT], {
     stdio: ["ignore", "pipe", "pipe"],
@@ -204,6 +210,8 @@ function spawnAgent(name: string, index: number): ChildProcess {
       MC_PORT,
       MCP_WS_URL,
       START_MCP_SERVER: "false", // We already started it
+      // Model selection
+      CLAUDE_MODEL: model,
       // Team env vars
       TEAM_NAME,
       TEAM_ROLE: isLead ? "lead" : "member",
@@ -283,6 +291,7 @@ ${C.bold}${C.cyan}╔═══════════════════�
 
   Team:    ${TEAM_NAME}
   Agents:  ${AGENT_NAMES.join(", ")} (${AGENT_NAMES.length}体)
+  Models:  ${AGENT_NAMES.map((_, i) => AGENT_MODELS[i] || DEFAULT_MODEL).join(", ")}
   Mission: ${TEAM_MISSION}
   Server:  ${MC_HOST}:${MC_PORT}
   MCP:     ${MCP_WS_URL}

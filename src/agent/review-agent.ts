@@ -17,6 +17,16 @@ const REVIEW_LOG_FILE = path.join(process.cwd(), "learning", "review-log.md");
 // 分析間隔（ミリ秒）
 const REVIEW_INTERVAL = 5 * 60 * 1000; // 5分ごと
 
+// Model selection (review agent can use cheaper model)
+const SUPPORTED_MODELS: Record<string, string> = {
+  "sonnet": "claude-sonnet-4-20250514",
+  "opus": "claude-opus-4-6",
+  "haiku": "claude-haiku-3-5-20241022",
+};
+const REVIEW_MODEL = process.env.REVIEW_MODEL || process.env.CLAUDE_MODEL
+  ? (SUPPORTED_MODELS[(process.env.REVIEW_MODEL || process.env.CLAUDE_MODEL || "").toLowerCase()] || (process.env.REVIEW_MODEL || process.env.CLAUDE_MODEL))
+  : "claude-sonnet-4-20250514";
+
 // 最低ログ行数（これ以下なら分析スキップ）
 const MIN_LOG_LINES = 20;
 
@@ -178,10 +188,11 @@ ${logContent.slice(-15000)}  // 最新15000文字
 - 既存ルールで十分カバーされている場合は newRules: [] を返す`;
 
     try {
+      console.log(`${PREFIX} Using model: ${REVIEW_MODEL}`);
       const result = query({
         prompt,
         options: {
-          model: "claude-opus-4-6",
+          model: REVIEW_MODEL,
           maxTurns: 1,
           tools: [],
         },
