@@ -47,37 +47,29 @@ export interface AgentResult {
   };
 }
 
-const DEFAULT_SYSTEM_INSTRUCTION = `Minecraftサバイバルエージェント。自律的に行動。
+const DEFAULT_SYSTEM_INSTRUCTION = `Minecraftサバイバルエージェント。完全自律で判断・行動する。
 
-## 重要: 専門タスクはサブエージェントに委譲
+## 絶対ルール
+- ユーザーに質問しない。選択肢を提示しない。自分で決めて即実行。
+- 「何をしましょうか？」「どれがいいですか？」は禁止。
+- 迷ったら安全優先で行動を選ぶ。
 
-以下のタスクは**必ずTask toolでサブエージェントを呼び出して委譲**すること:
+## 優先順位（上から順に判断）
+1. 緊急: HP≤10→食事/flee、敵近い→戦闘/flee
+2. 夜間: ベッドで寝る（なければ作る）
+3. 装備: 持ってる最強装備を着る
+4. 進行: エンチャント→ネザー→エンドの順で進める
+5. 資源不足時: 必要素材を集める
 
-- 鉄鉱石を掘る → Task { subagent_type: "iron-mining", prompt: "鉄インゴットを集めて" }
-- ダイヤを掘る → Task { subagent_type: "diamond-mining", prompt: "ダイヤを探して" }
-- ベッドを作る → Task { subagent_type: "bed-crafting", prompt: "ベッドを作って" }
-- ネザーに行く → Task { subagent_type: "nether-gate", prompt: "ネザーポータルを作って" }
+## サブエージェント（Task tool）
+複雑作業は委譲:
+- iron-mining / diamond-mining / bed-crafting / nether-gate
 
-自分でやるのは: 移動、簡単なクラフト、食事、戦闘回避のみ。
-複雑な採掘・建築は全てサブエージェントに任せる。
+## 行動パターン
+- 状況確認→判断→即実行（報告は簡潔に）
+- 装備後はget_surroundingsで装備確認
 
-## 基本ルール
-
-### 毎ターン最初に
-1. minecraft_get_surroundings で状況確認
-2. minecraft_get_status でHP・空腹確認
-3. minecraft_get_inventory で所持品確認
-
-### 判断基準
-- 石ピッケルがない & 鉄が必要 → まず木・石ツールを自分で作る
-- 石ピッケルがある & 鉄が必要 → **iron-mining サブエージェントに委譲**
-- ベッドがない & 夜 → **bed-crafting サブエージェントに委譲**
-
-### 緊急時（自分で即対応）
-- HP5以下 → 食事/逃走
-- 敵が近い → flee
-
-出力: 簡潔に。`;
+出力: 行動と結果のみ。質問禁止。`;
 
 
 // Content block types
@@ -183,10 +175,10 @@ export class ClaudeClient extends EventEmitter {
    */
   private createOptions(): Options {
     return {
-      // No built-in tools, but enable Task for subagents
-      tools: [],
+      // Enable Task tool for subagent invocation
+      tools: ["Task"],
 
-      // Allow Task tool for subagent invocation + MCP tools
+      // Auto-allow Task and MCP tools without permission prompts
       allowedTools: ["Task", "mcp__minecraft-mcp__*"],
 
       // Use Claude Code OAuth
@@ -228,13 +220,14 @@ export class ClaudeClient extends EventEmitter {
 
   /**
    * Create skill-based subagent definitions
-   * Each subagent has its own MCP server access
+   * Subagents inherit MCP servers from parent automatically
+   * Use 'tools' array to control which tools subagent can access
    */
   private createSkillAgents(): Record<string, {
     description: string;
     prompt: string;
+    tools?: string[];
     model?: "sonnet" | "opus" | "haiku" | "inherit";
-    mcpServers?: Array<string | Record<string, { command: string; args: string[]; env?: Record<string, string> }>>;
   }> {
     const skills = [
       { name: "iron-mining", description: "鉄鉱石採掘・精錬の専門家。鉄装備が必要な時に使う。" },
@@ -255,20 +248,9 @@ export class ClaudeClient extends EventEmitter {
     const agents: Record<string, {
       description: string;
       prompt: string;
+      tools?: string[];
       model?: "sonnet" | "opus" | "haiku" | "inherit";
-      mcpServers?: Array<string | Record<string, { command: string; args: string[]; env?: Record<string, string> }>>;
     }> = {};
-
-    // MCP server config for subagents
-    const mcpServerConfig = {
-      "minecraft-mcp": {
-        command: "node",
-        args: [MCP_BRIDGE_PATH],
-        env: {
-          MCP_WS_URL: this.config.mcpServerUrl!,
-        },
-      },
-    };
 
     for (const skill of skills) {
       agents[skill.name] = {
@@ -288,8 +270,9 @@ export class ClaudeClient extends EventEmitter {
 - スキルの目標を達成したら結果を報告して終了
 
 では、まずスキル詳細を取得してください。`,
+        // Inherit all tools from parent (including MCP tools)
+        // By omitting 'tools', subagent gets access to all parent's tools
         model: "sonnet",
-        mcpServers: [mcpServerConfig],
       };
     }
 

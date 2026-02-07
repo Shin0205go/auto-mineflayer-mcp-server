@@ -15,7 +15,8 @@
     "start:dev-agent": "node dist/agent/dev-agent.js",
     "start:self-improve": "node dist/agent/claude-agent.js & node dist/agent/review-agent.js & wait",
     "start:review-agent": "node dist/agent/review-agent.js",
-    "board": "node dist/realtime-board.js"
+    "board": "node dist/realtime-board.js",
+    "board:view": "node dist/board-viewer.js"
   },
   "keywords": [
     "mcp",

@@ -1033,6 +1033,23 @@ export class BotManager extends EventEmitter {
     lines.push(`HP: ${health.toFixed(1)}/20, 空腹: ${food}/20`);
     lines.push(`食料: ${foodCount}個${foodNames.length > 0 ? ` (${foodNames.slice(0, 3).join(", ")})` : ""}`);
     lines.push(`松明: ${torchCount}個, 足場ブロック: ${scaffoldCount}個`);
+
+    // Equipment info
+    const slots = bot.inventory.slots;
+    const head = slots[5]?.name || "なし";
+    const chest = slots[6]?.name || "なし";
+    const legs = slots[7]?.name || "なし";
+    const feet = slots[8]?.name || "なし";
+    const mainHand = bot.heldItem?.name || "なし";
+    const offHand = slots[45]?.name || "なし";
+
+    const armorParts = [head, chest, legs, feet].filter(a => a !== "なし");
+    if (armorParts.length > 0) {
+      lines.push(`装備: ${armorParts.join(", ")}`);
+    } else {
+      lines.push(`装備: なし ⚠️`);
+    }
+    lines.push(`手: ${mainHand}${offHand !== "なし" ? ` / 盾: ${offHand}` : ""}`);
     lines.push(``);
 
     // 基本位置
@@ -1235,7 +1252,8 @@ export class BotManager extends EventEmitter {
 
     const bot = managed.bot;
     const pos = bot.entity.position;
-    const found: Array<{ x: number; y: number; z: number; distance: number }> = [];
+    const found: Array<{ x: number; y: number; z: number; distance: number; name: string }> = [];
+    const searchName = blockName.toLowerCase();
 
     // Search in a cube around the bot
     for (let x = -maxDistance; x <= maxDistance; x++) {
@@ -1243,15 +1261,23 @@ export class BotManager extends EventEmitter {
         for (let z = -maxDistance; z <= maxDistance; z++) {
           const blockPos = pos.offset(x, y, z);
           const block = bot.blockAt(blockPos);
-          if (block && block.name === blockName) {
-            const dist = pos.distanceTo(blockPos);
-            if (dist <= maxDistance) {
-              found.push({
-                x: Math.floor(blockPos.x),
-                y: Math.floor(blockPos.y),
-                z: Math.floor(blockPos.z),
-                distance: Math.round(dist * 10) / 10,
-              });
+          if (block && block.name !== "air") {
+            const name = block.name.toLowerCase();
+            // Match exact, suffix (e.g., "bed" matches "red_bed"), or contains
+            const isMatch = name === searchName ||
+                           name.endsWith("_" + searchName) ||
+                           name.includes(searchName);
+            if (isMatch) {
+              const dist = pos.distanceTo(blockPos);
+              if (dist <= maxDistance) {
+                found.push({
+                  x: Math.floor(blockPos.x),
+                  y: Math.floor(blockPos.y),
+                  z: Math.floor(blockPos.z),
+                  distance: Math.round(dist * 10) / 10,
+                  name: block.name,
+                });
+              }
             }
           }
         }
@@ -1267,8 +1293,8 @@ export class BotManager extends EventEmitter {
 
     // Return up to 10 nearest
     const nearest = found.slice(0, 10);
-    const result = nearest.map(b => `(${b.x}, ${b.y}, ${b.z}) - ${b.distance} blocks away`).join("\n");
-    return `Found ${found.length} ${blockName}. Nearest:\n${result}`;
+    const result = nearest.map(b => `${b.name} at (${b.x}, ${b.y}, ${b.z}) - ${b.distance} blocks`).join("\n");
+    return `Found ${found.length} matching "${blockName}". Nearest:\n${result}`;
   }
 
   async placeBlock(
@@ -3193,6 +3219,43 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     });
   }
 
+  /**
+   * Get detailed equipment info for each slot
+   */
+  getEquipment(username: string): string {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      throw new Error(`Bot '${username}' not found`);
+    }
+
+    const bot = managed.bot;
+    const slots = bot.inventory.slots;
+
+    // Mineflayer inventory slots for equipment:
+    // 5: helmet, 6: chestplate, 7: leggings, 8: boots
+    // 45: off-hand
+    const equipment = {
+      head: slots[5]?.name || "(empty)",
+      chest: slots[6]?.name || "(empty)",
+      legs: slots[7]?.name || "(empty)",
+      feet: slots[8]?.name || "(empty)",
+      mainHand: bot.heldItem?.name || "(empty)",
+      offHand: slots[45]?.name || "(empty)",
+    };
+
+    const lines = [
+      `## Equipment`,
+      `- Head: ${equipment.head}`,
+      `- Chest: ${equipment.chest}`,
+      `- Legs: ${equipment.legs}`,
+      `- Feet: ${equipment.feet}`,
+      `- Main Hand: ${equipment.mainHand}`,
+      `- Off Hand: ${equipment.offHand}`,
+    ];
+
+    return lines.join("\n");
+  }
+
   getNearbyEntities(username: string, range: number = 16, type: string = "all"): string {
     const managed = this.bots.get(username);
     if (!managed) {
@@ -3804,11 +3867,47 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       throw new Error(errorMsg);
     }
 
+    // Determine the correct slot using minecraft-data enchantCategories
+    let slot: "hand" | "off-hand" | "head" | "torso" | "legs" | "feet" = "hand";
+
+    // Use minecraft-data directly (bot.registry may not have enchantCategories)
+    const minecraftData = await import("minecraft-data");
+    const mcData = minecraftData.default(bot.version);
+    const itemData = mcData.itemsByName[item.name];
+    const categories: string[] = itemData?.enchantCategories || [];
+
+    // Debug log
+    console.error(`[Equip] Item: ${item.name}, Categories: ${categories.join(", ") || "none"}, Version: ${bot.version}`);
+
+    // Support both old (1.20) and new (1.21+) category names
+    if (categories.includes("armor_head") || categories.includes("head_armor")) {
+      slot = "head";
+    } else if (categories.includes("armor_chest") || (categories.includes("armor") && item.name.includes("chestplate"))) {
+      slot = "torso";
+    } else if (categories.includes("armor_legs") || categories.includes("leg_armor")) {
+      slot = "legs";
+    } else if (categories.includes("armor_feet") || categories.includes("foot_armor")) {
+      slot = "feet";
+    } else if (item.name.includes("shield")) {
+      slot = "off-hand";
+    }
+
+    console.error(`[Equip] Equipping ${item.name} to slot: ${slot}`);
+
     try {
-      await bot.equip(item, "hand");
-      return `Equipped ${item.name}`;
+      await bot.equip(item, slot);
+
+      // Return with current equipment status for verification
+      const slots = bot.inventory.slots;
+      const currentEquip = {
+        head: slots[5]?.name || "なし",
+        chest: slots[6]?.name || "なし",
+        legs: slots[7]?.name || "なし",
+        feet: slots[8]?.name || "なし",
+      };
+      return `Equipped ${item.name} to ${slot}. 現在の装備: 頭=${currentEquip.head}, 胸=${currentEquip.chest}, 脚=${currentEquip.legs}, 足=${currentEquip.feet}`;
     } catch (err) {
-      return `Failed to equip ${item.name}: ${err}`;
+      return `Failed to equip ${item.name} to ${slot}: ${err}`;
     }
   }
 
@@ -3870,19 +3969,21 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     for (let i = 0; i < targetHeight; i++) {
       const currentY = Math.floor(bot.entity.position.y);
 
-      // 1. Dig blocks above if needed (Y+2)
-      const blockAbove = bot.blockAt(new Vec3(startX, currentY + 2, startZ));
-      if (blockAbove && blockAbove.name !== "air" && blockAbove.name !== "water") {
-        console.error(`[Pillar] Digging ${blockAbove.name} above at Y=${currentY + 2}`);
-        try {
-          const pickaxe = bot.inventory.items().find(i => i.name.includes("pickaxe"));
-          if (pickaxe) await bot.equip(pickaxe, "hand");
-          bot.clearControlStates();
-          await new Promise(r => setTimeout(r, 100));
-          await bot.dig(blockAbove);
-        } catch (e) {
-          console.error(`[Pillar] Dig failed: ${e}`);
-          // Continue anyway - might be able to proceed
+      // 1. Dig blocks above if needed (Y+2 and Y+3 for jump clearance)
+      for (const yOffset of [2, 3]) {
+        const blockAbove = bot.blockAt(new Vec3(startX, currentY + yOffset, startZ));
+        if (blockAbove && blockAbove.name !== "air" && blockAbove.name !== "water" && blockAbove.name !== "cave_air") {
+          console.error(`[Pillar] Digging ${blockAbove.name} above at Y=${currentY + yOffset}`);
+          try {
+            const pickaxe = bot.inventory.items().find(i => i.name.includes("pickaxe"));
+            if (pickaxe) await bot.equip(pickaxe, "hand");
+            bot.clearControlStates();
+            await new Promise(r => setTimeout(r, 100));
+            await bot.dig(blockAbove);
+          } catch (e) {
+            console.error(`[Pillar] Dig failed at Y+${yOffset}: ${e}`);
+            // Continue anyway - might be able to proceed
+          }
         }
       }
 

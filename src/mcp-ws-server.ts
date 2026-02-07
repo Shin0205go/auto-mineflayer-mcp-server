@@ -161,6 +161,7 @@ const FAILURE_PATTERNS = [
 const INFORMATIONAL_TOOLS = [
   "minecraft_get_surroundings",
   "minecraft_get_status",
+  "minecraft_get_equipment",
   "minecraft_get_position",
   "minecraft_get_inventory",
   "minecraft_look_around",
@@ -456,6 +457,10 @@ const tools = {
   // Combat tools
   minecraft_get_status: {
     description: "Get bot's health, hunger, and equipment status",
+    inputSchema: { type: "object", properties: {} },
+  },
+  minecraft_get_equipment: {
+    description: "Get detailed equipment in each slot (head, chest, legs, feet, hands)",
     inputSchema: { type: "object", properties: {} },
   },
   minecraft_get_nearby_entities: {
@@ -939,6 +944,11 @@ async function handleTool(
     case "minecraft_get_status": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       return botManager.getStatus(username);
+    }
+
+    case "minecraft_get_equipment": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return botManager.getEquipment(username);
     }
 
     case "minecraft_get_nearby_entities": {
