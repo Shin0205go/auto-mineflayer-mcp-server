@@ -4,7 +4,7 @@
 
 Claude AIエージェントがMinecraftを自律的にプレイするためのMCPサーバー。
 Mineflayerライブラリでボットを制御し、MCPプロトコルでClaudeと連携。
-マルチボット対応、サバイバルモード、エージェント間協調機能を搭載。
+自己改善システム（Dev Agent）により、ツール失敗時のソースコード修正と行動設定チューニングを自動実行。
 
 ## アーキテクチャ
 
@@ -15,19 +15,20 @@ Mineflayerライブラリでボットを制御し、MCPプロトコルでClaude�
 └─────────────────┘                     └────────┬─────────┘
                                                  │
 ┌─────────────────┐                     ┌────────▼─────────┐
-│  Claude Agent   │ ──── WebSocket ──── │  WebSocket MCP   │
+│  Game Agent     │ ──── WebSocket ──── │  WebSocket MCP   │
 │  (claude-agent) │                     │  (mcp-ws-server) │
 └─────────────────┘                     └────────┬─────────┘
-                                                 │
-                                        ┌────────▼─────────┐
-                                        │  Bot Manager     │
-                                        │  (Mineflayer)    │
-                                        └────────┬─────────┘
-                                                 │
-                                        ┌────────▼─────────┐
-                                        │  Minecraft       │
-                                        │  Server          │
-                                        └──────────────────┘
+         ▲                                       │
+         │ 起動/停止                             │ ログ・ループ結果
+         │                               ┌───────▼──────────┐
+┌────────┴──────────┐                    │   Bot Manager    │
+│    Dev Agent      │                    │   (Mineflayer)   │
+│  (dev-agent.ts)   │                    └────────┬─────────┘
+│                   │                             │
+│ - ソースコード修正│                    ┌────────▼─────────┐
+│ - 設定チューニング│                    │   Minecraft      │
+└───────────────────┘                    │   Server         │
+                                         └──────────────────┘
 ```
 
 ## ディレクトリ構造
@@ -37,26 +38,27 @@ src/
 ├── index.ts              # MCPサーバー (stdio)
 ├── mcp-ws-server.ts      # MCPサーバー (WebSocket)
 ├── bot-manager.ts        # Mineflayerボット管理
-├── realtime-board.ts     # 掲示板サーバー
 │
 ├── tools/                # MCPツール実装
 │   ├── connection.ts     # 接続・切断
 │   ├── movement.ts       # 移動
 │   ├── environment.ts    # 環境認識
 │   ├── building.ts       # 建築・ブロック操作
-│   ├── coordination.ts   # エージェント間連携（掲示板）
+│   ├── crafting.ts       # クラフト
 │   ├── combat.ts         # 戦闘
-│   └── crafting.ts       # クラフト
+│   ├── coordination.ts   # エージェント間連携（掲示板）
+│   └── learning.ts       # 学習・記憶・設定管理
 │
 ├── agent/                # Claudeエージェント
-│   ├── claude-agent.ts   # 自律エージェント（ゲームプレイ）
-│   ├── dev-agent.ts      # 自己改善エージェント（コード修正）
+│   ├── claude-agent.ts   # Game Agent（ゲームプレイ）
+│   ├── dev-agent.ts      # Dev Agent（ソースコード修正 + 設定チューニング）
+│   ├── report-agent.ts   # Report Agent（進化レポート生成）
 │   ├── claude-client.ts  # Claude SDK クライアント
-│   ├── mcp-bridge.ts     # stdio→WebSocket変換
 │   └── mcp-ws-transport.ts
 │
 └── types/
-    └── tool-log.ts       # ツール実行ログの型定義
+    ├── tool-log.ts       # ツール実行ログ型
+    └── agent-config.ts   # エージェント設定型
 ```
 
 ## 開発コマンド
@@ -71,60 +73,140 @@ npm run typecheck # 型チェック
 ## 起動コマンド
 
 ```bash
-# MCPサーバー（stdio）- Claude Desktop等から利用
-npm start
-
-# Claudeエージェント起動
-npm run start:claude
-
-# 2体目のClaude（別名）
-BOT_USERNAME=Claude2 MC_PORT=58896 npm run start:claude
-
-# WebSocket MCPサーバー（エージェント用）
+# MCP WSサーバー（必須）
 npm run start:mcp-ws
 
-# Dev Agent（自己改善エージェント）
-npm run start:dev-agent
+# 自己改善システム（推奨）
+npm run start:self-improve  # Dev Agent + Game Agent
 
-# 掲示板サーバー
-npm run board
+# 個別起動
+npm run start:game-agent    # Game Agent単体
+npm run start:dev-agent     # Dev Agent単体
+npm run start:report-agent  # Report Agent単体
+
+# その他
+npm start                   # MCPサーバー (stdio)
+npm run board               # 掲示板サーバー
 ```
 
 ## 自己改善システム（Dev Agent）
 
-ツール実行ログを監視し、失敗パターンを分析してソースコードを自動修正するエージェント。
+### 概要
+
+Dev Agentは2つのモードで動作：
+1. **ソースコード修正** - ツール失敗を検知してTypeScriptコードを修正
+2. **設定チューニング** - ループ結果を分析してagent-config.jsonを更新
 
 ### アーキテクチャ
 
 ```
-┌─────────────────────────────────────────────────────┐
-│              MCP WS Server                          │
-│         (ツール実行ログ収集・配信)                    │
-└───────────┬─────────────────────────┬───────────────┘
-            │                         │
-     WebSocket                   WebSocket
-            │                         │
-┌───────────▼───────────┐ ┌───────────▼───────────┐
-│   Minecraft Agent     │ │     Dev Agent         │
-│   (ゲームプレイ)       │ │   (コード修正)         │
-│                       │ │                       │
-│ - ツール実行          │ │ - ログ受信            │
-│ - 結果をログ送信      │ │ - 失敗パターン分析    │
-│                       │ │ - src/tools/*.ts 修正 │
-│                       │ │ - ビルド・再起動指示   │
-└───────────────────────┘ └───────────────────────┘
+┌────────────────────────────────────────────────────┐
+│           MCP WS Server                            │
+│  (ツール実行ログ + ループ結果 収集・配信)            │
+└──────────┬─────────────────────┬───────────────────┘
+           │                     │
+    WebSocket              WebSocket
+           │                     │
+┌──────────▼──────────┐ ┌────────▼──────────────────┐
+│   Game Agent        │ │     Dev Agent             │
+│   (ゲームプレイ)     │ │  (ソースコード修正        │
+│                     │ │   + 設定チューニング)      │
+│ - ツール実行        │ │                           │
+│ - ループ結果送信    │ │ - ツールログ受信          │
+│ - 設定リロード      │ │ - 失敗パターン分析        │
+│                     │ │ - Claude SDK Edit修正     │
+│                     │ │ - ビルド・再起動          │
+│                     │ │ - ループ結果分析          │
+│                     │ │ - agent-config.json更新   │
+└─────────────────────┘ └───────────────────────────┘
 ```
 
-### Dev Agent用ツール
+### Dev Agent用MCPツール
 
-- `dev_subscribe` - ツール実行ログの購読開始
+**ツールログ系（ソースコード修正用）**
+- `dev_subscribe` - ツール実行ログ + ループ結果の購読開始
 - `dev_get_tool_logs` - ログ取得（フィルタ可能）
 - `dev_get_failure_summary` - 失敗サマリー取得
 - `dev_clear_logs` - ログクリア
 
-### ログファイル
+**設定チューニング系**
+- `dev_get_config` - agent-config.json取得
+- `dev_save_config` - 設定保存 + evolution-history.jsonl追記
+- `dev_get_evolution_history` - 進化履歴取得
+- `dev_get_loop_results` - ループ結果取得
+- `dev_publish_loop_result` - ループ結果公開（Game Agentが使用）
 
-ツール実行ログは `logs/tool-execution.jsonl` に保存される。
+### ログ・設定ファイル
+
+| ファイル | 用途 | 形式 |
+|---------|------|------|
+| `logs/tool-execution.jsonl` | ツール実行ログ | JSONL（最大1000件メモリ保持） |
+| `logs/loop-results.jsonl` | ループ実行結果 | JSONL（最大100件メモリ保持） |
+| `learning/agent-config.json` | エージェント設定 | JSON（性格・優先度・閾値） |
+| `learning/evolution-history.jsonl` | 設定変更履歴 | JSONL（全履歴永続保存） |
+| `learning/evolution-reports/` | 進化レポート | Markdown（30分ごと生成） |
+
+### agent-config.json構造
+
+```typescript
+{
+  version: number,              // 設定バージョン
+  lastUpdated: string,          // 最終更新日時
+  updatedBy: string,            // 更新者（DevAgent等）
+
+  personality: {
+    aggressiveness: 0-10,       // 攻撃性
+    explorationDrive: 0-10,     // 探索意欲
+    resourceHoarding: 0-10,     // 資源収集意欲
+    riskTolerance: 0-10         // リスク許容度
+  },
+
+  priorities: {                  // 行動優先度（重み）
+    survival: 100,
+    food: 80,
+    equipment: 70,
+    shelter: 60,
+    exploration: 50,
+    mining: 50,
+    building: 30
+  },
+
+  decisionRules: [               // 判断ルール
+    {
+      condition: string,
+      action: string,
+      priority: "high" | "medium" | "low",
+      source: string
+    }
+  ],
+
+  thresholds: {
+    fleeHP: number,              // 逃走開始HP
+    eatHunger: number,           // 食事開始空腹度
+    nightShelterTime: number     // 夜間避難開始時刻
+  }
+}
+```
+
+### ソースコード修正フロー
+
+1. ツール失敗が3件以上蓄積
+2. Dev Agentが失敗パターン分析（ツール名・エラー内容）
+3. MCP Filesystem経由でソースコード読込
+4. Claude SDK `query()` + Editツールで修正
+5. TypeScript構文チェック
+6. `npm run build`
+7. Game Agent再起動
+
+### 設定チューニングフロー
+
+1. Game Agentがループ完了（5回 or 3分経過）
+2. `dev_publish_loop_result` でループ結果をMCP経由送信
+3. Dev Agentがバッファに蓄積
+4. Claude SDK `query()` (maxTurns:1, tools無し) で分析
+5. JSON形式で変更内容を出力
+6. `dev_save_config` で保存 + evolution-history.jsonl追記
+7. Game Agent次ループで設定リロード
 
 ## MCPツール一覧
 
@@ -132,34 +214,38 @@ npm run board
 - `minecraft_connect` - サーバーに接続
 - `minecraft_disconnect` - 切断
 - `minecraft_get_position` - 現在座標
-- `minecraft_move_to` - 移動
+- `minecraft_move_to` - 移動（solid blockは自動で隣のair blockへリダイレクト）
 - `minecraft_chat` - チャット送信
 
 ### 環境認識
 - `minecraft_get_surroundings` - 周囲の状況（移動可能方向、近くの資源）
 - `minecraft_get_biome` - バイオーム確認
-- `minecraft_find_entities` - エンティティ検索（羊、ゾンビ等）
-- `minecraft_explore_for_biome` - バイオーム探索
+- `minecraft_find_block` - ブロック検索
+- `minecraft_get_nearby_entities` - 近くのエンティティ
+- `minecraft_check_infrastructure` - クラフト台・かまど検索
 
 ### サバイバル
 - `minecraft_dig_block` - ブロック破壊
 - `minecraft_get_inventory` - インベントリ確認
-- `minecraft_craft` - クラフト
-- `minecraft_equip_item` - アイテム装備
-- `minecraft_pillar_up` - ジャンプ設置で上昇
+- `minecraft_craft` - クラフト（自動でクラフト台検索）
+- `minecraft_smelt` - 精錬（自動でかまど検索）
+- `minecraft_equip` - アイテム装備
+- `minecraft_collect_items` - アイテム回収
 
-### 戦闘
+### 戦闘・生存
+- `minecraft_get_status` - HP/空腹確認
+- `minecraft_eat` - 食事
 - `minecraft_fight` - 敵と戦う（自動装備・攻撃・逃走）
 - `minecraft_attack` - 単発攻撃
 - `minecraft_flee` - 逃走
-- `minecraft_get_status` - HP/空腹確認
-- `minecraft_eat` - 食事
+- `minecraft_equip_armor` - 防具装備
+- `minecraft_equip_weapon` - 武器装備
 
-### 建築
+### 建築・移動補助
 - `minecraft_place_block` - ブロック設置
-- `minecraft_build_structure` - 構造物（house, tower, marker）
-- `minecraft_build_road` - 道路
-- `minecraft_build_village` - 村
+- `minecraft_pillar_up` - ジャンプ設置で上昇
+- `minecraft_tunnel` - トンネル掘削
+- `minecraft_level_ground` - 地面整地
 
 ### エージェント連携
 - `agent_board_read` - 掲示板を読む
@@ -167,31 +253,35 @@ npm run board
 - `agent_board_wait` - 新着を待つ
 - `agent_board_clear` - クリア
 
-### 自己学習（Reflexion）
-- `log_experience` - 行動と結果を記録（成功・失敗問わず）
-- `get_recent_experiences` - 過去の経験を振り返る
-- `reflect_and_learn` - 経験からパターン分析、改善点抽出
-- `save_skill` - 成功手順をスキルとして保存
-- `get_skills` - 保存スキルを参照
-- `get_reflection_insights` - 振り返り知見を取得
-
-学習データは `learning/` ディレクトリに保存:
-- `experience.jsonl` - 経験ログ
-- `reflection.md` - 振り返りレポート
-- `skills.json` - スキルライブラリ
+### 学習・記憶
+- `save_memory` - 重要情報を記憶 (`learning/memory.json`)
+- `recall_memory` - 記憶を参照
+- `log_experience` - 経験を記録 (`learning/experience.jsonl`)
+- `get_skills` - スキルライブラリ参照
 
 ## 環境変数
 
 ```bash
+# Minecraft接続
 MC_HOST=localhost
 MC_PORT=25565
-BOT_USERNAME=Claude    # ボット名（変更可能）
+BOT_USERNAME=Claude
+
+# MCP WebSocket
 MCP_WS_URL=ws://localhost:8765
+
+# Dev Agent設定
+MANAGE_GAME_AGENT=true        # Game Agent管理を有効化
+START_MCP_SERVER=false        # MCP WSサーバー自動起動（通常false）
+
+# Claude API
+ANTHROPIC_API_KEY=sk-...
+CLAUDE_MODEL=opus             # dev-agentのモデル（opus推奨）
 ```
 
 ## イベントプッシュシステム
 
-WebSocket MCPサーバーはゲームイベントをクライアントにプッシュ配信する。
+WebSocket MCPサーバーはゲームイベントをクライアントにプッシュ配信。
 
 ### 発行されるイベント
 
@@ -226,77 +316,25 @@ ws.on("message", (data) => {
 });
 ```
 
-## Mamba Agent（ローカルAI）
+## スキルベースサブエージェント
 
-Apple Silicon上でローカル動作するMamba2モデルを使用した軽量エージェント。
-**Claudeと同じ64個のMCPツールを使用**する。
+Task toolを使って専門スキルを実行。各スキルは独立したサブエージェントとして動作。
 
-### 特徴
+### 利用可能スキル
 
-- **同じMCPツール**: Claudeと同じツールセットを共有
-- **イベント駆動**: ポーリングではなくイベント受信で行動
-- **ローカル推論**: API不要、~0.3秒で判断
-- **日本語プロンプト**: Claudeと同じスタイル
-- **学習ルール共有**: `learning/rules.json`から読み込み
+| スキル | 説明 | 使用例 |
+|--------|------|--------|
+| `iron-mining` | 鉄鉱石採掘→精錬→ツール作成 | `Task skill="iron-mining"` |
+| `diamond-mining` | ダイヤモンド探索・採掘 | `Task skill="diamond-mining"` |
+| `bed-crafting` | 羊探索→羊毛収集→ベッド作成 | `Task skill="bed-crafting"` |
+| `nether-gate` | 黒曜石収集→ポータル建設 | `Task skill="nether-gate"` |
 
-### 起動
-
-```bash
-# 別プロジェクト
-cd /Users/shingo/Develop/mamba-agent
-./run.sh
-```
-
-### アーキテクチャ
-
-```
-┌──────────────────────────────────────────────┐
-│        MCP WebSocket Server (port 8765)       │
-│                                               │
-│    64 tools (両エージェント共通)               │
-│    - minecraft_dig_block                      │
-│    - minecraft_craft                          │
-│    - minecraft_fight                          │
-│    - agent_board_read/write                   │
-│    - ...                                      │
-└───────────┬───────────────────┬───────────────┘
-            │                   │
-   ┌────────▼────────┐ ┌────────▼────────┐
-   │  Claude Agent   │ │  Mamba Agent    │
-   │  (API)          │ │  (Local)        │
-   │                 │ │                 │
-   │  call_tool()    │ │  call_tool()    │
-   │  同じIF         │ │  同じIF         │
-   └─────────────────┘ └─────────────────┘
-```
-
-### 比較
-
-| 項目 | Claude Agent | Mamba Agent |
-|------|-------------|-------------|
-| 推論場所 | クラウドAPI | ローカルGPU |
-| MCPツール | 64個 | 64個（同じ） |
-| 駆動方式 | ループ | イベント駆動 |
-| 推論速度 | 2-5秒 | 0.3秒 |
-| コスト | API課金 | 電気代のみ |
-| 思考深度 | 深い戦略 | 即時反応 |
-| 学習ルール | あり | あり（共有） |
-| 掲示板 | 読み書き | 読み書き |
-
-### 今後の拡張
-
-```
-階層型エージェント構造:
-
-イベント → Mamba判定 → 重要？ ─Yes→ Claude起動（戦略）
-                         │
-                        No → Mamba自己処理（反射）
-```
-
-詳細は `/Users/shingo/Develop/mamba-agent/README.md` 参照。
+各スキルは `~/.claude/skills/` に保存された専門知識とツールセットを持つ。
 
 ## 注意事項
 
 - Minecraftサーバーでボットに`/op botname`が必要
 - サバイバルモードで動作（自動切替）
 - シングルプレイの「LANに公開」でもテスト可能
+- Dev Agentはopusモデル推奨（ソースコード修正の精度）
+- Game Agentはhaikuモデルで十分（ゲームプレイ）

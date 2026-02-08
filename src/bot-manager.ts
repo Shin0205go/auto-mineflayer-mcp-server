@@ -710,11 +710,12 @@ export class BotManager extends EventEmitter {
       let lastPos = start.clone();
       let pathResetCount = 0;
       let notMovingCount = 0;
+      let checkInterval: ReturnType<typeof setInterval> | null = null;
 
       const finish = (result: { success: boolean; message: string; stuckReason?: string }) => {
         if (resolved) return;
         resolved = true;
-        clearInterval(checkInterval);
+        if (checkInterval !== null) clearInterval(checkInterval);
         bot.removeListener("goal_reached", onGoalReached);
         bot.removeListener("path_reset", onPathReset);
         bot.removeListener("goal_updated", onGoalUpdated);
@@ -736,18 +737,36 @@ export class BotManager extends EventEmitter {
         }
       };
 
+      let lastPathResetPos = start.clone();
+
       const onPathReset = () => {
-        // path_reset fires when pathfinder recalculates; only fail after multiple resets
-        // without any progress, indicating the path truly cannot be found
+        // path_reset fires when pathfinder recalculates; with canDig=true this happens
+        // frequently as the bot digs through obstacles. Only fail after many consecutive
+        // resets without making any spatial progress toward the target.
+        const currentPos = bot.entity.position;
+        const movedSinceLastReset = currentPos.distanceTo(lastPathResetPos);
+        if (movedSinceLastReset > 0.3) {
+          // We made progress since last reset - this is normal recalculation
+          pathResetCount = 0;
+          lastPathResetPos = currentPos.clone();
+          return;
+        }
         pathResetCount++;
-        if (pathResetCount >= 3) {
-          const finalPos = bot.entity.position;
-          const finalDist = finalPos.distanceTo(targetPos);
+        // Also check if bot is currently digging - digging causes repeated resets
+        // while the bot stands still, which is normal behavior
+        const isDigging = (bot as any).targetDigBlock != null;
+        if (isDigging) {
+          // Reset counter during active digging - the bot is making progress
+          if (pathResetCount > 4) pathResetCount = 4;
+          return;
+        }
+        if (pathResetCount >= 20) {
+          const finalDist = currentPos.distanceTo(targetPos);
           if (finalDist > 3) {
-            const yDiff = y - finalPos.y;
+            const yDiff = y - currentPos.y;
             finish({
               success: false,
-              message: `Cannot reach target - no path found. Stopped at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks away.`,
+              message: `Cannot reach target - no path found. Stopped at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks away.`,
               stuckReason: Math.abs(yDiff) > 2 ? (yDiff > 0 ? "target_higher" : "target_lower") : "no_path"
             });
           }
@@ -757,11 +776,14 @@ export class BotManager extends EventEmitter {
       bot.on("goal_reached", onGoalReached);
       bot.on("path_reset", onPathReset);
       bot.on("goal_updated", onGoalUpdated);
-      bot.pathfinder.setGoal(goal);
 
-      const checkInterval = setInterval(() => {
+      // IMPORTANT: Initialize checkInterval BEFORE setGoal, because setGoal
+      // can synchronously fire path_reset, which calls finish() -> clearInterval(checkInterval).
+      // If checkInterval is still in TDZ (uninitialized let), this throws
+      // "Cannot access 'checkInterval' before initialization".
+      checkInterval = setInterval(() => {
         if (resolved) {
-          clearInterval(checkInterval);
+          if (checkInterval !== null) clearInterval(checkInterval);
           return;
         }
 
@@ -775,10 +797,12 @@ export class BotManager extends EventEmitter {
         }
 
         const moved = currentPos.distanceTo(lastPos);
-        if (moved < 0.1) {
+        // Check if bot is actively digging (standing still while breaking a block is progress)
+        const isDigging = (bot as any).targetDigBlock != null;
+        if (moved < 0.1 && !isDigging) {
           noProgressCount++;
-          // Allow more time for pathfinder to compute (15 checks * 500ms = 7.5s)
-          if (noProgressCount >= 15) {
+          // Allow more time: 30 checks * 500ms = 15s without any movement or digging
+          if (noProgressCount >= 30) {
             const yDiff = y - currentPos.y;
             finish({
               success: false,
@@ -793,11 +817,11 @@ export class BotManager extends EventEmitter {
           lastPos = currentPos.clone();
         }
 
-        // Only declare failure if pathfinder is not moving AND we've waited enough
-        if (!bot.pathfinder.isMoving() && currentDist > 3) {
+        // Only declare failure if pathfinder is not moving AND not digging AND we've waited enough
+        if (!bot.pathfinder.isMoving() && !isDigging && currentDist > 3) {
           notMovingCount++;
-          // Wait for at least 5 consecutive checks (2.5s) before concluding
-          if (notMovingCount >= 5) {
+          // Wait for at least 10 consecutive checks (5s) before concluding
+          if (notMovingCount >= 10) {
             const yDiff = y - currentPos.y;
             finish({
               success: false,
@@ -809,6 +833,9 @@ export class BotManager extends EventEmitter {
           notMovingCount = 0;
         }
       }, 500);
+
+      // Set the goal AFTER checkInterval is initialized (see comment above)
+      bot.pathfinder.setGoal(goal);
 
       const timeout = Math.max(15000, distance * 1000);
       setTimeout(() => {

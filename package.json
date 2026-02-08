@@ -13,7 +13,7 @@
     "start:mcp-ws": "node dist/mcp-ws-server.js",
     "start:mcp-ws:watch": "nodemon --watch dist/mcp-ws-server.js --watch dist/bot-manager.js --watch dist/tools dist/mcp-ws-server.js",
     "start:dev-agent": "node dist/agent/dev-agent.js",
-    "start:self-improve": "node dist/agent/claude-agent.js & node dist/agent/dev-agent.js & node dist/agent/review-agent.js & wait",
+    "start:self-improve": "MANAGE_GAME_AGENT=true node dist/agent/dev-agent.js",
     "start:review-agent": "node dist/agent/review-agent.js",
     "start:report-agent": "node dist/agent/report-agent.js",
     "board": "node dist/realtime-board.js",
