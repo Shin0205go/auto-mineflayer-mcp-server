@@ -386,7 +386,7 @@ export class ClaudeClient extends EventEmitter {
       tools: mainAgentTools,
 
       // Auto-allow these tools without permission prompts
-      allowedTools: ["Task", "mcp__mineflayer__*"],
+      allowedTools: mainAgentTools,  // Only awareness + Task, no action tools
 
       // Use Claude Code OAuth
       env: this.env,

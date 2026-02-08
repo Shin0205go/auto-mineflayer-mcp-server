@@ -170,6 +170,24 @@ class DevAgent {
     }
   }
 
+  private async subscribeToDev(): Promise<void> {
+    await this.callTool("dev_subscribe", {});
+  }
+
+  private async getAgentConfig(): Promise<AgentConfig> {
+    const result = await this.callTool("dev_get_config", {}) as { content: { text: string }[] };
+    const configText = result.content[0].text;
+    return JSON.parse(configText);
+  }
+
+  private async saveAgentConfig(config: AgentConfig, changes: ConfigChange[], analysis: string): Promise<void> {
+    await this.callTool("dev_save_config", {
+      config,
+      changes,
+      analysis,
+    });
+  }
+
   // ========== Tool Log Handling (Source Code Fixing) ==========
 
   private handleToolLog(log: ToolExecutionLog): void {
