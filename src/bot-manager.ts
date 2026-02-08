@@ -3806,29 +3806,29 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       });
     }
 
-    // Open trade window
+    // Open trade window using mineflayer's villager API
     try {
-      const villagerEntity = villager as any;
-      await bot.activateEntity(villagerEntity);
+      const villagerWindow = await bot.openVillager(villager);
 
-      // Wait for trade window to open
-      const tradeWindow = await new Promise<any>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error("Timeout waiting for trade window"));
-        }, 3000);
+      // Wait for trades to be ready
+      if (!villagerWindow.trades || villagerWindow.trades.length === 0) {
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            resolve(); // resolve anyway, trades might already be loaded
+          }, 5000);
 
-        bot.once("windowOpen", (window: any) => {
-          clearTimeout(timeout);
-          resolve(window);
+          villagerWindow.once("ready", () => {
+            clearTimeout(timeout);
+            resolve();
+          });
         });
-      });
+      }
 
-      // Get trades from the window
-      const trades = tradeWindow.trades || [];
+      const trades = villagerWindow.trades || [];
       console.error(`[Trade] Window opened with ${trades.length} trades`);
 
       if (trades.length === 0) {
-        bot.closeWindow(tradeWindow);
+        villagerWindow.close();
         return `Villager has no trades available. Type: ${villager.name}`;
       }
 
@@ -3842,19 +3842,19 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
           return `[${i}] ${input1}${input2} → ${output}${disabled}`;
         }).join("\n");
 
-        bot.closeWindow(tradeWindow);
+        villagerWindow.close();
         return `Villager trades:\n${tradeList}\n\nUse tradeIndex parameter to execute a trade.`;
       }
 
       // Execute specific trade
       if (tradeIndex < 0 || tradeIndex >= trades.length) {
-        bot.closeWindow(tradeWindow);
+        villagerWindow.close();
         throw new Error(`Invalid trade index ${tradeIndex}. Available: 0-${trades.length - 1}`);
       }
 
       const trade = trades[tradeIndex];
       if (trade.tradeDisabled) {
-        bot.closeWindow(tradeWindow);
+        villagerWindow.close();
         return `Trade [${tradeIndex}] is currently disabled (villager needs to restock).`;
       }
 
@@ -3863,29 +3863,30 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       const input2 = trade.inputItem2;
 
       if (input1) {
+        const realCount = trade.realPrice ?? input1.count;
         const have = bot.inventory.count(input1.type, input1.metadata);
-        if (have < input1.count) {
-          bot.closeWindow(tradeWindow);
-          return `Not enough ${input1.name}. Need ${input1.count}, have ${have}.`;
+        if (have < realCount) {
+          villagerWindow.close();
+          return `Not enough ${input1.name}. Need ${realCount}, have ${have}.`;
         }
       }
 
       if (input2) {
         const have = bot.inventory.count(input2.type, input2.metadata);
         if (have < input2.count) {
-          bot.closeWindow(tradeWindow);
+          villagerWindow.close();
           return `Not enough ${input2.name}. Need ${input2.count}, have ${have}.`;
         }
       }
 
-      // Execute the trade using mineflayer's trade method
-      await (bot as any).trade(villagerEntity, tradeIndex);
+      // Execute the trade using mineflayer's bot.trade() with the villager window instance
+      await bot.trade(villagerWindow, tradeIndex, 1);
       await this.delay(300);
 
       const output = trade.outputItem;
       const outputDesc = output ? `${output.count}x ${output.name}` : "item";
 
-      bot.closeWindow(tradeWindow);
+      villagerWindow.close();
       return `Trade successful! Received ${outputDesc}.`;
 
     } catch (err: any) {

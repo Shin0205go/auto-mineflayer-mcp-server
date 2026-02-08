@@ -677,10 +677,15 @@ ${buildError ? `
       });
 
       let editApplied = false;
+      let claudeResponse = "";
 
       for await (const msg of result) {
+        // Log all messages for debugging
+        console.log(`${PREFIX} ${C.dim}Claude msg type: ${msg.type}${C.reset}`);
+
         if (msg.type === "tool_use_summary") {
-          const summary = msg as { type: string; toolName?: string; success?: boolean };
+          const summary = msg as { type: string; toolName?: string; success?: boolean; error?: string };
+          console.log(`${PREFIX} Tool: ${summary.toolName}, Success: ${summary.success}, Error: ${summary.error || "none"}`);
           if (summary.toolName === "Edit" && summary.success) {
             editApplied = true;
             console.log(`${PREFIX} ${C.green}Edit applied successfully${C.reset}`);
@@ -691,6 +696,11 @@ ${buildError ? `
           const content = msg.message.content;
           if (Array.isArray(content)) {
             for (const block of content) {
+              if (block.type === "text") {
+                const textContent = (block as { text?: string }).text || "";
+                claudeResponse += textContent;
+                console.log(`${PREFIX} ${C.dim}Claude: ${textContent.slice(0, 150)}...${C.reset}`);
+              }
               if (block.type === "tool_use" && (block as { name?: string }).name === "Edit") {
                 console.log(`${PREFIX} ${C.cyan}Edit tool invoked${C.reset}`);
                 editApplied = true;
@@ -698,6 +708,12 @@ ${buildError ? `
             }
           }
         }
+      }
+
+      // Log Claude's final response if no edit was applied
+      if (!editApplied && claudeResponse) {
+        console.log(`${PREFIX} ${C.yellow}Claude's response (no edit):${C.reset}`);
+        console.log(`${PREFIX} ${claudeResponse.slice(0, 500)}`);
       }
 
       if (editApplied) {
