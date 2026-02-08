@@ -258,6 +258,7 @@ const INFORMATIONAL_TOOLS = [
   "minecraft_get_entities",
   "minecraft_find_entities",   // "No cow found" is valid info, not an error
   "minecraft_find_block",      // "No oak_log found" is valid info, not an error
+  "minecraft_move_to",         // "Path blocked" is gameplay info, not an error
   "minecraft_craft",           // Missing materials is info, not error
   "minecraft_smelt",           // Missing furnace/fuel is info, not error
   "agent_board_read",
