@@ -181,7 +181,7 @@ ${logContent.slice(-15000)}  // 最新15000文字
       const result = query({
         prompt,
         options: {
-          model: "claude-opus-4-6",
+          model: process.env.CLAUDE_MODEL || "sonnet",
           maxTurns: 1,
           tools: [],
         },

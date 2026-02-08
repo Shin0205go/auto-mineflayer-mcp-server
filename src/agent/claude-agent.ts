@@ -11,9 +11,10 @@ import "dotenv/config";
 import { spawn, ChildProcess } from "child_process";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import WebSocket from "ws";
-import { ClaudeClient } from "./claude-client.js";
+import { ClaudeClient, buildSystemPromptFromConfig } from "./claude-client.js";
+import type { AgentConfig, LoopResult } from "../types/agent-config.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -105,6 +106,7 @@ function startMCPServer(): Promise<void> {
 class ClaudeAgent {
   private claude: ClaudeClient;
   private isRunning = false;
+  private agentConfig: AgentConfig | null = null;
 
   constructor() {
     this.claude = new ClaudeClient({
@@ -113,6 +115,50 @@ class ClaudeAgent {
     });
 
     this.setupEventHandlers();
+  }
+
+  /**
+   * Load agent-config.json and update system prompt
+   */
+  private loadConfig(): AgentConfig | null {
+    try {
+      const configPath = join(projectRoot, "learning", "agent-config.json");
+      if (!existsSync(configPath)) {
+        return null;
+      }
+      const configData = JSON.parse(readFileSync(configPath, "utf-8")) as AgentConfig;
+      return configData;
+    } catch (e) {
+      console.error(`${PREFIX} Failed to load agent-config.json:`, e);
+      return null;
+    }
+  }
+
+  /**
+   * Reload config and update system prompt
+   */
+  private reloadConfig(): void {
+    const newConfig = this.loadConfig();
+    if (newConfig) {
+      const configChanged = !this.agentConfig || newConfig.version !== this.agentConfig.version;
+      this.agentConfig = newConfig;
+      if (configChanged) {
+        const newPrompt = buildSystemPromptFromConfig(newConfig);
+        this.claude.updateSystemPrompt(newPrompt);
+        console.log(`${PREFIX} ${C.green}Config reloaded (v${newConfig.version})${C.reset}`);
+      }
+    }
+  }
+
+  /**
+   * Publish loop result to MCP server
+   */
+  private async publishLoopResult(loopResult: LoopResult): Promise<void> {
+    try {
+      await this.claude.callMCPTool("dev_publish_loop_result", { loopResult });
+    } catch (e) {
+      console.error(`${PREFIX} Failed to publish loop result:`, e);
+    }
   }
 
   private setupEventHandlers(): void {
@@ -136,7 +182,10 @@ class ClaudeAgent {
 
     this.isRunning = true;
 
-    // Load learned optimization rules (high priority only, max 30)
+    // Load agent-config.json (replaces rules.json)
+    this.reloadConfig();
+
+    // Also load legacy rules for backwards compatibility
     let learnedRules = "";
     try {
       const rulesPath = join(projectRoot, "learning", "rules.json");
@@ -188,6 +237,9 @@ ${learnedRules ? `## 学習ルール:\n${learnedRules}\n` : ""}
         loopCount++;
         console.log(`\n${PREFIX} ${C.cyan}=== Loop ${loopCount} ===${C.reset}`);
 
+        // Reload config at start of each loop (picks up Dev Agent changes)
+        this.reloadConfig();
+
         // Events are now injected per tool call via MCP Bridge
         const result = await this.claude.runQuery(currentPrompt);
 
@@ -210,6 +262,20 @@ ${learnedRules ? `## 学習ルール:\n${learnedRules}\n` : ""}
           console.error(`${PREFIX} ${C.red}Turn failed:${C.reset}`, result.error);
           loopSummary = `エラー: ${result.error?.slice(0, 50) || "unknown"}`;
         }
+
+        // Publish loop result for Dev Agent analysis
+        const loopResult: LoopResult = {
+          id: `loop_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+          loopNumber: loopCount,
+          timestamp: Date.now(),
+          success: result.success,
+          summary: loopSummary || `ループ${loopCount}`,
+          toolCalls: result.toolCalls || [],
+          status: { hp: 0, food: 0, position: [0, 0, 0] },  // Will be filled from last status check
+          usage: result.usage,
+          intent: currentPrompt.slice(0, 100),
+        };
+        await this.publishLoopResult(loopResult);
 
         // Force board write at end of each loop with actual summary
         await this.claude.forceBoardWrite(

@@ -15,6 +15,7 @@ import { appendFileSync, readFileSync, existsSync, writeFileSync, mkdirSync } fr
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import type { ToolExecutionLog, ToolExecutionContext } from "./types/tool-log.js";
+import type { LoopResult } from "./types/agent-config.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -26,6 +27,15 @@ const MAX_LOGS_IN_MEMORY = 500;
 
 // Dev Agent subscriptions (for receiving tool logs)
 const devAgentConnections = new Set<WebSocket>();
+
+// Loop result storage
+const LOOP_RESULT_FILE = join(__dirname, "..", "logs", "loop-results.jsonl");
+const loopResults: LoopResult[] = [];
+const MAX_LOOP_RESULTS = 100;
+
+// Agent config paths
+const AGENT_CONFIG_FILE = join(__dirname, "..", "learning", "agent-config.json");
+const EVOLUTION_HISTORY_FILE = join(__dirname, "..", "learning", "evolution-history.jsonl");
 
 // Ensure logs directory exists
 function ensureLogDir() {
@@ -57,6 +67,86 @@ function getBotContext(username: string): ToolExecutionContext {
   } catch {
     return {};
   }
+}
+
+// === Critical State Check (Skill Abort) ===
+const CRITICAL_HP_THRESHOLD = 5;
+
+// Tools that are always allowed (safe/recovery actions)
+const SAFE_TOOLS = new Set([
+  "minecraft_connect",
+  "minecraft_disconnect",
+  "minecraft_get_position",
+  "minecraft_get_status",
+  "minecraft_get_surroundings",
+  "minecraft_get_inventory",
+  "minecraft_get_equipment",
+  "minecraft_get_nearby_entities",
+  "minecraft_get_biome",
+  "minecraft_get_chat_messages",
+  "minecraft_chat",
+  "minecraft_eat",           // Recovery action
+  "minecraft_flee",          // Safety action
+  "minecraft_sleep",         // Safety action
+  "subscribe_events",
+  "agent_board_read",
+  "agent_board_write",
+  "agent_board_wait",
+  "agent_board_clear",
+  // Learning/memory tools
+  "log_experience",
+  "get_recent_experiences",
+  "reflect_and_learn",
+  "save_memory",
+  "recall_memory",
+  "forget_memory",
+  "get_agent_skill",
+  "list_agent_skills",
+  // Dev tools
+  "dev_subscribe",
+  "dev_get_tool_logs",
+  "dev_get_failure_summary",
+  "dev_clear_logs",
+  "dev_publish_loop_result",
+  "dev_get_loop_results",
+  "dev_get_config",
+  "dev_save_config",
+  "dev_get_evolution_history",
+]);
+
+/**
+ * Check if bot is in critical state and tool should be blocked
+ * Returns abort message if should block, null if OK to proceed
+ */
+function checkCriticalState(username: string | undefined, toolName: string): string | null {
+  // Skip check for safe tools
+  if (SAFE_TOOLS.has(toolName)) {
+    return null;
+  }
+
+  // Skip if no username (not connected)
+  if (!username) {
+    return null;
+  }
+
+  try {
+    const status = botManager.getStatus(username);
+    const statusObj = JSON.parse(status);
+    const hp = statusObj.health;
+
+    if (hp <= CRITICAL_HP_THRESHOLD) {
+      return `【緊急中断】HP=${hp}（危険水準）。このツールは実行できません。` +
+        `\n\n即座に以下のいずれかを実行してください:` +
+        `\n1. minecraft_eat で食事（インベントリに食料があれば）` +
+        `\n2. minecraft_flee で安全な場所へ逃走` +
+        `\n3. スキルを終了して親エージェントに報告` +
+        `\n\n現在の状態: HP=${hp}/20, 食料=${statusObj.food}/20`;
+    }
+  } catch {
+    // If we can't get status, allow the tool to proceed
+  }
+
+  return null;
 }
 
 // Record tool execution
@@ -725,6 +815,52 @@ const tools = {
     inputSchema: { type: "object", properties: {} },
   },
 
+  // === Dev Agent v2 ツール ===
+  dev_publish_loop_result: {
+    description: "Publish a loop result from Game Agent for Dev Agent analysis",
+    inputSchema: {
+      type: "object",
+      properties: {
+        loopResult: { type: "object", description: "LoopResult object with id, loopNumber, timestamp, success, summary, toolCalls, status, usage, intent" },
+      },
+      required: ["loopResult"],
+    },
+  },
+  dev_get_loop_results: {
+    description: "Get recent loop results for analysis",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", default: 10, description: "Max results to return (default: 10)" },
+        since: { type: "number", description: "Timestamp to filter from" },
+      },
+    },
+  },
+  dev_get_config: {
+    description: "Get current agent-config.json",
+    inputSchema: { type: "object", properties: {} },
+  },
+  dev_save_config: {
+    description: "Save updated agent-config.json and append to evolution history",
+    inputSchema: {
+      type: "object",
+      properties: {
+        config: { type: "object", description: "New AgentConfig object" },
+        evolution: { type: "object", description: "EvolutionEntry describing the changes" },
+      },
+      required: ["config", "evolution"],
+    },
+  },
+  dev_get_evolution_history: {
+    description: "Get evolution history entries",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", default: 20, description: "Max entries to return" },
+      },
+    },
+  },
+
   // === 自己学習ツール ===
   ...learningTools,
 };
@@ -736,6 +872,13 @@ async function handleTool(
   args: Record<string, unknown>
 ): Promise<string> {
   const username = connectionBots.get(ws);
+
+  // Check for critical state before executing dangerous tools
+  const criticalAbort = checkCriticalState(username, name);
+  if (criticalAbort) {
+    console.error(`[MCP-WS] Critical state abort: ${name} blocked for ${username}`);
+    return criticalAbort;
+  }
 
   switch (name) {
     case "minecraft_connect": {
@@ -1115,6 +1258,108 @@ async function handleTool(
         // Ignore
       }
       return "Tool logs cleared";
+    }
+
+    // === Dev Agent v2 tools ===
+    case "dev_publish_loop_result": {
+      const loopResult = args.loopResult as LoopResult;
+      if (!loopResult) throw new Error("loopResult is required");
+
+      // Store in memory
+      loopResults.push(loopResult);
+      if (loopResults.length > MAX_LOOP_RESULTS) {
+        loopResults.shift();
+      }
+
+      // Persist to file
+      try {
+        ensureLogDir();
+        appendFileSync(LOOP_RESULT_FILE, JSON.stringify(loopResult) + "\n");
+      } catch (e) {
+        console.error("[MCP-WS-Server] Failed to write loop result:", e);
+      }
+
+      // Notify Dev Agents
+      const loopNotification = {
+        jsonrpc: "2.0",
+        method: "notifications/loopResult",
+        params: loopResult,
+      };
+      const loopJson = JSON.stringify(loopNotification);
+
+      devAgentConnections.forEach((devWs) => {
+        if (devWs.readyState === WebSocket.OPEN) {
+          devWs.send(loopJson);
+        }
+      });
+
+      console.log(`[MCP-WS-Server] Loop result #${loopResult.loopNumber} published (success=${loopResult.success})`);
+      return `Loop result #${loopResult.loopNumber} published`;
+    }
+
+    case "dev_get_loop_results": {
+      const limit = (args.limit as number) || 10;
+      const since = args.since as number | undefined;
+
+      let results = [...loopResults];
+      if (since) {
+        results = results.filter(r => r.timestamp > since);
+      }
+      results = results.slice(-limit);
+
+      return JSON.stringify(results, null, 2);
+    }
+
+    case "dev_get_config": {
+      try {
+        const configContent = readFileSync(AGENT_CONFIG_FILE, "utf-8");
+        return configContent;
+      } catch (e) {
+        throw new Error(`Failed to read agent-config.json: ${e}`);
+      }
+    }
+
+    case "dev_save_config": {
+      const config = args.config as Record<string, unknown>;
+      const evolution = args.evolution as Record<string, unknown>;
+
+      if (!config) throw new Error("config is required");
+
+      try {
+        // Save config
+        writeFileSync(AGENT_CONFIG_FILE, JSON.stringify(config, null, 2) + "\n");
+        console.log(`[MCP-WS-Server] Agent config saved (version ${config.version})`);
+
+        // Append evolution entry
+        if (evolution) {
+          appendFileSync(EVOLUTION_HISTORY_FILE, JSON.stringify(evolution) + "\n");
+          console.log(`[MCP-WS-Server] Evolution entry appended`);
+        }
+
+        return `Config saved (version ${config.version})`;
+      } catch (e) {
+        throw new Error(`Failed to save config: ${e}`);
+      }
+    }
+
+    case "dev_get_evolution_history": {
+      const limit = (args.limit as number) || 20;
+
+      try {
+        if (!existsSync(EVOLUTION_HISTORY_FILE)) {
+          return "[]";
+        }
+        const content = readFileSync(EVOLUTION_HISTORY_FILE, "utf-8");
+        const entries = content
+          .trim()
+          .split("\n")
+          .filter(line => line.trim())
+          .map(line => JSON.parse(line));
+
+        return JSON.stringify(entries.slice(-limit), null, 2);
+      } catch (e) {
+        throw new Error(`Failed to read evolution history: ${e}`);
+      }
     }
 
     // === Additional Mineflayer API Tools ===

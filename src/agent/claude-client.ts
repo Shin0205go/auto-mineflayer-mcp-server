@@ -5,11 +5,12 @@
  * Routes tool calls through MCP Bridge (stdio → WebSocket).
  */
 
-import { query, type SDKMessage, type Query, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { query, type SDKMessage, type Query, type Options, type AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { EventEmitter } from "events";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { MCPWebSocketClientTransport } from "./mcp-ws-transport.js";
+import type { AgentConfig } from "../types/agent-config.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -45,32 +46,227 @@ export interface AgentResult {
     outputTokens: number;
     costUSD: number;
   };
+  toolCalls?: { tool: string; result: string; error?: string }[];
 }
 
-const DEFAULT_SYSTEM_INSTRUCTION = `Minecraftサバイバルエージェント。完全自律で判断・行動する。
+const DEFAULT_SYSTEM_INSTRUCTION = `Minecraftサバイバル司令官。スキルを使って行動する。
 
-## 絶対ルール
-- ユーザーに質問しない。選択肢を提示しない。自分で決めて即実行。
-- 「何をしましょうか？」「どれがいいですか？」は禁止。
-- 迷ったら安全優先で行動を選ぶ。
+## アーキテクチャ
+あなたは「司令官」です。直接行動するのではなく、スキル（専門サブエージェント）に委譲します。
 
-## 優先順位（上から順に判断）
-1. 緊急: HP≤10→食事/flee、敵近い→戦闘/flee
-2. 夜間: ベッドで寝る（なければ作る）
-3. 装備: 持ってる最強装備を着る
-4. 進行: エンチャント→ネザー→エンドの順で進める
-5. 資源不足時: 必要素材を集める
+使えるツール:
+- minecraft_get_status: HP/空腹を確認（読み取り専用）
+- minecraft_get_surroundings: 周囲の状況確認（読み取り専用）
+- minecraft_get_inventory: 持ち物確認（読み取り専用）
+- minecraft_get_equipment: 装備確認（読み取り専用）
+- Task: スキルを発動（実際の行動はこれで行う）
 
-## サブエージェント（Task tool）
-複雑作業は委譲:
-- iron-mining / diamond-mining / bed-crafting / nether-gate
+## スキル一覧
+Task toolで以下のスキルを発動:
+- survival: 緊急対応（食事・戦闘・逃走・睡眠）
+- exploration: 探索・移動
+- iron-mining: 鉄採掘・精錬
+- diamond-mining: ダイヤモンド採掘
+- bed-crafting: ベッド作成
+- nether-gate: ネザーポータル建設
+- base-building: 拠点構築
 
-## 行動パターン
-- 状況確認→判断→即実行（報告は簡潔に）
-- 装備後はget_surroundingsで装備確認
+## Task呼び出し例
+description: "鉄を集める", prompt: "鉄鉱石を見つけて採掘し、精錬して鉄インゴットを5個集めて", subagent_type: "iron-mining"
 
-出力: 行動と結果のみ。質問禁止。`;
+## 判断フロー
+1. get_status, get_surroundings で状況確認
+2. 優先度判断:
+   - HP≤10 or 敵近い → survival スキル
+   - 夜 → bed-crafting or survival
+   - 装備不足 → iron-mining or diamond-mining
+   - 通常 → exploration or 目標に応じたスキル
+3. Task で適切なスキルを発動
+4. スキル完了後、再度状況確認
 
+## ルール
+- 直接dig/craft/moveはしない（スキルに任せる）
+- 質問しない、選択肢を提示しない
+- 簡潔に報告`;
+
+/**
+ * Build system prompt from AgentConfig
+ * Converts personality, priorities, rules, thresholds into prompt text
+ */
+export function buildSystemPromptFromConfig(config: AgentConfig): string {
+  // Sort priorities by weight (descending)
+  const sortedPriorities = Object.entries(config.priorities)
+    .sort(([, a], [, b]) => b - a)
+    .map(([name, weight]) => `- ${name}: ${weight}`)
+    .join("\n");
+
+  // Format personality
+  const personality = config.personality;
+  const personalityText = [
+    `攻撃性: ${personality.aggressiveness}/10`,
+    `探索意欲: ${personality.explorationDrive}/10`,
+    `資源収集: ${personality.resourceHoarding}/10`,
+    `リスク許容: ${personality.riskTolerance}/10`,
+  ].join("、");
+
+  // Format decision rules
+  const rulesText = config.decisionRules.length > 0
+    ? config.decisionRules
+        .map(r => `- [${r.priority}] ${r.condition} → ${r.action}`)
+        .join("\n")
+    : "（なし）";
+
+  // Format thresholds
+  const thresholds = config.thresholds;
+  const thresholdsText = [
+    `逃走HP: ${thresholds.fleeHP}`,
+    `食事空腹度: ${thresholds.eatHunger}`,
+    `夜行動開始: ${thresholds.nightShelterTime} tick`,
+  ].join("、");
+
+  return `Minecraftサバイバル司令官。スキルを使って行動する。
+
+## アーキテクチャ
+あなたは「司令官」です。直接行動するのではなく、スキル（専門サブエージェント）に委譲します。
+
+使えるツール:
+- minecraft_get_status: HP/空腹を確認（読み取り専用）
+- minecraft_get_surroundings: 周囲の状況確認（読み取り専用）
+- minecraft_get_inventory: 持ち物確認（読み取り専用）
+- minecraft_get_equipment: 装備確認（読み取り専用）
+- Task: スキルを発動（実際の行動はこれで行う）
+
+## スキル一覧
+Task toolで以下のスキルを発動:
+- survival: 緊急対応（食事・戦闘・逃走・睡眠）
+- exploration: 探索・移動
+- iron-mining: 鉄採掘・精錬
+- diamond-mining: ダイヤモンド採掘
+- bed-crafting: ベッド作成
+- nether-gate: ネザーポータル建設
+- base-building: 拠点構築
+
+## Task呼び出し例
+description: "鉄を集める", prompt: "鉄鉱石を見つけて採掘し、精錬して鉄インゴットを5個集めて", subagent_type: "iron-mining"
+
+## 性格特性
+${personalityText}
+
+## 行動優先度（重み順）
+${sortedPriorities}
+
+## 判断ルール
+${rulesText}
+
+## 閾値
+${thresholdsText}
+
+## 判断フロー
+1. get_status, get_surroundings で状況確認
+2. 優先度判断:
+   - HP≤${thresholds.fleeHP} or 敵近い → survival スキル
+   - 夜（${thresholds.nightShelterTime} tick以降） → bed-crafting or survival
+   - 装備不足 → iron-mining or diamond-mining
+   - 通常 → 優先度リストに従う
+3. Task で適切なスキルを発動
+4. スキル完了後、再度状況確認
+
+## ルール
+- 直接dig/craft/moveはしない（スキルに任せる）
+- 質問しない、選択肢を提示しない
+- 簡潔に報告`;
+}
+
+// Tool prefix for MCP tools (server name = "mineflayer")
+const MCP_PREFIX = "mcp__mineflayer__";
+
+// Common tool sets that skills can compose
+const TOOL_SETS: Record<string, string[]> = {
+  awareness: [
+    "minecraft_get_status",
+    "minecraft_get_surroundings",
+    "minecraft_get_inventory",
+    "minecraft_get_position",
+  ],
+  movement: [
+    "minecraft_move_to",
+    "minecraft_find_block",
+  ],
+  mining: [
+    "minecraft_dig_block",
+    "minecraft_tunnel",
+    "minecraft_collect_items",
+  ],
+  crafting: [
+    "minecraft_craft",
+    "minecraft_check_infrastructure",
+  ],
+  building: [
+    "minecraft_place_block",
+  ],
+  combat: [
+    "minecraft_fight",
+    "minecraft_attack",
+    "minecraft_flee",
+    "minecraft_get_nearby_entities",
+  ],
+  equipment: [
+    "minecraft_equip_item",
+  ],
+  survival: [
+    "minecraft_eat",
+    "minecraft_sleep",
+  ],
+  smelting: [
+    "minecraft_smelt",
+  ],
+  memory: [
+    "save_memory",
+    "recall_memory",
+  ],
+  skill: [
+    "get_agent_skill",
+  ],
+};
+
+// Skill definitions with specific tool access
+const SKILL_DEFINITIONS: Record<string, {
+  description: string;
+  toolSets: string[];
+  extraTools?: string[];
+}> = {
+  "iron-mining": {
+    description: "鉄鉱石採掘・精錬。鉄装備が必要な時に使う。",
+    toolSets: ["awareness", "movement", "mining", "crafting", "smelting", "equipment", "skill"],
+  },
+  "diamond-mining": {
+    description: "ダイヤモンド採掘。Y=-59でブランチマイニング。",
+    toolSets: ["awareness", "movement", "mining", "crafting", "equipment", "skill"],
+    extraTools: ["minecraft_pillar_up"],
+  },
+  "bed-crafting": {
+    description: "ベッド作成（羊狩り→羊毛→ベッド）。夜をスキップしたい時に使う。",
+    toolSets: ["awareness", "movement", "mining", "crafting", "combat", "survival", "skill"],
+  },
+  "nether-gate": {
+    description: "ネザーポータル建設（黒曜石採掘 or 鋳造）。",
+    toolSets: ["awareness", "movement", "mining", "crafting", "building", "skill"],
+    extraTools: ["minecraft_smelt"],
+  },
+  "survival": {
+    description: "サバイバル基本行動（食事・戦闘・逃走・睡眠）。緊急時に使う。",
+    toolSets: ["awareness", "movement", "combat", "survival", "equipment", "skill"],
+  },
+  "exploration": {
+    description: "探索・移動。新しい場所を見つけたい時に使う。",
+    toolSets: ["awareness", "movement", "mining", "memory", "skill"],
+    extraTools: ["minecraft_pillar_up"],
+  },
+  "base-building": {
+    description: "拠点構築（チェスト・かまど・作業台設置）。",
+    toolSets: ["awareness", "movement", "mining", "crafting", "building", "memory", "skill"],
+  },
+};
 
 // Content block types
 interface TextBlock {
@@ -106,7 +302,7 @@ export class ClaudeClient extends EventEmitter {
   constructor(config: ClaudeConfig = {}) {
     super();
     this.config = {
-      model: "claude-opus-4-6",
+      model: process.env.CLAUDE_MODEL || "haiku",
       systemInstruction: DEFAULT_SYSTEM_INSTRUCTION,
       maxTurns: 50,
       mcpServerUrl: "ws://localhost:8765",
@@ -172,21 +368,32 @@ export class ClaudeClient extends EventEmitter {
 
   /**
    * Create options for Agent SDK with MCP Bridge
+   * Main agent only has Task + minimal awareness tools
+   * All action tools are hidden and only available through skill subagents
    */
   private createOptions(): Options {
-    return {
-      // Enable Task tool for subagent invocation
-      tools: ["Task"],
+    // Main agent only sees these tools (read-only awareness + Task)
+    const mainAgentTools = [
+      "Task",  // For invoking skill subagents
+      `${MCP_PREFIX}minecraft_get_status`,      // HP/hunger check
+      `${MCP_PREFIX}minecraft_get_surroundings`, // Environment awareness
+      `${MCP_PREFIX}minecraft_get_inventory`,   // What do we have?
+      `${MCP_PREFIX}minecraft_get_equipment`,   // What are we wearing?
+    ];
 
-      // Auto-allow Task and MCP tools without permission prompts
-      allowedTools: ["Task", "mcp__minecraft-mcp__*"],
+    return {
+      // Main agent tools - minimal awareness only
+      tools: mainAgentTools,
+
+      // Auto-allow these tools without permission prompts
+      allowedTools: ["Task", "mcp__mineflayer__*"],
 
       // Use Claude Code OAuth
       env: this.env,
 
       // Route through MCP Bridge (stdio → WebSocket)
       mcpServers: {
-        "minecraft-mcp": {
+        "mineflayer": {
           command: "node",
           args: [MCP_BRIDGE_PATH],
           env: {
@@ -218,65 +425,70 @@ export class ClaudeClient extends EventEmitter {
     };
   }
 
+
   /**
    * Create skill-based subagent definitions
-   * Subagents inherit MCP servers from parent automatically
-   * Use 'tools' array to control which tools subagent can access
+   * Each skill only sees the tools it needs
    */
-  private createSkillAgents(): Record<string, {
-    description: string;
-    prompt: string;
-    tools?: string[];
-    model?: "sonnet" | "opus" | "haiku" | "inherit";
-  }> {
-    const skills = [
-      { name: "iron-mining", description: "鉄鉱石採掘・精錬の専門家。鉄装備が必要な時に使う。" },
-      { name: "diamond-mining", description: "ダイヤモンド採掘の専門家。ダイヤ装備が必要な時に使う。" },
-      { name: "bed-crafting", description: "ベッド作成（羊毛収集含む）の専門家。夜をスキップしたい時に使う。" },
-      { name: "nether-gate", description: "ネザーポータル建設の専門家。ネザーに行きたい時に使う。" },
-      { name: "nether-fortress", description: "ネザー要塞探索の専門家。ブレイズロッドが必要な時に使う。" },
-      { name: "enchanting", description: "エンチャント・XPファームの専門家。装備を強化したい時に使う。" },
-      { name: "auto-farm", description: "自動農場建設の専門家。食料を自動化したい時に使う。" },
-      { name: "mob-farm", description: "モブトラップ建設の専門家。経験値・ドロップを自動化したい時に使う。" },
-      { name: "iron-golem-trap", description: "アイアンゴーレムトラップ建設の専門家。鉄を無限化したい時に使う。" },
-      { name: "villager-trading", description: "村人取引・繁殖の専門家。エメラルドやレアアイテムが欲しい時に使う。" },
-      { name: "potion-brewing", description: "ポーション醸造の専門家。バフポーションが必要な時に使う。" },
-      { name: "redstone-basics", description: "レッドストーン回路の専門家。自動化装置を作りたい時に使う。" },
-      { name: "ender-dragon", description: "エンダードラゴン討伐の専門家。エンドに行ってボスを倒したい時に使う。" },
-    ];
+  private createSkillAgents(): Record<string, AgentDefinition> {
+    const agents: Record<string, AgentDefinition> = {};
 
-    const agents: Record<string, {
-      description: string;
-      prompt: string;
-      tools?: string[];
-      model?: "sonnet" | "opus" | "haiku" | "inherit";
-    }> = {};
+    for (const [skillName, skillDef] of Object.entries(SKILL_DEFINITIONS)) {
+      // Build tool list from tool sets
+      const tools: string[] = [];
+      for (const setName of skillDef.toolSets) {
+        const toolSet = TOOL_SETS[setName];
+        if (toolSet) {
+          for (const tool of toolSet) {
+            const fullName = MCP_PREFIX + tool;
+            if (!tools.includes(fullName)) {
+              tools.push(fullName);
+            }
+          }
+        }
+      }
+      // Add extra tools
+      if (skillDef.extraTools) {
+        for (const tool of skillDef.extraTools) {
+          const fullName = MCP_PREFIX + tool;
+          if (!tools.includes(fullName)) {
+            tools.push(fullName);
+          }
+        }
+      }
 
-    for (const skill of skills) {
-      agents[skill.name] = {
-        description: skill.description,
-        prompt: `あなたは「${skill.name}」スキルの専門サブエージェントです。
+      agents[skillName] = {
+        description: skillDef.description,
+        prompt: `あなたは「${skillName}」スキルの専門エージェントです。
 
-## 最初にやること
-1. mcp__minecraft-mcp__get_agent_skill で skill_name: "${skill.name}" のスキル詳細を取得
+## 使えるツール
+このスキルでは以下のツールのみ使用可能です:
+${tools.map(t => "- " + t.replace(MCP_PREFIX, "")).join("\n")}
+
+## 手順
+1. get_agent_skill で "${skillName}" のスキル詳細を取得
 2. スキルの手順に従って実行
+3. 完了したら結果を報告
 
-## 実行中のルール
-- 毎ターン mcp__minecraft-mcp__minecraft_get_status でHP確認
-- HP5以下なら即座に中断して報告
-- 必要な素材が足りない場合は報告
+## 安全ルール
+- HP≤5 → ツールがブロックされ「緊急中断」メッセージが返る
+- 「緊急中断」を受けたら → eat/flee後、即座にスキル終了して報告
+- 素材不足 → 報告して終了
 
-## 完了条件
-- スキルの目標を達成したら結果を報告して終了
-
-では、まずスキル詳細を取得してください。`,
-        // Inherit all tools from parent (including MCP tools)
-        // By omitting 'tools', subagent gets access to all parent's tools
-        model: "sonnet",
+スキル詳細を取得してください。`,
+        tools: tools,  // Only these tools are visible to this skill
+        model: "inherit",
       };
     }
 
     return agents;
+  }
+
+  /**
+   * Update the system prompt (called when config changes)
+   */
+  updateSystemPrompt(prompt: string): void {
+    this.config.systemInstruction = prompt;
   }
 
   /**
@@ -291,9 +503,15 @@ export class ClaudeClient extends EventEmitter {
       let result: string | undefined;
       let usage: AgentResult["usage"] | undefined;
       let error: string | undefined;
+      const toolCalls: { tool: string; result: string; error?: string }[] = [];
 
       for await (const message of queryResult) {
-        // Log assistant messages
+        // Debug: log message types to understand SDK subagent structure
+        if (message.type === "tool_progress" || message.type === "tool_use_summary") {
+          console.log(`${PREFIX} ${C.dim}[${message.type}]${C.reset}`, JSON.stringify(message).slice(0, 500));
+        }
+
+        // Log assistant messages (main agent)
         if (message.type === "assistant" && message.message.content) {
           const content = message.message.content as ContentBlock[];
           for (const block of content) {
@@ -308,8 +526,13 @@ export class ClaudeClient extends EventEmitter {
               const toolBlock = block as ToolUseBlock;
               console.log(`${PREFIX} ${C.dim}Tool: ${toolBlock.name}${C.reset}`, toolBlock.input);
               this.emit("tool_use", toolBlock.name, toolBlock.input);
+              // Track tool call
+              toolCalls.push({
+                tool: toolBlock.name.replace(MCP_PREFIX, ""),
+                result: "pending",
+              });
               // Log tool call to board
-              const toolShort = toolBlock.name.replace("mcp__minecraft-mcp__", "");
+              const toolShort = toolBlock.name.replace(MCP_PREFIX, "");
               this.logToBoard(`🔧 ${toolShort}`);
             }
           }
@@ -335,6 +558,7 @@ export class ClaudeClient extends EventEmitter {
         result,
         error,
         usage,
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       };
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : String(e);
@@ -421,6 +645,16 @@ ${lines.join("\n")}
 **重要**: 上記イベントを確認し、必要に応じて対応してください。
 - health_changed/damaged → HPが低ければ食べるか逃げる
 - hostile_spawn → 戦うか逃げるか判断`;
+  }
+
+  /**
+   * Call a tool on the MCP server directly
+   */
+  async callMCPTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+    if (!this.mcp) {
+      throw new Error("MCP not connected");
+    }
+    return this.mcp.callTool(name, args);
   }
 
   /**
