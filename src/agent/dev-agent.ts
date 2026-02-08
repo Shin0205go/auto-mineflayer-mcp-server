@@ -575,12 +575,10 @@ ${C.yellow}╔══════════════════════
   ): Promise<ImprovementPlan | null> {
     let filePath: string;
     let funcName: string | undefined;
-    let found: boolean;
 
     if (buildError && brokenFilePath) {
       filePath = brokenFilePath;
       funcName = undefined;
-      found = true;
       console.log(`${PREFIX} Re-reading broken file: ${filePath}`);
     } else {
       const mapping = await this.findToolImplementation(toolName);
@@ -590,7 +588,6 @@ ${C.yellow}╔══════════════════════
       }
       filePath = mapping.file;
       funcName = mapping.func;
-      found = mapping.found;
     }
 
     let sourceCode = await this.readFile(filePath);
@@ -612,55 +609,31 @@ ${C.yellow}╔══════════════════════
       }
     }
 
-    const implStatus = found
-      ? `✅ 実装確認済み: ${funcName || "関数"}() が ${filePath} に存在します。`
-      : `⚠️ 実装が見つかりません: ${funcName || "関数"}() の実装を探しています。`;
+    const prompt = `${toolName}ツールの修正タスク。
 
-    const buildErrorSection = buildError
-      ? `
-## 🚨 ビルドエラー（最優先で修正してください）:
-\`\`\`
-${buildError}
-\`\`\`
+## エラー内容:
+${failures.errors.map(e => `- ${e}`).join("\n")}
 
-**このビルドエラーを解決してください。** 元のランタイムエラーは後回しで構いません。
-`
-      : "";
+## ファイル: ${filePath}
 
-    const prompt = `あなたはMinecraft MCPツールのデバッガーです。
-
-## 失敗しているツール: ${toolName}
-${buildErrorSection}
-## 実装状況:
-${implStatus}
-
-## ランタイムエラー${buildError ? "（ビルドエラー解決後に対処）" : ""}:
-${failures.errors.map(e => `- "${e}"`).join("\n")}
-
-## 失敗例:
-${JSON.stringify(failures.examples.slice(0, 2), null, 2)}
-
-## 修正対象ファイル: ${filePath}
-
-## 現在のソースコード:
+## ソースコード:
 \`\`\`typescript
 ${sourceCode}
 \`\`\`
 
-## タスク
 ${buildError ? `
-**ビルドエラーがあります！** まずビルドエラーを解決してください。
-` : `
-エラーの原因を分析し、修正してください。
-`}
-**Editツールを使って直接ファイルを修正してください。**
+## ビルドエラー:
+${buildError}
+` : ""}
 
-重要:
-- 上記のソースコードを分析して問題箇所を特定
-- Editツールで最小限の修正を適用（old_string と new_string を正確に指定）
-- **console.log() を追加しない**
-- ${buildError ? "ビルドエラーの行番号を参考に修正箇所を特定" : "実装確認済みなら「実装されていない」は誤り"}
-- 必ずEditツールを1回は呼び出してください`;
+## 指示:
+${buildError ? `ビルドエラーを修正してください。` : `上記エラーの原因を特定し、修正してください。`}
+
+**すぐにEditツールを使ってファイルを修正してください。長い分析は不要です。**
+
+- old_stringとnew_stringを正確に指定
+- 最小限の変更
+- console.logは追加しない`;
 
     try {
       const { ANTHROPIC_API_KEY, ...envWithoutKey } = process.env;
@@ -668,7 +641,7 @@ ${buildError ? `
         prompt,
         options: {
           model: process.env.CLAUDE_MODEL || "claude-opus-4-6",
-          maxTurns: 3,
+          maxTurns: 5,
           allowedTools: ["Edit"],
           permissionMode: "acceptEdits",
           cwd: projectRoot,
