@@ -1085,7 +1085,15 @@ async function handleTool(
 
     // Combat tools
     case "minecraft_get_status": {
-      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      if (!username) {
+        const connectedBots = botManager.getAllBots();
+        if (connectedBots.length === 0) {
+          throw new Error("Not connected. Call minecraft_connect first.");
+        }
+        const botUsername = connectedBots[0];
+        connectionBots.set(ws, botUsername);
+        return botManager.getStatus(botUsername);
+      }
       return botManager.getStatus(username);
     }
 
@@ -1128,7 +1136,8 @@ async function handleTool(
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
       const direction = args.direction as "north" | "south" | "east" | "west" | "down" | "up";
       if (direction === "up") {
-        throw new Error("For going up, use minecraft_pillar_up instead of tunnel.");
+        const height = (args.length as number) || 10;
+        return await botManager.pillarUp(username, height);
       }
       const length = (args.length as number) || 10;
       return await botManager.digTunnel(username, direction, length);

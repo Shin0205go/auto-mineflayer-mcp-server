@@ -151,6 +151,30 @@ class ClaudeAgent {
   }
 
   /**
+   * Get current bot status via MCP
+   */
+  private async getBotStatus(): Promise<{ hp: number; food: number; position: number[] }> {
+    try {
+      const statusResult = await this.claude.callMCPTool("minecraft_get_status", {}) as { content?: { text: string }[] };
+      const posResult = await this.claude.callMCPTool("minecraft_get_position", {}) as { content?: { text: string }[] };
+
+      const statusText = statusResult?.content?.[0]?.text || "{}";
+      const posText = posResult?.content?.[0]?.text || "{}";
+
+      const status = JSON.parse(statusText);
+      const pos = JSON.parse(posText);
+
+      return {
+        hp: status.health ?? 0,
+        food: status.food ?? 0,
+        position: [pos.x ?? 0, pos.y ?? 0, pos.z ?? 0],
+      };
+    } catch {
+      return { hp: 0, food: 0, position: [0, 0, 0] };
+    }
+  }
+
+  /**
    * Publish loop result to MCP server
    */
   private async publishLoopResult(loopResult: LoopResult): Promise<void> {
@@ -263,6 +287,9 @@ ${learnedRules ? `## 学習ルール:\n${learnedRules}\n` : ""}
           loopSummary = `エラー: ${result.error?.slice(0, 50) || "unknown"}`;
         }
 
+        // Get actual bot status for loop result
+        const botStatus = await this.getBotStatus();
+
         // Publish loop result for Dev Agent analysis
         const loopResult: LoopResult = {
           id: `loop_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
@@ -271,7 +298,7 @@ ${learnedRules ? `## 学習ルール:\n${learnedRules}\n` : ""}
           success: result.success,
           summary: loopSummary || `ループ${loopCount}`,
           toolCalls: result.toolCalls || [],
-          status: { hp: 0, food: 0, position: [0, 0, 0] },  // Will be filled from last status check
+          status: botStatus,
           usage: result.usage,
           intent: currentPrompt.slice(0, 100),
         };

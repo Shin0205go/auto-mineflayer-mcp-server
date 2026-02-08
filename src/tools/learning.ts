@@ -3,6 +3,8 @@
  *
  * Implements Reflexion pattern:
  * Action → Result → Reflection → Apply to next
+ *
+ * Memory API: Unified storage for locations, rules, insights
  */
 
 import * as fs from "fs";
@@ -11,6 +13,8 @@ import * as path from "path";
 const DATA_DIR = path.join(process.cwd(), "learning");
 const EXPERIENCE_FILE = path.join(DATA_DIR, "experience.jsonl");
 const REFLECTION_FILE = path.join(DATA_DIR, "reflection.md");
+const MEMORY_FILE = path.join(DATA_DIR, "memory.json");
+// Legacy files (for migration)
 const SKILL_LIBRARY_FILE = path.join(DATA_DIR, "skills.json");
 const LOCATIONS_FILE = path.join(DATA_DIR, "locations.json");
 
@@ -42,15 +46,47 @@ export interface Skill {
   lastUsed: string;
 }
 
-// 場所記憶の型定義
+// 場所記憶の型定義 (legacy, for migration)
 export interface SavedLocation {
-  name: string;           // 場所の名前（例: "作業台1", "拠点", "鉄鉱脈"）
-  type: string;           // タイプ（crafting_table, furnace, chest, bed, base, resource等）
+  name: string;
+  type: string;
   x: number;
   y: number;
   z: number;
-  note?: string;          // メモ
-  savedAt: string;        // 保存日時
+  note?: string;
+  savedAt: string;
+}
+
+// === Unified Memory API ===
+export type MemoryType = "location" | "rule" | "insight";
+
+export interface LocationData {
+  x: number;
+  y: number;
+  z: number;
+  locationType: string;  // crafting_table, furnace, chest, bed, base, resource
+}
+
+export interface RuleData {
+  description: string;
+  steps: string[];
+  prerequisites?: string[];
+}
+
+export interface InsightData {
+  content: string;
+  source?: string;  // reflection, experience, etc.
+}
+
+export interface Memory {
+  id: string;
+  type: MemoryType;
+  name: string;
+  data: LocationData | RuleData | InsightData;
+  tags?: string[];
+  createdAt: string;
+  updatedAt: string;
+  usedCount: number;
 }
 
 // MCPツール定義
@@ -93,30 +129,6 @@ export const learningTools = {
     },
   },
 
-  save_rule: {
-    description: "成功した手順を学習ルールとして保存。再利用可能にする。",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        name: { type: "string", description: "ルール名（例: 'かまど作成'）" },
-        description: { type: "string", description: "ルールの説明" },
-        steps: { type: "array", items: { type: "string" }, description: "手順リスト" },
-        prerequisites: { type: "array", items: { type: "string" }, description: "前提条件" },
-      },
-      required: ["name", "description", "steps"],
-    },
-  },
-
-  get_rules: {
-    description: "保存された学習ルールを取得。",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        name_filter: { type: "string", description: "ルール名でフィルタ" },
-      },
-    },
-  },
-
   get_reflection_insights: {
     description: "これまでの振り返りで得られた知見を取得。",
     inputSchema: {
@@ -125,42 +137,57 @@ export const learningTools = {
     },
   },
 
-  // === 場所記憶 ===
-  remember_location: {
-    description: "重要な場所を記憶する。作業台、かまど、チェスト、拠点、鉱脈などを保存して後で戻れるようにする。",
+  // === Unified Memory API ===
+  save_memory: {
+    description: "場所・ルール・知見を統一メモリに保存。type: location(座標), rule(手順), insight(学び)",
     inputSchema: {
       type: "object" as const,
       properties: {
-        name: { type: "string", description: "場所の名前（例: '作業台1', '拠点', '鉄鉱脈'）" },
-        type: { type: "string", description: "タイプ（crafting_table, furnace, chest, bed, base, resource, other）" },
-        x: { type: "number", description: "X座標" },
-        y: { type: "number", description: "Y座標" },
-        z: { type: "number", description: "Z座標" },
-        note: { type: "string", description: "メモ（任意）" },
+        type: {
+          type: "string",
+          enum: ["location", "rule", "insight"],
+          description: "メモリタイプ"
+        },
+        name: { type: "string", description: "名前（例: '拠点', 'かまど作成', '夜の生存術'）" },
+        // Location data
+        x: { type: "number", description: "[location] X座標" },
+        y: { type: "number", description: "[location] Y座標" },
+        z: { type: "number", description: "[location] Z座標" },
+        locationType: { type: "string", description: "[location] 場所タイプ（crafting_table, furnace, chest, bed, base, resource）" },
+        // Rule data
+        description: { type: "string", description: "[rule/insight] 説明" },
+        steps: { type: "array", items: { type: "string" }, description: "[rule] 手順リスト" },
+        prerequisites: { type: "array", items: { type: "string" }, description: "[rule] 前提条件" },
+        // Common
+        tags: { type: "array", items: { type: "string" }, description: "タグ（任意）" },
       },
-      required: ["name", "type", "x", "y", "z"],
+      required: ["type", "name"],
     },
   },
 
-  recall_locations: {
-    description: "保存した場所を思い出す。作業台やかまどの場所を確認できる。デフォルト20件まで。",
+  recall_memory: {
+    description: "保存したメモリを取得。場所・ルール・知見を検索。",
     inputSchema: {
       type: "object" as const,
       properties: {
-        type_filter: { type: "string", description: "タイプでフィルタ（crafting_table, furnace, chest等）" },
-        nearest_to_x: { type: "number", description: "この座標に近い順にソート（X）" },
-        nearest_to_z: { type: "number", description: "この座標に近い順にソート（Z）" },
+        type: { type: "string", enum: ["location", "rule", "insight", "all"], description: "タイプでフィルタ（デフォルト: all）" },
+        name_filter: { type: "string", description: "名前で部分一致検索" },
+        tag_filter: { type: "string", description: "タグでフィルタ" },
+        location_type: { type: "string", description: "[location] 場所タイプでフィルタ" },
+        nearest_to_x: { type: "number", description: "[location] この座標に近い順にソート" },
+        nearest_to_z: { type: "number", description: "[location] この座標に近い順にソート" },
         limit: { type: "number", description: "最大件数（デフォルト20）" },
       },
     },
   },
 
-  forget_location: {
-    description: "保存した場所を削除する。",
+  forget_memory: {
+    description: "保存したメモリを削除。",
     inputSchema: {
       type: "object" as const,
       properties: {
-        name: { type: "string", description: "削除する場所の名前" },
+        name: { type: "string", description: "削除するメモリの名前" },
+        type: { type: "string", enum: ["location", "rule", "insight"], description: "タイプ（同名が複数ある場合）" },
       },
       required: ["name"],
     },
@@ -501,6 +528,251 @@ export function forgetLocation(name: string): string {
   }
 }
 
+// === Unified Memory API Implementation ===
+
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+}
+
+function loadMemories(): Memory[] {
+  ensureDataDir();
+  if (!fs.existsSync(MEMORY_FILE)) {
+    return [];
+  }
+  try {
+    return JSON.parse(fs.readFileSync(MEMORY_FILE, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveMemories(memories: Memory[]): void {
+  ensureDataDir();
+  fs.writeFileSync(MEMORY_FILE, JSON.stringify(memories, null, 2));
+}
+
+/**
+ * Migrate legacy data to unified memory
+ */
+export function migrateToMemoryAPI(): string {
+  const migrated: string[] = [];
+
+  // Migrate locations
+  if (fs.existsSync(LOCATIONS_FILE)) {
+    try {
+      const locations: SavedLocation[] = JSON.parse(fs.readFileSync(LOCATIONS_FILE, "utf-8"));
+      const memories = loadMemories();
+      for (const loc of locations) {
+        if (!memories.find(m => m.type === "location" && m.name === loc.name)) {
+          memories.push({
+            id: generateId(),
+            type: "location",
+            name: loc.name,
+            data: {
+              x: loc.x,
+              y: loc.y,
+              z: loc.z,
+              locationType: loc.type,
+            } as LocationData,
+            tags: [loc.type],
+            createdAt: loc.savedAt,
+            updatedAt: loc.savedAt,
+            usedCount: 0,
+          });
+        }
+      }
+      saveMemories(memories);
+      migrated.push(`locations: ${locations.length}件`);
+    } catch { /* ignore */ }
+  }
+
+  // Migrate skills/rules
+  if (fs.existsSync(SKILL_LIBRARY_FILE)) {
+    try {
+      const skills: Skill[] = JSON.parse(fs.readFileSync(SKILL_LIBRARY_FILE, "utf-8"));
+      const memories = loadMemories();
+      for (const skill of skills) {
+        if (!memories.find(m => m.type === "rule" && m.name === skill.name)) {
+          memories.push({
+            id: generateId(),
+            type: "rule",
+            name: skill.name,
+            data: {
+              description: skill.description,
+              steps: skill.steps,
+              prerequisites: skill.prerequisites,
+            } as RuleData,
+            createdAt: skill.lastUsed,
+            updatedAt: skill.lastUsed,
+            usedCount: skill.successCount,
+          });
+        }
+      }
+      saveMemories(memories);
+      migrated.push(`rules: ${skills.length}件`);
+    } catch { /* ignore */ }
+  }
+
+  return migrated.length > 0
+    ? `マイグレーション完了: ${migrated.join(", ")}`
+    : "マイグレーション対象なし";
+}
+
+/**
+ * Save memory (location, rule, or insight)
+ */
+export function saveMemory(args: {
+  type: MemoryType;
+  name: string;
+  x?: number;
+  y?: number;
+  z?: number;
+  locationType?: string;
+  description?: string;
+  steps?: string[];
+  prerequisites?: string[];
+  tags?: string[];
+}): string {
+  const memories = loadMemories();
+  const now = new Date().toISOString();
+
+  let data: LocationData | RuleData | InsightData;
+
+  if (args.type === "location") {
+    if (args.x === undefined || args.y === undefined || args.z === undefined) {
+      return "エラー: location には x, y, z が必要です";
+    }
+    data = {
+      x: args.x,
+      y: args.y,
+      z: args.z,
+      locationType: args.locationType || "other",
+    };
+  } else if (args.type === "rule") {
+    if (!args.description || !args.steps) {
+      return "エラー: rule には description と steps が必要です";
+    }
+    data = {
+      description: args.description,
+      steps: args.steps,
+      prerequisites: args.prerequisites,
+    };
+  } else {
+    // insight
+    data = {
+      content: args.description || "",
+      source: "manual",
+    };
+  }
+
+  // Update existing or create new
+  const existing = memories.findIndex(m => m.type === args.type && m.name === args.name);
+  if (existing >= 0) {
+    memories[existing].data = data;
+    memories[existing].updatedAt = now;
+    memories[existing].usedCount++;
+    if (args.tags) memories[existing].tags = args.tags;
+  } else {
+    memories.push({
+      id: generateId(),
+      type: args.type,
+      name: args.name,
+      data,
+      tags: args.tags || (args.type === "location" && args.locationType ? [args.locationType] : undefined),
+      createdAt: now,
+      updatedAt: now,
+      usedCount: 1,
+    });
+  }
+
+  saveMemories(memories);
+
+  if (args.type === "location") {
+    const loc = data as LocationData;
+    return `メモリ保存: ${args.name} [${args.type}] (${loc.x}, ${loc.y}, ${loc.z})`;
+  }
+  return `メモリ保存: ${args.name} [${args.type}]`;
+}
+
+/**
+ * Recall memories with filters
+ */
+export function recallMemory(args: {
+  type?: MemoryType | "all";
+  name_filter?: string;
+  tag_filter?: string;
+  location_type?: string;
+  nearest_to_x?: number;
+  nearest_to_z?: number;
+  limit?: number;
+}): Memory[] {
+  let memories = loadMemories();
+
+  // Type filter
+  if (args.type && args.type !== "all") {
+    memories = memories.filter(m => m.type === args.type);
+  }
+
+  // Name filter
+  if (args.name_filter) {
+    const filter = args.name_filter.toLowerCase();
+    memories = memories.filter(m => m.name.toLowerCase().includes(filter));
+  }
+
+  // Tag filter
+  if (args.tag_filter) {
+    memories = memories.filter(m => m.tags?.includes(args.tag_filter!));
+  }
+
+  // Location type filter
+  if (args.location_type) {
+    memories = memories.filter(m => {
+      if (m.type !== "location") return false;
+      const loc = m.data as LocationData;
+      return loc.locationType === args.location_type || loc.locationType?.includes(args.location_type!);
+    });
+  }
+
+  // Sort by distance for locations
+  if (args.nearest_to_x !== undefined && args.nearest_to_z !== undefined) {
+    memories.sort((a, b) => {
+      if (a.type !== "location" && b.type !== "location") return 0;
+      if (a.type !== "location") return 1;
+      if (b.type !== "location") return -1;
+      const locA = a.data as LocationData;
+      const locB = b.data as LocationData;
+      const distA = Math.sqrt((locA.x - args.nearest_to_x!) ** 2 + (locA.z - args.nearest_to_z!) ** 2);
+      const distB = Math.sqrt((locB.x - args.nearest_to_x!) ** 2 + (locB.z - args.nearest_to_z!) ** 2);
+      return distA - distB;
+    });
+  }
+
+  // Limit
+  const limit = args.limit || 20;
+  return memories.slice(0, limit);
+}
+
+/**
+ * Forget (delete) a memory
+ */
+export function forgetMemory(name: string, type?: MemoryType): string {
+  const memories = loadMemories();
+  const before = memories.length;
+
+  const filtered = memories.filter(m => {
+    if (m.name !== name) return true;
+    if (type && m.type !== type) return true;
+    return false;
+  });
+
+  if (filtered.length === before) {
+    return `メモリ「${name}」が見つかりません`;
+  }
+
+  saveMemories(filtered);
+  return `メモリ「${name}」を削除しました`;
+}
+
 // === Agent Skills ===
 const SKILLS_DIR = path.join(process.cwd(), ".claude", "skills");
 
@@ -611,8 +883,73 @@ export async function handleLearningTool(
       return reflectAndLearn(focusArea);
     }
 
+    case "get_reflection_insights": {
+      return getReflectionInsights();
+    }
+
+    // === Unified Memory API ===
+    case "save_memory": {
+      return saveMemory({
+        type: args.type as MemoryType,
+        name: args.name as string,
+        x: args.x as number | undefined,
+        y: args.y as number | undefined,
+        z: args.z as number | undefined,
+        locationType: args.locationType as string | undefined,
+        description: args.description as string | undefined,
+        steps: args.steps as string[] | undefined,
+        prerequisites: args.prerequisites as string[] | undefined,
+        tags: args.tags as string[] | undefined,
+      });
+    }
+
+    case "recall_memory": {
+      const memories = recallMemory({
+        type: args.type as MemoryType | "all" | undefined,
+        name_filter: args.name_filter as string | undefined,
+        tag_filter: args.tag_filter as string | undefined,
+        location_type: args.location_type as string | undefined,
+        nearest_to_x: args.nearest_to_x as number | undefined,
+        nearest_to_z: args.nearest_to_z as number | undefined,
+        limit: args.limit as number | undefined,
+      });
+
+      if (memories.length === 0) {
+        return "メモリが見つかりません。";
+      }
+
+      const lines = memories.map(m => {
+        if (m.type === "location") {
+          const loc = m.data as LocationData;
+          return `- [location] ${m.name}: (${loc.x}, ${loc.y}, ${loc.z}) [${loc.locationType}]`;
+        } else if (m.type === "rule") {
+          const rule = m.data as RuleData;
+          return `- [rule] ${m.name}: ${rule.description} (${rule.steps.length}手順)`;
+        } else {
+          const insight = m.data as InsightData;
+          return `- [insight] ${m.name}: ${insight.content.slice(0, 50)}...`;
+        }
+      });
+
+      return `メモリ (${memories.length}件):\n${lines.join("\n")}`;
+    }
+
+    case "forget_memory": {
+      return forgetMemory(
+        args.name as string,
+        args.type as MemoryType | undefined
+      );
+    }
+
+    case "migrate_memory": {
+      return migrateToMemoryAPI();
+    }
+
+    // === Legacy (backward compatibility) ===
     case "save_rule": {
-      return saveSkill({
+      // Redirect to save_memory
+      return saveMemory({
+        type: "rule",
         name: args.name as string,
         description: args.description as string,
         steps: args.steps as string[],
@@ -621,69 +958,58 @@ export async function handleLearningTool(
     }
 
     case "get_rules": {
-      const nameFilter = args.name_filter as string | undefined;
-      const rules = getSkills(nameFilter);
-
-      if (rules.length === 0) {
+      const memories = recallMemory({ type: "rule", name_filter: args.name_filter as string | undefined });
+      if (memories.length === 0) {
         return "保存された学習ルールがありません。";
       }
-
-      const lines = rules.map(s =>
-        `## ${s.name} (使用${s.successCount}回)\n${s.description}\n手順:\n${s.steps.map((st, i) => `  ${i + 1}. ${st}`).join("\n")}`
-      );
-
+      const lines = memories.map(m => {
+        const rule = m.data as RuleData;
+        return `## ${m.name} (使用${m.usedCount}回)\n${rule.description}\n手順:\n${rule.steps.map((st, i) => `  ${i + 1}. ${st}`).join("\n")}`;
+      });
       return lines.join("\n\n");
     }
 
-    case "get_reflection_insights": {
-      return getReflectionInsights();
-    }
-
-    // === 場所記憶 ===
     case "remember_location": {
-      return rememberLocation({
+      // Redirect to save_memory
+      return saveMemory({
+        type: "location",
         name: args.name as string,
-        type: args.type as string,
         x: args.x as number,
         y: args.y as number,
         z: args.z as number,
-        note: args.note as string | undefined,
+        locationType: args.type as string,
       });
     }
 
     case "recall_locations": {
-      const typeFilter = args.type_filter as string | undefined;
-      const nearX = args.nearest_to_x as number | undefined;
-      const nearZ = args.nearest_to_z as number | undefined;
-      const limit = (args.limit as number) || 20; // Default limit to prevent huge responses
-      let locations = recallLocations(typeFilter, nearX, nearZ);
-
-      if (locations.length === 0) {
-        return typeFilter
-          ? `タイプ「${typeFilter}」の場所は保存されていません。`
-          : "保存された場所はありません。";
-      }
-
-      const totalCount = locations.length;
-      const wasLimited = totalCount > limit;
-      locations = locations.slice(0, limit);
-
-      const lines = locations.map(l => {
-        const dist = nearX !== undefined && nearZ !== undefined
-          ? ` (距離: ${Math.sqrt((l.x - nearX) ** 2 + (l.z - nearZ) ** 2).toFixed(0)}m)`
-          : "";
-        return `- ${l.name} [${l.type}]: (${l.x}, ${l.y}, ${l.z})${dist}${l.note ? ` - ${l.note}` : ""}`;
+      const memories = recallMemory({
+        type: "location",
+        location_type: args.type_filter as string | undefined,
+        nearest_to_x: args.nearest_to_x as number | undefined,
+        nearest_to_z: args.nearest_to_z as number | undefined,
+        limit: args.limit as number | undefined,
       });
 
-      let result = `保存された場所 (${locations.length}/${totalCount}件):\n${lines.join("\n")}`;
-      if (wasLimited) {
-        result += `\n\n※ ${totalCount - limit}件省略。type_filterで絞り込むか、limitを増やしてください。`;
+      if (memories.length === 0) {
+        return "保存された場所はありません。";
       }
-      return result;
+
+      const nearX = args.nearest_to_x as number | undefined;
+      const nearZ = args.nearest_to_z as number | undefined;
+
+      const lines = memories.map(m => {
+        const loc = m.data as LocationData;
+        const dist = nearX !== undefined && nearZ !== undefined
+          ? ` (距離: ${Math.sqrt((loc.x - nearX) ** 2 + (loc.z - nearZ) ** 2).toFixed(0)}m)`
+          : "";
+        return `- ${m.name} [${loc.locationType}]: (${loc.x}, ${loc.y}, ${loc.z})${dist}`;
+      });
+
+      return `保存された場所 (${memories.length}件):\n${lines.join("\n")}`;
     }
 
     case "forget_location": {
-      return forgetLocation(args.name as string);
+      return forgetMemory(args.name as string, "location");
     }
 
     // === Agent Skills ===

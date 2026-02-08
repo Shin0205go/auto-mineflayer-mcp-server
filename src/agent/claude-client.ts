@@ -506,8 +506,22 @@ ${tools.map(t => "- " + t.replace(MCP_PREFIX, "")).join("\n")}
       const toolCalls: { tool: string; result: string; error?: string }[] = [];
 
       for await (const message of queryResult) {
-        // Debug: log message types to understand SDK subagent structure
-        if (message.type === "tool_progress" || message.type === "tool_use_summary") {
+        // Track tool completions via tool_use_summary
+        if (message.type === "tool_use_summary") {
+          const summary = message as unknown as { toolName?: string; success?: boolean; error?: string; output?: string };
+          if (summary.toolName) {
+            const toolName = summary.toolName.replace(MCP_PREFIX, "");
+            toolCalls.push({
+              tool: toolName,
+              result: summary.success ? "success" : "failure",
+              error: summary.error || undefined,
+            });
+          }
+          console.log(`${PREFIX} ${C.dim}[${message.type}]${C.reset}`, JSON.stringify(message).slice(0, 500));
+        }
+
+        // Debug: log tool progress
+        if (message.type === "tool_progress") {
           console.log(`${PREFIX} ${C.dim}[${message.type}]${C.reset}`, JSON.stringify(message).slice(0, 500));
         }
 
@@ -526,11 +540,6 @@ ${tools.map(t => "- " + t.replace(MCP_PREFIX, "")).join("\n")}
               const toolBlock = block as ToolUseBlock;
               console.log(`${PREFIX} ${C.dim}Tool: ${toolBlock.name}${C.reset}`, toolBlock.input);
               this.emit("tool_use", toolBlock.name, toolBlock.input);
-              // Track tool call
-              toolCalls.push({
-                tool: toolBlock.name.replace(MCP_PREFIX, ""),
-                result: "pending",
-              });
               // Log tool call to board
               const toolShort = toolBlock.name.replace(MCP_PREFIX, "");
               this.logToBoard(`🔧 ${toolShort}`);

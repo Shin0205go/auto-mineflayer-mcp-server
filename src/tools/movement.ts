@@ -71,9 +71,8 @@ export async function handleMovementTool(
       const y = args.y as number;
       const z = args.z as number;
 
-      await botManager.moveTo(username, x, y, z);
-      const newPos = botManager.getPosition(username);
-      return `Moved to approximately (${newPos?.x.toFixed(1)}, ${newPos?.y.toFixed(1)}, ${newPos?.z.toFixed(1)})`;
+      const result = await botManager.moveTo(username, x, y, z);
+      return result;
     }
 
     case "minecraft_chat": {
