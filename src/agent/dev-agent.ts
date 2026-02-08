@@ -15,8 +15,6 @@ import { spawn, ChildProcess } from "child_process";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { ToolExecutionLog } from "../types/tool-log.js";
 import type { LoopResult, AgentConfig, EvolutionEntry, ConfigChange } from "../types/agent-config.js";
@@ -71,61 +69,10 @@ class DevAgent {
   private manageGameAgent = process.env.MANAGE_GAME_AGENT === "true";
   private isImproving = false;
 
-  // MCP Filesystem client
-  private fsClient: Client | null = null;
-  private fsTransport: StdioClientTransport | null = null;
-
   // Config tuning state
   private loopResultBuffer: LoopResult[] = [];
   private lastTuningTime = Date.now();
   private tuningCount = 0;
-
-  // ========== MCP Filesystem ==========
-
-  async connectFilesystem(): Promise<void> {
-    console.log(`${PREFIX} Starting MCP Filesystem server...`);
-
-    this.fsTransport = new StdioClientTransport({
-      command: "npx",
-      args: ["-y", "@modelcontextprotocol/server-filesystem", projectRoot],
-    });
-
-    this.fsClient = new Client({
-      name: "dev-agent",
-      version: "1.0.0",
-    }, {
-      capabilities: {},
-    });
-
-    await this.fsClient.connect(this.fsTransport);
-    console.log(`${PREFIX} ${C.green}Connected to MCP Filesystem server${C.reset}`);
-  }
-
-  async readFile(relativePath: string): Promise<string | null> {
-    if (!this.fsClient) {
-      console.error(`${PREFIX} Filesystem client not connected`);
-      return null;
-    }
-
-    try {
-      const result = await this.fsClient.callTool({
-        name: "read_text_file",
-        arguments: { path: join(projectRoot, relativePath) },
-      });
-
-      if (result.content && Array.isArray(result.content)) {
-        for (const item of result.content) {
-          if (item.type === "text") {
-            return item.text;
-          }
-        }
-      }
-      return null;
-    } catch (e) {
-      console.error(`${PREFIX} Failed to read file ${relativePath}:`, e);
-      return null;
-    }
-  }
 
 
   // ========== WebSocket Connection ==========
@@ -262,9 +209,6 @@ ${C.yellow}╔══════════════════════
 ║    Source code fixing + Behavior config tuning                ║
 ╚══════════════════════════════════════════════════════════════╝${C.reset}
 `);
-
-    // Connect to MCP Filesystem server first
-    await this.connectFilesystem();
 
     await this.connect();
     this.isRunning = true;
@@ -515,49 +459,28 @@ ${C.yellow}╔══════════════════════
       funcName = mapping.func;
     }
 
-    let sourceCode = await this.readFile(filePath);
-    if (!sourceCode) {
-      console.log(`${PREFIX} Source file not found: ${filePath}`);
-      return null;
-    }
-
-    const MAX_SOURCE_SIZE = 200000;
-    if (sourceCode.length > MAX_SOURCE_SIZE) {
-      console.log(`${PREFIX} File very large (${sourceCode.length} chars), truncating...`);
-      const targetIndex = funcName ? sourceCode.indexOf(funcName) : -1;
-      if (targetIndex > 0) {
-        const start = Math.max(0, targetIndex - 50000);
-        const end = Math.min(sourceCode.length, targetIndex + 150000);
-        sourceCode = `// ... (truncated before line ${sourceCode.slice(0, start).split('\n').length})\n${sourceCode.slice(start, end)}\n// ... (truncated after)`;
-      } else {
-        sourceCode = sourceCode.slice(0, MAX_SOURCE_SIZE) + "\n// ... (truncated)";
-      }
-    }
-
     const prompt = `${toolName}ツールの修正タスク。
 
 ## エラー内容:
 ${failures.errors.map(e => `- ${e}`).join("\n")}
 
-## ファイル: ${filePath}
-
-## ソースコード:
-\`\`\`typescript
-${sourceCode}
-\`\`\`
+## 修正対象: ${filePath}
+${funcName ? `関数: ${funcName}` : ""}
 
 ${buildError ? `
-## ビルドエラー:
+## ビルドエラー（最優先）:
 ${buildError}
 ` : ""}
 
 ## 指示:
-${buildError ? `ビルドエラーを修正してください。` : `上記エラーの原因を特定し、修正してください。`}
+1. まずReadツールで${filePath}を読んでください
+2. ${buildError ? `ビルドエラーを修正` : `エラーの原因を特定して修正`}してください
+3. Editツールで修正を適用してください
 
-**すぐにEditツールを使ってファイルを修正してください。長い分析は不要です。**
-
+**重要**:
+- 長い分析は不要、すぐに修正してください
 - old_stringとnew_stringを正確に指定
-- 最小限の変更
+- 最小限の変更のみ
 - console.logは追加しない`;
 
     try {
@@ -567,7 +490,7 @@ ${buildError ? `ビルドエラーを修正してください。` : `上記エ�
         options: {
           model: process.env.CLAUDE_MODEL || "claude-opus-4-6",
           maxTurns: 5,
-          allowedTools: ["Edit"],
+          allowedTools: ["Read", "Edit"],
           permissionMode: "acceptEdits",
           cwd: projectRoot,
           env: envWithoutKey as Record<string, string>,
@@ -974,9 +897,6 @@ ${toolStatsText || "（なし）"}
     this.stopGameAgent();
     if (this.ws) {
       this.ws.close();
-    }
-    if (this.fsClient) {
-      this.fsClient.close();
     }
   }
 }
