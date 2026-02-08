@@ -642,6 +642,11 @@ ${JSON.stringify(failures.examples.slice(0, 2), null, 2)}
 
 ## 修正対象ファイル: ${filePath}
 
+## 現在のソースコード:
+\`\`\`typescript
+${sourceCode}
+\`\`\`
+
 ## タスク
 ${buildError ? `
 **ビルドエラーがあります！** まずビルドエラーを解決してください。
@@ -651,10 +656,11 @@ ${buildError ? `
 **Editツールを使って直接ファイルを修正してください。**
 
 重要:
-- まずReadツールでファイルを読んで問題箇所を確認
-- Editツールで最小限の修正を適用
+- 上記のソースコードを分析して問題箇所を特定
+- Editツールで最小限の修正を適用（old_string と new_string を正確に指定）
 - **console.log() を追加しない**
-- ${buildError ? "ビルドエラーの行番号を参考に修正箇所を特定" : "実装確認済みなら「実装されていない」は誤り"}`;
+- ${buildError ? "ビルドエラーの行番号を参考に修正箇所を特定" : "実装確認済みなら「実装されていない」は誤り"}
+- 必ずEditツールを1回は呼び出してください`;
 
     try {
       const { ANTHROPIC_API_KEY, ...envWithoutKey } = process.env;
@@ -662,8 +668,8 @@ ${buildError ? `
         prompt,
         options: {
           model: process.env.CLAUDE_MODEL || "claude-opus-4-6",
-          maxTurns: 10,
-          allowedTools: ["Read", "Edit", "Grep", "Glob"],
+          maxTurns: 3,
+          allowedTools: ["Edit"],
           permissionMode: "acceptEdits",
           cwd: projectRoot,
           env: envWithoutKey as Record<string, string>,

@@ -707,10 +707,11 @@ export class BotManager extends EventEmitter {
     return new Promise((resolve) => {
       let resolved = false;
       let noProgressCount = 0;
+      // Declare checkInterval first to avoid TDZ issues when event handlers fire early
+      let checkInterval: ReturnType<typeof setInterval> | null = null;
       let lastPos = start.clone();
       let pathResetCount = 0;
       let notMovingCount = 0;
-      let checkInterval: ReturnType<typeof setInterval> | null = null;
 
       const finish = (result: { success: boolean; message: string; stuckReason?: string }) => {
         if (resolved) return;
