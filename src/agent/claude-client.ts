@@ -5,7 +5,7 @@
  * Routes tool calls through MCP Bridge (stdio → WebSocket).
  */
 
-import { query, type SDKMessage, type Query, type Options, type AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
+import { query, type Query, type Options, type AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { EventEmitter } from "events";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -372,21 +372,32 @@ export class ClaudeClient extends EventEmitter {
    * All action tools are hidden and only available through skill subagents
    */
   private createOptions(): Options {
-    // Main agent only sees these tools (read-only awareness + Task)
+    // Main agent only sees these tools (awareness + coordination + Task)
+    // IMPORTANT: Must use full MCP tool names (mcp__server__tool)
     const mainAgentTools = [
       "Task",  // For invoking skill subagents
-      `${MCP_PREFIX}minecraft_get_status`,      // HP/hunger check
-      `${MCP_PREFIX}minecraft_get_surroundings`, // Environment awareness
-      `${MCP_PREFIX}minecraft_get_inventory`,   // What do we have?
-      `${MCP_PREFIX}minecraft_get_equipment`,   // What are we wearing?
+      // Connection
+      "mcp__mineflayer__minecraft_connect",
+      "mcp__mineflayer__minecraft_disconnect",
+      "mcp__mineflayer__minecraft_chat",
+      // Awareness
+      "mcp__mineflayer__minecraft_get_status",
+      "mcp__mineflayer__minecraft_get_position",
+      "mcp__mineflayer__minecraft_get_surroundings",
+      "mcp__mineflayer__minecraft_get_inventory",
+      "mcp__mineflayer__minecraft_get_equipment",
+      // Coordination
+      "mcp__mineflayer__agent_board_read",
+      "mcp__mineflayer__agent_board_write",
+      "mcp__mineflayer__get_agent_skill",
     ];
 
     return {
       // Main agent tools - minimal awareness only
       tools: mainAgentTools,
 
-      // Auto-allow these tools without permission prompts
-      allowedTools: mainAgentTools,  // Only awareness + Task, no action tools
+      // Allow all MCP tools without prompts (tools param already restricts)
+      allowedTools: ["Task", "mcp__mineflayer__*"],
 
       // Use Claude Code OAuth
       env: this.env,
@@ -413,9 +424,8 @@ export class ClaudeClient extends EventEmitter {
       // Load skills from project directory
       settingSources: ["project"],
 
-      // Bypass permissions for MCP tools
+      // Bypass permissions - tools param handles restriction
       permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
 
       // Include partial messages for streaming
       includePartialMessages: true,
