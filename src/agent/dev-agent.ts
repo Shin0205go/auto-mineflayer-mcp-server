@@ -15,7 +15,6 @@ import { spawn, ChildProcess } from "child_process";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import WebSocket from "ws";
-import ts from "typescript";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -56,13 +55,6 @@ interface ImprovementPlan {
   problem: string;
   filePath: string;
   suggestedFix: string;
-  functionName?: string;
-  fixedFunction?: string;
-  alreadyApplied?: boolean;
-  code?: {
-    before: string;
-    after: string;
-  };
 }
 
 class DevAgent {
@@ -135,60 +127,6 @@ class DevAgent {
     }
   }
 
-  async writeFile(relativePath: string, content: string): Promise<boolean> {
-    if (!this.fsClient) {
-      console.error(`${PREFIX} Filesystem client not connected`);
-      return false;
-    }
-
-    try {
-      await this.fsClient.callTool({
-        name: "write_file",
-        arguments: {
-          path: join(projectRoot, relativePath),
-          content,
-        },
-      });
-      return true;
-    } catch (e) {
-      console.error(`${PREFIX} Failed to write file ${relativePath}:`, e);
-      return false;
-    }
-  }
-
-  async editFile(relativePath: string, oldText: string, newText: string): Promise<{ success: boolean; error?: string }> {
-    const content = await this.readFile(relativePath);
-    if (content === null) {
-      return { success: false, error: `Failed to read file: ${relativePath}` };
-    }
-
-    if (!content.includes(oldText)) {
-      const normalizedContent = content.replace(/\r\n/g, '\n');
-      const normalizedOldText = oldText.replace(/\r\n/g, '\n');
-
-      if (!normalizedContent.includes(normalizedOldText)) {
-        return { success: false, error: `Old text not found in file (${oldText.length} chars)` };
-      }
-
-      const newContent = normalizedContent.replace(normalizedOldText, newText);
-      const writeSuccess = await this.writeFile(relativePath, newContent);
-      return writeSuccess
-        ? { success: true }
-        : { success: false, error: "Failed to write file" };
-    }
-
-    const matchCount = content.split(oldText).length - 1;
-    if (matchCount > 1) {
-      console.log(`${PREFIX} ${C.yellow}Warning: ${matchCount} matches found, replacing first only${C.reset}`);
-    }
-
-    const newContent = content.replace(oldText, newText);
-    const writeSuccess = await this.writeFile(relativePath, newContent);
-
-    return writeSuccess
-      ? { success: true }
-      : { success: false, error: "Failed to write file" };
-  }
 
   // ========== WebSocket Connection ==========
 
@@ -412,7 +350,7 @@ ${C.yellow}╔══════════════════════
     console.log(`${PREFIX} Most failing tool: ${toolName} (${toolFailures.count} failures)`);
     console.log(`${PREFIX} Errors: ${toolFailures.errors.join(", ")}`);
 
-    const MAX_ATTEMPTS = 20;
+    const MAX_ATTEMPTS = 10;
     const MAX_SAME_ERROR_RETRIES = 3;
     let buildSuccess = false;
     let attempts = 0;
@@ -438,25 +376,12 @@ ${C.yellow}╔══════════════════════
         continue;
       }
 
-      console.log(`${PREFIX} Improvement plan generated for ${toolName}`);
+      console.log(`${PREFIX} ${C.green}Fix applied by Claude${C.reset}`);
       console.log(`${PREFIX} Problem: ${plan.problem}`);
       console.log(`${PREFIX} File: ${plan.filePath}`);
 
-      let applied = plan.alreadyApplied || false;
-      if (!applied) {
-        applied = await this.applyFix(plan);
-      } else {
-        console.log(`${PREFIX} ${C.green}Fix already applied by Claude${C.reset}`);
-      }
-
-      if (!applied) {
-        console.log(`${PREFIX} ${C.red}Failed to apply fix, retrying...${C.reset}`);
-        await this.sleep(3000);
-        continue;
-      }
-
       lastModifiedFile = plan.filePath;
-      const fixDescription = `${plan.functionName || plan.suggestedFix}: ${plan.problem}`;
+      const fixDescription = `${plan.suggestedFix}: ${plan.problem}`;
 
       buildSuccess = await this.rebuild();
 
@@ -695,7 +620,6 @@ ${buildError ? `ビルドエラーを修正してください。` : `上記エ�
           problem: "Fixed by Claude using Edit tool",
           filePath,
           suggestedFix: "Applied directly",
-          alreadyApplied: true,
         };
       }
 
@@ -708,93 +632,6 @@ ${buildError ? `ビルドエラーを修正してください。` : `上記エ�
     return null;
   }
 
-  private async applyFix(plan: ImprovementPlan): Promise<boolean> {
-    if (plan.functionName && plan.fixedFunction) {
-      return this.replaceFunction(plan.filePath, plan.functionName, plan.fixedFunction);
-    }
-
-    if (!plan.code?.before || !plan.code?.after) {
-      console.log(`${PREFIX} No code changes specified`);
-      return false;
-    }
-
-    const result = await this.editFile(plan.filePath, plan.code.before, plan.code.after);
-
-    if (result.success) {
-      console.log(`${PREFIX} ${C.green}Applied fix to ${plan.filePath}${C.reset}`);
-      return true;
-    } else {
-      console.log(`${PREFIX} ${C.red}Failed to apply fix: ${result.error}${C.reset}`);
-      console.log(`${PREFIX} Looking for:`, plan.code.before.slice(0, 100));
-      return false;
-    }
-  }
-
-  private validateTypeScriptSyntax(code: string, filename: string = "temp.ts"): { valid: boolean; errors: string[] } {
-    const sourceFile = ts.createSourceFile(
-      filename,
-      code,
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS
-    );
-
-    const errors: string[] = [];
-
-    const parseErrors = (sourceFile as any).parseDiagnostics;
-    if (parseErrors && parseErrors.length > 0) {
-      for (const diag of parseErrors) {
-        const message = ts.flattenDiagnosticMessageText(diag.messageText, "\n");
-        const pos = diag.start !== undefined
-          ? sourceFile.getLineAndCharacterOfPosition(diag.start)
-          : { line: 0, character: 0 };
-        errors.push(`Line ${pos.line + 1}: ${message}`);
-      }
-    }
-
-    return { valid: errors.length === 0, errors };
-  }
-
-  private async replaceFunction(filePath: string, functionName: string, newFunction: string): Promise<boolean> {
-    const content = await this.readFile(filePath);
-    if (!content) {
-      console.log(`${PREFIX} ${C.red}Failed to read file: ${filePath}${C.reset}`);
-      return false;
-    }
-
-    const existingFunction = this.extractFunction(content, functionName);
-    if (!existingFunction) {
-      console.log(`${PREFIX} ${C.red}Function not found: ${functionName}${C.reset}`);
-      return false;
-    }
-
-    console.log(`${PREFIX} Found function ${functionName} (${existingFunction.length} chars)`);
-    console.log(`${PREFIX} Replacing with new version (${newFunction.length} chars)`);
-
-    const newContent = content.replace(existingFunction, newFunction);
-
-    if (newContent === content) {
-      console.log(`${PREFIX} ${C.red}Replace failed - content unchanged${C.reset}`);
-      return false;
-    }
-
-    const syntaxCheck = this.validateTypeScriptSyntax(newContent, filePath);
-    if (!syntaxCheck.valid) {
-      console.log(`${PREFIX} ${C.red}Syntax error in generated code - rejecting fix${C.reset}`);
-      syntaxCheck.errors.slice(0, 5).forEach(err => {
-        console.log(`${PREFIX}   ${C.red}${err}${C.reset}`);
-      });
-      return false;
-    }
-
-    console.log(`${PREFIX} ${C.green}Syntax check passed${C.reset}`);
-
-    const success = await this.writeFile(filePath, newContent);
-    if (success) {
-      console.log(`${PREFIX} ${C.green}Replaced function ${functionName} in ${filePath}${C.reset}`);
-    }
-    return success;
-  }
 
   private async rebuild(): Promise<boolean> {
     console.log(`${PREFIX} Rebuilding project...`);
@@ -855,60 +692,6 @@ ${buildError ? `ビルドエラーを修正してください。` : `上記エ�
     });
   }
 
-  private extractFunction(source: string, funcName: string): string | null {
-    const lines = source.split("\n");
-
-    const funcPatterns = [
-      new RegExp(`^  async\\s+${funcName}\\s*\\(`),
-      new RegExp(`^  ${funcName}\\s*\\(`),
-      new RegExp(`^  ${funcName}\\s*=\\s*async`),
-    ];
-
-    let funcStartLine = -1;
-    for (let i = 0; i < lines.length; i++) {
-      for (const pattern of funcPatterns) {
-        if (pattern.test(lines[i])) {
-          funcStartLine = i;
-          break;
-        }
-      }
-      if (funcStartLine !== -1) break;
-    }
-
-    if (funcStartLine === -1) {
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].match(new RegExp(`async\\s+${funcName}\\s*\\(`)) ||
-            lines[i].match(new RegExp(`${funcName}\\s*\\(`))) {
-          const trimmed = lines[i].trimStart();
-          if (trimmed.startsWith("async") || trimmed.startsWith(funcName)) {
-            funcStartLine = i;
-            break;
-          }
-        }
-      }
-    }
-
-    if (funcStartLine === -1) return null;
-
-    const funcIndent = lines[funcStartLine].match(/^(\s*)/)?.[1] || "";
-    const closingPattern = new RegExp(`^${funcIndent}}\\s*$`);
-
-    let funcEndLine = -1;
-    for (let i = funcStartLine + 1; i < lines.length; i++) {
-      if (closingPattern.test(lines[i])) {
-        funcEndLine = i;
-        break;
-      }
-      const lineIndent = lines[i].match(/^(\s*)/)?.[1] || "";
-      if (lines[i].trim() && lineIndent.length < funcIndent.length) {
-        break;
-      }
-    }
-
-    if (funcEndLine === -1) return null;
-
-    return lines.slice(funcStartLine, funcEndLine + 1).join("\n");
-  }
 
   // ========== Config Tuning ==========
 
