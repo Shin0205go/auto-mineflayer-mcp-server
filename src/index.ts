@@ -14,6 +14,7 @@ import { buildingTools, handleBuildingTool } from "./tools/building.js";
 import { coordinationTools, handleCoordinationTool } from "./tools/coordination.js";
 import { craftingTools, handleCraftingTool } from "./tools/crafting.js";
 import { combatTools, handleCombatTool } from "./tools/combat.js";
+import { learningTools, handleLearningTool } from "./tools/learning.js";
 
 // Combine all tools
 const allTools = {
@@ -24,6 +25,7 @@ const allTools = {
   ...coordinationTools,
   ...craftingTools,
   ...combatTools,
+  ...learningTools,
 };
 
 // Create MCP server

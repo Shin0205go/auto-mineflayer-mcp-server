@@ -16,6 +16,7 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import type { ToolExecutionLog, ToolExecutionContext } from "./types/tool-log.js";
 import type { LoopResult } from "./types/agent-config.js";
+import { StabilityAnalyzer } from "./stability-analyzer.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -27,6 +28,9 @@ const MAX_LOGS_IN_MEMORY = 500;
 
 // Dev Agent subscriptions (for receiving tool logs)
 const devAgentConnections = new Set<WebSocket>();
+
+// Stability analyzer
+const stabilityAnalyzer = new StabilityAnalyzer();
 
 // Loop result storage
 const LOOP_RESULT_FILE = join(__dirname, "..", "logs", "loop-results.jsonl");
@@ -112,6 +116,12 @@ const SAFE_TOOLS = new Set([
   "dev_get_config",
   "dev_save_config",
   "dev_get_evolution_history",
+  // Stability analysis tools
+  "dev_get_stability_metrics",
+  "dev_get_unstable_disturbances",
+  "dev_get_failed_responses",
+  "dev_get_failure_modes",
+  "dev_get_most_unstable_mode",
 ]);
 
 /**
@@ -185,6 +195,14 @@ function recordToolExecution(
   } catch (e) {
     console.error("[MCP-WS-Server] Failed to write log:", e);
   }
+
+  // Record for stability analysis
+  stabilityAnalyzer.onToolExecution(agentName, {
+    tool,
+    success: result === "success",
+    duration,
+    error
+  });
 
   // Notify Dev Agents
   const notification = {
@@ -315,6 +333,16 @@ const activeConnections = new Set<WebSocket>();
 
 // Listen for game events from BotManager and push to clients
 botManager.on("gameEvent", (username: string, event: { type: string; message: string; timestamp: number; data?: Record<string, unknown> }) => {
+  // Record disturbance for stability analysis
+  const systemState = botManager.getSystemState(username);
+  if (systemState) {
+    stabilityAnalyzer.onGameEvent(username, {
+      type: event.type,
+      message: event.message,
+      priority: 'medium' // TODO: get actual priority from event
+    }, systemState);
+  }
+
   const notification = {
     jsonrpc: "2.0",
     method: "notifications/gameEvent",
@@ -862,6 +890,34 @@ const tools = {
     },
   },
 
+  // === 安定性分析ツール ===
+  dev_get_stability_metrics: {
+    description: "Get stability metrics (success rate, settlement time) for each disturbance type",
+    inputSchema: { type: "object", properties: {} },
+  },
+  dev_get_unstable_disturbances: {
+    description: "Get list of disturbance types with stabilization rate < 80%",
+    inputSchema: { type: "object", properties: {} },
+  },
+  dev_get_failed_responses: {
+    description: "Get failed disturbance responses for analysis",
+    inputSchema: {
+      type: "object",
+      properties: {
+        disturbanceType: { type: "string", description: "Filter by disturbance type" },
+        limit: { type: "number", default: 10, description: "Max responses to return" },
+      },
+    },
+  },
+  dev_get_failure_modes: {
+    description: "Get eigenmode analysis (conceptual): failure patterns with pseudo-eigenvalues, dominant variables",
+    inputSchema: { type: "object", properties: {} },
+  },
+  dev_get_most_unstable_mode: {
+    description: "Get the most unstable failure mode (highest positive pseudo-eigenvalue)",
+    inputSchema: { type: "object", properties: {} },
+  },
+
   // === 自己学習ツール ===
   ...learningTools,
 };
@@ -1372,6 +1428,44 @@ async function handleTool(
       }
     }
 
+    // === Stability Analysis Tools ===
+
+    case "dev_get_stability_metrics": {
+      const metrics = stabilityAnalyzer.getMetrics();
+      const result = Array.from(metrics.entries()).map(([, metric]) => metric);
+      return JSON.stringify(result, null, 2);
+    }
+
+    case "dev_get_unstable_disturbances": {
+      const unstable = stabilityAnalyzer.getUnstableDisturbances();
+      return JSON.stringify(unstable, null, 2);
+    }
+
+    case "dev_get_failed_responses": {
+      const disturbanceType = args.disturbanceType as string | undefined;
+      const limit = (args.limit as number) || 10;
+
+      if (!disturbanceType) {
+        throw new Error("disturbanceType is required");
+      }
+
+      const failed = stabilityAnalyzer.getFailedResponses(disturbanceType);
+      return JSON.stringify(failed.slice(0, limit), null, 2);
+    }
+
+    case "dev_get_failure_modes": {
+      const modes = stabilityAnalyzer.analyzeFailureModes();
+      return JSON.stringify(modes, null, 2);
+    }
+
+    case "dev_get_most_unstable_mode": {
+      const mode = stabilityAnalyzer.getMostUnstableMode();
+      if (!mode) {
+        return JSON.stringify({ message: "All modes are stable" });
+      }
+      return JSON.stringify(mode, null, 2);
+    }
+
     // === Additional Mineflayer API Tools ===
     case "minecraft_wake": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
@@ -1436,6 +1530,10 @@ async function handleTool(
     case "remember_location":
     case "recall_locations":
     case "forget_location":
+    case "save_memory":
+    case "recall_memory":
+    case "forget_memory":
+    case "migrate_memory":
     case "list_agent_skills":
     case "get_agent_skill": {
       return await handleLearningTool(name, args);
@@ -1606,6 +1704,18 @@ function startServer(port: number = 8765) {
   wss.on('listening', () => {
     console.log(`[MCP-WS-Server] Mineflayer MCP WebSocket Server running on ws://localhost:${port}`);
     console.log(`[MCP-WS-Server] Available tools: ${Object.keys(tools).join(', ')}`);
+
+    // Load stability analysis data
+    stabilityAnalyzer.loadResponses();
+    console.log(`[MCP-WS-Server] Stability analyzer initialized`);
+
+    // Print eigenmode analysis if data exists
+    setTimeout(() => {
+      const modes = stabilityAnalyzer.analyzeFailureModes();
+      if (modes.length > 0) {
+        stabilityAnalyzer.printEigenmodeAnalysis();
+      }
+    }, 1000);
   });
 
   wss.on('error', (error) => {

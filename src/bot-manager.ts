@@ -838,7 +838,8 @@ export class BotManager extends EventEmitter {
       // Set the goal AFTER checkInterval is initialized (see comment above)
       bot.pathfinder.setGoal(goal);
 
-      const timeout = Math.max(15000, distance * 1000);
+      // Increased timeout: min 30s + 1.5s per block + extra for complex paths
+      const timeout = Math.max(30000, distance * 1500);
       setTimeout(() => {
         if (!resolved) {
           const finalPos = bot.entity.position;
@@ -1794,14 +1795,19 @@ export class BotManager extends EventEmitter {
         ];
 
         for (const offset of offsets) {
-          const testPos = blockPos.plus(offset);
-          const testDistance = bot.entity.position.distanceTo(testPos);
-          if (testDistance <= REACH_DISTANCE) {
-            const adjacentBlock = bot.blockAt(testPos);
-            if (!adjacentBlock || adjacentBlock.name === "air") {
-              console.error(`[Dig] Found reachable adjacent position`);
+          const adjPos = blockPos.plus(offset);
+          const adjBlock = bot.blockAt(adjPos);
+          // Find an air block adjacent to target that we can stand near
+          if (!adjBlock || adjBlock.name === "air") {
+            try {
+              await this.moveToBasic(username, adjPos.x, adjPos.y, adjPos.z);
+              await this.delay(300);
               distance = bot.entity.position.distanceTo(blockPos);
-              break;
+              if (distance <= REACH_DISTANCE) {
+                break;
+              }
+            } catch (e) {
+              // Try next offset
             }
           }
         }
@@ -1860,16 +1866,17 @@ export class BotManager extends EventEmitter {
       }
 
       // Check if tool is sufficient for this block (using dynamic registry check)
-      if (toolType === "pickaxe" && equippedTool) {
+      // Warn but don't block mining - player can still dig without proper tool (just no drops)
+      const blockData = bot.registry.blocksByName[blockName];
+      const hasHarvestToolReq = blockData && blockData.harvestTools && Object.keys(blockData.harvestTools).length > 0;
+      if (toolType === "pickaxe" && hasHarvestToolReq && equippedTool) {
         if (!canPickaxeHarvest(bot, blockName, equippedTool)) {
           const requiredTier = getRequiredPickaxeTier(bot, blockName);
-          return `Cannot mine ${blockName} - requires ${requiredTier || "better pickaxe"}! You have: ${equippedTool}. Craft the required pickaxe first.`;
+          console.error(`[Dig] Warning: ${blockName} requires ${requiredTier || "better pickaxe"} for drops, have ${equippedTool}. Proceeding anyway.`);
         }
-      } else if (toolType === "pickaxe" && !equippedTool) {
+      } else if (toolType === "pickaxe" && hasHarvestToolReq && !equippedTool) {
         const requiredTier = getRequiredPickaxeTier(bot, blockName);
-        if (requiredTier) {
-          return `Cannot mine ${blockName} - requires ${requiredTier}! No pickaxe equipped. Craft the required pickaxe first.`;
-        }
+        console.error(`[Dig] Warning: ${blockName} requires ${requiredTier || "wooden_pickaxe"} for drops. No pickaxe equipped. Proceeding anyway.`);
       }
     }
 
@@ -1934,10 +1941,16 @@ export class BotManager extends EventEmitter {
       try { bot.stopDigging(); } catch (_) { /* ignore if not digging */ }
 
       // Wait until bot velocity is near zero (fully stopped)
-      for (let waitTick = 0; waitTick < 10; waitTick++) {
+      for (let waitTick = 0; waitTick < 20; waitTick++) {
         const vel = bot.entity.velocity;
-        if (Math.abs(vel.x) < 0.01 && Math.abs(vel.z) < 0.01) break;
+        if (Math.abs(vel.x) < 0.01 && Math.abs(vel.y) < 0.01 && Math.abs(vel.z) < 0.01) break;
         bot.clearControlStates();
+        await this.delay(100);
+      }
+
+      // Ensure bot is on ground before digging
+      for (let groundTick = 0; groundTick < 20; groundTick++) {
+        if (bot.entity.onGround) break;
         await this.delay(100);
       }
 
@@ -1946,6 +1959,10 @@ export class BotManager extends EventEmitter {
       if (!blockBeforeDig || blockBeforeDig.name === "air") {
         return `Block at (${x}, ${y}, ${z}) no longer exists`;
       }
+
+      // Re-look at the block right before digging
+      await bot.lookAt(blockBeforeDig.position.offset(0.5, 0.5, 0.5));
+      await this.delay(50);
 
       try {
         await bot.dig(blockBeforeDig, true);  // forceLook = true
@@ -2355,11 +2372,24 @@ async collectNearbyItems(username: string): Promise<string> {
 
       try {
         if (distance < 2) {
-          // Very close - move directly
+          // Very close - move directly to the item position
           await bot.lookAt(itemPos);
           bot.setControlState("forward", true);
-          await this.delay(500);
+          await this.delay(300);
           bot.setControlState("forward", false);
+          // Walk onto the exact item position for pickup
+          await bot.lookAt(itemPos);
+          try {
+            const goal = new goals.GoalNear(
+              Math.floor(itemPos.x),
+              Math.floor(itemPos.y),
+              Math.floor(itemPos.z),
+              0
+            );
+            bot.pathfinder.setGoal(goal);
+            await this.delay(1000);
+            bot.pathfinder.setGoal(null);
+          } catch (_) { /* ignore pathfinder errors */ }
         } else {
           // Use pathfinder for longer distances
           const goal = new goals.GoalNear(
@@ -2605,7 +2635,7 @@ async collectNearbyItems(username: string): Promise<string> {
       inventory[item.name] = (inventory[item.name] || 0) + item.count;
     }
 
-    // Check for crafting table nearby
+    // Check for crafting table nearby or in inventory
     const craftingTableId = mcData.blocksByName.crafting_table?.id;
     const hasCraftingTable = !!bot.findBlock({
       matching: craftingTableId,
@@ -2668,9 +2698,22 @@ async collectNearbyItems(username: string): Promise<string> {
         }
       }
 
+      // Check if player has at least one required item in inventory
+      const hasAnyIngredient = Object.entries(recipe.needs).some(([item, count]) => {
+        let have = inventory[item] || 0;
+        if (have === 0 && recipe.alt) {
+          for (const altItem of recipe.alt) {
+            const altName = item.replace("oak_", "").replace("birch_", "").replace("spruce_", "");
+            const checkItem = altItem.includes(altName) ? altItem : item.replace("oak_", altItem.split("_")[0] + "_");
+            have += inventory[checkItem] || 0;
+          }
+        }
+        return have > 0;
+      });
+
       if (canCraft) {
         craftable.push(recipe.name + (recipe.output ? ` (makes ${recipe.output})` : ""));
-      } else if (missingItems.length === 1) {
+      } else if (missingItems.length === 1 && hasAnyIngredient) {
         almostCraftable.push({ name: recipe.name, missing: missingItems[0] });
       }
     }
@@ -3235,27 +3278,88 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       .filter(b => isBedBlock(b.name))
       .map(b => b.id);
 
-    const bedBlock = bot.findBlock({
+    let bedBlock = bot.findBlock({
       matching: bedBlockIds,
-      maxDistance: 4,
+      maxDistance: 32,
     });
 
     if (!bedBlock) {
-      throw new Error("No bed found within 4 blocks. Craft a bed with 3 wool + 3 planks.");
+      throw new Error("No bed found within 32 blocks. Craft a bed with 3 wool + 3 planks.");
     }
 
-    try {
-      await bot.sleep(bedBlock);
-      // Wait a bit for the sleep to complete
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      return "Slept through the night. It's now morning!";
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      if (errMsg.includes("monsters")) {
-        return "Cannot sleep - there are monsters nearby!";
-      }
-      throw new Error(`Failed to sleep: ${errMsg}`);
+    // Move close to the bed before sleeping
+    const pathfinder = await import("mineflayer-pathfinder");
+    const goal = new pathfinder.goals.GoalNear(
+      bedBlock.position.x,
+      bedBlock.position.y,
+      bedBlock.position.z,
+      1
+    );
+    bot.pathfinder.setGoal(goal);
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 10000);
+      bot.once("goal_reached", () => { clearTimeout(timeout); resolve(); });
+    });
+
+    // Wait a moment for position to stabilize
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Re-find the bed block after moving (block reference may be stale)
+    bedBlock = bot.findBlock({
+      matching: bedBlockIds,
+      maxDistance: 6,
+    });
+
+    if (!bedBlock) {
+      throw new Error("Moved toward bed but it's no longer nearby. Try again.");
     }
+
+    // If still too far from the bed, walk directly toward it
+    const dist = bot.entity.position.distanceTo(bedBlock.position);
+    if (dist > 3) {
+      const goal2 = new pathfinder.goals.GoalBlock(
+        bedBlock.position.x,
+        bedBlock.position.y,
+        bedBlock.position.z
+      );
+      bot.pathfinder.setGoal(goal2);
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
+        bot.once("goal_reached", () => { clearTimeout(timeout); resolve(); });
+      });
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    // Try sleeping in available beds (skip occupied ones)
+    const nearbyBeds = bot.findBlocks({
+      matching: bedBlockIds,
+      maxDistance: 6,
+      count: 10,
+    });
+
+    const tryBeds = [bedBlock.position, ...nearbyBeds.filter(p =>
+      p.x !== bedBlock!.position.x || p.y !== bedBlock!.position.y || p.z !== bedBlock!.position.z
+    )];
+
+    for (const bedPos of tryBeds) {
+      const bed = bot.blockAt(bedPos);
+      if (!bed) continue;
+      try {
+        await bot.sleep(bed);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        return "Slept through the night. It's now morning!";
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        if (errMsg.includes("occupied")) {
+          continue;
+        }
+        if (errMsg.includes("monsters")) {
+          return "Cannot sleep - there are monsters nearby!";
+        }
+        throw new Error(`Failed to sleep: ${errMsg}`);
+      }
+    }
+    throw new Error("All nearby beds are occupied. Place another bed or wait.");
   }
 
   /**
@@ -3353,6 +3457,59 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
         z: bot.entity.position.z.toFixed(1),
       },
     });
+  }
+
+  /**
+   * Get system state for stability analysis
+   */
+  getSystemState(username: string): {
+    timestamp: number;
+    health: number;
+    hunger: number;
+    position: { x: number; y: number; z: number };
+    nearbyHostiles: number;
+    hasWeapon: boolean;
+    timeOfDay: number;
+    inventoryCount: number;
+  } | null {
+    const managed = this.bots.get(username);
+    if (!managed) {
+      return null;
+    }
+
+    const bot = managed.bot;
+
+    // Count nearby hostile mobs
+    const hostiles = Object.values(bot.entities)
+      .filter((e: any) =>
+        e.type === "mob" &&
+        e.mobType &&
+        ["zombie", "skeleton", "spider", "creeper", "enderman"].includes(e.mobType) &&
+        e.position.distanceTo(bot.entity.position) < 20
+      );
+
+    // Check if has weapon
+    const heldItem = bot.heldItem;
+    const hasWeapon = heldItem && (
+      heldItem.name.includes("sword") ||
+      heldItem.name.includes("axe") ||
+      heldItem.name.includes("bow")
+    );
+
+    return {
+      timestamp: Date.now(),
+      health: bot.health ?? 0,
+      hunger: bot.food ?? 0,
+      position: {
+        x: bot.entity.position.x,
+        y: bot.entity.position.y,
+        z: bot.entity.position.z
+      },
+      nearbyHostiles: hostiles.length,
+      hasWeapon: !!hasWeapon,
+      timeOfDay: bot.time.timeOfDay,
+      inventoryCount: bot.inventory.items().length
+    };
   }
 
   /**
@@ -3547,21 +3704,31 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     const findTarget = () => {
       const entities = Object.values(bot.entities);
       if (entityName) {
-        return entities.find(e => {
+        const targetLower = entityName.toLowerCase();
+        const candidates = entities.filter(e => {
           if (!e || e === bot.entity) return false;
           const dist = e.position.distanceTo(bot.entity.position);
-          if (dist > 20) return false;
+          if (dist > 48) return false;
 
           // Check various name properties
-          const eName = e.name?.toLowerCase();
-          const eDisplayName = e.displayName?.toLowerCase();
-          const eType = e.type?.toLowerCase();
-          const targetName = entityName.toLowerCase();
+          const eName = e.name?.toLowerCase() || "";
+          const eDisplayName = (e as any).displayName?.toLowerCase() || "";
+          const eUsername = (e as any).username?.toLowerCase() || "";
+          const eMobType = (e as any).mobType?.toLowerCase() || "";
 
-          return eName === targetName ||
-                 eDisplayName === targetName ||
-                 eType === targetName;
-        }) || null;
+          return eName === targetLower ||
+                 eDisplayName === targetLower ||
+                 eUsername === targetLower ||
+                 eMobType === targetLower ||
+                 eName.includes(targetLower) ||
+                 eDisplayName.includes(targetLower);
+        });
+        if (candidates.length === 0) return null;
+        // Return closest match
+        return candidates.sort((a, b) =>
+          a.position.distanceTo(bot.entity.position) -
+          b.position.distanceTo(bot.entity.position)
+        )[0];
       }
       return entities
         .filter(e => isHostileMob(bot, e.name?.toLowerCase() || ""))
@@ -3649,6 +3816,11 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     }
 
     const bot = managed.bot;
+
+    // Check if already full
+    if (bot.food === 20) {
+      return "No need to eat - hunger is full (20/20)";
+    }
 
     // Find food in inventory using dynamic detection
     let foodItem = null;
@@ -4104,11 +4276,14 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     let blocksPlaced = 0;
 
     for (let i = 0; i < targetHeight; i++) {
+      // Use Math.round for all axes consistently to handle edge positions (e.g. 5.99 -> 6)
+      const curX = Math.round(bot.entity.position.x);
       const currentY = Math.floor(bot.entity.position.y);
+      const curZ = Math.round(bot.entity.position.z);
 
       // 1. Dig blocks above if needed (Y+2 and Y+3 for jump clearance)
       for (const yOffset of [2, 3]) {
-        const blockAbove = bot.blockAt(new Vec3(startX, currentY + yOffset, startZ));
+        const blockAbove = bot.blockAt(new Vec3(curX, currentY + yOffset, curZ));
         if (blockAbove && blockAbove.name !== "air" && blockAbove.name !== "water" && blockAbove.name !== "cave_air") {
           console.error(`[Pillar] Digging ${blockAbove.name} above at Y=${currentY + yOffset}`);
           try {
@@ -4133,27 +4308,111 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       await bot.equip(scaffold, "hand");
 
       // 3. Get block below feet to place against
-      const blockBelow = bot.blockAt(new Vec3(startX, currentY - 1, startZ));
-      if (!blockBelow || blockBelow.name === "air") {
-        console.error(`[Pillar] No block below to place against`);
+      // Try multiple candidate positions to find a solid block below
+      const feetY = Math.floor(bot.entity.position.y);
+      const bx = Math.floor(bot.entity.position.x);
+      const bz = Math.floor(bot.entity.position.z);
+      const candidates = [
+        new Vec3(bx, feetY - 1, bz),
+        new Vec3(curX, feetY - 1, curZ),
+        new Vec3(bx, feetY, bz),  // might be standing inside a slab/partial block
+        new Vec3(curX, feetY, curZ),
+      ];
+      let blockBelow: ReturnType<typeof bot.blockAt> = null;
+      for (const pos of candidates) {
+        const b = bot.blockAt(pos);
+        if (b && b.name !== "air" && b.name !== "cave_air" && b.name !== "water" && b.name !== "void_air") {
+          blockBelow = b;
+          break;
+        }
+      }
+      if (!blockBelow) {
+        console.error(`[Pillar] No block below to place against at Y=${feetY - 1}`);
         break;
       }
 
-      // 4. Jump and place
-      bot.setControlState("jump", true);
-      await new Promise(r => setTimeout(r, 180)); // Wait for jump peak
+      // 4. Jump and place - retry up to 3 times per level
+      let placed = false;
+      for (let attempt = 0; attempt < 3 && !placed; attempt++) {
+        // Re-center on the block before each attempt
+        bot.clearControlStates();
+        await new Promise(r => setTimeout(r, 150));
 
-      try {
-        // Place on top of block below (this puts block at feet level, lifting us up)
-        await bot.placeBlock(blockBelow, new Vec3(0, 1, 0));
-        blocksPlaced++;
-        console.error(`[Pillar] Placed ${blocksPlaced}/${targetHeight} at Y=${currentY}`);
-      } catch (e) {
-        console.error(`[Pillar] Place failed: ${e}`);
+        // Re-fetch blockBelow in case position shifted
+        if (attempt > 0) {
+          const retryFeetY = Math.floor(bot.entity.position.y);
+          const retryX = Math.floor(bot.entity.position.x);
+          const retryZ = Math.floor(bot.entity.position.z);
+          const roundX = Math.round(bot.entity.position.x);
+          const roundZ = Math.round(bot.entity.position.z);
+          const retryCandidates = [
+            new Vec3(retryX, retryFeetY - 1, retryZ),
+            new Vec3(roundX, retryFeetY - 1, roundZ),
+            new Vec3(retryX, retryFeetY, retryZ),
+            new Vec3(roundX, retryFeetY, roundZ),
+          ];
+          blockBelow = null;
+          for (const pos of retryCandidates) {
+            const b = bot.blockAt(pos);
+            if (b && b.name !== "air" && b.name !== "cave_air" && b.name !== "water" && b.name !== "void_air") {
+              blockBelow = b;
+              break;
+            }
+          }
+          if (!blockBelow) break;
+          await new Promise(r => setTimeout(r, 200));
+        }
+
+        // Sneak to stay centered, then jump
+        bot.setControlState("sneak", true);
+        await new Promise(r => setTimeout(r, 250));
+
+        // Save reference block position before jumping
+        const savedBlockPos = blockBelow!.position.clone();
+
+        bot.setControlState("jump", true);
+
+        // Wait for jump to reach peak height before placing
+        const jumpBaseY = bot.entity.position.y;
+        let prevY = jumpBaseY;
+        await new Promise<void>((resolve) => {
+          let elapsed = 0;
+          const interval = setInterval(() => {
+            elapsed += 10;
+            const curY = bot.entity.position.y;
+            const rising = curY - jumpBaseY;
+            // Place when we've risen enough AND started to fall (peak), or timeout
+            // Increased timeout from 600ms to 1500ms to handle lag
+            if ((rising > 0.8 && curY <= prevY) || elapsed >= 1500) {
+              clearInterval(interval);
+              resolve();
+            }
+            prevY = curY;
+          }, 10);
+        });
+
+        bot.setControlState("jump", false);
+
+        try {
+          // Re-fetch the block at saved position for a fresh reference
+          const freshBlock = bot.blockAt(savedBlockPos) || blockBelow;
+
+          // Place on top of block below (this puts block at feet level, lifting us up)
+          await bot.placeBlock(freshBlock!, new Vec3(0, 1, 0));
+          blocksPlaced++;
+          placed = true;
+          console.error(`[Pillar] Placed ${blocksPlaced}/${targetHeight} at Y=${currentY}`);
+        } catch (e) {
+          console.error(`[Pillar] Place failed (attempt ${attempt + 1}): ${e}`);
+          // Wait longer before retry to let bot settle
+          await new Promise(r => setTimeout(r, 300));
+        }
+
+        // Keep sneaking until we land on the new block
+        await new Promise(r => setTimeout(r, 500));
+        bot.setControlState("sneak", false);
+        await new Promise(r => setTimeout(r, 300)); // Wait to stabilize
       }
-
-      bot.setControlState("jump", false);
-      await new Promise(r => setTimeout(r, 300)); // Wait to land on new block
     }
 
     const finalY = bot.entity.position.y;
@@ -4182,16 +4441,26 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
         b.position.distanceTo(bot.entity.position)
       )[0];
 
-    if (!hostile) {
-      return "No hostiles nearby - safe!";
+    // Calculate flee direction
+    let direction: { x: number; y: number; z: number; scaled: (n: number) => any };
+    let fleeFromName: string;
+
+    if (hostile) {
+      // Flee away from hostile
+      direction = bot.entity.position.minus(hostile.position).normalize();
+      fleeFromName = hostile.name || "hostile";
+      console.error(`[Flee] Fleeing from ${fleeFromName} at (${hostile.position.x.toFixed(1)}, ${hostile.position.y.toFixed(1)}, ${hostile.position.z.toFixed(1)})`);
+    } else {
+      // No hostile found - flee in a random direction
+      const angle = Math.random() * 2 * Math.PI;
+      const vec = new (bot.entity.position as any).constructor(Math.cos(angle), 0, Math.sin(angle));
+      direction = vec.normalize();
+      fleeFromName = "danger";
+      console.error(`[Flee] No hostile found, fleeing in random direction`);
     }
 
-    // Calculate flee direction (opposite of hostile)
-    const direction = bot.entity.position.minus(hostile.position).normalize();
     const fleeTarget = bot.entity.position.plus(direction.scaled(distance));
     const startPos = bot.entity.position.clone();
-
-    console.error(`[Flee] Fleeing from ${hostile.name} at (${hostile.position.x.toFixed(1)}, ${hostile.position.y.toFixed(1)}, ${hostile.position.z.toFixed(1)}) to (${fleeTarget.x.toFixed(1)}, ${fleeTarget.y.toFixed(1)}, ${fleeTarget.z.toFixed(1)})`);
 
     const goal = new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3);
     bot.pathfinder.setGoal(goal);
@@ -4205,10 +4474,9 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
 
       const check = setInterval(() => {
         const distMoved = bot.entity.position.distanceTo(startPos);
-        const distFromHostile = bot.entity.position.distanceTo(hostile.position);
 
         // Success: moved enough distance or reached target
-        if (distMoved >= distance * 0.7 || distFromHostile >= distance || !bot.pathfinder.isMoving()) {
+        if (distMoved >= distance * 0.7 || !bot.pathfinder.isMoving()) {
           clearInterval(check);
           clearTimeout(timeout);
           bot.pathfinder.setGoal(null);
@@ -4217,8 +4485,12 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       }, 200);
     });
 
-    const newDist = bot.entity.position.distanceTo(hostile.position);
-    return `Fled from ${hostile.name}! Now ${newDist.toFixed(1)} blocks away`;
+    const distMoved = bot.entity.position.distanceTo(startPos);
+    if (hostile) {
+      const newDist = bot.entity.position.distanceTo(hostile.position);
+      return `Fled from ${fleeFromName}! Now ${newDist.toFixed(1)} blocks away`;
+    }
+    return `Fled ${distMoved.toFixed(1)} blocks from ${fleeFromName}!`;
   }
 
   /**
@@ -4664,8 +4936,24 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
         // Horizontal: use pathfinder to move into the tunnel
         const goal = new goals.GoalBlock(nextX, nextY, nextZ);
         bot.pathfinder.setGoal(goal);
-        await this.delay(300);
-        bot.pathfinder.setGoal(null);
+
+        // Wait for pathfinder to reach goal or timeout (max 5 seconds per block)
+        try {
+          await Promise.race([
+            new Promise<void>((resolve) => {
+              const onReached = () => {
+                bot.removeListener('goal_reached', onReached);
+                resolve();
+              };
+              bot.on('goal_reached', onReached);
+            }),
+            this.delay(5000)
+          ]);
+        } catch (err) {
+          console.warn(`[Tunnel] Movement timeout, continuing...`);
+        } finally {
+          bot.pathfinder.setGoal(null);
+        }
       }
 
       // Update current position
