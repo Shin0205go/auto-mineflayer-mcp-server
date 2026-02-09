@@ -1,87 +1,90 @@
 /**
- * Bifurcation System - メインエクスポート
+ * Bifurcation System - 創発的アトラクター発見
  *
- * システム生物学の「代替安定的状態」と「分岐」の概念を実装。
- * エージェントが環境の変化（外乱）に応じて「動的な自己組織化」を行う。
+ * 事前定義された状態を持たない分岐システム。
+ * 位相空間上の軌跡から、系が「自然に留まる領域」を動的に発見する。
  *
  * アーキテクチャ:
  *
  * ┌──────────────────────────────────────────────────────────┐
  * │                  Bifurcation System                      │
  * │                                                          │
- * │  ┌─────────────────┐    ┌───────────────────────┐       │
- * │  │ Entropy Monitor │───▶│ Bifurcation Engine    │       │
- * │  │ (散逸構造監視)   │    │ (相転移判定+実行)      │       │
- * │  └─────────────────┘    └──────────┬────────────┘       │
- * │         ▲                          │                     │
- * │         │                          ▼                     │
- * │  ┌──────┴──────────┐    ┌───────────────────────┐       │
- * │  │ Tool Logs /     │    │ Meta-Prompt Manager   │       │
- * │  │ Game Events     │    │ (自己書き換え)         │       │
- * │  └─────────────────┘    └───────────────────────┘       │
+ * │  ┌─────────────────────┐    ┌─────────────────────────┐ │
+ * │  │ PhaseSpaceObserver  │───▶│ AttractorLandscape      │ │
+ * │  │ (位相空間の知覚)     │    │ (アトラクター発見)       │ │
+ * │  └─────────────────────┘    └───────────┬─────────────┘ │
+ * │         ▲                               │               │
+ * │         │                               ▼               │
+ * │  ┌──────┴──────────────┐    ┌─────────────────────────┐ │
+ * │  │ Tool Logs /         │    │ MetaPromptManager       │ │
+ * │  │ Game Events         │    │ (創発的行動規範生成)      │ │
+ * │  └─────────────────────┘    └─────────────────────────┘ │
  * │                                                          │
- * │  States:                                                 │
- * │  [Primitive Survival] → [Organized Settlement]           │
- * │                           → [Industrial Complex]         │
- * │                                                          │
- * │  Hysteresis: 一度遷移したら簡単には戻らない               │
+ * │  Attractors: 事前定義なし — 軌跡から自動発見              │
+ * │  Prompts: テンプレートなし — 統計から動的生成             │
  * └──────────────────────────────────────────────────────────┘
  */
 
-export { EntropyMonitor } from "./entropy-monitor.js";
-export { BifurcationEngine } from "./bifurcation-engine.js";
+export { PhaseSpaceObserver } from "./entropy-monitor.js";
+export { AttractorLandscape } from "./attractor-landscape.js";
 export { MetaPromptManager } from "./meta-prompt.js";
 
-// Re-export types
 export type {
-  SystemState,
-  StateDefinition,
-  EntropyMetrics,
-  EntropyWeights,
-  EntropyInput,
-  PhaseTransitionEvent,
-  MigrationAction,
-  BehaviorProfile,
-  PotentialLandscape,
-  TransitionBarrier,
-  HysteresisState,
-  BifurcationSnapshot,
+  PhasePoint,
+  PhaseDimension,
+  PhaseSpaceInput,
+  Attractor,
+  EmergentBehaviorStats,
+  BasinTransition,
+  EmergentLandscape,
   BifurcationConfig,
+  BifurcationSnapshot,
 } from "../types/bifurcation.js";
 
-import { EntropyMonitor } from "./entropy-monitor.js";
-import { BifurcationEngine } from "./bifurcation-engine.js";
+import { PhaseSpaceObserver } from "./entropy-monitor.js";
+import { AttractorLandscape } from "./attractor-landscape.js";
 import { MetaPromptManager } from "./meta-prompt.js";
 import type { ToolExecutionLog } from "../types/tool-log.js";
-import type { BifurcationConfig } from "../types/bifurcation.js";
+import type { BifurcationConfig, Attractor, BasinTransition } from "../types/bifurcation.js";
 
 /**
  * 分岐システム全体のファサード
- *
- * mcp-ws-serverやclaude-agentからこのクラスを通じて
- * 全機能にアクセスする。
  */
 export class BifurcationSystem {
-  readonly entropy: EntropyMonitor;
-  readonly engine: BifurcationEngine;
+  readonly observer: PhaseSpaceObserver;
+  readonly landscape: AttractorLandscape;
   readonly metaPrompt: MetaPromptManager;
 
   constructor(config?: Partial<BifurcationConfig>) {
-    this.entropy = new EntropyMonitor(config);
-    this.engine = new BifurcationEngine(this.entropy, config);
+    this.observer = new PhaseSpaceObserver(config);
+    this.landscape = new AttractorLandscape(this.observer, config);
     this.metaPrompt = new MetaPromptManager();
 
-    // 相転移時にメタプロンプトを自動更新
-    this.engine.on("state:changed", (event: {
-      previousState: string;
-      newState: string;
-      behaviorProfile: import("../types/bifurcation.js").BehaviorProfile;
-      transition: import("../types/bifurcation.js").PhaseTransitionEvent;
-    }) => {
-      this.metaPrompt.generatePrompt(
-        event.newState as import("../types/bifurcation.js").SystemState,
-        event.behaviorProfile,
-        { transitionReason: event.transition.reason }
+    // アトラクター発見時にメタプロンプトを更新
+    this.landscape.on("attractor:discovered", (attractor: Attractor) => {
+      this.metaPrompt.generateFromAttractor(
+        attractor,
+        this.observer.getDimensions(),
+        `新しいアトラクター ${attractor.id} が発見された`
+      );
+    });
+
+    // 遷移時にメタプロンプトを更新
+    this.landscape.on("transition", (transition: BasinTransition) => {
+      const toAttractor = transition.toAttractorId
+        ? this.landscape.getLandscape().attractors.find(
+            (a: Attractor) => a.id === transition.toAttractorId
+          ) || null
+        : null;
+
+      const dims = transition.dominantDimensions
+        .map((d: { name: string; delta: number }) => `${d.name}(Δ${d.delta.toFixed(3)})`)
+        .join(", ");
+
+      this.metaPrompt.generateFromAttractor(
+        toAttractor,
+        this.observer.getDimensions(),
+        `盆地間遷移: ${transition.fromAttractorId || "unknown"} → ${transition.toAttractorId || "unknown"}。主要変化次元: ${dims}`
       );
     });
   }
@@ -90,22 +93,16 @@ export class BifurcationSystem {
    * ツール実行ログの参照を設定
    */
   connectToolLogs(logs: ToolExecutionLog[]): void {
-    this.entropy.setToolLogSource(logs);
+    this.landscape.setToolLogSource(logs);
   }
 
-  /**
-   * システムを開始
-   */
   start(): void {
-    this.engine.start();
-    console.log("[BifurcationSystem] System started.");
+    this.landscape.start();
+    console.log("[BifurcationSystem] System started (emergent attractor mode).");
   }
 
-  /**
-   * システムを停止
-   */
   stop(): void {
-    this.engine.stop();
+    this.landscape.stop();
     console.log("[BifurcationSystem] System stopped.");
   }
 }

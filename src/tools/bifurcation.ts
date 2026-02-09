@@ -1,9 +1,8 @@
 /**
- * Bifurcation MCP Tools
+ * Bifurcation MCP Tools - 創発的アトラクター発見
  *
- * 分岐システムをMCPツールとして公開。
- * エージェントがシステムの安定性を監視し、
- * 相転移の状況を把握・制御できるようにする。
+ * 事前定義された状態を持たない。
+ * エージェントが位相空間上の軌跡とアトラクターを観察・操作するためのツール。
  */
 
 import type { BifurcationSystem } from "../bifurcation/index.js";
@@ -11,33 +10,24 @@ import type { BifurcationSystem } from "../bifurcation/index.js";
 // ========== Tool Definitions ==========
 
 export const bifurcationTools = {
-  bifurcation_get_status: {
-    description: "分岐システムの現在状態を取得。現在のフェーズ、エントロピー指標、ポテンシャルランドスケープ、遷移履歴を含む。",
+  bifurcation_get_landscape: {
+    description: "創発的アトラクターランドスケープを取得。発見済みアトラクター、現在位置、各アトラクターとの距離、軌跡の方向と速度を表示。",
     inputSchema: {
       type: "object" as const,
       properties: {},
     },
   },
 
-  bifurcation_get_entropy: {
-    description: "現在のエントロピー計測値を取得。構造的複雑度、操作エントロピー、要求圧力、協調負荷の各次元を確認。",
+  bifurcation_get_current_attractor: {
+    description: "現在属しているアトラクター盆地の詳細を取得。null = 未知の領域（新アトラクター形成中の可能性）。",
     inputSchema: {
       type: "object" as const,
-      properties: {
-        include_history: {
-          type: "boolean",
-          description: "過去の計測履歴を含めるか（デフォルト: false）",
-        },
-        history_limit: {
-          type: "number",
-          description: "履歴の取得件数（デフォルト: 10）",
-        },
-      },
+      properties: {},
     },
   },
 
   bifurcation_get_phase_directive: {
-    description: "現在のフェーズに対応する行動指示を取得。エージェントが自分の行動規範を確認する際に使用。",
+    description: "現在のアトラクターから創発的に導出された行動指示を取得。テンプレートではなく、観測データに基づく統計的ガイドライン。",
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -45,7 +35,7 @@ export const bifurcationTools = {
   },
 
   bifurcation_report_demand: {
-    description: "人間からの指示を分岐システムに報告。要求圧力の計測に使用される。",
+    description: "人間からの指示を分岐システムに報告。位相空間の「要求圧力」次元に影響する。",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -53,69 +43,26 @@ export const bifurcationTools = {
           type: "number",
           description: "指示の複雑度 (0.0-1.0)。0=単純(移動), 0.5=中(建築), 1.0=複雑(自動化構築)",
         },
-        description: {
-          type: "string",
-          description: "指示の概要",
-        },
       },
       required: ["complexity"],
     },
   },
 
-  bifurcation_update_environment: {
-    description: "環境状態を分岐システムに報告。構造的複雑度の計測に使用。自動農場数、構造物数、資源種類数などを更新。",
+  bifurcation_get_trajectory: {
+    description: "位相空間上の最近の軌跡を取得。系がどの方向に動いているか、遷移の予兆があるかを確認。",
     inputSchema: {
       type: "object" as const,
       properties: {
-        automated_farms: {
+        limit: {
           type: "number",
-          description: "自動農場の数",
-        },
-        structures_built: {
-          type: "number",
-          description: "構築済み構造物の数",
-        },
-        unique_resource_types: {
-          type: "number",
-          description: "保有している資源の種類数",
-        },
-        inventory_diversity: {
-          type: "number",
-          description: "インベントリの多様性スコア (ユニークアイテム数)",
+          description: "取得する軌跡点数（デフォルト: 20）",
         },
       },
-    },
-  },
-
-  bifurcation_force_transition: {
-    description: "システム状態を手動で遷移させる（通常はエントロピー閾値による自動遷移）。デバッグまたは人間の直接指示に使用。",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        target_state: {
-          type: "string",
-          enum: ["primitive_survival", "organized_settlement", "industrial_complex"],
-          description: "遷移先の状態",
-        },
-        reason: {
-          type: "string",
-          description: "遷移理由",
-        },
-      },
-      required: ["target_state", "reason"],
-    },
-  },
-
-  bifurcation_get_landscape: {
-    description: "Waddingtonポテンシャルランドスケープを取得。各状態のエネルギーレベル、遷移障壁、現在のエネルギーを可視化。",
-    inputSchema: {
-      type: "object" as const,
-      properties: {},
     },
   },
 
   bifurcation_get_transition_history: {
-    description: "過去の相転移履歴を取得。いつ、なぜ、どの状態から何へ遷移したかを確認。",
+    description: "アトラクター間の遷移履歴を取得。いつ、どの盆地からどこへ遷移し、どの次元の変化が支配的だったかを確認。",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -124,6 +71,14 @@ export const bifurcationTools = {
           description: "取得件数（デフォルト: 10）",
         },
       },
+    },
+  },
+
+  bifurcation_list_attractors: {
+    description: "発見済みの全アトラクター一覧を取得。各アトラクターの重心座標、安定性、滞在時間、行動統計を表示。",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
     },
   },
 };
@@ -136,11 +91,11 @@ export function handleBifurcationTool(
   args: Record<string, unknown>
 ): string {
   switch (toolName) {
-    case "bifurcation_get_status":
-      return handleGetStatus(system);
+    case "bifurcation_get_landscape":
+      return handleGetLandscape(system);
 
-    case "bifurcation_get_entropy":
-      return handleGetEntropy(system, args);
+    case "bifurcation_get_current_attractor":
+      return handleGetCurrentAttractor(system);
 
     case "bifurcation_get_phase_directive":
       return handleGetPhaseDirective(system);
@@ -148,17 +103,14 @@ export function handleBifurcationTool(
     case "bifurcation_report_demand":
       return handleReportDemand(system, args);
 
-    case "bifurcation_update_environment":
-      return handleUpdateEnvironment(system, args);
-
-    case "bifurcation_force_transition":
-      return handleForceTransition(system, args);
-
-    case "bifurcation_get_landscape":
-      return handleGetLandscape(system);
+    case "bifurcation_get_trajectory":
+      return handleGetTrajectory(system, args);
 
     case "bifurcation_get_transition_history":
       return handleGetTransitionHistory(system, args);
+
+    case "bifurcation_list_attractors":
+      return handleListAttractors(system);
 
     default:
       return `Unknown bifurcation tool: ${toolName}`;
@@ -167,67 +119,99 @@ export function handleBifurcationTool(
 
 // ========== Handler Implementations ==========
 
-function handleGetStatus(system: BifurcationSystem): string {
-  const snapshot = system.engine.getSnapshot();
-  const trend = system.entropy.getTrend();
-  const profile = system.engine.getCurrentBehaviorProfile();
+function handleGetLandscape(system: BifurcationSystem): string {
+  const landscape = system.landscape.getLandscape();
+  const dims = system.observer.getDimensions();
+  const lines: string[] = [];
 
-  const lines: string[] = [
-    `## 分岐システム状態`,
-    ``,
-    `**現在のフェーズ**: ${profile.phaseName}`,
-    `**システム状態**: ${snapshot.currentState}`,
-    ``,
-    `### エントロピー指標`,
-    `- 総合エントロピー: ${snapshot.entropy.totalEntropy.toFixed(1)} / ${system.engine.getStateDefinition(snapshot.currentState).maxEntropy}`,
-    `- 構造的複雑度: ${snapshot.entropy.structuralComplexity.toFixed(1)}`,
-    `- 操作エントロピー: ${snapshot.entropy.operationalEntropy.toFixed(1)}`,
-    `- 要求圧力: ${snapshot.entropy.demandPressure.toFixed(1)}`,
-    `- 協調負荷: ${snapshot.entropy.coordinationLoad.toFixed(1)}`,
-    `- トレンド: ${trend >= 0 ? "+" : ""}${trend.toFixed(3)} (${trend > 0 ? "増加中" : trend < 0 ? "減少中" : "安定"})`,
-    ``,
-    `### ヒステリシス`,
-    `- 現在の状態の滞在時間: ${(snapshot.hysteresis.timeInCurrentState / 1000).toFixed(0)}秒`,
-    `- 戻り遷移の閾値: ${snapshot.hysteresis.returnThreshold}`,
-    `- 閾値以下の持続時間: ${(snapshot.hysteresis.belowThresholdDuration / 1000).toFixed(0)}秒 / ${(snapshot.hysteresis.requiredBelowDuration / 1000).toFixed(0)}秒`,
-    ``,
-    `### 遷移`,
-    `- 進行中の遷移: ${snapshot.activeTransition ? `${snapshot.activeTransition.fromState} → ${snapshot.activeTransition.toState}` : "なし"}`,
-    `- 遷移回数: ${snapshot.transitionHistory.length}`,
-  ];
+  lines.push(`## 創発的アトラクターランドスケープ`);
+  lines.push(``);
+
+  // 現在位置
+  const posStr = landscape.currentPosition
+    .map((v, i) => `${dims[i]?.name || `d${i}`}=${v.toFixed(2)}`)
+    .filter((_, i) => landscape.currentPosition[i] > 0.1)
+    .join(", ");
+  lines.push(`**現在位置**: ${posStr || "(原点付近)"}`);
+  lines.push(`**現在のアトラクター**: ${landscape.currentAttractorId || "なし（未知領域）"}`);
+  lines.push(`**軌跡速度**: ${landscape.trajectorySpeed.toFixed(4)} (${landscape.trajectorySpeed < 0.05 ? "安定" : landscape.trajectorySpeed < 0.15 ? "変動中" : "急速変化"})`);
+  lines.push(``);
+
+  // 発見済みアトラクター
+  lines.push(`### 発見済みアトラクター: ${landscape.attractors.length}個`);
+  if (landscape.attractors.length === 0) {
+    lines.push(`まだアトラクターは発見されていません。系が安定するまで観測を続けます。`);
+  }
+  for (const a of landscape.attractors) {
+    const dist = landscape.distancesToAttractors.find(d => d.attractorId === a.id);
+    const marker = landscape.currentAttractorId === a.id ? " ← 現在" : "";
+    lines.push(`- **${a.id}**: 距離=${dist?.distance.toFixed(3) || "?"}, 安定性=${(a.stability / 1000).toFixed(1)}s, 観測=${a.sampleCount}${marker}`);
+  }
+  lines.push(``);
+
+  // 軌跡の方向
+  const dirStr = landscape.trajectoryDirection
+    .map((v, i) => ({ name: dims[i]?.name || `d${i}`, value: v }))
+    .filter(d => Math.abs(d.value) > 0.2)
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+    .slice(0, 5)
+    .map(d => `${d.name}:${d.value > 0 ? "+" : ""}${d.value.toFixed(2)}`)
+    .join(", ");
+  if (dirStr) {
+    lines.push(`**軌跡の方向**: ${dirStr}`);
+  }
 
   return lines.join("\n");
 }
 
-function handleGetEntropy(system: BifurcationSystem, args: Record<string, unknown>): string {
-  const latest = system.entropy.getLatest();
-  const includeHistory = args.include_history as boolean || false;
-  const historyLimit = args.history_limit as number || 10;
+function handleGetCurrentAttractor(system: BifurcationSystem): string {
+  const attractor = system.landscape.getCurrentAttractor();
+  const dims = system.observer.getDimensions();
 
-  if (!latest) {
-    return "エントロピー計測データなし。システムがまだ開始されていないか、計測が行われていません。";
+  if (!attractor) {
+    return [
+      `## 現在のアトラクター: なし`,
+      ``,
+      `系は既知のアトラクター盆地の外にいます。`,
+      `新しい安定状態が形成されつつある可能性があります。`,
+      ``,
+      `観測を続けると、系が十分な時間留まった領域が`,
+      `新しいアトラクターとして自動的に発見されます。`,
+    ].join("\n");
   }
 
-  const lines: string[] = [
-    `## 最新エントロピー計測`,
-    ``,
-    `| 指標 | 値 |`,
-    `|------|------|`,
-    `| 構造的複雑度 | ${latest.structuralComplexity.toFixed(2)} |`,
-    `| 操作エントロピー | ${latest.operationalEntropy.toFixed(2)} |`,
-    `| 要求圧力 | ${latest.demandPressure.toFixed(2)} |`,
-    `| 協調負荷 | ${latest.coordinationLoad.toFixed(2)} |`,
-    `| **総合** | **${latest.totalEntropy.toFixed(2)}** |`,
-    ``,
-    `トレンド: ${system.entropy.getTrend().toFixed(3)}`,
-  ];
+  const lines: string[] = [];
+  lines.push(`## 現在のアトラクター: ${attractor.id}`);
+  lines.push(``);
 
-  if (includeHistory) {
-    const history = system.entropy.getHistory(historyLimit);
-    lines.push(``, `### 履歴 (直近${history.length}件)`);
-    history.forEach((h, i) => {
-      const date = new Date(h.timestamp).toLocaleTimeString();
-      lines.push(`${i + 1}. [${date}] total=${h.totalEntropy.toFixed(1)} (struct=${h.structuralComplexity.toFixed(1)}, ops=${h.operationalEntropy.toFixed(1)}, demand=${h.demandPressure.toFixed(1)}, coord=${h.coordinationLoad.toFixed(1)})`);
+  // 重心の記述
+  const centroidStr = attractor.centroid
+    .map((v, i) => ({ name: dims[i]?.name || `d${i}`, value: v }))
+    .filter(d => d.value > 0.2)
+    .sort((a, b) => b.value - a.value)
+    .map(d => `${d.name}=${d.value.toFixed(2)}`)
+    .join(", ");
+  lines.push(`**重心**: ${centroidStr || "(低活動)"}`);
+  lines.push(`**発見日時**: ${new Date(attractor.discoveredAt).toLocaleString()}`);
+  lines.push(`**観測数**: ${attractor.sampleCount}`);
+  lines.push(`**安定性**: ${(attractor.stability / 1000).toFixed(1)}秒/観測`);
+  lines.push(`**滞在時間**: ${(attractor.totalResidenceTime / 60000).toFixed(1)}分`);
+  lines.push(``);
+
+  // 行動統計
+  const stats = attractor.behaviorStats;
+  if (stats.topTools.length > 0) {
+    lines.push(`### 頻用ツール`);
+    stats.topTools.slice(0, 5).forEach(t => {
+      lines.push(`- \`${t.tool}\`: ${t.frequency}回 (成功率: ${(t.successRate * 100).toFixed(0)}%)`);
+    });
+    lines.push(``);
+  }
+
+  if (stats.problematicTools.length > 0) {
+    lines.push(`### 問題ツール`);
+    stats.problematicTools.forEach(t => {
+      lines.push(`- ⚠ \`${t.tool}\`: 失敗率 ${(t.failureRate * 100).toFixed(0)}% (${t.count}回)`);
     });
   }
 
@@ -237,147 +221,132 @@ function handleGetEntropy(system: BifurcationSystem, args: Record<string, unknow
 function handleGetPhaseDirective(system: BifurcationSystem): string {
   const directive = system.metaPrompt.getPhaseDirective();
   if (!directive) {
-    // まだプロンプトが生成されていない場合、現在の状態から生成
-    const profile = system.engine.getCurrentBehaviorProfile();
-    const state = system.engine.getCurrentState();
-    return system.metaPrompt.generatePrompt(state, profile);
+    const attractor = system.landscape.getCurrentAttractor();
+    if (attractor) {
+      return system.metaPrompt.generateFromAttractor(
+        attractor,
+        system.observer.getDimensions()
+      );
+    }
+    return system.metaPrompt.generateFromAttractor(
+      null,
+      system.observer.getDimensions(),
+      "初回起動 — アトラクター未発見"
+    );
   }
   return directive;
 }
 
 function handleReportDemand(system: BifurcationSystem, args: Record<string, unknown>): string {
   const complexity = args.complexity as number;
-  const description = args.description as string || "";
-
-  system.entropy.recordInstruction(complexity);
-
-  return `要求圧力を記録: 複雑度=${complexity.toFixed(2)}${description ? ` (${description})` : ""}`;
+  system.observer.recordInstruction(complexity);
+  return `要求圧力を記録: 複雑度=${complexity.toFixed(2)}`;
 }
 
-function handleUpdateEnvironment(system: BifurcationSystem, args: Record<string, unknown>): string {
-  const update: Record<string, number> = {};
+function handleGetTrajectory(system: BifurcationSystem, args: Record<string, unknown>): string {
+  const limit = (args.limit as number) || 20;
+  const snapshot = system.landscape.getSnapshot();
+  const points = snapshot.recentTrajectory.slice(-limit);
+  const dims = system.observer.getDimensions();
 
-  if (args.automated_farms !== undefined) {
-    update.automatedFarms = args.automated_farms as number;
-  }
-  if (args.structures_built !== undefined) {
-    update.structuresBuilt = args.structures_built as number;
-  }
-  if (args.unique_resource_types !== undefined) {
-    update.uniqueResourceTypes = args.unique_resource_types as number;
-  }
-  if (args.inventory_diversity !== undefined) {
-    update.inventoryDiversity = args.inventory_diversity as number;
+  if (points.length === 0) {
+    return "軌跡データなし。システムがまだ計測を開始していません。";
   }
 
-  system.entropy.updateEnvironment(update);
+  const lines: string[] = [];
+  lines.push(`## 位相空間軌跡 (直近${points.length}点)`);
+  lines.push(``);
 
-  const entries = Object.entries(update)
-    .map(([k, v]) => `${k}=${v}`)
-    .join(", ");
-
-  return `環境状態を更新: ${entries}`;
-}
-
-function handleForceTransition(system: BifurcationSystem, args: Record<string, unknown>): string {
-  const targetState = args.target_state as string;
-  const reason = args.reason as string;
-
-  const validStates = ["primitive_survival", "organized_settlement", "industrial_complex"];
-  if (!validStates.includes(targetState)) {
-    return `無効な状態: ${targetState}. 有効: ${validStates.join(", ")}`;
-  }
-
-  const transition = system.engine.forceTransition(
-    targetState as import("../types/bifurcation.js").SystemState,
-    reason
-  );
-
-  if (!transition) {
-    return `遷移不要: すでに${targetState}状態です。`;
-  }
-
-  return [
-    `## 手動相転移を実行`,
-    ``,
-    `- 遷移元: ${transition.fromState}`,
-    `- 遷移先: ${transition.toState}`,
-    `- 理由: ${transition.reason}`,
-    `- ステータス: ${transition.status}`,
-    `- マイグレーション計画: ${transition.migrationPlan.length}アクション`,
-    ``,
-    `行動規範が「${system.engine.getCurrentBehaviorProfile().phaseName}」モードに更新されました。`,
-  ].join("\n");
-}
-
-function handleGetLandscape(system: BifurcationSystem): string {
-  const metrics = system.entropy.getLatest() || {
-    structuralComplexity: 0,
-    operationalEntropy: 0,
-    demandPressure: 0,
-    coordinationLoad: 0,
-    totalEntropy: 0,
-    timestamp: Date.now(),
-  };
-  const landscape = system.engine.computeLandscape(metrics);
-
-  const lines: string[] = [
-    `## Waddington ポテンシャルランドスケープ`,
-    ``,
-    `現在のエネルギー: ${landscape.currentEnergy.toFixed(1)}`,
-    ``,
-    `### 状態エネルギー（正=安定, 負=不安定）`,
-  ];
-
-  const stateNames: Record<string, string> = {
-    primitive_survival: "原始的サバイバル",
-    organized_settlement: "組織化された集落",
-    industrial_complex: "工業コンプレックス",
-  };
-
-  for (const [state, energy] of Object.entries(landscape.stateEnergies)) {
-    const marker = state === landscape.currentState ? " ← 現在" : "";
-    const stability = energy > 0 ? "安定" : "不安定";
-    lines.push(`  ${stateNames[state] || state}: ${energy.toFixed(1)} (${stability})${marker}`);
-  }
-
-  lines.push(``, `### 遷移障壁`);
-  for (const barrier of landscape.transitionBarriers) {
-    const dir = barrier.from < barrier.to ? "→" : "←";
-    const progress = (barrier.currentProgress * 100).toFixed(0);
-    const bar = "█".repeat(Math.round(barrier.currentProgress * 10)) +
-                "░".repeat(10 - Math.round(barrier.currentProgress * 10));
-    lines.push(`  ${stateNames[barrier.from] || barrier.from} ${dir} ${stateNames[barrier.to] || barrier.to}`);
-    lines.push(`    障壁: ${barrier.barrierHeight.toFixed(1)} | 進行: [${bar}] ${progress}%`);
-  }
+  // 各点のサマリー
+  points.forEach((p, idx) => {
+    const time = new Date(p.timestamp).toLocaleTimeString();
+    const significant = p.coordinates
+      .map((v, i) => ({ name: dims[i]?.name || `d${i}`, value: v }))
+      .filter(d => d.value > 0.3)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 4)
+      .map(d => `${d.name}=${d.value.toFixed(2)}`)
+      .join(", ");
+    lines.push(`${idx + 1}. [${time}] ${significant || "(低活動)"}`);
+  });
 
   return lines.join("\n");
 }
 
 function handleGetTransitionHistory(system: BifurcationSystem, args: Record<string, unknown>): string {
-  const limit = args.limit as number || 10;
-  const snapshot = system.engine.getSnapshot();
-  const history = snapshot.transitionHistory.slice(-limit);
+  const limit = (args.limit as number) || 10;
+  const history = system.landscape.getTransitionHistory(limit);
 
   if (history.length === 0) {
-    return "相転移履歴なし。システムは初期状態のまま安定しています。";
+    return "遷移履歴なし。アトラクター間の遷移はまだ発生していません。";
   }
 
-  const lines: string[] = [
-    `## 相転移履歴 (直近${history.length}件)`,
-    ``,
-  ];
+  const lines: string[] = [];
+  lines.push(`## アトラクター間遷移履歴 (直近${history.length}件)`);
+  lines.push(``);
 
   history.forEach((t, i) => {
-    const date = new Date(t.timestamp).toLocaleString();
-    lines.push(`### ${i + 1}. ${t.fromState} → ${t.toState}`);
-    lines.push(`- 日時: ${date}`);
-    lines.push(`- 理由: ${t.reason}`);
-    lines.push(`- トリガーエントロピー: ${t.triggerEntropy.totalEntropy.toFixed(1)}`);
-    lines.push(`- ステータス: ${t.status}`);
-    lines.push(`- アクション計画: ${t.migrationPlan.length}件`);
+    const time = new Date(t.timestamp).toLocaleString();
+    const from = t.fromAttractorId || "unknown";
+    const to = t.toAttractorId || "unknown";
+    lines.push(`### ${i + 1}. ${from} → ${to}`);
+    lines.push(`- 日時: ${time}`);
+    if (t.dominantDimensions.length > 0) {
+      lines.push(`- 支配的変化次元:`);
+      t.dominantDimensions.forEach(d => {
+        lines.push(`  - ${d.name}: Δ${d.delta.toFixed(3)}`);
+      });
+    }
+    if (t.externalTrigger) {
+      lines.push(`- 外部トリガー: ${t.externalTrigger}`);
+    }
     lines.push(``);
   });
+
+  return lines.join("\n");
+}
+
+function handleListAttractors(system: BifurcationSystem): string {
+  const landscape = system.landscape.getLandscape();
+  const dims = system.observer.getDimensions();
+
+  if (landscape.attractors.length === 0) {
+    return [
+      `## 発見済みアトラクター: 0個`,
+      ``,
+      `系はまだ安定状態を発見していません。`,
+      `観測を続けると、系が十分な時間留まった領域が`,
+      `自動的にアトラクターとして認識されます。`,
+    ].join("\n");
+  }
+
+  const lines: string[] = [];
+  lines.push(`## 発見済みアトラクター: ${landscape.attractors.length}個`);
+  lines.push(``);
+
+  for (const a of landscape.attractors) {
+    const isCurrent = landscape.currentAttractorId === a.id;
+    lines.push(`### ${a.id}${isCurrent ? " (現在)" : ""}`);
+
+    // 重心の支配的次元
+    const dominant = a.centroid
+      .map((v, i) => ({ name: dims[i]?.name || `d${i}`, value: v }))
+      .filter(d => d.value > 0.3)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+    if (dominant.length > 0) {
+      lines.push(`重心: ${dominant.map(d => `${d.name}=${d.value.toFixed(2)}`).join(", ")}`);
+    }
+
+    lines.push(`観測: ${a.sampleCount}回 | 安定性: ${(a.stability / 1000).toFixed(1)}s | 滞在: ${(a.totalResidenceTime / 60000).toFixed(1)}分`);
+    lines.push(`発見: ${new Date(a.discoveredAt).toLocaleString()} | 最終訪問: ${new Date(a.lastVisited).toLocaleString()}`);
+
+    // 分散（盆地の広さ）
+    const avgVar = a.variance.reduce((s, v) => s + v, 0) / a.variance.length;
+    lines.push(`盆地の広さ: ${avgVar < 0.01 ? "狭い(安定)" : avgVar < 0.05 ? "中程度" : "広い(変動的)"} (平均分散: ${avgVar.toFixed(4)})`);
+
+    lines.push(``);
+  }
 
   return lines.join("\n");
 }

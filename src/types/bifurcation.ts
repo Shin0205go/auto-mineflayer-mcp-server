@@ -1,296 +1,252 @@
 /**
- * Bifurcation Architecture Types
+ * Bifurcation Architecture Types - 創発的アトラクター発見
  *
- * システム生物学の「代替安定的状態（Alternative Stable States）」と
- * 「分岐（Bifurcation）」を導入するための型定義。
+ * 事前定義された状態を持たない。
+ * 系の位相空間上の軌跡から、アトラクター盆地を動的に発見する。
  *
- * Waddingtonの発生学的ランドスケープに基づき、システムの安定性を
- * 「谷（アトラクター）」として捉え、外乱が閾値を超えた際に
- * 相転移（Phase Transition）を行う。
+ * 生物学アナロジー:
+ * - 位相空間の各軸 = 遺伝子発現量
+ * - 軌跡 = 細胞の分化過程
+ * - アトラクター = 分化した細胞型（事前に設計されたものではなく創発する）
+ * - 相転移 = 細胞のリプログラミング（外乱による盆地間遷移）
  */
 
-// ========== System States (Attractor Basins) ==========
+// ========== Phase Space (位相空間) ==========
 
 /**
- * システムの安定状態（アトラクター盆地）
+ * 位相空間上の一点。
+ * 系の「今の状態」を多次元ベクトルとして表現する。
  *
- * State A: Primitive Survival - 手動の資源確保、小規模構造
- * State B: Organized Settlement - 自動農場、整理された拠点、基本防衛
- * State C: Industrial Complex - レッドストーン自動化、多拠点分散、マルチエージェント協調
+ * 各次元は正規化された0-1の値。
+ * 次元の意味はシステムが自分で発見する — 名前はヒントに過ぎない。
  */
-export type SystemState = "primitive_survival" | "organized_settlement" | "industrial_complex";
-
-export interface StateDefinition {
-  id: SystemState;
-  name: string;
-  description: string;
-
-  /** この状態が維持可能な最大エントロピー閾値 */
-  maxEntropy: number;
-
-  /** この状態への遷移に必要な最小エントロピー（ヒステリシス：戻り用） */
-  minEntropyToReturn: number;
-
-  /** この状態で使用するエージェント行動規範 */
-  behaviorProfile: BehaviorProfile;
-
-  /** 状態の安定性ポテンシャル（深い谷ほど安定） */
-  potentialDepth: number;
-
-  /** 遷移に必要な活性化エネルギー */
-  activationEnergy: number;
-}
-
-// ========== Entropy Metrics (散逸構造の監視) ==========
-
-/**
- * エントロピー計測の各次元
- *
- * システムの「限界」を測る複合指標。
- * 生物学における「ストレス指標」に相当。
- */
-export interface EntropyMetrics {
-  /** 構造的複雑度: ビルド数、自動化レベル、資源多様性 */
-  structuralComplexity: number;
-
-  /** 操作エントロピー: ツール失敗率、タスク繰り返し、未解決エラー */
-  operationalEntropy: number;
-
-  /** 要求圧力: 人間の指示頻度・複雑度、資源不足度 */
-  demandPressure: number;
-
-  /** 協調負荷: エージェント数、メッセージ頻度、目標競合 */
-  coordinationLoad: number;
-
-  /** 総合エントロピー（加重合計） */
-  totalEntropy: number;
+export interface PhasePoint {
+  /** 位相空間の座標ベクトル */
+  coordinates: number[];
 
   /** 計測タイムスタンプ */
   timestamp: number;
+
+  /** この点を計測した時の生データ（デバッグ用） */
+  rawInput?: PhaseSpaceInput;
 }
 
 /**
- * エントロピー計測用の重み付け設定
+ * 位相空間の次元定義
+ * 系が何を「知覚」しているかを定義する
  */
-export interface EntropyWeights {
-  structuralComplexity: number;
-  operationalEntropy: number;
-  demandPressure: number;
-  coordinationLoad: number;
+export interface PhaseDimension {
+  /** 次元名（ヒント。系の挙動には影響しない） */
+  name: string;
+
+  /** 正規化の最小・最大値 */
+  min: number;
+  max: number;
 }
 
 /**
- * エントロピー計測の入力ソース
+ * 位相空間への入力データ
+ * ツール実行ログ・ゲームイベント・環境状態から集計される
  */
-export interface EntropyInput {
-  /** ツール実行ログからの集計 */
-  toolStats: {
-    totalCalls: number;
-    failureCount: number;
-    failureRate: number;
-    uniqueToolsUsed: number;
-    avgDuration: number;
-    repeatedFailures: number;  // 同じツールの連続失敗
-  };
+export interface PhaseSpaceInput {
+  /** ツール使用パターン */
+  toolFailureRate: number;
+  toolDiversity: number;
+  toolThroughput: number;
+  repeatedFailures: number;
 
-  /** 環境状態 */
-  environmentState: {
-    automatedFarms: number;
-    structuresBuilt: number;
-    uniqueResourceTypes: number;
-    inventoryDiversity: number;
-  };
+  /** 行動パターン */
+  explorationRadius: number;
+  combatFrequency: number;
+  craftingFrequency: number;
+  buildingFrequency: number;
 
-  /** 要求パターン */
-  demandPattern: {
-    instructionFrequency: number;    // 指示/分
-    instructionComplexity: number;   // 0-1 scale
-    unfulfilledRequests: number;
-    resourceDeficit: number;         // 必要量 - 保有量
-  };
+  /** 資源状態 */
+  inventoryDiversity: number;
+  resourceSurplus: number;
 
-  /** マルチエージェント状態 */
-  coordinationState: {
-    activeAgents: number;
-    messageFrequency: number;
-    conflictingGoals: number;
-    boardMessageRate: number;
-  };
+  /** 生存指標 */
+  healthStability: number;
+  deathFrequency: number;
+
+  /** 外部圧力 */
+  demandRate: number;
+  demandComplexity: number;
+
+  /** 協調状態 */
+  agentCount: number;
+  messageRate: number;
 }
 
-// ========== Bifurcation Events (分岐イベント) ==========
+// ========== Attractor (アトラクター) ==========
 
 /**
- * 相転移イベント
+ * 発見されたアトラクター盆地
+ *
+ * 事前定義ではなく、軌跡のクラスタリングから創発する。
+ * 名前すら持たない — 系が自ら特徴を抽出し、記述する。
  */
-export interface PhaseTransitionEvent {
+export interface Attractor {
+  /** 一意識別子（発見順に振られる） */
+  id: string;
+
+  /** 重心（centroid）: この盆地の「代表的な位相座標」 */
+  centroid: number[];
+
+  /** 分散: 各次元のばらつき。盆地の「広さ」 */
+  variance: number[];
+
+  /** この盆地に滞在した観測数 */
+  sampleCount: number;
+
+  /** 最初に発見されたタイムスタンプ */
+  discoveredAt: number;
+
+  /** 最後にこの盆地に滞在していたタイムスタンプ */
+  lastVisited: number;
+
+  /** この盆地での滞在合計時間（ms） */
+  totalResidenceTime: number;
+
+  /** 安定性: 滞在時間 / 観測回数。長いほど安定な谷 */
+  stability: number;
+
+  /** 盆地での振る舞い統計（創発的行動プロファイル） */
+  behaviorStats: EmergentBehaviorStats;
+}
+
+/**
+ * 創発的行動統計
+ *
+ * テンプレートではなく、実際の観測から自動的に集計される。
+ * 「この盆地にいるとき、系は何をしていたか」の統計的記述。
+ */
+export interface EmergentBehaviorStats {
+  /** ツール使用頻度ランキング（降順） */
+  topTools: { tool: string; frequency: number; successRate: number }[];
+
+  /** 高失敗率ツール（避けるべき行動の創発的発見） */
+  problematicTools: { tool: string; failureRate: number; count: number }[];
+
+  /** 平均的な資源状態 */
+  avgResourceDiversity: number;
+
+  /** 平均HP安定性 */
+  avgHealthStability: number;
+
+  /** この盆地への遷移時のトリガー特徴 */
+  entryConditions: number[];  // 遷移時の位相座標
+
+  /** この盆地からの離脱時のトリガー特徴 */
+  exitConditions: number[];   // 離脱時の位相座標
+}
+
+// ========== Transition (遷移) ==========
+
+/**
+ * 盆地間遷移イベント
+ *
+ * fromAttractor/toAttractor は事前定義ではなく、
+ * 発見されたアトラクターのIDを参照する。
+ * toAttractor が null なら「未知の領域への逸脱」を意味する。
+ */
+export interface BasinTransition {
   id: string;
   timestamp: number;
 
-  /** 遷移元 */
-  fromState: SystemState;
+  /** 遷移元のアトラクターID（null = 初期状態/未知領域） */
+  fromAttractorId: string | null;
 
-  /** 遷移先 */
-  toState: SystemState;
+  /** 遷移先のアトラクターID（null = 新しい未知の領域） */
+  toAttractorId: string | null;
 
-  /** 遷移のトリガーとなったエントロピー */
-  triggerEntropy: EntropyMetrics;
+  /** 遷移時の位相座標 */
+  transitionPoint: number[];
 
-  /** 遷移理由 */
-  reason: string;
+  /** 遷移前の軌跡（直近N点） */
+  precedingTrajectory: number[][];
 
-  /** 遷移に伴うアクション計画 */
-  migrationPlan: MigrationAction[];
+  /** 遷移の要因分析: どの次元が最も変化したか */
+  dominantDimensions: { dimension: number; name: string; delta: number }[];
 
-  /** 遷移ステータス */
-  status: "initiated" | "in_progress" | "completed" | "failed" | "rolled_back";
-
-  /** 完了時間 */
-  completedAt?: number;
+  /** 外部トリガーがあったか */
+  externalTrigger?: string;
 }
 
-/**
- * マイグレーションアクション
- * 相転移時に実行する具体的アクション
- */
-export interface MigrationAction {
-  id: string;
-  type: "build_automation" | "restructure_base" | "deploy_redstone" |
-        "setup_farm" | "coordinate_agents" | "upgrade_tools" |
-        "establish_perimeter" | "create_storage" | "meta_prompt_update";
-  description: string;
-  priority: number;
-  status: "pending" | "in_progress" | "completed" | "skipped";
-  prerequisiteIds?: string[];
-}
-
-// ========== Behavior Profiles (行動規範) ==========
+// ========== Landscape (ランドスケープ) ==========
 
 /**
- * 各安定状態でのエージェント行動規範
- * メタ・プロンプトの自己書き換えに使用
+ * 現在のランドスケープ状態
+ *
+ * 事前定義のポテンシャル関数ではなく、
+ * 観測された軌跡の密度から逆算されるランドスケープ。
  */
-export interface BehaviorProfile {
-  /** フェーズ名（System Promptに反映） */
-  phaseName: string;
+export interface EmergentLandscape {
+  /** 現在の位相座標 */
+  currentPosition: number[];
 
-  /** 優先事項リスト（降順） */
-  priorities: string[];
+  /** 現在属しているアトラクターID（null = 遷移中/未知領域） */
+  currentAttractorId: string | null;
 
-  /** 使用を推奨するツール群 */
-  preferredTools: string[];
+  /** 発見済みの全アトラクター */
+  attractors: Attractor[];
 
-  /** 避けるべき行動 */
-  avoidActions: string[];
+  /** 現在位置から各アトラクターまでの距離 */
+  distancesToAttractors: { attractorId: string; distance: number }[];
 
-  /** 意思決定の基準 */
-  decisionCriteria: string;
+  /** 軌跡の最近の方向ベクトル（どの方向に動いているか） */
+  trajectoryDirection: number[];
 
-  /** リスク許容度 0-1 */
-  riskTolerance: number;
+  /** 軌跡の速度（位相空間上の移動速度） */
+  trajectorySpeed: number;
 
-  /** 自動化レベル 0-1 */
-  automationLevel: number;
-
-  /** 協調モード */
-  coordinationMode: "solo" | "cooperative" | "hierarchical";
-}
-
-// ========== Potential Landscape (ポテンシャルランドスケープ) ==========
-
-/**
- * Waddingtonランドスケープのモデル
- * ポテンシャル関数 V(x) で安定性を表現
- */
-export interface PotentialLandscape {
-  /** 現在の状態 */
-  currentState: SystemState;
-
-  /** 各状態のポテンシャルエネルギー（低いほど安定） */
-  stateEnergies: Record<SystemState, number>;
-
-  /** 現在のシステムエネルギー（エントロピーから算出） */
-  currentEnergy: number;
-
-  /** 各遷移の活性化エネルギー障壁 */
-  transitionBarriers: TransitionBarrier[];
-
-  /** ランドスケープのスナップショット時間 */
+  /** スナップショット時刻 */
   timestamp: number;
-}
-
-export interface TransitionBarrier {
-  from: SystemState;
-  to: SystemState;
-  barrierHeight: number;
-  currentProgress: number; // 0-1: 障壁をどれだけ越えかけているか
-}
-
-// ========== Hysteresis (ヒステリシス) ==========
-
-/**
- * ヒステリシス状態
- * 一度遷移したら、簡単には戻らない
- */
-export interface HysteresisState {
-  /** 現在の状態に留まっている時間（ms） */
-  timeInCurrentState: number;
-
-  /** 現在の状態に遷移した時のエントロピー */
-  entryEntropy: number;
-
-  /** 戻り遷移を開始するための閾値 */
-  returnThreshold: number;
-
-  /** 連続で閾値を下回っている時間（ms） */
-  belowThresholdDuration: number;
-
-  /** 戻り遷移に必要な連続時間（ms）*/
-  requiredBelowDuration: number;
-
-  /** 遷移履歴（バタつき防止の参照用） */
-  recentTransitions: { timestamp: number; from: SystemState; to: SystemState }[];
-}
-
-// ========== System Snapshot (システムスナップショット) ==========
-
-/**
- * 分岐システム全体のスナップショット
- */
-export interface BifurcationSnapshot {
-  currentState: SystemState;
-  entropy: EntropyMetrics;
-  landscape: PotentialLandscape;
-  hysteresis: HysteresisState;
-  activeTransition: PhaseTransitionEvent | null;
-  transitionHistory: PhaseTransitionEvent[];
-  lastUpdated: number;
 }
 
 // ========== Configuration ==========
 
 /**
  * 分岐システムの設定
+ *
+ * 事前定義の状態は含まない。
+ * 発見アルゴリズムのハイパーパラメータのみ。
  */
 export interface BifurcationConfig {
-  /** エントロピー計測間隔（ms） */
+  /** 計測間隔（ms） */
   measurementInterval: number;
 
-  /** エントロピーの重み */
-  entropyWeights: EntropyWeights;
+  /** 位相空間の次元定義 */
+  dimensions: PhaseDimension[];
 
-  /** 各状態の定義 */
-  states: Record<SystemState, StateDefinition>;
+  /** アトラクター判定の距離閾値: これ以下ならアトラクター内 */
+  attractorRadius: number;
 
-  /** ヒステリシスの戻り遷移に必要な連続時間（ms） */
-  hysteresisReturnDuration: number;
+  /** 新しいアトラクターとして認識するための最小滞在観測数 */
+  minSamplesForAttractor: number;
 
-  /** バタつき防止: 最小遷移間隔（ms） */
-  minTransitionInterval: number;
+  /** 遷移判定: アトラクターから逸脱したと判定する距離 */
+  escapeRadius: number;
 
-  /** エントロピー履歴の保持数 */
-  entropyHistorySize: number;
+  /** 軌跡の保持数（スライディングウィンドウ） */
+  trajectoryWindowSize: number;
 
-  /** 自動遷移を有効にするか */
-  autoTransitionEnabled: boolean;
+  /** 重心の更新率（指数移動平均の係数、0-1） */
+  centroidLearningRate: number;
+
+  /** 永続化ファイルのパス */
+  dataDir: string;
+}
+
+// ========== Snapshot ==========
+
+/**
+ * システム全体のスナップショット
+ */
+export interface BifurcationSnapshot {
+  landscape: EmergentLandscape;
+  recentTrajectory: PhasePoint[];
+  transitionHistory: BasinTransition[];
+  config: BifurcationConfig;
+  lastUpdated: number;
 }
