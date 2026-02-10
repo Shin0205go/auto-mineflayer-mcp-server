@@ -74,19 +74,39 @@ Task toolで以下のスキルを発動:
 ## Task呼び出し例
 description: "鉄を集める", prompt: "鉄鉱石を見つけて採掘し、精錬して鉄インゴットを5個集めて", subagent_type: "iron-mining"
 
-## 判断フロー
-1. get_status, get_surroundings で状況確認
-2. 優先度判断:
-   - HP≤10 or 敵近い → survival スキル
-   - 夜 → bed-crafting or survival
-   - 装備不足 → iron-mining or diamond-mining
-   - 通常 → exploration or 目標に応じたスキル
-3. Task で適切なスキルを発動
-4. スキル完了後、再度状況確認
+## 判断フロー（状況適応型）
+1. **必ず最初に**: get_status, get_surroundings で現在の状態を確認
+2. **状況分析**: 以下の危機度を判定
+   - 【緊急】HP≤10 or Food≤5 or 敵2体以上近接 → survival スキル（即座）
+   - 【警戒】HP≤15 or Food≤10 or 夜+敵接近 → 現タスク中断、survival優先
+   - 【注意】Food≤15 → 装備/探索の合間に食料確保を検討
+   - 【通常】上記以外 → 目標に応じたスキル選択
+3. 危機度に応じてTask発動（低優先度タスクは中断可）
+4. スキル完了後、状況を再評価
+
+## 最終目標：エンダードラゴン討伐
+
+あなた自身で計画を立て、実行してください:
+
+1. **タスク管理ツールを使う**
+   - TaskCreate: 必要なタスクを自分で定義
+   - TaskUpdate: 進捗を記録 (pending/in_progress/completed)
+   - TaskList: 現在のタスクを確認
+
+2. **自律的な計画**
+   - agent_board_read で目標確認
+   - 現在の状況から次に何をすべきか判断
+   - 長期目標（ドラゴン討伐）に向けた中間目標を設定
+   - 行き詰まったら計画を見直す
+
+3. **階層的実行**
+   - 複雑な作業はTask tool + スキルに委譲
+   - 直接的なdig/craft/moveは避ける
 
 ## ルール
-- 直接dig/craft/moveはしない（スキルに任せる）
+- 自分でTODOを考え、管理する
 - 質問しない、選択肢を提示しない
+- 掲示板に重要な判断を記録
 - 簡潔に報告`;
 
 /**
@@ -109,13 +129,6 @@ export function buildSystemPromptFromConfig(config: AgentConfig): string {
     `リスク許容: ${personality.riskTolerance}/10`,
   ].join("、");
 
-  // Format decision rules
-  const rulesText = config.decisionRules.length > 0
-    ? config.decisionRules
-        .map(r => `- [${r.priority}] ${r.condition} → ${r.action}`)
-        .join("\n")
-    : "（なし）";
-
   // Format thresholds
   const thresholds = config.thresholds;
   const thresholdsText = [
@@ -124,57 +137,28 @@ export function buildSystemPromptFromConfig(config: AgentConfig): string {
     `夜行動開始: ${thresholds.nightShelterTime} tick`,
   ].join("、");
 
-  return `Minecraftサバイバル司令官。スキルを使って行動する。
+  return `Minecraftエンダードラゴン討伐を目指すエージェント。
 
-## アーキテクチャ
-あなたは「司令官」です。直接行動するのではなく、スキル（専門サブエージェント）に委譲します。
+## 設定
+性格: ${personalityText}
+優先度: ${sortedPriorities}
+閾値: ${thresholdsText}
 
-使えるツール:
-- minecraft_get_status: HP/空腹を確認（読み取り専用）
-- minecraft_get_surroundings: 周囲の状況確認（読み取り専用）
-- minecraft_get_inventory: 持ち物確認（読み取り専用）
-- minecraft_get_equipment: 装備確認（読み取り専用）
-- Task: スキルを発動（実際の行動はこれで行う）
+## ツール
+- 状態確認: get_status, get_inventory, get_surroundings, get_position
+- Task: スキル発動（survival, exploration, iron-mining, diamond-mining, bed-crafting, nether-gate, base-building）
+- タスク管理: task_list, task_create, task_update, task_get
+- 記憶: save_memory, recall_memory
+- 掲示板: agent_board_write, agent_board_read
 
-## スキル一覧
-Task toolで以下のスキルを発動:
-- survival: 緊急対応（食事・戦闘・逃走・睡眠）
-- exploration: 探索・移動
-- iron-mining: 鉄採掘・精錬
-- diamond-mining: ダイヤモンド採掘
-- bed-crafting: ベッド作成
-- nether-gate: ネザーポータル建設
-- base-building: 拠点構築
+## 行動方針
+1. 毎ループ開始時、task_listで確認
+2. タスクなければtask_createで計画
+3. 状態確認後、Taskでスキル発動
+4. HP≤${thresholds.fleeHP} or Food≤${thresholds.eatHunger}なら生存優先
+5. 重要な判断はagent_board_writeで記録
 
-## Task呼び出し例
-description: "鉄を集める", prompt: "鉄鉱石を見つけて採掘し、精錬して鉄インゴットを5個集めて", subagent_type: "iron-mining"
-
-## 性格特性
-${personalityText}
-
-## 行動優先度（重み順）
-${sortedPriorities}
-
-## 判断ルール
-${rulesText}
-
-## 閾値
-${thresholdsText}
-
-## 判断フロー
-1. get_status, get_surroundings で状況確認
-2. 優先度判断:
-   - HP≤${thresholds.fleeHP} or 敵近い → survival スキル
-   - 夜（${thresholds.nightShelterTime} tick以降） → bed-crafting or survival
-   - 装備不足 → iron-mining or diamond-mining
-   - 通常 → 優先度リストに従う
-3. Task で適切なスキルを発動
-4. スキル完了後、再度状況確認
-
-## ルール
-- 直接dig/craft/moveはしない（スキルに任せる）
-- 質問しない、選択肢を提示しない
-- 簡潔に報告`;
+自律的に計画し、実行してください。`;
 }
 
 // Tool prefix for MCP tools (server name = "mineflayer")
@@ -226,6 +210,12 @@ const TOOL_SETS: Record<string, string[]> = {
   ],
   skill: [
     "get_agent_skill",
+  ],
+  tasks: [
+    "task_create",
+    "task_list",
+    "task_get",
+    "task_update",
   ],
 };
 
@@ -390,6 +380,11 @@ export class ClaudeClient extends EventEmitter {
       "mcp__mineflayer__agent_board_read",
       "mcp__mineflayer__agent_board_write",
       "mcp__mineflayer__get_agent_skill",
+      // Task Management
+      "mcp__mineflayer__task_create",
+      "mcp__mineflayer__task_list",
+      "mcp__mineflayer__task_get",
+      "mcp__mineflayer__task_update",
     ];
 
     return {

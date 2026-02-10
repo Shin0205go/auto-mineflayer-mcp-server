@@ -1509,17 +1509,16 @@ export class BotManager extends EventEmitter {
         await new Promise(resolve => setTimeout(resolve, 500));
 
         // Check multiple times for blocks that commonly timeout
-        const specialBlocks = ['torch', 'furnace', 'crafting_table', 'chest', 'oak_slab', 'stone_slab', 'slab', 'dirt', 'sand', 'gravel', 'cobblestone', 'stone', 'grass_block'];
-        const maxAttempts = specialBlocks.some(b => blockType.includes(b)) ? 4 : 3;
+        const maxAttempts = 6;
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
           const placedBlock = bot.blockAt(targetPos);
           if (placedBlock && (placedBlock.name === blockType || placedBlock.name === blockType.replace("minecraft:", ""))) {
             return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)})` };
           }
 
-          // Wait between attempts
+          // Wait between attempts, with increasing delays
           if (attempt < maxAttempts - 1) {
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await new Promise(resolve => setTimeout(resolve, 500 + (attempt * 200)));
           }
         }
 
@@ -1534,32 +1533,6 @@ export class BotManager extends EventEmitter {
           }
           // Only allow "verification pending" for small decorative blocks, NOT chests/furnaces
           return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}) (verification pending)` };
-        }
-
-        // For important blocks like chest/furnace, require actual verification
-        const importantBlocks = ['chest', 'furnace', 'crafting_table'];
-        if (importantBlocks.some(b => blockType.includes(b))) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          const placedBlock = bot.blockAt(targetPos);
-          if (placedBlock && (placedBlock.name === blockType || placedBlock.name === blockType.replace("minecraft:", ""))) {
-            return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)})` };
-          }
-          return { success: false, message: `Failed to place ${blockType} - block not found at target position. Try a different location.` };
-        }
-
-        // For other blocks that timeout, check one more time with longer wait
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const placedBlock = bot.blockAt(targetPos);
-        if (placedBlock && (placedBlock.name === blockType || placedBlock.name === blockType.replace("minecraft:", ""))) {
-          return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)})` };
-        }
-
-        // If still not placed, it might be a server lag issue
-        // Try one last time with a longer wait
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const finalCheck = bot.blockAt(targetPos);
-        if (finalCheck && (finalCheck.name === blockType || finalCheck.name === blockType.replace("minecraft:", ""))) {
-          return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}) (delayed verification)` };
         }
 
         // If still not placed, return failure
@@ -2320,6 +2293,7 @@ async collectNearbyItems(username: string): Promise<string> {
         // mineflayer v4.x: entity.name === "item", entity.type === "other", entity.displayName === "Item"
         const isItem = entity.id !== bot.entity.id && (
           entity.name === "item" ||
+          entity.type === "other" ||
           entity.displayName === "Item" ||
           (entity.entityType !== undefined && entity.entityType === 2) // item entity type ID
         );
@@ -3288,8 +3262,8 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     }
 
     // Move close to the bed before sleeping
-    const pathfinder = await import("mineflayer-pathfinder");
-    const goal = new pathfinder.goals.GoalNear(
+    const { goals } = await import("mineflayer-pathfinder");
+    const goal = new goals.GoalNear(
       bedBlock.position.x,
       bedBlock.position.y,
       bedBlock.position.z,
@@ -3317,7 +3291,7 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     // If still too far from the bed, walk directly toward it
     const dist = bot.entity.position.distanceTo(bedBlock.position);
     if (dist > 3) {
-      const goal2 = new pathfinder.goals.GoalBlock(
+      const goal2 = new goals.GoalBlock(
         bedBlock.position.x,
         bedBlock.position.y,
         bedBlock.position.z
@@ -3462,16 +3436,7 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
   /**
    * Get system state for stability analysis
    */
-  getSystemState(username: string): {
-    timestamp: number;
-    health: number;
-    hunger: number;
-    position: { x: number; y: number; z: number };
-    nearbyHostiles: number;
-    hasWeapon: boolean;
-    timeOfDay: number;
-    inventoryCount: number;
-  } | null {
+  getSystemState(username: string): import("./types/stability.js").SystemState | null {
     const managed = this.bots.get(username);
     if (!managed) {
       return null;
@@ -3496,6 +3461,56 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       heldItem.name.includes("bow")
     );
 
+    // Check food in inventory
+    const foodItems = bot.inventory.items().filter((item: any) =>
+      item.name.includes("cooked") ||
+      item.name.includes("bread") ||
+      item.name.includes("apple") ||
+      item.name.includes("carrot") ||
+      item.name.includes("potato") ||
+      item.name.includes("beef") ||
+      item.name.includes("porkchop") ||
+      item.name.includes("chicken") ||
+      item.name.includes("mutton") ||
+      item.name.includes("fish") ||
+      item.name.includes("salmon")
+    );
+
+    // Calculate armor value
+    const armorSlots = [bot.inventory.slots[5], bot.inventory.slots[6], bot.inventory.slots[7], bot.inventory.slots[8]];
+    const armorValue = armorSlots.reduce((total: number, slot: any) => {
+      if (!slot) return total;
+      // Approximate armor values
+      if (slot.name.includes("diamond")) return total + 3;
+      if (slot.name.includes("iron")) return total + 2.5;
+      if (slot.name.includes("chainmail")) return total + 2;
+      if (slot.name.includes("gold")) return total + 2;
+      if (slot.name.includes("leather")) return total + 1;
+      return total;
+    }, 0);
+
+    // Check for danger (use bot properties, not entity)
+    const isInWater = (bot as any).isInWater || false;
+    const isInLava = (bot as any).isInLava || false;
+    const onGround = (bot as any).entity?.onGround || false;
+    const isInDanger = isInWater || isInLava ||
+                       (bot.entity.position.y > 100 && !onGround);
+
+    // Check for negative effects
+    const negativeEffects = ['poison', 'wither', 'hunger', 'weakness', 'slowness', 'mining_fatigue'];
+    const effects = Object.keys(bot.entity.effects || {});
+    const hasNegativeEffect = effects.some(e => negativeEffects.includes(e));
+
+    // Determine tool quality
+    let toolQuality: 'none' | 'wood' | 'stone' | 'iron' | 'diamond' | 'netherite' = 'none';
+    if (heldItem) {
+      if (heldItem.name.includes("netherite")) toolQuality = "netherite";
+      else if (heldItem.name.includes("diamond")) toolQuality = "diamond";
+      else if (heldItem.name.includes("iron")) toolQuality = "iron";
+      else if (heldItem.name.includes("stone")) toolQuality = "stone";
+      else if (heldItem.name.includes("wood")) toolQuality = "wood";
+    }
+
     return {
       timestamp: Date.now(),
       health: bot.health ?? 0,
@@ -3508,7 +3523,18 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       nearbyHostiles: hostiles.length,
       hasWeapon: !!hasWeapon,
       timeOfDay: bot.time.timeOfDay,
-      inventoryCount: bot.inventory.items().length
+      inventoryCount: bot.inventory.items().length,
+
+      // Extended state
+      foodItemCount: foodItems.reduce((sum: number, item: any) => sum + item.count, 0),
+      armorValue,
+      isInDanger,
+      isInWater,
+      isInLava,
+      onGround,
+      hasNegativeEffect,
+      effectsList: effects,
+      toolQuality
     };
   }
 
@@ -4241,13 +4267,15 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       "ancient_debris", "crying_obsidian", "reinforced_deepslate"];
 
     const isScaffoldBlock = (itemName: string): boolean => {
+      // Remove minecraft: prefix if present
+      const cleanName = itemName.replace("minecraft:", "");
       // Check if block exists in registry
-      const blockInfo = bot.registry.blocksByName[itemName];
+      const blockInfo = bot.registry.blocksByName[cleanName];
       if (!blockInfo) return false;
       // Must be solid block (boundingBox === 'block')
       if (blockInfo.boundingBox !== "block") return false;
       // Exclude valuable/special blocks
-      if (excludePatterns.some(p => itemName.includes(p))) return false;
+      if (excludePatterns.some(p => cleanName.includes(p))) return false;
       return true;
     };
 
@@ -4255,13 +4283,21 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       .filter(i => isScaffoldBlock(i.name))
       .reduce((sum, i) => sum + i.count, 0);
 
-    if (countScaffold() === 0) {
+    const scaffoldCount = countScaffold();
+
+    if (scaffoldCount === 0) {
       const inv = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
-      throw new Error(`Cannot pillar up - no blocks! Need: cobblestone, dirt, stone. Have: ${inv}`);
+      throw new Error(`Cannot pillar up - no scaffold blocks! Need: cobblestone, dirt, stone. Have: ${inv}`);
     }
 
     const targetHeight = Math.min(height, 15); // Safety limit
-    console.error(`[Pillar] Starting: ${targetHeight} blocks from Y=${startY.toFixed(1)}, scaffold count: ${countScaffold()}`);
+
+    // Warn if insufficient blocks for target height
+    if (scaffoldCount < targetHeight) {
+      console.error(`[Pillar] WARNING: Only ${scaffoldCount} blocks available, but need ${targetHeight}. Will place what we have.`);
+    }
+
+    console.error(`[Pillar] Starting: ${targetHeight} blocks from Y=${startY.toFixed(1)}, scaffold count: ${scaffoldCount}`);
 
     // Stop all movement and digging first
     bot.pathfinder.setGoal(null);
@@ -4273,13 +4309,33 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
     }
     await new Promise(r => setTimeout(r, 500)); // Longer wait to ensure previous operations complete
 
+    // Verify we have solid ground below before starting
+    const checkY = Math.floor(bot.entity.position.y);
+    const checkX = Math.floor(bot.entity.position.x);
+    const checkZ = Math.floor(bot.entity.position.z);
+    const groundCheck = [
+      new Vec3(checkX, checkY - 1, checkZ),
+      new Vec3(checkX, checkY - 2, checkZ),
+    ];
+    let hasGround = false;
+    for (const pos of groundCheck) {
+      const b = bot.blockAt(pos);
+      if (b && b.name !== "air" && b.name !== "cave_air" && b.name !== "water" && b.name !== "void_air") {
+        hasGround = true;
+        break;
+      }
+    }
+    if (!hasGround) {
+      throw new Error(`Failed to pillar up. No solid ground below. Try moving to open area first.`);
+    }
+
     let blocksPlaced = 0;
 
     for (let i = 0; i < targetHeight; i++) {
-      // Use Math.round for all axes consistently to handle edge positions (e.g. 5.99 -> 6)
-      const curX = Math.round(bot.entity.position.x);
+      // Use Math.floor for all axes consistently
+      const curX = Math.floor(bot.entity.position.x);
       const currentY = Math.floor(bot.entity.position.y);
-      const curZ = Math.round(bot.entity.position.z);
+      const curZ = Math.floor(bot.entity.position.z);
 
       // 1. Dig blocks above if needed (Y+2 and Y+3 for jump clearance)
       for (const yOffset of [2, 3]) {
@@ -4315,8 +4371,8 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       const candidates = [
         new Vec3(bx, feetY - 1, bz),
         new Vec3(curX, feetY - 1, curZ),
-        new Vec3(bx, feetY, bz),  // might be standing inside a slab/partial block
-        new Vec3(curX, feetY, curZ),
+        new Vec3(bx, feetY - 2, bz),
+        new Vec3(curX, feetY - 2, curZ),
       ];
       let blockBelow: ReturnType<typeof bot.blockAt> = null;
       for (const pos of candidates) {
@@ -4343,13 +4399,9 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
           const retryFeetY = Math.floor(bot.entity.position.y);
           const retryX = Math.floor(bot.entity.position.x);
           const retryZ = Math.floor(bot.entity.position.z);
-          const roundX = Math.round(bot.entity.position.x);
-          const roundZ = Math.round(bot.entity.position.z);
           const retryCandidates = [
             new Vec3(retryX, retryFeetY - 1, retryZ),
-            new Vec3(roundX, retryFeetY - 1, roundZ),
             new Vec3(retryX, retryFeetY, retryZ),
-            new Vec3(roundX, retryFeetY, roundZ),
           ];
           blockBelow = null;
           for (const pos of retryCandidates) {
@@ -4375,6 +4427,7 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
         // Wait for jump to reach peak height before placing
         const jumpBaseY = bot.entity.position.y;
         let prevY = jumpBaseY;
+        let peakReached = false;
         await new Promise<void>((resolve) => {
           let elapsed = 0;
           const interval = setInterval(() => {
@@ -4382,8 +4435,11 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
             const curY = bot.entity.position.y;
             const rising = curY - jumpBaseY;
             // Place when we've risen enough AND started to fall (peak), or timeout
-            // Increased timeout from 600ms to 1500ms to handle lag
-            if ((rising > 0.8 && curY <= prevY) || elapsed >= 1500) {
+            if (rising > 0.8 && curY <= prevY) {
+              peakReached = true;
+              clearInterval(interval);
+              resolve();
+            } else if (elapsed >= 800) {
               clearInterval(interval);
               resolve();
             }
@@ -4393,18 +4449,24 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
 
         bot.setControlState("jump", false);
 
-        try {
-          // Re-fetch the block at saved position for a fresh reference
-          const freshBlock = bot.blockAt(savedBlockPos) || blockBelow;
+        // Only try to place if we reached a reasonable jump height
+        if (peakReached || bot.entity.position.y - jumpBaseY > 0.5) {
+          try {
+            // Re-fetch the block at saved position for a fresh reference
+            const freshBlock = bot.blockAt(savedBlockPos) || blockBelow;
 
-          // Place on top of block below (this puts block at feet level, lifting us up)
-          await bot.placeBlock(freshBlock!, new Vec3(0, 1, 0));
-          blocksPlaced++;
-          placed = true;
-          console.error(`[Pillar] Placed ${blocksPlaced}/${targetHeight} at Y=${currentY}`);
-        } catch (e) {
-          console.error(`[Pillar] Place failed (attempt ${attempt + 1}): ${e}`);
-          // Wait longer before retry to let bot settle
+            // Place on top of block below (this puts block at feet level, lifting us up)
+            await bot.placeBlock(freshBlock!, new Vec3(0, 1, 0));
+            blocksPlaced++;
+            placed = true;
+            console.error(`[Pillar] Placed ${blocksPlaced}/${targetHeight} at Y=${currentY}`);
+          } catch (e) {
+            console.error(`[Pillar] Place failed (attempt ${attempt + 1}): ${e}`);
+            // Wait longer before retry to let bot settle
+            await new Promise(r => setTimeout(r, 300));
+          }
+        } else {
+          console.error(`[Pillar] Jump too low (${(bot.entity.position.y - jumpBaseY).toFixed(2)}), retrying...`);
           await new Promise(r => setTimeout(r, 300));
         }
 
@@ -4413,16 +4475,29 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
         bot.setControlState("sneak", false);
         await new Promise(r => setTimeout(r, 300)); // Wait to stabilize
       }
+
+      if (!placed) {
+        console.error(`[Pillar] Failed to place block after 3 attempts at level ${i + 1}`);
+        break;
+      }
     }
 
     const finalY = bot.entity.position.y;
     const gained = finalY - startY;
 
     if (gained < 0.5 && blocksPlaced === 0) {
-      throw new Error(`Failed to pillar up. No blocks placed. Try moving to open area first.`);
+      throw new Error(`Failed to pillar up. No blocks placed. Check: 1) Have scaffold blocks? 2) Solid ground below? 3) Open space above?`);
     }
 
-    return `Pillared up ${gained.toFixed(1)} blocks (Y:${startY.toFixed(0)}→${finalY.toFixed(0)}, placed ${blocksPlaced})` + this.getBriefStatus(username);
+    // Report partial success clearly
+    let result = `Pillared up ${gained.toFixed(1)} blocks (Y:${startY.toFixed(0)}→${finalY.toFixed(0)}, placed ${blocksPlaced}/${targetHeight})`;
+
+    if (blocksPlaced < targetHeight) {
+      const remaining = targetHeight - blocksPlaced;
+      result += `. PARTIAL: Stopped early (${remaining} blocks short). Reason: ${scaffoldCount < targetHeight ? `Only had ${scaffoldCount} blocks` : 'Placement failed'}`;
+    }
+
+    return result + this.getBriefStatus(username);
   }
 
   async flee(username: string, distance: number = 20): Promise<string> {
@@ -4843,6 +4918,12 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
       }
     }
 
+    // Check if we have a pickaxe
+    if (equippedTool === "empty hand") {
+      const inv = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
+      throw new Error(`Cannot dig tunnel - no pickaxe! Need: wooden/stone/iron pickaxe. Have: ${inv}. Craft a pickaxe first.`);
+    }
+
     let blocksDug = 0;
     const oresFound: Record<string, number> = {};
     const currentPos = {
@@ -4975,8 +5056,15 @@ async craftItem(username: string, itemName: string, count: number = 1): Promise<
 
     // Build result message
     const finalPos = bot.entity.position;
-    let result = `Tunneled ${blocksDug} blocks ${direction} with ${equippedTool}.`;
+    let result = `Tunneled ${blocksDug}/${length} blocks ${direction} with ${equippedTool}.`;
     result += ` Position: (${Math.floor(finalPos.x)}, ${Math.floor(finalPos.y)}, ${Math.floor(finalPos.z)}).`;
+
+    // Report if stopped early
+    if (blocksDug < length) {
+      const reason = bot.health < 8 ? "HP too low" : "Movement/digging failed";
+      result += ` PARTIAL: Stopped at ${blocksDug}/${length} (${reason}).`;
+    }
+
     result += ` Items collected: ${itemsCollected}.`;
 
     if (Object.keys(oresFound).length > 0) {

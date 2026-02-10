@@ -45,6 +45,7 @@ class MCPBridge {
   >();
   private eventBuffer: GameEvent[] = [];
   private subscribedToEvents = false;
+  private lastFoodManagementTime = 0;
 
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -169,6 +170,23 @@ class MCPBridge {
       // health_changed is urgent only if health is low
       if (e.type === "health_changed" && e.data) {
         const health = e.data.health as number | undefined;
+        const hunger = e.data.food as number | undefined;
+
+        // Early-exit for stable state: ignore minor fluctuations
+        if (health !== undefined && hunger !== undefined && health >= 18 && hunger >= 17) {
+          continue; // Dead zone - system is stable, no action needed
+        }
+
+        // Fast negative feedback loop: if hunger < 15, immediately consume food
+        if (hunger !== undefined && hunger < 15) {
+          const now = Date.now();
+          if (now - this.lastFoodManagementTime > 5000) {
+            this.lastFoodManagementTime = now;
+            urgentEvents.push(e);
+          }
+          continue; // Early return - skip diagnostics
+        }
+
         if (health !== undefined && health < 10) {
           urgentEvents.push(e);
         } else {

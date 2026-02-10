@@ -11,12 +11,12 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { botManager } from "./bot-manager.js";
 import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
 import { learningTools, handleLearningTool, getAgentSkill } from "./tools/learning.js";
+import { taskCreate, taskList, taskGet, taskUpdate, TASK_MANAGEMENT_TOOLS } from "./tools/task-management.js";
 import { appendFileSync, readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import type { ToolExecutionLog, ToolExecutionContext } from "./types/tool-log.js";
 import type { LoopResult } from "./types/agent-config.js";
-import { StabilityAnalyzer } from "./stability-analyzer.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -28,9 +28,6 @@ const MAX_LOGS_IN_MEMORY = 500;
 
 // Dev Agent subscriptions (for receiving tool logs)
 const devAgentConnections = new Set<WebSocket>();
-
-// Stability analyzer
-const stabilityAnalyzer = new StabilityAnalyzer();
 
 // Loop result storage
 const LOOP_RESULT_FILE = join(__dirname, "..", "logs", "loop-results.jsonl");
@@ -75,6 +72,7 @@ function getBotContext(username: string): ToolExecutionContext {
 
 // === Critical State Check (Skill Abort) ===
 const CRITICAL_HP_THRESHOLD = 5;
+const CRITICAL_FOOD_THRESHOLD = 0;  // 0のみブロック（3は厳しすぎ）
 
 // Tools that are always allowed (safe/recovery actions)
 const SAFE_TOOLS = new Set([
@@ -116,12 +114,6 @@ const SAFE_TOOLS = new Set([
   "dev_get_config",
   "dev_save_config",
   "dev_get_evolution_history",
-  // Stability analysis tools
-  "dev_get_stability_metrics",
-  "dev_get_unstable_disturbances",
-  "dev_get_failed_responses",
-  "dev_get_failure_modes",
-  "dev_get_most_unstable_mode",
 ]);
 
 /**
@@ -143,6 +135,7 @@ function checkCriticalState(username: string | undefined, toolName: string): str
     const status = botManager.getStatus(username);
     const statusObj = JSON.parse(status);
     const hp = statusObj.health;
+    const food = statusObj.food;
 
     if (hp <= CRITICAL_HP_THRESHOLD) {
       return `【緊急中断】HP=${hp}（危険水準）。このツールは実行できません。` +
@@ -150,7 +143,17 @@ function checkCriticalState(username: string | undefined, toolName: string): str
         `\n1. minecraft_eat で食事（インベントリに食料があれば）` +
         `\n2. minecraft_flee で安全な場所へ逃走` +
         `\n3. スキルを終了して親エージェントに報告` +
-        `\n\n現在の状態: HP=${hp}/20, 食料=${statusObj.food}/20`;
+        `\n\n現在の状態: HP=${hp}/20, 食料=${food}/20`;
+    }
+
+    if (food <= CRITICAL_FOOD_THRESHOLD) {
+      return `【緊急警告】空腹度=${food}（飢餓状態）。このツールは実行できません。` +
+        `\n\n即座に食料を確保してください:` +
+        `\n1. minecraft_find_block で動物（sheep/cow/pig/chicken）を探す` +
+        `\n2. minecraft_fight で動物を倒して肉を入手` +
+        `\n3. minecraft_eat で即座に食事` +
+        `\n\n現在の状態: HP=${hp}/20, 食料=${food}/20` +
+        `\n\n⚠️ 食料優先度=150、生存優先。他のタスクは後回し。`;
     }
   } catch {
     // If we can't get status, allow the tool to proceed
@@ -195,14 +198,6 @@ function recordToolExecution(
   } catch (e) {
     console.error("[MCP-WS-Server] Failed to write log:", e);
   }
-
-  // Record for stability analysis
-  stabilityAnalyzer.onToolExecution(agentName, {
-    tool,
-    success: result === "success",
-    duration,
-    error
-  });
 
   // Notify Dev Agents
   const notification = {
@@ -333,16 +328,6 @@ const activeConnections = new Set<WebSocket>();
 
 // Listen for game events from BotManager and push to clients
 botManager.on("gameEvent", (username: string, event: { type: string; message: string; timestamp: number; data?: Record<string, unknown> }) => {
-  // Record disturbance for stability analysis
-  const systemState = botManager.getSystemState(username);
-  if (systemState) {
-    stabilityAnalyzer.onGameEvent(username, {
-      type: event.type,
-      message: event.message,
-      priority: 'medium' // TODO: get actual priority from event
-    }, systemState);
-  }
-
   const notification = {
     jsonrpc: "2.0",
     method: "notifications/gameEvent",
@@ -890,36 +875,16 @@ const tools = {
     },
   },
 
-  // === 安定性分析ツール ===
-  dev_get_stability_metrics: {
-    description: "Get stability metrics (success rate, settlement time) for each disturbance type",
-    inputSchema: { type: "object", properties: {} },
-  },
-  dev_get_unstable_disturbances: {
-    description: "Get list of disturbance types with stabilization rate < 80%",
-    inputSchema: { type: "object", properties: {} },
-  },
-  dev_get_failed_responses: {
-    description: "Get failed disturbance responses for analysis",
-    inputSchema: {
-      type: "object",
-      properties: {
-        disturbanceType: { type: "string", description: "Filter by disturbance type" },
-        limit: { type: "number", default: 10, description: "Max responses to return" },
-      },
-    },
-  },
-  dev_get_failure_modes: {
-    description: "Get eigenmode analysis (conceptual): failure patterns with pseudo-eigenvalues, dominant variables",
-    inputSchema: { type: "object", properties: {} },
-  },
-  dev_get_most_unstable_mode: {
-    description: "Get the most unstable failure mode (highest positive pseudo-eigenvalue)",
-    inputSchema: { type: "object", properties: {} },
-  },
-
   // === 自己学習ツール ===
   ...learningTools,
+
+  // === タスク管理ツール ===
+  ...Object.fromEntries(
+    TASK_MANAGEMENT_TOOLS.map(tool => [tool.name, {
+      description: tool.description,
+      inputSchema: tool.inputSchema
+    }])
+  ),
 };
 
 // Handle tool calls
@@ -1428,44 +1393,6 @@ async function handleTool(
       }
     }
 
-    // === Stability Analysis Tools ===
-
-    case "dev_get_stability_metrics": {
-      const metrics = stabilityAnalyzer.getMetrics();
-      const result = Array.from(metrics.entries()).map(([, metric]) => metric);
-      return JSON.stringify(result, null, 2);
-    }
-
-    case "dev_get_unstable_disturbances": {
-      const unstable = stabilityAnalyzer.getUnstableDisturbances();
-      return JSON.stringify(unstable, null, 2);
-    }
-
-    case "dev_get_failed_responses": {
-      const disturbanceType = args.disturbanceType as string | undefined;
-      const limit = (args.limit as number) || 10;
-
-      if (!disturbanceType) {
-        throw new Error("disturbanceType is required");
-      }
-
-      const failed = stabilityAnalyzer.getFailedResponses(disturbanceType);
-      return JSON.stringify(failed.slice(0, limit), null, 2);
-    }
-
-    case "dev_get_failure_modes": {
-      const modes = stabilityAnalyzer.analyzeFailureModes();
-      return JSON.stringify(modes, null, 2);
-    }
-
-    case "dev_get_most_unstable_mode": {
-      const mode = stabilityAnalyzer.getMostUnstableMode();
-      if (!mode) {
-        return JSON.stringify({ message: "All modes are stable" });
-      }
-      return JSON.stringify(mode, null, 2);
-    }
-
     // === Additional Mineflayer API Tools ===
     case "minecraft_wake": {
       if (!username) throw new Error("Not connected. Call minecraft_connect first.");
@@ -1537,6 +1464,23 @@ async function handleTool(
     case "list_agent_skills":
     case "get_agent_skill": {
       return await handleLearningTool(name, args);
+    }
+
+    // === タスク管理ツール ===
+    case "task_create": {
+      return await taskCreate(args as any);
+    }
+
+    case "task_list": {
+      return await taskList(args as any);
+    }
+
+    case "task_get": {
+      return await taskGet(args as any);
+    }
+
+    case "task_update": {
+      return await taskUpdate(args as any);
     }
 
     default:
@@ -1704,18 +1648,6 @@ function startServer(port: number = 8765) {
   wss.on('listening', () => {
     console.log(`[MCP-WS-Server] Mineflayer MCP WebSocket Server running on ws://localhost:${port}`);
     console.log(`[MCP-WS-Server] Available tools: ${Object.keys(tools).join(', ')}`);
-
-    // Load stability analysis data
-    stabilityAnalyzer.loadResponses();
-    console.log(`[MCP-WS-Server] Stability analyzer initialized`);
-
-    // Print eigenmode analysis if data exists
-    setTimeout(() => {
-      const modes = stabilityAnalyzer.analyzeFailureModes();
-      if (modes.length > 0) {
-        stabilityAnalyzer.printEigenmodeAnalysis();
-      }
-    }, 1000);
   });
 
   wss.on('error', (error) => {

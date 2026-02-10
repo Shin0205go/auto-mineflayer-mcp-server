@@ -2,7 +2,7 @@
  * Agent Configuration Types
  *
  * Dev Agentが行動チューニングに使う設定の型定義。
- * agent-config.json で性格・優先度・判断ルールを管理し、
+ * agent-config.json で性格・優先度・閾値を管理し、
  * Game Agentのシステムプロンプトに反映する。
  */
 
@@ -20,21 +20,11 @@ export interface AgentConfig {
 
   priorities: Record<string, number>;  // survival:100, food:80, ...
 
-  decisionRules: DecisionRule[];
-
   thresholds: {
     fleeHP: number;           // このHP以下で逃走
     eatHunger: number;        // この空腹度以下で食事
     nightShelterTime: number; // この時刻で夜の行動開始
   };
-}
-
-export interface DecisionRule {
-  id: string;
-  condition: string;   // 条件の説明 (e.g. "HP<=6 かつ敵が近い")
-  action: string;      // 行動の指示 (e.g. "即座にfleeスキルを発動")
-  priority: "high" | "medium" | "low";
-  source: string;      // ルール追加元 (e.g. "DevAgent-v2", "initial")
 }
 
 export interface LoopResult {

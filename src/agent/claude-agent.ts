@@ -110,7 +110,7 @@ class ClaudeAgent {
 
   constructor() {
     this.claude = new ClaudeClient({
-      maxTurns: 50,
+      maxTurns: 300,  // サブエージェントが完了まで動けるように大幅増
       mcpServerUrl: MCP_WS_URL,
     });
 
