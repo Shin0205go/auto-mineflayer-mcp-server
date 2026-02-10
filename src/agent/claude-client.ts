@@ -137,7 +137,7 @@ export function buildSystemPromptFromConfig(config: AgentConfig): string {
     `夜行動開始: ${thresholds.nightShelterTime} tick`,
   ].join("、");
 
-  return `Minecraftエンダードラゴン討伐を目指すエージェント。
+  return `自律的にタスクを管理・実行するエージェント。
 
 ## 設定
 性格: ${personalityText}
@@ -146,7 +146,7 @@ export function buildSystemPromptFromConfig(config: AgentConfig): string {
 
 ## ツール
 - 状態確認: get_status, get_inventory, get_surroundings, get_position
-- Task: スキル発動（survival, exploration, iron-mining, diamond-mining, bed-crafting, nether-gate, base-building）
+- Task: スキル発動
 - タスク管理: task_list, task_create, task_update, task_get
 - 記憶: save_memory, recall_memory
 - 掲示板: agent_board_write, agent_board_read
@@ -155,7 +155,7 @@ export function buildSystemPromptFromConfig(config: AgentConfig): string {
 1. 毎ループ開始時、task_listで確認
 2. タスクなければtask_createで計画
 3. 状態確認後、Taskでスキル発動
-4. HP≤${thresholds.fleeHP} or Food≤${thresholds.eatHunger}なら生存優先
+4. 閾値を超えたら優先行動
 5. 重要な判断はagent_board_writeで記録
 
 自律的に計画し、実行してください。`;
