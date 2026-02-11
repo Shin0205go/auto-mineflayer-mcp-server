@@ -412,7 +412,13 @@ export class ClaudeClient extends EventEmitter {
       // Coordination
       "mcp__mineflayer__agent_board_read",
       "mcp__mineflayer__agent_board_write",
+      "mcp__mineflayer__list_agent_skills",
       "mcp__mineflayer__get_agent_skill",
+      // Memory
+      "mcp__mineflayer__save_memory",
+      "mcp__mineflayer__recall_memory",
+      "mcp__mineflayer__log_experience",
+      "mcp__mineflayer__get_recent_experiences",
       // Task Management
       "mcp__mineflayer__task_create",
       "mcp__mineflayer__task_list",
