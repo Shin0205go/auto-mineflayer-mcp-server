@@ -660,10 +660,15 @@ export async function digBlock(
       return `Dug ${blockName} with ${heldItem} and picked up ${Math.max(pickedUp, specificItemGained)} item(s)${itemDetail}!` + getBriefStatus(username);
     }
 
-    // Check if we expected drops but got none (wrong tool warning)
+    // Check if we expected drops but got none
     const oresNeedingPickaxe = ["_ore", "stone", "cobblestone", "deepslate"];
     const isOre = oresNeedingPickaxe.some(s => blockName.includes(s));
     const hasPickaxe = heldItem.includes("pickaxe");
+
+    // If we used correct tool but still got no drops, this is likely a server configuration issue
+    if (isOre && hasPickaxe && pickedUp === 0 && specificItemGained === 0) {
+      return `⚠️ CRITICAL: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED! This is likely a Minecraft server configuration issue. Check: 1) /gamerule doTileDrops (should be true), 2) Game mode (should be survival, not creative), 3) Server plugins blocking item drops. Block broken successfully but no loot received.` + getBriefStatus(username);
+    }
 
     if (isOre && !hasPickaxe) {
       return `WARNING: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED! Need pickaxe for ore/stone!` + getBriefStatus(username);
