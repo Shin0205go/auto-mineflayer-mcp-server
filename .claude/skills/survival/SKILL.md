@@ -48,27 +48,20 @@ minecraft_survival_routine {
 ## 自動実行される処理
 
 ### Food ルーチン
-```
-1. minecraft_get_nearby_entities で動物を検索
-2. 武器があれば minecraft_equip_weapon
-3. minecraft_attack で狩猟
-4. minecraft_collect_items でドロップ回収
-5. minecraft_smelt で肉を調理（かまど利用可能時）
-```
+- 近くの動物を自動検索
+- 武器を装備して狩猟
+- ドロップアイテムを回収
+- かまどがあれば肉を調理
 
 ### Shelter ルーチン
-```
-1. minecraft_get_inventory でベッド確認
-2. ない場合は材料収集
-3. minecraft_build_structure { type: "shelter", size: "small" }
-```
+- ベッドの有無を確認
+- 材料が不足していれば自動収集
+- 小型シェルターを自動建築
 
 ### Tools ルーチン
-```
-1. minecraft_get_inventory でツール確認
-2. minecraft_craft_chain { target: "wooden_pickaxe", autoGather: true }
-3. 木の斧、シャベルも同様にクラフト
-```
+- 現在のツール所持状況を確認
+- ピッケル、斧、シャベルを順番にクラフト
+- 素材不足時は自動収集
 
 ## 状態に応じた自動判断
 

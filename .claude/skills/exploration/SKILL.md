@@ -94,18 +94,9 @@ Findings:
 
 ## 探索後のアクション
 
-```
-# 発見した村の座標を記憶
-save_memory {
-  type: "location",
-  name: "最寄りの村",
-  x: 250, y: 65, z: 320,
-  locationType: "village"
-}
-
-# 発見した資源地点に移動
-minecraft_move_to { x: 250, y: 65, z: 320 }
-```
+発見した重要な場所はメモリに保存することを推奨：
+- save_memory で座標を記録
+- 後で recall_memory で参照可能
 
 ## エラー対応
 
