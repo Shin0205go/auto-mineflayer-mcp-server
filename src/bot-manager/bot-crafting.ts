@@ -51,7 +51,7 @@ function getBriefStatus(managed: ManagedBot): string {
 /**
  * List all craftable items by category
  */
-export async function listAllRecipes(managed: ManagedBot, category?: string): Promise<string> {
+export async function listAllRecipes(_managed: ManagedBot, category?: string): Promise<string> {
   // Define useful recipes by category
   const recipes: Record<string, { name: string; ingredients: string }[]> = {
     tools: [
@@ -246,6 +246,11 @@ export async function listCraftableNow(managed: ManagedBot): Promise<string> {
  */
 export async function craftItem(managed: ManagedBot, itemName: string, count: number = 1): Promise<string> {
   const bot = managed.bot;
+
+  // Check if bot is still connected
+  if (!bot || !bot.entity) {
+    throw new Error("Bot is not connected to the server. Please reconnect.");
+  }
 
   // Dynamic import of minecraft-data
   const minecraftData = await import("minecraft-data");
@@ -651,6 +656,12 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
  */
 export async function smeltItem(managed: ManagedBot, itemName: string, count: number = 1): Promise<string> {
   const bot = managed.bot;
+
+  // Check if bot is still connected
+  if (!bot || !bot.entity) {
+    throw new Error("Bot is not connected to the server. Please reconnect.");
+  }
+
   const minecraftData = await import("minecraft-data");
   const mcData = minecraftData.default(bot.version);
 
