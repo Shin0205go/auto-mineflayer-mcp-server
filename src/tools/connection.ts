@@ -1,4 +1,5 @@
 import { botManager } from "../bot-manager/index.js";
+import { setAgentType } from "../agent-state.js";
 
 export const connectionTools = {
   minecraft_connect: {
@@ -23,6 +24,12 @@ export const connectionTools = {
         version: {
           type: "string",
           description: "Minecraft version (optional, auto-detect if not specified)",
+        },
+        agentType: {
+          type: "string",
+          enum: ["game", "dev"],
+          default: "dev",
+          description: "Agent type: 'game' for Game Agent (basic tools only), 'dev' for Dev Agent (all tools). Default: 'dev' for Claude Code CLI.",
         },
       },
       required: ["username"],
@@ -64,14 +71,18 @@ export async function handleConnectionTool(
       const port = (args.port as number) || parseInt(process.env.MC_PORT || "25565");
       const username = args.username as string;
       const version = args.version as string | undefined;
+      const agentType = (args.agentType as "game" | "dev") || "dev";
 
       if (!username) {
         throw new Error("Username is required");
       }
 
+      // Set agent type for tool filtering
+      setAgentType(agentType);
+
       try {
         await botManager.connect({ host, port, username, version });
-        return `Successfully connected to ${host}:${port} as ${username}`;
+        return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})`;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         throw new Error(`Failed to connect to ${host}:${port}: ${errorMessage}`);

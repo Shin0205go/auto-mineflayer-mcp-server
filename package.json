@@ -17,11 +17,18 @@
     "board": "node dist/realtime-board.js",
     "board:view": "node dist/board-viewer.js",
     "start:mamba": "cd /Users/shingo/Develop/mamba-agent && ./run.sh",
+    "claude:loop": "./scripts/claude-loop.sh",
+    "claude:interactive": "./scripts/claude-interactive-loop.sh",
+    "claude:team": "./scripts/claude-team-loop.sh",
     "agent:start": "./scripts/start-agent.sh",
-    "agent:stop": "pm2 stop minecraft-agent mcp-ws-server",
-    "agent:restart": "pm2 restart minecraft-agent",
-    "agent:logs": "pm2 logs minecraft-agent",
-    "agent:status": "pm2 status"
+    "agent:stop": "npx pm2 stop minecraft-agent board-viewer",
+    "agent:restart": "npx pm2 restart minecraft-agent",
+    "agent:logs": "npx pm2 logs minecraft-agent",
+    "agent:status": "npx pm2 status",
+    "team:start": "./scripts/start-agent-team.sh",
+    "team:stop": "npx pm2 stop team-lead team-member-1 team-member-2",
+    "team:logs": "npx pm2 logs team-lead team-member-1 team-member-2",
+    "team:restart": "npx pm2 restart team-lead team-member-1 team-member-2"
   },
   "keywords": [
     "mcp",

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mineflayer": {
+      "command": "node",
+      "args": ["/Users/shingo/Develop/minecraftAIViewer/dist/index.js"]
+    }
+  }
+}

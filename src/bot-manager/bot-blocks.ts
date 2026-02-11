@@ -166,6 +166,12 @@ export async function digBlock(
 ): Promise<string> {
   const bot = managed.bot;
   const username = managed.username;
+
+  // Check if bot is still connected
+  if (!bot || !bot.entity) {
+    return "Bot is not connected to the server. Please reconnect.";
+  }
+
   const blockPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
   const block = bot.blockAt(blockPos);
 

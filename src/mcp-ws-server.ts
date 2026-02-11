@@ -25,6 +25,8 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import type { ToolExecutionLog, ToolExecutionContext } from "./types/tool-log.js";
 import type { LoopResult } from "./types/agent-config.js";
+import { GAME_AGENT_TOOLS } from "./tool-filters.js";
+import { searchTools, getToolCategories, TOOL_METADATA } from "./tool-metadata.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -312,47 +314,6 @@ const connectionAgentTypes = new WeakMap<WebSocket, string>();
 // Track all active WebSocket connections for event broadcasting
 const activeConnections = new Set<WebSocket>();
 
-// Basic tools for Game Agent (high-level operations are accessed via skills)
-const GAME_AGENT_TOOLS = new Set([
-  // Status & Communication (4 tools - connection is automatic)
-  "minecraft_get_state", // Unified state getter
-  "minecraft_chat",
-  "minecraft_get_chat_messages",
-  "subscribe_events",
-  // High-level actions (7 tools)
-  "minecraft_gather_resources",
-  "minecraft_build_structure",
-  "minecraft_craft_chain",
-  "minecraft_survival_routine",
-  "minecraft_explore_area",
-  "minecraft_enchant_item",
-  "minecraft_brew_potion",
-  // Basic operations (3 tools)
-  "minecraft_craft",
-  "minecraft_smelt",
-  "minecraft_check_infrastructure",
-  // Learning & Memory (6 tools)
-  "save_memory",
-  "recall_memory",
-  "log_experience",
-  "get_recent_experiences",
-  "list_agent_skills",
-  "get_agent_skill",
-  // Coordination (4 tools)
-  "agent_board_read",
-  "agent_board_write",
-  "agent_board_wait",
-  "agent_board_clear",
-  // Task Management (4 tools)
-  "task_create",
-  "task_list",
-  "task_get",
-  "task_update",
-  // Dev Agent integration (2 tools)
-  "dev_publish_loop_result",
-  "dev_get_loop_results",
-]);
-
 // Listen for game events from BotManager and push to clients
 botManager.on("gameEvent", (username: string, event: { type: string; message: string; timestamp: number; data?: Record<string, unknown> }) => {
   const notification = {
@@ -438,6 +399,25 @@ const tools = {
         username: { type: "string", description: "Bot username to subscribe to" },
       },
       required: ["username"],
+    },
+  },
+  // Tool Search
+  search_tools: {
+    description: "Search for available tools by keyword or category. Use this to discover relevant tools without loading all tool definitions. Categories: connection, info, communication, actions, crafting, learning, coordination, tasks, dev",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query (keyword, category, or tag). Examples: 'crafting', 'survival', 'mining', 'info'. Leave empty to get top priority tools.",
+        },
+        detail: {
+          type: "string",
+          enum: ["brief", "full"],
+          default: "brief",
+          description: "Level of detail in results. 'brief' shows only names and categories, 'full' includes descriptions and parameters.",
+        },
+      },
     },
   },
   // High-level action tools
@@ -741,6 +721,44 @@ async function handleTool(
       return `Subscribed to events for ${subUsername}`;
     }
 
+    case "search_tools": {
+      const query = (args.query as string) || "";
+      const detail = (args.detail as "brief" | "full") || "brief";
+
+      // IMPORTANT: search_tools always searches ALL tools (Progressive Disclosure)
+      // Only tools/list is filtered by agent type
+      const availableTools = new Set(Object.keys(tools));
+
+      // Search for matching tools
+      const matchedTools = searchTools(query, availableTools);
+
+      if (detail === "brief") {
+        // Return brief info: name and category only
+        const results = matchedTools.map(name => {
+          const metadata = TOOL_METADATA[name];
+          return {
+            name,
+            category: metadata?.category || "unknown",
+            priority: metadata?.priority || 0,
+          };
+        });
+        return JSON.stringify({ query, count: results.length, tools: results }, null, 2);
+      } else {
+        // Return full info: name, category, description, and input schema
+        const results = matchedTools.map(name => {
+          const metadata = TOOL_METADATA[name];
+          const toolDef = tools[name as keyof typeof tools];
+          return {
+            name,
+            category: metadata?.category || "unknown",
+            tags: metadata?.tags || [],
+            description: toolDef?.description || "",
+            inputSchema: toolDef?.inputSchema || {},
+          };
+        });
+        return JSON.stringify({ query, count: results.length, tools: results }, null, 2);
+      }
+    }
 
     // Dev Agent tools
     case "dev_subscribe": {

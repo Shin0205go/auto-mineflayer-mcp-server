@@ -15,6 +15,9 @@ import { coordinationTools, handleCoordinationTool } from "./tools/coordination.
 import { craftingTools, handleCraftingTool } from "./tools/crafting.js";
 import { combatTools, handleCombatTool } from "./tools/combat.js";
 import { learningTools, handleLearningTool } from "./tools/learning.js";
+import { GAME_AGENT_TOOLS } from "./tool-filters.js";
+import { getAgentType } from "./agent-state.js";
+import { searchTools, TOOL_METADATA } from "./tool-metadata.js";
 
 // Combine all tools
 const allTools = {
@@ -26,6 +29,25 @@ const allTools = {
   ...craftingTools,
   ...combatTools,
   ...learningTools,
+  // Tool Search
+  search_tools: {
+    description: "Search for available tools by keyword or category. Use this to discover relevant tools without loading all tool definitions. Categories: connection, info, communication, actions, crafting, learning, coordination, tasks",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query (keyword, category, or tag). Examples: 'crafting', 'survival', 'mining', 'info'. Leave empty to get top priority tools.",
+        },
+        detail: {
+          type: "string",
+          enum: ["brief", "full"],
+          default: "brief",
+          description: "Level of detail in results. 'brief' shows only names and categories, 'full' includes descriptions and parameters.",
+        },
+      },
+    },
+  },
 };
 
 // Create MCP server
@@ -43,8 +65,18 @@ const server = new Server(
 
 // Handle tool listing
 server.setRequestHandler(ListToolsRequestSchema, async () => {
+  // Get current agent type
+  const agentType = getAgentType();
+
+  // Filter tools based on agent type
+  const filteredTools = agentType === "dev"
+    ? Object.entries(allTools)  // Dev mode: all tools
+    : Object.entries(allTools).filter(([name]) => GAME_AGENT_TOOLS.has(name));  // Game mode: basic tools only
+
+  console.error(`[MCP-Stdio] tools/list for agentType=${agentType}: ${filteredTools.length} tools`);
+
   return {
-    tools: Object.entries(allTools).map(([name, tool]) => ({
+    tools: filteredTools.map(([name, tool]) => ({
       name,
       description: (tool as { description: string }).description,
       inputSchema: (tool as { inputSchema: object }).inputSchema,
@@ -75,6 +107,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       result = await handleCraftingTool(name, toolArgs);
     } else if (name in combatTools) {
       result = await handleCombatTool(name, toolArgs);
+    } else if (name === "search_tools") {
+      const query = (toolArgs.query as string) || "";
+      const detail = (toolArgs.detail as "brief" | "full") || "brief";
+
+      // IMPORTANT: search_tools always searches ALL tools (Progressive Disclosure)
+      // Only tools/list is filtered by agent type
+      const availableTools = new Set(Object.keys(allTools));
+
+      // Search for matching tools
+      const matchedTools = searchTools(query, availableTools);
+
+      if (detail === "brief") {
+        // Return brief info: name and category only
+        const results = matchedTools.map(toolName => {
+          const metadata = TOOL_METADATA[toolName];
+          return {
+            name: toolName,
+            category: metadata?.category || "unknown",
+            priority: metadata?.priority || 0,
+          };
+        });
+        result = JSON.stringify({ query, count: results.length, tools: results }, null, 2);
+      } else {
+        // Return full info: name, category, description, and input schema
+        const results = matchedTools.map(toolName => {
+          const metadata = TOOL_METADATA[toolName];
+          const toolDef = allTools[toolName as keyof typeof allTools];
+          return {
+            name: toolName,
+            category: metadata?.category || "unknown",
+            tags: metadata?.tags || [],
+            description: toolDef?.description || "",
+            inputSchema: toolDef?.inputSchema || {},
+          };
+        });
+        result = JSON.stringify({ query, count: results.length, tools: results }, null, 2);
+      }
     } else {
       throw new Error(`Unknown tool: ${name}`);
     }

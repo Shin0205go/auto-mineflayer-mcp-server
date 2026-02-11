@@ -1,0 +1,8 @@
+Minecraftサーバーに接続してプレイを開始してください。
+
+minecraft_connectツールを使用して以下の設定で接続：
+- host: localhost
+- port: 60038
+- username: Claude
+
+接続後、周囲を確認してサバイバルモードでプレイを開始してください。

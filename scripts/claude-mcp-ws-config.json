@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mineflayer-ws": {
+      "command": "node",
+      "args": ["/Users/shingo/Develop/minecraftAIViewer/scripts/mcp-ws-client.mjs"]
+    }
+  }
+}
