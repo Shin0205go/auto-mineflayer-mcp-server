@@ -902,8 +902,7 @@ async function handleTool(
       const username = args.username as string;
       const type = args.type as "shelter" | "wall" | "platform" | "tower";
       const size = args.size as "small" | "medium" | "large";
-      const materials = args.materials as string | undefined;
-      return await minecraft_build_structure(username, type, size, materials);
+      return await minecraft_build_structure(username, type, size);
     }
 
     case "minecraft_craft_chain": {

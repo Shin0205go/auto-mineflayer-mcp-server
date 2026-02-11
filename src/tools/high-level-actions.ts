@@ -99,183 +99,134 @@ export async function minecraft_gather_resources(
   const inventory = botManager.getInventory(username);
   const invStr = inventory.map(i => `${i.name}(${i.count})`).join(", ");
 
-  return `Resource gathering complete. ${results.join(", ")}. Inventory: ${invStr}`;
+  return `Gathering complete. ${results.join(", ")}. Inventory: ${invStr}`;
 }
 
 /**
- * Build predefined structures (shelter, wall, platform, tower)
- * Levels ground first, then constructs the structure
+ * Build a structure at the bot's current location
+ * Supports: shelter, wall, platform, tower
  */
 export async function minecraft_build_structure(
   username: string,
   type: "shelter" | "wall" | "platform" | "tower",
-  size: "small" | "medium" | "large",
-  materials?: string
+  size: "small" | "medium" | "large" = "small"
 ): Promise<string> {
-  const position = botManager.getPosition(username);
-  const centerX = Math.floor(position.x);
-  const centerY = Math.floor(position.y);
-  const centerZ = Math.floor(position.z);
+  console.error(`[BuildStructure] Type: ${type}, Size: ${size}`);
 
-  console.error(`[BuildStructure] Building ${size} ${type} at (${centerX}, ${centerY}, ${centerZ})`);
+  const position = botManager.getPosition(username);
+  if (!position) {
+    return "Failed to get bot position";
+  }
+
+  const baseX = Math.floor(position.x);
+  const baseY = Math.floor(position.y);
+  const baseZ = Math.floor(position.z);
 
   // Determine dimensions based on size
-  const dimensions: Record<string, { width: number; height: number; length: number }> = {
-    small: { width: 3, height: 3, length: 3 },
-    medium: { width: 5, height: 4, length: 5 },
-    large: { width: 7, height: 5, length: 7 }
+  const dimensions = {
+    small: { width: 3, length: 3, height: 3 },
+    medium: { width: 5, length: 5, height: 4 },
+    large: { width: 7, length: 7, height: 5 }
   };
 
   const dim = dimensions[size];
 
-  // Auto-select building material if not specified
-  let buildMaterial = materials;
-  if (!buildMaterial) {
-    const inventory = botManager.getInventory(username);
-    const candidates = ["cobblestone", "planks", "oak_planks", "stone", "dirt", "wood"];
-    for (const candidate of candidates) {
-      const item = inventory.find(i => i.name.includes(candidate));
-      if (item && item.count > 20) {
-        buildMaterial = item.name;
-        break;
-      }
-    }
-  }
-
-  if (!buildMaterial) {
-    return "No suitable building materials found in inventory. Need at least 20 blocks (cobblestone, planks, stone, dirt, or wood).";
-  }
-
-  console.error(`[BuildStructure] Using material: ${buildMaterial}`);
-
   // Level ground first
-  try {
-    const levelResult = await botManager.levelGround(username, {
-      centerX,
-      centerZ,
-      radius: Math.ceil(dim.width / 2) + 1,
-      targetY: centerY,
-      fillBlock: buildMaterial,
-      mode: "both"
-    });
-    console.error(`[BuildStructure] Ground leveling: ${levelResult}`);
-  } catch (err) {
-    console.error(`[BuildStructure] Ground leveling failed: ${err}`);
+  const levelResult = await botManager.levelGround(username, {
+    centerX: baseX,
+    centerZ: baseZ,
+    radius: Math.floor(dim.width / 2),
+    mode: "both",
+  });
+  console.error(`[BuildStructure] Level ground: ${levelResult}`);
+
+  // Check inventory for building materials
+  const inventory = botManager.getInventory(username);
+  const buildingMaterials = ["cobblestone", "oak_planks", "birch_planks", "spruce_planks", "stone", "dirt"];
+  const material = inventory.find(item => buildingMaterials.includes(item.name) && item.count >= 20);
+
+  if (!material) {
+    return `Need at least 20 building blocks. Have: ${inventory.map(i => `${i.name}(${i.count})`).join(", ")}`;
   }
 
+  console.error(`[BuildStructure] Using material: ${material.name}`);
+
+  const results: string[] = [];
   let blocksPlaced = 0;
-  const errors: string[] = [];
 
   try {
-    switch (type) {
-      case "shelter":
-        // Build 4 walls and a roof
-        // Floor
-        for (let x = -Math.floor(dim.width / 2); x <= Math.floor(dim.width / 2); x++) {
-          for (let z = -Math.floor(dim.length / 2); z <= Math.floor(dim.length / 2); z++) {
-            try {
-              await botManager.placeBlock(username, buildMaterial, centerX + x, centerY, centerZ + z);
-              blocksPlaced++;
-            } catch (err) {
-              errors.push(`Floor (${centerX + x}, ${centerY}, ${centerZ + z}): ${err}`);
-            }
-          }
+    if (type === "shelter") {
+      // Build walls (4 sides)
+      for (let y = 0; y < dim.height; y++) {
+        // Front and back walls
+        for (let x = 0; x < dim.width; x++) {
+          await botManager.placeBlock(username, material.name, baseX + x, baseY + y, baseZ);
+          await botManager.placeBlock(username, material.name, baseX + x, baseY + y, baseZ + dim.length - 1);
+          blocksPlaced += 2;
         }
+        // Side walls (skip corners to avoid duplication)
+        for (let z = 1; z < dim.length - 1; z++) {
+          await botManager.placeBlock(username, material.name, baseX, baseY + y, baseZ + z);
+          await botManager.placeBlock(username, material.name, baseX + dim.width - 1, baseY + y, baseZ + z);
+          blocksPlaced += 2;
+        }
+      }
 
-        // Walls
-        for (let y = 1; y <= dim.height; y++) {
-          for (let x = -Math.floor(dim.width / 2); x <= Math.floor(dim.width / 2); x++) {
-            for (let z = -Math.floor(dim.length / 2); z <= Math.floor(dim.length / 2); z++) {
-              // Only place blocks on the perimeter
-              if (x === -Math.floor(dim.width / 2) || x === Math.floor(dim.width / 2) ||
-                  z === -Math.floor(dim.length / 2) || z === Math.floor(dim.length / 2)) {
-                // Leave a door opening on one wall
-                if (y === 1 && x === 0 && z === -Math.floor(dim.length / 2)) {
-                  continue; // Door opening
-                }
-                try {
-                  await botManager.placeBlock(username, buildMaterial, centerX + x, centerY + y, centerZ + z);
-                  blocksPlaced++;
-                } catch (err) {
-                  errors.push(`Wall (${centerX + x}, ${centerY + y}, ${centerZ + z}): ${err}`);
-                }
-              }
-            }
-          }
+      // Build roof
+      for (let x = 0; x < dim.width; x++) {
+        for (let z = 0; z < dim.length; z++) {
+          await botManager.placeBlock(username, material.name, baseX + x, baseY + dim.height, baseZ + z);
+          blocksPlaced++;
         }
+      }
 
-        // Roof
-        for (let x = -Math.floor(dim.width / 2); x <= Math.floor(dim.width / 2); x++) {
-          for (let z = -Math.floor(dim.length / 2); z <= Math.floor(dim.length / 2); z++) {
-            try {
-              await botManager.placeBlock(username, buildMaterial, centerX + x, centerY + dim.height + 1, centerZ + z);
-              blocksPlaced++;
-            } catch (err) {
-              errors.push(`Roof (${centerX + x}, ${centerY + dim.height + 1}, ${centerZ + z}): ${err}`);
-            }
-          }
-        }
-        break;
+      results.push(`Built ${size} shelter (${dim.width}x${dim.length}x${dim.height})`);
 
-      case "wall":
-        // Build a straight wall
-        for (let y = 0; y < dim.height; y++) {
-          for (let x = 0; x < dim.width; x++) {
-            try {
-              await botManager.placeBlock(username, buildMaterial, centerX + x, centerY + y, centerZ);
-              blocksPlaced++;
-            } catch (err) {
-              errors.push(`Wall (${centerX + x}, ${centerY + y}, ${centerZ}): ${err}`);
-            }
-          }
+    } else if (type === "wall") {
+      // Build a protective wall
+      const wallLength = dim.width * 2;
+      for (let y = 0; y < dim.height; y++) {
+        for (let x = 0; x < wallLength; x++) {
+          await botManager.placeBlock(username, material.name, baseX + x, baseY + y, baseZ);
+          blocksPlaced++;
         }
-        break;
+      }
+      results.push(`Built ${size} wall (${wallLength}x${dim.height})`);
 
-      case "platform":
-        // Build a flat platform
-        for (let x = -Math.floor(dim.width / 2); x <= Math.floor(dim.width / 2); x++) {
-          for (let z = -Math.floor(dim.length / 2); z <= Math.floor(dim.length / 2); z++) {
-            try {
-              await botManager.placeBlock(username, buildMaterial, centerX + x, centerY, centerZ + z);
-              blocksPlaced++;
-            } catch (err) {
-              errors.push(`Platform (${centerX + x}, ${centerY}, ${centerZ + z}): ${err}`);
-            }
-          }
+    } else if (type === "platform") {
+      // Build a flat platform
+      for (let x = 0; x < dim.width; x++) {
+        for (let z = 0; z < dim.length; z++) {
+          await botManager.placeBlock(username, material.name, baseX + x, baseY, baseZ + z);
+          blocksPlaced++;
         }
-        break;
+      }
+      results.push(`Built ${size} platform (${dim.width}x${dim.length})`);
 
-      case "tower":
-        // Build a vertical tower
-        for (let y = 0; y < dim.height; y++) {
-          // Create a hollow tower (walls only)
-          for (let x = -1; x <= 1; x++) {
-            for (let z = -1; z <= 1; z++) {
-              // Only place blocks on the perimeter
-              if (x === -1 || x === 1 || z === -1 || z === 1) {
-                try {
-                  await botManager.placeBlock(username, buildMaterial, centerX + x, centerY + y, centerZ + z);
-                  blocksPlaced++;
-                } catch (err) {
-                  errors.push(`Tower (${centerX + x}, ${centerY + y}, ${centerZ + z}): ${err}`);
-                }
-              }
-            }
-          }
-        }
-        break;
+    } else if (type === "tower") {
+      // Build a vertical tower
+      const towerHeight = dim.height * 2;
+      for (let y = 0; y < towerHeight; y++) {
+        await botManager.placeBlock(username, material.name, baseX, baseY + y, baseZ);
+        blocksPlaced++;
+      }
+      results.push(`Built ${size} tower (height ${towerHeight})`);
     }
+
   } catch (err) {
-    return `Structure building interrupted: ${err}. Placed ${blocksPlaced} blocks before error.`;
+    console.error(`[BuildStructure] Error: ${err}`);
+    results.push(`Placed ${blocksPlaced} blocks before error: ${err}`);
   }
 
-  const errorSummary = errors.length > 0 ? ` Errors: ${errors.length} (first: ${errors[0]})` : "";
-  return `Built ${size} ${type} with ${buildMaterial}. Placed ${blocksPlaced} blocks.${errorSummary}`;
+  const finalInventory = botManager.getInventory(username);
+  const invStr = finalInventory.map(i => `${i.name}(${i.count})`).join(", ");
+
+  return `${results.join("; ")}. Blocks placed: ${blocksPlaced}. Inventory: ${invStr}`;
 }
 
 /**
- * Craft items in the correct order, with optional automatic material gathering
- * Calculates recipe dependencies and crafts in sequence
+ * Craft items with automatic dependency resolution
+ * Uses Mineflayer's recipe system to dynamically determine what needs to be crafted
  */
 export async function minecraft_craft_chain(
   username: string,
@@ -284,101 +235,111 @@ export async function minecraft_craft_chain(
 ): Promise<string> {
   console.error(`[CraftChain] Target: ${target}, autoGather: ${autoGather}`);
 
-  // Define crafting chains for common items
-  const craftingChains: Record<string, Array<{ item: string; count: number; needs?: Array<{ item: string; count: number }> }>> = {
-    "wooden_pickaxe": [
-      { item: "oak_planks", count: 3, needs: [{ item: "oak_log", count: 1 }] },
-      { item: "stick", count: 2, needs: [{ item: "oak_planks", count: 1 }] },
-      { item: "wooden_pickaxe", count: 1 }
-    ],
-    "stone_pickaxe": [
-      { item: "stick", count: 2 },
-      { item: "stone_pickaxe", count: 1, needs: [{ item: "cobblestone", count: 3 }, { item: "stick", count: 2 }] }
-    ],
-    "iron_pickaxe": [
-      { item: "stick", count: 2 },
-      { item: "iron_ingot", count: 3, needs: [{ item: "iron_ore", count: 3 }] },
-      { item: "iron_pickaxe", count: 1 }
-    ],
-    "crafting_table": [
-      { item: "oak_planks", count: 4, needs: [{ item: "oak_log", count: 1 }] },
-      { item: "crafting_table", count: 1 }
-    ],
-    "furnace": [
-      { item: "furnace", count: 1, needs: [{ item: "cobblestone", count: 8 }] }
-    ],
-    "torch": [
-      { item: "stick", count: 1 },
-      { item: "torch", count: 4, needs: [{ item: "coal", count: 1 }, { item: "stick", count: 1 }] }
-    ]
+  const results: string[] = [];
+  const craftedItems = new Set<string>(); // Prevent infinite loops
+
+  /**
+   * Recursively craft an item and its dependencies
+   */
+  const craftRecursive = async (itemName: string, count: number): Promise<void> => {
+    if (craftedItems.has(itemName)) {
+      console.error(`[CraftChain] Already crafted ${itemName}, skipping to prevent loop`);
+      return;
+    }
+
+    console.error(`[CraftChain] Attempting to craft ${itemName} x${count}`);
+
+    // Try to craft directly first
+    try {
+      const craftResult = await botManager.craftItem(username, itemName, count);
+      results.push(craftResult);
+      craftedItems.add(itemName);
+      return;
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[CraftChain] Direct craft failed: ${errMsg}`);
+
+      // If autoGather is enabled and error is about missing ingredients, try to gather/craft them
+      if (autoGather && errMsg.includes("missing ingredient")) {
+        // Parse the error message to extract needed ingredients
+        // Format: "Recipe needs: item1(need N), item2(need M)"
+        const needsMatch = errMsg.match(/Recipe needs: ([^.]+)/);
+        if (needsMatch) {
+          const needsStr = needsMatch[1];
+          const ingredients = needsStr.split(/,\s*/);
+
+          for (const ingredient of ingredients) {
+            const match = ingredient.match(/(\w+)\(need (\d+)\)/);
+            if (match) {
+              const neededItem = match[1];
+              const neededCount = parseInt(match[2]);
+
+              console.error(`[CraftChain] Need ${neededCount}x ${neededItem}`);
+
+              // Check if this item can be crafted or must be gathered
+              const isCraftable = await isItemCraftable(neededItem);
+
+              if (isCraftable) {
+                // Recursively craft the dependency
+                await craftRecursive(neededItem, neededCount);
+              } else {
+                // Gather the raw material
+                console.error(`[CraftChain] ${neededItem} is not craftable, gathering...`);
+                const gatherResult = await minecraft_gather_resources(
+                  username,
+                  [{ name: neededItem, count: neededCount }],
+                  32
+                );
+                results.push(`Gathered: ${gatherResult}`);
+              }
+            }
+          }
+
+          // Retry crafting after gathering/crafting dependencies
+          const retryCraftResult = await botManager.craftItem(username, itemName, count);
+          results.push(retryCraftResult);
+          craftedItems.add(itemName);
+          return;
+        }
+      }
+
+      throw new Error(`Failed to craft ${itemName}: ${errMsg}`);
+    }
   };
 
-  const chain = craftingChains[target];
-  if (!chain) {
-    // If no predefined chain, try to craft directly
-    try {
-      const result = await botManager.craftItem(username, target, 1);
-      return result;
-    } catch (err) {
-      return `No crafting chain defined for ${target} and direct craft failed: ${err}`;
-    }
+  /**
+   * Check if an item can be crafted (has recipes) or must be gathered
+   */
+  const isItemCraftable = async (itemName: string): Promise<boolean> => {
+    // Items that are typically raw materials (not craftable)
+    const rawMaterials = [
+      // Logs and natural blocks
+      "oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log",
+      "mangrove_log", "cherry_log", "pale_oak_log",
+      "cobblestone", "stone", "dirt", "sand", "gravel",
+      // Ores
+      "coal_ore", "iron_ore", "gold_ore", "diamond_ore", "lapis_ore", "redstone_ore",
+      "copper_ore", "emerald_ore",
+      "coal", "iron_ingot", "gold_ingot", "diamond", "emerald",
+      // Natural resources
+      "wheat", "carrot", "potato", "beetroot",
+      "leather", "wool", "string", "feather",
+      "flint", "clay_ball",
+    ];
+
+    return !rawMaterials.includes(itemName);
+  };
+
+  try {
+    await craftRecursive(target, 1);
+    const inventory = botManager.getInventory(username);
+    const invStr = inventory.map(i => `${i.name}(${i.count})`).join(", ");
+    return `Crafting chain complete for ${target}. ${results.join("; ")}. Inventory: ${invStr}`;
+  } catch (err) {
+    const inventory = botManager.getInventory(username);
+    const invStr = inventory.map(i => `${i.name}(${i.count})`).join(", ");
+    return `Crafting chain failed for ${target}: ${err}. Results so far: ${results.join("; ")}. Inventory: ${invStr}`;
   }
-
-  const results: string[] = [];
-
-  for (const step of chain) {
-    console.error(`[CraftChain] Step: craft ${step.item} x${step.count}`);
-
-    // Check if we need to gather materials
-    if (autoGather && step.needs) {
-      for (const need of step.needs) {
-        const inventory = botManager.getInventory(username);
-        const currentCount = inventory.find(i => i.name === need.item)?.count || 0;
-
-        if (currentCount < need.count) {
-          const shortage = need.count - currentCount;
-          console.error(`[CraftChain] Need ${shortage} more ${need.item}, attempting to gather...`);
-
-          try {
-            const gatherResult = await minecraft_gather_resources(
-              username,
-              [{ name: need.item, count: shortage }],
-              32
-            );
-            results.push(`Gathered: ${gatherResult}`);
-          } catch (err) {
-            return `Failed to gather ${need.item}: ${err}. Crafting chain aborted.`;
-          }
-        }
-      }
-    }
-
-    // Check if item needs smelting (iron_ingot from iron_ore)
-    if (step.item === "iron_ingot" && step.needs) {
-      try {
-        const oreNeed = step.needs.find(n => n.item === "iron_ore");
-        if (oreNeed) {
-          const smeltResult = await botManager.smeltItem(username, "iron_ore", oreNeed.count);
-          results.push(`Smelted: ${smeltResult}`);
-        }
-      } catch (err) {
-        return `Failed to smelt iron_ore: ${err}`;
-      }
-    } else {
-      // Normal crafting
-      try {
-        const craftResult = await botManager.craftItem(username, step.item, step.count);
-        results.push(`Crafted: ${craftResult}`);
-      } catch (err) {
-        return `Failed to craft ${step.item}: ${err}. Chain aborted at this step. Results so far: ${results.join("; ")}`;
-      }
-    }
-  }
-
-  const inventory = botManager.getInventory(username);
-  const invStr = inventory.map(i => `${i.name}(${i.count})`).join(", ");
-
-  return `Crafting chain complete for ${target}. ${results.join("; ")}. Inventory: ${invStr}`;
 }
 
 /**
@@ -395,257 +356,218 @@ export async function minecraft_survival_routine(
   const status = botManager.getStatus(username);
   const inventory = botManager.getInventory(username);
 
-  console.error(`[SurvivalRoutine] Status: ${status}`);
+  let selectedPriority = priority;
 
-  // Parse hunger from status
-  const hungerMatch = status.match(/Food:\s*(\d+\.?\d*)/);
-  const hunger = hungerMatch ? parseFloat(hungerMatch[1]) : 20;
-
-  // Auto-detect priority based on current state
-  let actualPriority = priority;
   if (priority === "auto") {
-    if (hunger < 10) {
-      actualPriority = "food";
-    } else if (!inventory.some(i => i.name.includes("pickaxe"))) {
-      actualPriority = "tools";
+    // Auto-detect priority based on current state
+    const statusMatch = status.match(/Health: ([\d.]+)\/20, Food: ([\d.]+)\/20/);
+    if (!statusMatch) {
+      return `Failed to parse status: ${status}`;
+    }
+
+    const food = parseFloat(statusMatch[2]);
+    const hasPickaxe = inventory.some(item => item.name.includes("pickaxe"));
+
+    if (food < 10) {
+      selectedPriority = "food";
+    } else if (!hasPickaxe) {
+      selectedPriority = "tools";
     } else {
-      actualPriority = "shelter";
+      selectedPriority = "shelter";
+    }
+
+    console.error(`[SurvivalRoutine] Auto-selected priority: ${selectedPriority}`);
+  }
+
+  const results: string[] = [];
+
+  if (selectedPriority === "food") {
+    // Find and hunt animals for food
+    const nearbyEntities = botManager.findEntities(username, "passive", 32);
+
+    if (nearbyEntities.includes("cow") || nearbyEntities.includes("pig") || nearbyEntities.includes("chicken") || nearbyEntities.includes("sheep")) {
+      try {
+        // Fight passive mobs for food (this will attack them)
+        const fightResult = await botManager.fight(username, "cow"); // Try cow first
+        results.push(`Food: ${fightResult}`);
+
+        // Collect drops
+        await botManager.collectNearbyItems(username);
+      } catch (err) {
+        results.push(`Food gathering failed: ${err}`);
+      }
+    } else {
+      results.push("No food sources (animals) found nearby");
     }
   }
 
-  console.error(`[SurvivalRoutine] Executing priority: ${actualPriority}`);
+  if (selectedPriority === "shelter") {
+    // Check if we have a bed
+    const hasBed = inventory.some(item => item.name === "bed");
+    const hasWool = inventory.some(item => item.name === "wool");
+    const hasPlanks = inventory.some(item => item.name.includes("planks"));
 
-  switch (actualPriority) {
-    case "food":
-      // Find and gather food sources
-      const foodSources = ["apple", "beetroot", "carrot", "potato", "melon", "pumpkin", "beef", "porkchop", "chicken", "mutton"];
+    if (!hasBed) {
+      if (!hasWool) {
+        // Need to find sheep and shear them
+        const sheepResult = botManager.findEntities(username, "sheep", 64);
+        if (sheepResult.includes("sheep")) {
+          return "Found sheep nearby. Craft shears (2 iron_ingot) first, then use minecraft_craft_chain for 'bed'.";
+        }
+      }
 
-      // First check for animals nearby
-      const entities = botManager.findEntities(username, "passive", 32);
-
-      if (entities.includes("cow") || entities.includes("pig") || entities.includes("chicken") || entities.includes("sheep")) {
-        // Try to hunt animals
-        console.error(`[SurvivalRoutine] Found animals, attempting to hunt...`);
-
+      if (hasWool && hasPlanks) {
         try {
-          // Equip weapon if available
-          const weapon = inventory.find(i => i.name.includes("sword") || i.name.includes("axe"));
-          if (weapon) {
-            await botManager.equipItem(username, weapon.name);
-          }
-
-          // Attack nearby passive mob for food
-          const attackResult = await botManager.attack(username, "cow");
-
-          // Collect drops
-          await botManager.collectNearbyItems(username);
-
-          // Try to cook if we have furnace and fuel
-          const rawMeat = inventory.find(i => i.name.includes("beef") || i.name.includes("porkchop") || i.name.includes("chicken") || i.name.includes("mutton"));
-          if (rawMeat) {
-            try {
-              await botManager.smeltItem(username, rawMeat.name, Math.min(rawMeat.count, 5));
-            } catch (err) {
-              console.error(`[SurvivalRoutine] Could not cook meat: ${err}`);
-            }
-          }
-
-          return `Hunted animals for food. ${attackResult}. Check inventory for raw/cooked meat.`;
+          const bedResult = await botManager.craftItem(username, "bed", 1);
+          results.push(`Shelter: ${bedResult}`);
         } catch (err) {
-          console.error(`[SurvivalRoutine] Hunting failed: ${err}`);
+          results.push(`Bed crafting failed: ${err}`);
         }
       }
+    }
 
-      // Fall back to gathering plant-based food
-      for (const food of foodSources) {
-        try {
-          const gatherResult = await minecraft_gather_resources(username, [{ name: food, count: 5 }], 32);
-          return `Food gathering: ${gatherResult}`;
-        } catch (err) {
-          console.error(`[SurvivalRoutine] Could not gather ${food}: ${err}`);
-        }
-      }
-
-      return "No food sources found nearby. Explore further or hunt animals.";
-
-    case "shelter":
-      // Build basic shelter
-      const hasShelter = inventory.some(i => i.name === "bed");
-
-      if (!hasShelter) {
-        // Need to craft bed first (requires wool and planks)
-        const hasWool = inventory.some(i => i.name.includes("wool"));
-        const hasPlanks = inventory.some(i => i.name.includes("planks"));
-
-        if (!hasWool) {
-          // Need to find sheep and shear them
-          const sheepResult = botManager.findEntities(username, "sheep", 64);
-          if (sheepResult.includes("sheep")) {
-            return "Found sheep nearby. Craft shears (2 iron_ingot) first, then use minecraft_craft_chain for 'bed'.";
-          }
-        }
-
-        if (hasWool && hasPlanks) {
-          try {
-            await botManager.craftItem(username, "bed", 1);
-          } catch (err) {
-            console.error(`[SurvivalRoutine] Could not craft bed: ${err}`);
-          }
-        }
-      }
-
-      // Build shelter structure
-      try {
-        const buildResult = await minecraft_build_structure(username, "shelter", "small");
-        return `Shelter routine: ${buildResult}`;
-      } catch (err) {
-        return `Shelter building failed: ${err}`;
-      }
-
-    case "tools":
-      // Craft basic tool set
-      const hasPickaxe = inventory.some(i => i.name.includes("pickaxe"));
-      const hasAxe = inventory.some(i => i.name.includes("axe"));
-      const hasShovel = inventory.some(i => i.name.includes("shovel"));
-
-      const results: string[] = [];
-
-      if (!hasPickaxe) {
-        try {
-          const pickaxeResult = await minecraft_craft_chain(username, "wooden_pickaxe", true);
-          results.push(`Pickaxe: ${pickaxeResult}`);
-        } catch (err) {
-          console.error(`[SurvivalRoutine] Pickaxe crafting failed: ${err}`);
-        }
-      }
-
-      if (!hasAxe) {
-        try {
-          const axeResult = await botManager.craftItem(username, "wooden_axe", 1);
-          results.push(`Axe: ${axeResult}`);
-        } catch (err) {
-          console.error(`[SurvivalRoutine] Axe crafting failed: ${err}`);
-        }
-      }
-
-      if (!hasShovel) {
-        try {
-          const shovelResult = await botManager.craftItem(username, "wooden_shovel", 1);
-          results.push(`Shovel: ${shovelResult}`);
-        } catch (err) {
-          console.error(`[SurvivalRoutine] Shovel crafting failed: ${err}`);
-        }
-      }
-
-      return `Tool crafting routine: ${results.join("; ")}`;
-
-    default:
-      return `Unknown priority: ${actualPriority}`;
+    // Build a small shelter
+    try {
+      const buildResult = await minecraft_build_structure(username, "shelter", "small");
+      results.push(`Shelter: ${buildResult}`);
+    } catch (err) {
+      results.push(`Shelter building failed: ${err}`);
+    }
   }
+
+  if (selectedPriority === "tools") {
+    // Craft basic tools
+    const hasPickaxe = inventory.some(item => item.name.includes("pickaxe"));
+    const hasAxe = inventory.some(item => item.name.includes("axe"));
+    const hasShovel = inventory.some(item => item.name.includes("shovel"));
+
+    const results: string[] = [];
+
+    if (!hasPickaxe) {
+      try {
+        const pickaxeResult = await minecraft_craft_chain(username, "wooden_pickaxe", true);
+        results.push(`Pickaxe: ${pickaxeResult}`);
+      } catch (err) {
+        console.error(`[SurvivalRoutine] Pickaxe crafting failed: ${err}`);
+      }
+    }
+
+    if (!hasAxe) {
+      try {
+        const axeResult = await minecraft_craft_chain(username, "wooden_axe", true);
+        results.push(`Axe: ${axeResult}`);
+      } catch (err) {
+        console.error(`[SurvivalRoutine] Axe crafting failed: ${err}`);
+      }
+    }
+
+    if (!hasShovel) {
+      try {
+        const shovelResult = await minecraft_craft_chain(username, "wooden_shovel", true);
+        results.push(`Shovel: ${shovelResult}`);
+      } catch (err) {
+        console.error(`[SurvivalRoutine] Shovel crafting failed: ${err}`);
+      }
+    }
+  }
+
+  const finalInventory = botManager.getInventory(username);
+  const invStr = finalInventory.map(i => `${i.name}(${i.count})`).join(", ");
+
+  return `Survival routine (${selectedPriority}) complete. ${results.join("; ")}. Inventory: ${invStr}`;
 }
 
 /**
- * Explore the area in a spiral pattern looking for specific biomes, structures, or resources
- * Reports findings and returns to starting position if desired
+ * Explore an area in a spiral pattern to discover biomes, structures, and resources
  */
 export async function minecraft_explore_area(
   username: string,
-  radius: number,
+  radius: number = 100,
   target?: string
 ): Promise<string> {
+  console.error(`[ExploreArea] Radius: ${radius}, Target: ${target || "general"}`);
+
   const startPos = botManager.getPosition(username);
+  if (!startPos) {
+    return "Failed to get bot position";
+  }
+
   const startX = Math.floor(startPos.x);
   const startZ = Math.floor(startPos.z);
 
-  console.error(`[ExploreArea] Starting exploration from (${startX}, ${startZ}), radius: ${radius}, target: ${target || "any"}`);
-
   const findings: string[] = [];
-  let currentX = startX;
-  let currentZ = startZ;
-  let step = 1;
-  let direction = 0; // 0: +X, 1: +Z, 2: -X, 3: -Z
+  let visitedPoints = 0;
 
   // Spiral pattern exploration
-  const maxSteps = Math.ceil(radius / 5);
+  let x = startX;
+  let z = startZ;
+  let dx = 0;
+  let dz = -5; // Start moving north
+  let segmentLength = 1;
+  let segmentPassed = 0;
 
-  for (let i = 0; i < maxSteps; i++) {
-    for (let turn = 0; turn < 2; turn++) {
-      for (let s = 0; s < step; s++) {
-        // Calculate next position based on direction
-        switch (direction) {
-          case 0: currentX += 5; break; // East
-          case 1: currentZ += 5; break; // South
-          case 2: currentX -= 5; break; // West
-          case 3: currentZ -= 5; break; // North
-        }
+  while (Math.abs(x - startX) <= radius && Math.abs(z - startZ) <= radius) {
+    visitedPoints++;
 
-        // Check if out of bounds
-        const distFromStart = Math.sqrt(
-          Math.pow(currentX - startX, 2) + Math.pow(currentZ - startZ, 2)
-        );
+    try {
+      // Move to next point
+      await botManager.moveTo(username, x, startPos.y, z);
 
-        if (distFromStart > radius) {
-          console.error(`[ExploreArea] Reached exploration radius limit`);
-          const returnMsg = `Exploration complete. Visited ${findings.length} points. ` +
-            (findings.length > 0 ? `Findings: ${findings.join(", ")}` : "No notable findings.");
-          return returnMsg;
-        }
+      // Check biome
+      const biome = await botManager.getBiome(username);
+      if (target && biome.includes(target)) {
+        findings.push(`${target} biome at (${x}, ${z})`);
+      }
 
-        try {
-          // Move to next exploration point
-          const moveResult = await botManager.moveTo(username, currentX, startPos.y, currentZ);
-
-          if (!moveResult.includes("Reached") && !moveResult.includes("Moved")) {
-            console.error(`[ExploreArea] Move failed: ${moveResult}`);
-            continue;
-          }
-
-          // Check biome at current location
-          const biome = await botManager.getBiome(username);
-          console.error(`[ExploreArea] At (${currentX}, ${currentZ}), biome: ${biome}`);
-
-          // Check for target if specified
-          if (target) {
-            if (biome.toLowerCase().includes(target.toLowerCase())) {
-              findings.push(`${target} biome at (${currentX}, ${currentZ})`);
-            }
-
-            // Check for target block
-            const blockSearch = botManager.findBlock(username, target, 32);
-            if (!blockSearch.includes("No") && !blockSearch.includes("not found")) {
-              findings.push(`${target} block at current location`);
-            }
-
-            // Check for target entity
-            const entitySearch = botManager.findEntities(username, target, 32);
-            if (!entitySearch.includes("No") && !entitySearch.includes("not found")) {
-              findings.push(`${target} entity at current location`);
-            }
-          } else {
-            // General exploration - report interesting findings
-            const surroundings = botManager.getSurroundings(username);
-            if (surroundings.includes("diamond") || surroundings.includes("emerald") ||
-                surroundings.includes("ancient_debris") || surroundings.includes("village")) {
-              findings.push(`Interesting: ${surroundings.substring(0, 100)} at (${currentX}, ${currentZ})`);
-            }
-          }
-
-          // Small delay between moves
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-        } catch (err) {
-          console.error(`[ExploreArea] Error at (${currentX}, ${currentZ}): ${err}`);
+      // Check for target block
+      if (target) {
+        const blockResult = botManager.findBlock(username, target, 16);
+        if (!blockResult.includes("No") && !blockResult.includes("not found")) {
+          findings.push(`${target} block at current location`);
         }
       }
 
-      direction = (direction + 1) % 4; // Turn right
-    }
+      // Check for target entity
+      if (target) {
+        const entityResult = botManager.findEntities(username, target, 16);
+        if (entityResult.includes(target)) {
+          findings.push(`${target} entity at current location`);
+        }
+      }
 
-    step++;
+      // Move in spiral
+      x += dx;
+      z += dz;
+      segmentPassed++;
+
+      if (segmentPassed === segmentLength) {
+        segmentPassed = 0;
+
+        // Turn 90 degrees clockwise
+        const temp = dx;
+        dx = -dz;
+        dz = temp;
+
+        // Increase segment length every 2 turns
+        if (dz === 0) {
+          segmentLength++;
+        }
+      }
+
+      // Break if we've explored enough
+      if (visitedPoints >= 100) {
+        break;
+      }
+
+    } catch (err) {
+      console.error(`[ExploreArea] Error at (${x}, ${z}): ${err}`);
+      break;
+    }
   }
 
-  const returnMsg = `Exploration complete. Visited ${maxSteps * 4} points. ` +
-    (findings.length > 0 ? `Findings: ${findings.join(", ")}` : "No notable findings.");
-
-  return returnMsg;
+  if (findings.length > 0) {
+    return `Exploration complete. Visited ${visitedPoints} points. Findings: ${findings.join(", ")}`;
+  } else {
+    return `Exploration complete. Visited ${visitedPoints} points. No notable findings.`;
+  }
 }
