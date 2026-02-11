@@ -107,6 +107,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       result = await handleCraftingTool(name, toolArgs);
     } else if (name in combatTools) {
       result = await handleCombatTool(name, toolArgs);
+    } else if (name in learningTools) {
+      result = await handleLearningTool(name, toolArgs);
     } else if (name === "search_tools") {
       const query = (toolArgs.query as string) || "";
       const detail = (toolArgs.detail as "brief" | "full") || "brief";
