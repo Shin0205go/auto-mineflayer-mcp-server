@@ -640,22 +640,48 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           }
 
           // Additional wait for inventory synchronization
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await new Promise(resolve => setTimeout(resolve, 500));
 
-          // Try to collect any dropped items (in case crafting dropped items)
-          const nearbyItems = Object.values(bot.entities).filter(
-            entity => entity.name === "item" && entity.position.distanceTo(bot.entity.position) < 5
-          );
+          // CRITICAL: Check if item appears in inventory
+          // If not, it may have been dropped as an entity
+          const craftedItemInInventory = bot.inventory.items().find(item => item.name === itemName);
 
-          if (nearbyItems.length > 0) {
-            console.error(`[Craft] Found ${nearbyItems.length} dropped items, collecting...`);
-            for (const itemEntity of nearbyItems) {
-              try {
-                await bot.pathfinder.goto(new goals.GoalBlock(itemEntity.position.x, itemEntity.position.y, itemEntity.position.z));
-                await new Promise(resolve => setTimeout(resolve, 500));
-              } catch (collectErr) {
-                console.error(`[Craft] Failed to collect item: ${collectErr}`);
+          if (!craftedItemInInventory) {
+            console.error(`[Craft] ${itemName} not in inventory after crafting, searching for dropped items...`);
+
+            // Wait a bit longer for item to spawn as entity
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            // Try to collect any dropped items within 10 blocks
+            const nearbyItems = Object.values(bot.entities).filter(
+              entity => entity.name === "item" && entity.position.distanceTo(bot.entity.position) < 10
+            );
+
+            if (nearbyItems.length > 0) {
+              console.error(`[Craft] Found ${nearbyItems.length} dropped items, collecting...`);
+              for (const itemEntity of nearbyItems) {
+                try {
+                  const distance = itemEntity.position.distanceTo(bot.entity.position);
+                  console.error(`[Craft] Item at distance ${distance.toFixed(1)}m, moving to collect...`);
+
+                  await bot.pathfinder.goto(new goals.GoalNear(
+                    Math.floor(itemEntity.position.x),
+                    Math.floor(itemEntity.position.y),
+                    Math.floor(itemEntity.position.z),
+                    1
+                  ));
+
+                  // Wait for pickup
+                  await new Promise(resolve => setTimeout(resolve, 1000));
+                } catch (collectErr) {
+                  console.error(`[Craft] Failed to collect item: ${collectErr}`);
+                }
               }
+
+              // Final wait to ensure all items are collected
+              await new Promise(resolve => setTimeout(resolve, 500));
+            } else {
+              console.error(`[Craft] WARNING: No ${itemName} in inventory and no dropped items found. This may indicate a server configuration issue.`);
             }
           }
 
