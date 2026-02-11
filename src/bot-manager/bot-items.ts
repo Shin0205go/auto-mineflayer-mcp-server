@@ -93,24 +93,27 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
         // Auto-pickup range is ~1 block, so get very close
         await bot.lookAt(itemPos);
         bot.setControlState("forward", true);
-        await delay(500); // Increased from 300 to ensure closer approach
+        await delay(800); // Increased from 500 to get even closer
         bot.setControlState("forward", false);
 
-        // If still not close enough, use pathfinder to get to exact position
+        // If still not close enough, use pathfinder with range 0.5 (not 0, which is too strict)
         const remainingDist = bot.entity.position.distanceTo(itemPos);
-        if (remainingDist > 1.0) {
+        if (remainingDist > 0.8) {
           try {
             const goal = new goals.GoalNear(
               Math.floor(itemPos.x),
               Math.floor(itemPos.y),
               Math.floor(itemPos.z),
-              0
+              0.5 // Changed from 0 to 0.5 - "exactly at position" is often impossible
             );
             bot.pathfinder.setGoal(goal);
-            await delay(1500); // Increased timeout
+            await delay(2000); // Increased timeout from 1500
             bot.pathfinder.setGoal(null);
           } catch (_) { /* ignore pathfinder errors */ }
         }
+
+        // Extra wait time for auto-pickup to definitely trigger
+        await delay(500);
       } else {
         // Use pathfinder for longer distances
         const goal = new goals.GoalNear(
@@ -136,7 +139,7 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
 
           // Check if we're close enough for auto-pickup (Minecraft auto-pickup range is ~1 block)
           const currentDist = bot.entity.position.distanceTo(itemPos);
-          if (currentDist < 1.0) {
+          if (currentDist < 1.2) { // Slightly increased threshold
             reachedItem = true;
             break;
           }
@@ -155,17 +158,17 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
           if (finalDist < 3) {
             await bot.lookAt(itemPos);
             bot.setControlState("forward", true);
-            await delay(1000); // Increased from 800 to get closer
+            await delay(1200); // Increased from 1000 to get even closer
             bot.setControlState("forward", false);
 
             // Extra wait for auto-pickup to trigger
-            await delay(200);
+            await delay(500); // Increased from 200
           }
         }
       }
 
       // Wait for auto-pickup and check if item was collected
-      await delay(300);
+      await delay(500); // Increased from 300
 
       if (!bot.entities[item.id]) {
         collectedCount++;
