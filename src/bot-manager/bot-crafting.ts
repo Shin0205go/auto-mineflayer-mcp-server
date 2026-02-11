@@ -629,14 +629,34 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       for (const tryRecipe of craftableRecipes) {
         try {
           await bot.craft(tryRecipe, 1, craftingTable || undefined);
-          // Wait for inventory to update after crafting
-          // Increased delay to ensure inventory synchronization
-          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Wait for crafting to complete
+          await new Promise(resolve => setTimeout(resolve, 300));
 
           // Close any open window to ensure items are transferred to inventory
           if (bot.currentWindow) {
             bot.closeWindow(bot.currentWindow);
             await new Promise(resolve => setTimeout(resolve, 200));
+          }
+
+          // Additional wait for inventory synchronization
+          await new Promise(resolve => setTimeout(resolve, 300));
+
+          // Try to collect any dropped items (in case crafting dropped items)
+          const nearbyItems = Object.values(bot.entities).filter(
+            entity => entity.name === "item" && entity.position.distanceTo(bot.entity.position) < 5
+          );
+
+          if (nearbyItems.length > 0) {
+            console.error(`[Craft] Found ${nearbyItems.length} dropped items, collecting...`);
+            for (const itemEntity of nearbyItems) {
+              try {
+                await bot.pathfinder.goto(new goals.GoalBlock(itemEntity.position.x, itemEntity.position.y, itemEntity.position.z));
+                await new Promise(resolve => setTimeout(resolve, 500));
+              } catch (collectErr) {
+                console.error(`[Craft] Failed to collect item: ${collectErr}`);
+              }
+            }
           }
 
           crafted = true;
