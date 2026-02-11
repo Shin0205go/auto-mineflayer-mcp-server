@@ -272,14 +272,27 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   // Get recipes - try with and without crafting table
   const craftingTableId = mcData.blocksByName.crafting_table?.id;
 
-  // First check nearby (4 blocks)
-  let craftingTable = bot.findBlock({
-    matching: craftingTableId,
-    maxDistance: 4,
-  });
+  // List of items that can be crafted in 2x2 grid (player inventory) and should NOT use crafting table
+  // This avoids bugs with crafting table window item retrieval
+  const simpleRecipes = [
+    "stick", "planks", "oak_planks", "spruce_planks", "birch_planks", "jungle_planks",
+    "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks",
+    "crafting_table", "torch",
+  ];
 
-  // If not nearby, search wider and move to it
-  if (!craftingTable) {
+  const isSimpleRecipe = simpleRecipes.includes(itemName) || itemName.endsWith("_planks");
+
+  // First check nearby (4 blocks) - but skip for simple recipes
+  let craftingTable = null;
+  if (!isSimpleRecipe) {
+    craftingTable = bot.findBlock({
+      matching: craftingTableId,
+      maxDistance: 4,
+    });
+  }
+
+  // If not nearby, search wider and move to it (but skip for simple recipes)
+  if (!isSimpleRecipe && !craftingTable) {
     const farTable = bot.findBlock({
       matching: craftingTableId,
       maxDistance: 32,
@@ -318,11 +331,20 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   // Always use recipesAll to get all possible recipes for this item
   // recipesFor sometimes misses valid recipes due to ingredient matching issues
-  let recipes;
-  if (craftingTable) {
+  // First try without crafting table (player inventory 2x2 grid)
+  let recipes = bot.recipesAll(item.id, null, null);
+
+  // Check if any recipes can be done without crafting table
+  const canCraftInInventory = recipes.length > 0;
+
+  // If we can craft in inventory, prefer that to avoid crafting table bugs
+  if (canCraftInInventory) {
+    craftingTable = null;
+    console.error(`[Craft] Using player inventory (2x2) for ${itemName} - avoiding crafting table`);
+  } else if (craftingTable) {
+    // Only use crafting table if we must (no 2x2 recipes available)
     recipes = bot.recipesAll(item.id, null, craftingTable);
-  } else {
-    recipes = bot.recipesAll(item.id, null, null);
+    console.error(`[Craft] Using crafting table (3x3) for ${itemName}`);
   }
 
   // Helper function to check if we have a compatible item
@@ -607,6 +629,16 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       for (const tryRecipe of craftableRecipes) {
         try {
           await bot.craft(tryRecipe, 1, craftingTable || undefined);
+          // Wait for inventory to update after crafting
+          // Increased delay to ensure inventory synchronization
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Close any open window to ensure items are transferred to inventory
+          if (bot.currentWindow) {
+            bot.closeWindow(bot.currentWindow);
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+
           crafted = true;
           break;
         } catch (craftErr) {
