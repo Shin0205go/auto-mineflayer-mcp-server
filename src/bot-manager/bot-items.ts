@@ -90,23 +90,27 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
     try {
       if (distance < 2) {
         // Very close - move directly to the item position
+        // Auto-pickup range is ~1 block, so get very close
         await bot.lookAt(itemPos);
         bot.setControlState("forward", true);
-        await delay(300);
+        await delay(500); // Increased from 300 to ensure closer approach
         bot.setControlState("forward", false);
-        // Walk onto the exact item position for pickup
-        await bot.lookAt(itemPos);
-        try {
-          const goal = new goals.GoalNear(
-            Math.floor(itemPos.x),
-            Math.floor(itemPos.y),
-            Math.floor(itemPos.z),
-            0
-          );
-          bot.pathfinder.setGoal(goal);
-          await delay(1000);
-          bot.pathfinder.setGoal(null);
-        } catch (_) { /* ignore pathfinder errors */ }
+
+        // If still not close enough, use pathfinder to get to exact position
+        const remainingDist = bot.entity.position.distanceTo(itemPos);
+        if (remainingDist > 1.0) {
+          try {
+            const goal = new goals.GoalNear(
+              Math.floor(itemPos.x),
+              Math.floor(itemPos.y),
+              Math.floor(itemPos.z),
+              0
+            );
+            bot.pathfinder.setGoal(goal);
+            await delay(1500); // Increased timeout
+            bot.pathfinder.setGoal(null);
+          } catch (_) { /* ignore pathfinder errors */ }
+        }
       } else {
         // Use pathfinder for longer distances
         const goal = new goals.GoalNear(
@@ -130,9 +134,9 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
             break;
           }
 
-          // Check if we're close enough
+          // Check if we're close enough for auto-pickup (Minecraft auto-pickup range is ~1 block)
           const currentDist = bot.entity.position.distanceTo(itemPos);
-          if (currentDist < 1.5) {
+          if (currentDist < 1.0) {
             reachedItem = true;
             break;
           }
@@ -151,8 +155,11 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
           if (finalDist < 3) {
             await bot.lookAt(itemPos);
             bot.setControlState("forward", true);
-            await delay(800);
+            await delay(1000); // Increased from 800 to get closer
             bot.setControlState("forward", false);
+
+            // Extra wait for auto-pickup to trigger
+            await delay(200);
           }
         }
       }
