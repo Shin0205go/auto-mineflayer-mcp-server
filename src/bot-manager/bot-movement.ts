@@ -1,0 +1,1103 @@
+import { Vec3 } from "vec3";
+import pkg from "mineflayer-pathfinder";
+const { goals } = pkg;
+import type { ManagedBot } from "./types.js";
+import { isHostileMob } from "./minecraft-utils.js";
+
+// Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
+const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
+
+/**
+ * Get brief status after an action (HP, hunger, position, surroundings, dangers)
+ * Only returns status if APPEND_BRIEF_STATUS=true (for Mamba agent)
+ */
+function getBriefStatus(managed: ManagedBot): string {
+  if (!APPEND_BRIEF_STATUS) return "";
+
+  const bot = managed.bot;
+  const pos = bot.entity.position;
+  const hp = bot.health?.toFixed(1) ?? "?";
+  const food = bot.food ?? "?";
+  const x = Math.floor(pos.x);
+  const y = Math.floor(pos.y);
+  const z = Math.floor(pos.z);
+
+  const getBlock = (dx: number, dy: number, dz: number) => {
+    const block = bot.blockAt(new Vec3(x + dx, y + dy, z + dz));
+    return block?.name || "unknown";
+  };
+
+  // Check walkable directions
+  const dirs = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
+  const walkable: string[] = [];
+  for (const [dir, [dx, dz]] of Object.entries(dirs)) {
+    const feet = getBlock(dx, 0, dz);
+    const head = getBlock(dx, 1, dz);
+    if ((feet === "air" || feet === "water") && (head === "air" || head === "water")) {
+      walkable.push(dir);
+    }
+  }
+
+  // Nearby resources
+  const resources: string[] = [];
+  for (let dx = -3; dx <= 3; dx++) {
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dz = -3; dz <= 3; dz++) {
+        const block = bot.blockAt(new Vec3(x + dx, y + dy, z + dz));
+        if (block && (block.name.includes("_ore") || block.name.includes("_log") || block.name === "chest")) {
+          resources.push(block.name);
+        }
+      }
+    }
+  }
+
+  // Dangers
+  const hostiles = Object.values(bot.entities)
+    .filter(e => e && isHostileMob(bot, e.name?.toLowerCase() || ""))
+    .map(e => {
+      const dist = e.position.distanceTo(bot.entity.position);
+      return `${e.name}(${dist.toFixed(1)}m)`;
+    });
+
+  let status = `\n[HP:${hp} Food:${food} (${x},${y},${z})]`;
+  if (walkable.length > 0) status += ` Walk:${walkable.join(",")}`;
+  if (resources.length > 0) status += ` Near:${resources.slice(0, 3).join(",")}`;
+  if (hostiles.length > 0) status += ` ⚠️DANGER:${hostiles.slice(0, 2).join(",")}`;
+
+  return status;
+}
+
+/**
+ * Delay helper
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Get bot position
+ */
+export function getPosition(managed: ManagedBot): { x: number; y: number; z: number } {
+  const pos = managed.bot.entity.position;
+  return { x: pos.x, y: pos.y, z: pos.z };
+}
+
+/**
+ * Basic pathfinding move (internal use)
+ */
+async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number): Promise<{ success: boolean; message: string; stuckReason?: string }> {
+  const bot = managed.bot;
+  const targetPos = new Vec3(x, y, z);
+  const start = bot.entity.position;
+  const distance = start.distanceTo(targetPos);
+
+  const goal = new goals.GoalNear(x, y, z, 2);
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    let noProgressCount = 0;
+    // Declare checkInterval first to avoid TDZ issues when event handlers fire early
+    let checkInterval: ReturnType<typeof setInterval> | null = null;
+    let lastPos = start.clone();
+    let pathResetCount = 0;
+    let notMovingCount = 0;
+
+    const finish = (result: { success: boolean; message: string; stuckReason?: string }) => {
+      if (resolved) return;
+      resolved = true;
+      if (checkInterval !== null) clearInterval(checkInterval);
+      bot.removeListener("goal_reached", onGoalReached);
+      bot.removeListener("path_reset", onPathReset);
+      bot.removeListener("goal_updated", onGoalUpdated);
+      try { bot.pathfinder.setGoal(null); } catch (_) {}
+      resolve(result);
+    };
+
+    const onGoalReached = () => {
+      const pos = bot.entity.position;
+      finish({ success: true, message: `Reached destination (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})` });
+    };
+
+    const onGoalUpdated = () => {
+      // Goal was changed externally; treat as cancellation
+      const pos = bot.entity.position;
+      const dist = pos.distanceTo(targetPos);
+      if (dist < 3) {
+        finish({ success: true, message: `Reached destination (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})` });
+      }
+    };
+
+    let lastPathResetPos = start.clone();
+
+    const onPathReset = () => {
+      // path_reset fires when pathfinder recalculates; with canDig=true this happens
+      // frequently as the bot digs through obstacles. Only fail after many consecutive
+      // resets without making any spatial progress toward the target.
+      const currentPos = bot.entity.position;
+      const movedSinceLastReset = currentPos.distanceTo(lastPathResetPos);
+      if (movedSinceLastReset > 0.3) {
+        // We made progress since last reset - this is normal recalculation
+        pathResetCount = 0;
+        lastPathResetPos = currentPos.clone();
+        return;
+      }
+      pathResetCount++;
+      // Also check if bot is currently digging - digging causes repeated resets
+      // while the bot stands still, which is normal behavior
+      const isDigging = (bot as any).targetDigBlock != null;
+      if (isDigging) {
+        // Reset counter during active digging - the bot is making progress
+        if (pathResetCount > 4) pathResetCount = 4;
+        return;
+      }
+      if (pathResetCount >= 20) {
+        const finalDist = currentPos.distanceTo(targetPos);
+        if (finalDist > 3) {
+          const yDiff = y - currentPos.y;
+          finish({
+            success: false,
+            message: `Cannot reach target - no path found. Stopped at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks away.`,
+            stuckReason: Math.abs(yDiff) > 2 ? (yDiff > 0 ? "target_higher" : "target_lower") : "no_path"
+          });
+        }
+      }
+    };
+
+    bot.on("goal_reached", onGoalReached);
+    bot.on("path_reset", onPathReset);
+    bot.on("goal_updated", onGoalUpdated);
+
+    // IMPORTANT: Initialize checkInterval BEFORE setGoal, because setGoal
+    // can synchronously fire path_reset, which calls finish() -> clearInterval(checkInterval).
+    // If checkInterval is still in TDZ (uninitialized let), this throws
+    // "Cannot access 'checkInterval' before initialization".
+    checkInterval = setInterval(() => {
+      if (resolved) {
+        if (checkInterval !== null) clearInterval(checkInterval);
+        return;
+      }
+
+      const currentPos = bot.entity.position;
+      const currentDist = currentPos.distanceTo(targetPos);
+
+      // Distance-based success check
+      if (currentDist < 3) {
+        finish({ success: true, message: `Reached destination (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)})` });
+        return;
+      }
+
+      const moved = currentPos.distanceTo(lastPos);
+      // Check if bot is actively digging (standing still while breaking a block is progress)
+      const isDigging = (bot as any).targetDigBlock != null;
+      if (moved < 0.1 && !isDigging) {
+        noProgressCount++;
+        // Allow more time: 30 checks * 500ms = 15s without any movement or digging
+        if (noProgressCount >= 30) {
+          const yDiff = y - currentPos.y;
+          finish({
+            success: false,
+            message: `Stuck at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). ${currentDist.toFixed(1)} blocks from target.`,
+            stuckReason: Math.abs(yDiff) > 2 ? (yDiff > 0 ? "target_higher" : "target_lower") : "obstacle"
+          });
+          return;
+        }
+      } else {
+        noProgressCount = 0;
+        pathResetCount = 0; // Reset path_reset counter on progress
+        lastPos = currentPos.clone();
+      }
+
+      // Only declare failure if pathfinder is not moving AND not digging AND we've waited enough
+      if (!bot.pathfinder.isMoving() && !isDigging && currentDist > 3) {
+        notMovingCount++;
+        // Wait for at least 10 consecutive checks (5s) before concluding
+        if (notMovingCount >= 10) {
+          const yDiff = y - currentPos.y;
+          finish({
+            success: false,
+            message: `Pathfinder stopped at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). ${currentDist.toFixed(1)} blocks from target.`,
+            stuckReason: Math.abs(yDiff) > 2 ? (yDiff > 0 ? "target_higher" : "target_lower") : "pathfinder_stopped"
+          });
+        }
+      } else {
+        notMovingCount = 0;
+      }
+    }, 500);
+
+    // Set the goal AFTER checkInterval is initialized (see comment above)
+    bot.pathfinder.setGoal(goal);
+
+    // Increased timeout: min 30s + 1.5s per block + extra for complex paths
+    const timeout = Math.max(30000, distance * 1500);
+    setTimeout(() => {
+      if (!resolved) {
+        const finalPos = bot.entity.position;
+        const finalDist = finalPos.distanceTo(targetPos);
+        if (finalDist < 3) {
+          finish({ success: true, message: `Reached destination (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)})` });
+        } else {
+          finish({
+            success: false,
+            message: `Movement timeout. Stopped at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks from target.`,
+            stuckReason: "timeout"
+          });
+        }
+      }
+    }, timeout);
+  });
+}
+
+/**
+ * MoveTo using pathfinder - simplified version that relies on pathfinder's canDig and allow1by1towers
+ */
+export async function moveTo(managed: ManagedBot, x: number, y: number, z: number): Promise<string> {
+  const bot = managed.bot;
+  const start = bot.entity.position;
+  const targetPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
+  const distance = start.distanceTo(targetPos);
+
+  console.error(`[Move] From (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)}) to (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
+
+  // Check if target position is inside a solid block
+  const targetBlock = bot.blockAt(targetPos);
+  const isPassableBlock = (name: string) => {
+    if (!name) return false;
+    const passable = ["air", "cave_air", "void_air", "water", "lava",
+      "grass", "tall_grass", "fern", "large_fern", "dead_bush",
+      "dandelion", "poppy", "blue_orchid", "allium", "azure_bluet",
+      "red_tulip", "orange_tulip", "white_tulip", "pink_tulip",
+      "oxeye_daisy", "cornflower", "lily_of_the_valley", "sunflower", "lilac", "rose_bush", "peony",
+      "sweet_berry_bush", "snow", "vine", "torch", "wall_torch",
+      "redstone_torch", "redstone_wall_torch", "soul_torch", "soul_wall_torch",
+      "rail", "powered_rail", "detector_rail", "activator_rail",
+      "carpet", "white_carpet", "orange_carpet", "magenta_carpet",
+      "light_blue_carpet", "yellow_carpet", "lime_carpet", "pink_carpet",
+      "gray_carpet", "light_gray_carpet", "cyan_carpet", "purple_carpet",
+      "blue_carpet", "brown_carpet", "green_carpet", "red_carpet", "black_carpet",
+      "sugar_cane", "kelp", "seagrass", "tall_seagrass",
+      "crimson_fungus", "warped_fungus", "crimson_roots", "warped_roots", "nether_sprouts",
+      "sign", "wall_sign", "hanging_sign"];
+    return passable.includes(name) || name.includes("sign") || name.includes("carpet") || name.includes("button") || name.includes("pressure_plate");
+  };
+
+  if (targetBlock && !isPassableBlock(targetBlock.name)) {
+    // Target is a solid block - find the best nearby standable position
+    console.error(`[Move] Target (${x}, ${y}, ${z}) is solid (${targetBlock.name}), finding standable position nearby...`);
+
+    // Search for standable positions near target - search radius 3
+    const candidates: { pos: Vec3; dist: number }[] = [];
+    for (let dx = -3; dx <= 3; dx++) {
+      for (let dz = -3; dz <= 3; dz++) {
+        for (let dy = -3; dy <= 3; dy++) {
+          if (dx === 0 && dy === 0 && dz === 0) continue;
+          const checkPos = targetPos.offset(dx, dy, dz);
+          const block = bot.blockAt(checkPos);
+          const blockAbove = bot.blockAt(checkPos.offset(0, 1, 0));
+          // Need 2-block tall passable space to stand
+          if (block && isPassableBlock(block.name) &&
+              blockAbove && isPassableBlock(blockAbove.name)) {
+            // Check there's solid ground below
+            const blockBelow = bot.blockAt(checkPos.offset(0, -1, 0));
+            if (blockBelow && !isPassableBlock(blockBelow.name)) {
+              candidates.push({ pos: checkPos, dist: checkPos.distanceTo(targetPos) });
+            }
+          }
+        }
+      }
+    }
+    candidates.sort((a, b) => a.dist - b.dist);
+
+    // Try candidates (up to 5)
+    for (const candidate of candidates.slice(0, 5)) {
+      console.error(`[Move] Trying standable position (${candidate.pos.x}, ${candidate.pos.y}, ${candidate.pos.z})`);
+      const result = await moveToBasic(managed, candidate.pos.x, candidate.pos.y, candidate.pos.z);
+      if (result.success) {
+        const isOre = targetBlock.name.includes("ore");
+        const suffix = isOre ? ` (near ${targetBlock.name} - use minecraft_dig_block to mine it)` : "";
+        return `Moved near ${targetBlock.name} at (${candidate.pos.x.toFixed(1)}, ${candidate.pos.y.toFixed(1)}, ${candidate.pos.z.toFixed(1)})${suffix}` + getBriefStatus(managed);
+      }
+    }
+
+    // No standable candidate found or all failed - fall through to pathfinder
+    // Pathfinder with canDig may be able to dig its way there
+    console.error(`[Move] No standable candidate succeeded, falling through to pathfinder for (${x}, ${y}, ${z})`);
+  }
+
+  // Use pathfinder directly - it handles digging and tower building automatically
+  const result = await moveToBasic(managed, x, y, z);
+
+  if (result.success) {
+    return result.message + getBriefStatus(managed);
+  }
+
+  // If pathfinder failed, report the reason
+  const finalPos = bot.entity.position;
+  const finalDist = finalPos.distanceTo(targetPos);
+  const heightDiff = y - finalPos.y;
+
+  let failureMsg = `Cannot reach (${x}, ${y}, ${z}). Current: (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks away.`;
+
+  // Give specific guidance based on the failure reason
+  if (result.stuckReason === "target_higher") {
+    const inv = bot.inventory.items();
+    const hasScaffold = inv.some(i => ["dirt", "cobblestone", "stone", "planks"].some(b => i.name.includes(b)));
+    if (hasScaffold) {
+      failureMsg += ` Target is ${heightDiff.toFixed(0)} blocks higher. Try minecraft_pillar_up to climb.`;
+    } else {
+      failureMsg += ` Target is ${heightDiff.toFixed(0)} blocks higher. Need blocks (dirt, cobblestone) to climb. Collect materials first.`;
+    }
+  } else if (result.stuckReason === "target_lower") {
+    failureMsg += ` Target is ${Math.abs(heightDiff).toFixed(0)} blocks lower. Dig down or find stairs/cave entrance.`;
+  } else {
+    failureMsg += ` Path blocked. Try moving around obstacles or mining through.`;
+  }
+
+  return failureMsg + getBriefStatus(managed);
+}
+
+/**
+ * Pillar up by jump-placing blocks
+ */
+export async function pillarUp(managed: ManagedBot, height: number = 1): Promise<string> {
+  const bot = managed.bot;
+  const startY = bot.entity.position.y;
+
+  // Check if we have scaffolding blocks - dynamically check if block is solid
+  // Exclude ores, valuable blocks, and special blocks
+  const excludePatterns = ["_ore", "spawner", "bedrock", "obsidian", "portal",
+    "diamond_block", "emerald_block", "gold_block", "iron_block", "netherite_block",
+    "ancient_debris", "crying_obsidian", "reinforced_deepslate"];
+
+  const isScaffoldBlock = (itemName: string): boolean => {
+    // Remove minecraft: prefix if present
+    const cleanName = itemName.replace("minecraft:", "");
+    // Exclude valuable/special blocks
+    if (excludePatterns.some(p => cleanName.includes(p))) return false;
+    // Check if block exists in registry
+    const blockInfo = bot.registry.blocksByName[cleanName];
+    if (!blockInfo) return false;
+    // Must be solid block (boundingBox === 'block')
+    return blockInfo.boundingBox === "block";
+  };
+
+  const countScaffold = () => bot.inventory.items()
+    .filter(i => isScaffoldBlock(i.name))
+    .reduce((sum, i) => sum + i.count, 0);
+
+  const scaffoldCount = countScaffold();
+
+  if (scaffoldCount === 0) {
+    const inv = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
+    throw new Error(`Cannot pillar up - no scaffold blocks! Need: cobblestone, dirt, stone. Have: ${inv}`);
+  }
+
+  const targetHeight = Math.min(height, 15); // Safety limit
+
+  // Warn if insufficient blocks for target height
+  if (scaffoldCount < targetHeight) {
+    console.error(`[Pillar] WARNING: Only ${scaffoldCount} blocks available, but need ${targetHeight}. Will place what we have.`);
+  }
+
+  console.error(`[Pillar] Starting: ${targetHeight} blocks from Y=${startY.toFixed(1)}, scaffold count: ${scaffoldCount}`);
+
+  // Stop all movement and digging first
+  bot.pathfinder.setGoal(null);
+  bot.clearControlStates();
+  try {
+    bot.stopDigging();
+  } catch {
+    // Ignore if not digging
+  }
+  await new Promise(r => setTimeout(r, 500)); // Longer wait to ensure previous operations complete
+
+  // Verify we have solid ground below before starting
+  const checkPos = bot.entity.position;
+  const checkY = Math.floor(checkPos.y);
+  const checkX = Math.floor(checkPos.x);
+  const checkZ = Math.floor(checkPos.z);
+
+  // Check multiple Y levels below to find solid ground
+  // Start from feet level and go down, also check wider horizontal area
+  const groundCheck: Vec3[] = [];
+  for (let dy = 0; dy >= -5; dy--) {
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        groundCheck.push(new Vec3(checkX + dx, checkY + dy, checkZ + dz));
+      }
+    }
+  }
+
+  const isNonSolid = (name: string) => {
+    return name === "air" || name === "cave_air" || name === "void_air" ||
+           name === "water" || name === "lava" || name.includes("sign") ||
+           name.includes("torch") || name.includes("carpet") || name === "snow";
+  };
+
+  let hasGround = false;
+  for (const pos of groundCheck) {
+    const b = bot.blockAt(pos);
+    if (b && !isNonSolid(b.name)) {
+      console.error(`[Pillar] Found solid ground: ${b.name} at Y=${pos.y}`);
+      hasGround = true;
+      break;
+    }
+  }
+  if (!hasGround) {
+    throw new Error(`Failed to pillar up. No solid ground below. Try moving to open area first.`);
+  }
+
+  let blocksPlaced = 0;
+
+  for (let i = 0; i < targetHeight; i++) {
+    // Use Math.floor for all axes consistently
+    const curX = Math.floor(bot.entity.position.x);
+    const currentY = Math.floor(bot.entity.position.y);
+    const curZ = Math.floor(bot.entity.position.z);
+
+    // 1. Dig blocks above if needed (Y+2 and Y+3 for jump clearance)
+    for (const yOffset of [2, 3]) {
+      const blockAbove = bot.blockAt(new Vec3(curX, currentY + yOffset, curZ));
+      if (blockAbove && blockAbove.name !== "air" && blockAbove.name !== "water" && blockAbove.name !== "cave_air") {
+        console.error(`[Pillar] Digging ${blockAbove.name} above at Y=${currentY + yOffset}`);
+        try {
+          const pickaxe = bot.inventory.items().find(i => i.name.includes("pickaxe"));
+          if (pickaxe) await bot.equip(pickaxe, "hand");
+          bot.clearControlStates();
+          await new Promise(r => setTimeout(r, 100));
+          await bot.dig(blockAbove);
+        } catch (e) {
+          console.error(`[Pillar] Dig failed at Y+${yOffset}: ${e}`);
+          // Continue anyway - might be able to proceed
+        }
+      }
+    }
+
+    // 2. Equip scaffold block
+    const scaffold = bot.inventory.items().find(i => isScaffoldBlock(i.name));
+    if (!scaffold) {
+      console.error(`[Pillar] Out of blocks after ${blocksPlaced} placed`);
+      break;
+    }
+    await bot.equip(scaffold, "hand");
+
+    // 3. Get block below feet to place against
+    // Try multiple candidate positions to find a solid block below
+    const feetY = Math.floor(bot.entity.position.y);
+    const bx = Math.floor(bot.entity.position.x);
+    const bz = Math.floor(bot.entity.position.z);
+    const candidates = [
+      new Vec3(bx, feetY - 1, bz),
+      new Vec3(curX, feetY - 1, curZ),
+      new Vec3(bx, feetY - 2, bz),
+      new Vec3(curX, feetY - 2, curZ),
+    ];
+    let blockBelow: ReturnType<typeof bot.blockAt> = null;
+    for (const pos of candidates) {
+      const b = bot.blockAt(pos);
+      if (b && b.name !== "air" && b.name !== "cave_air" && b.name !== "water" && b.name !== "void_air") {
+        blockBelow = b;
+        break;
+      }
+    }
+    if (!blockBelow) {
+      console.error(`[Pillar] No block below to place against at Y=${feetY - 1}`);
+      break;
+    }
+
+    // 4. Jump and place - retry up to 3 times per level
+    let placed = false;
+    for (let attempt = 0; attempt < 3 && !placed; attempt++) {
+      // Re-center on the block before each attempt
+      bot.clearControlStates();
+      await new Promise(r => setTimeout(r, 150));
+
+      // Re-fetch blockBelow in case position shifted
+      if (attempt > 0) {
+        const retryFeetY = Math.floor(bot.entity.position.y);
+        const retryX = Math.floor(bot.entity.position.x);
+        const retryZ = Math.floor(bot.entity.position.z);
+        const retryCandidates = [
+          new Vec3(retryX, retryFeetY - 1, retryZ),
+          new Vec3(retryX, retryFeetY, retryZ),
+        ];
+        blockBelow = null;
+        for (const pos of retryCandidates) {
+          const b = bot.blockAt(pos);
+          if (b && b.name !== "air" && b.name !== "cave_air" && b.name !== "water" && b.name !== "void_air") {
+            blockBelow = b;
+            break;
+          }
+        }
+        if (!blockBelow) break;
+        await new Promise(r => setTimeout(r, 200));
+      }
+
+      // Sneak to stay centered, then jump
+      bot.setControlState("sneak", true);
+      await new Promise(r => setTimeout(r, 250));
+
+      // Save reference block position before jumping
+      const savedBlockPos = blockBelow!.position.clone();
+
+      bot.setControlState("jump", true);
+
+      // Wait for jump to reach peak height before placing
+      const jumpBaseY = bot.entity.position.y;
+      let prevY = jumpBaseY;
+      let peakReached = false;
+      await new Promise<void>((resolve) => {
+        let elapsed = 0;
+        const interval = setInterval(() => {
+          elapsed += 10;
+          const curY = bot.entity.position.y;
+          const rising = curY - jumpBaseY;
+          // Place when we've risen enough AND started to fall (peak), or timeout
+          if (rising > 0.8 && curY <= prevY) {
+            peakReached = true;
+            clearInterval(interval);
+            resolve();
+          } else if (elapsed >= 800) {
+            clearInterval(interval);
+            resolve();
+          }
+          prevY = curY;
+        }, 10);
+      });
+
+      bot.setControlState("jump", false);
+
+      // Only try to place if we reached a reasonable jump height
+      if (peakReached || bot.entity.position.y - jumpBaseY > 0.5) {
+        try {
+          // Re-fetch the block at saved position for a fresh reference
+          const freshBlock = bot.blockAt(savedBlockPos) || blockBelow;
+
+          // Place on top of block below (this puts block at feet level, lifting us up)
+          await bot.placeBlock(freshBlock!, new Vec3(0, 1, 0));
+          blocksPlaced++;
+          placed = true;
+          console.error(`[Pillar] Placed ${blocksPlaced}/${targetHeight} at Y=${currentY}`);
+        } catch (e) {
+          console.error(`[Pillar] Place failed (attempt ${attempt + 1}): ${e}`);
+          // Wait longer before retry to let bot settle
+          await new Promise(r => setTimeout(r, 300));
+        }
+      } else {
+        console.error(`[Pillar] Jump too low (${(bot.entity.position.y - jumpBaseY).toFixed(2)}), retrying...`);
+        await new Promise(r => setTimeout(r, 300));
+      }
+
+      // Keep sneaking until we land on the new block
+      await new Promise(r => setTimeout(r, 500));
+      bot.setControlState("sneak", false);
+      await new Promise(r => setTimeout(r, 300)); // Wait to stabilize
+    }
+
+    if (!placed) {
+      console.error(`[Pillar] Failed to place block after 3 attempts at level ${i + 1}`);
+      break;
+    }
+  }
+
+  const finalY = bot.entity.position.y;
+  const gained = finalY - startY;
+
+  if (gained < 0.5 && blocksPlaced === 0) {
+    throw new Error(`Failed to pillar up. No blocks placed. Check: 1) Have scaffold blocks? 2) Solid ground below? 3) Open space above?`);
+  }
+
+  // Report partial success clearly
+  let result = `Pillared up ${gained.toFixed(1)} blocks (Y:${startY.toFixed(0)}→${finalY.toFixed(0)}, placed ${blocksPlaced}/${targetHeight})`;
+
+  if (blocksPlaced < targetHeight) {
+    const remaining = targetHeight - blocksPlaced;
+    result += `. PARTIAL: Stopped early (${remaining} blocks short). Reason: ${scaffoldCount < targetHeight ? `Only had ${scaffoldCount} blocks` : 'Placement failed'}`;
+  }
+
+  return result + getBriefStatus(managed);
+}
+
+/**
+ * Flee from danger
+ */
+export async function flee(managed: ManagedBot, distance: number = 20): Promise<string> {
+  const bot = managed.bot;
+
+  // Find nearest hostile (using dynamic registry check)
+  const hostile = Object.values(bot.entities)
+    .filter(e => isHostileMob(bot, e.name?.toLowerCase() || ""))
+    .sort((a, b) =>
+      a.position.distanceTo(bot.entity.position) -
+      b.position.distanceTo(bot.entity.position)
+    )[0];
+
+  // Calculate flee direction
+  let direction: { x: number; y: number; z: number; scaled: (n: number) => any };
+  let fleeFromName: string;
+
+  if (hostile) {
+    // Flee away from hostile
+    direction = bot.entity.position.minus(hostile.position).normalize();
+    fleeFromName = hostile.name || "hostile";
+    console.error(`[Flee] Fleeing from ${fleeFromName} at (${hostile.position.x.toFixed(1)}, ${hostile.position.y.toFixed(1)}, ${hostile.position.z.toFixed(1)})`);
+  } else {
+    // No hostile found - flee in a random direction
+    const angle = Math.random() * 2 * Math.PI;
+    const vec = new (bot.entity.position as any).constructor(Math.cos(angle), 0, Math.sin(angle));
+    direction = vec.normalize();
+    fleeFromName = "danger";
+    console.error(`[Flee] No hostile found, fleeing in random direction`);
+  }
+
+  const fleeTarget = bot.entity.position.plus(direction.scaled(distance));
+  const startPos = bot.entity.position.clone();
+
+  const goal = new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3);
+  bot.pathfinder.setGoal(goal);
+
+  // Wait for movement with proper completion check
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      bot.pathfinder.setGoal(null);
+      resolve();
+    }, 8000);
+
+    const check = setInterval(() => {
+      const distMoved = bot.entity.position.distanceTo(startPos);
+
+      // Success: moved enough distance or reached target
+      if (distMoved >= distance * 0.7 || !bot.pathfinder.isMoving()) {
+        clearInterval(check);
+        clearTimeout(timeout);
+        bot.pathfinder.setGoal(null);
+        resolve();
+      }
+    }, 200);
+  });
+
+  const distMoved = bot.entity.position.distanceTo(startPos);
+  if (hostile) {
+    const newDist = bot.entity.position.distanceTo(hostile.position);
+    return `Fled from ${fleeFromName}! Now ${newDist.toFixed(1)} blocks away`;
+  }
+  return `Fled ${distMoved.toFixed(1)} blocks from ${fleeFromName}!`;
+}
+
+/**
+ * Explore in a direction looking for a specific biome
+ */
+export async function exploreForBiome(
+  managed: ManagedBot,
+  targetBiome: string,
+  direction: "north" | "south" | "east" | "west" | "random",
+  maxBlocks: number = 200
+): Promise<string> {
+  const bot = managed.bot;
+  const startPos = bot.entity.position.clone();
+
+  // Load minecraft-data for biome lookup
+  const minecraftData = await import("minecraft-data");
+  const mcData = minecraftData.default(bot.version);
+
+  // Helper to get biome name from ID
+  const getBiomeName = (biome: any): string => {
+    if (!biome) return "unknown";
+    if (biome.name) return biome.name;
+    if (biome.id !== undefined) {
+      const biomeData = mcData.biomes?.[biome.id] || (mcData as any).biomesArray?.find((b: any) => b.id === biome.id);
+      return biomeData?.name || `biome_${biome.id}`;
+    }
+    return "unknown";
+  };
+
+  // Determine direction vector
+  let dx = 0, dz = 0;
+  switch (direction) {
+    case "north": dz = -1; break;
+    case "south": dz = 1; break;
+    case "east": dx = 1; break;
+    case "west": dx = -1; break;
+    case "random":
+      const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+      const picked = dirs[Math.floor(Math.random() * dirs.length)];
+      dx = picked[0];
+      dz = picked[1];
+      break;
+  }
+
+  console.error(`[BotManager] Exploring ${direction} looking for ${targetBiome}`);
+
+  // Walk in steps, checking biome
+  const stepSize = 10;  // Smaller step size for more reliable movement
+  let traveled = 0;
+  let foundBiome: string | null = null;
+  let foundAt: Vec3 | null = null;
+
+  while (traveled < maxBlocks) {
+    const targetDistance = Math.min(traveled + stepSize, maxBlocks);
+    const targetX = startPos.x + dx * targetDistance;
+    const targetZ = startPos.z + dz * targetDistance;
+
+    // Move to target
+    const goal = new goals.GoalNear(targetX, bot.entity.position.y, targetZ, 3);
+    bot.pathfinder.setGoal(goal);
+
+    // Wait for movement (with timeout)
+    const moveStart = Date.now();
+    let reachedGoal = false;
+    while (Date.now() - moveStart < 10000) {  // Reduced timeout
+      await delay(500);
+      const currentPos = bot.entity.position;
+      const distToGoal = Math.sqrt(
+        Math.pow(currentPos.x - targetX, 2) + Math.pow(currentPos.z - targetZ, 2)
+      );
+      if (distToGoal < 5) {
+        reachedGoal = true;
+        break;
+      }
+    }
+    bot.pathfinder.setGoal(null);
+
+    // Update traveled to actual distance moved
+    const currentPos = bot.entity.position;
+    traveled = Math.floor(Math.sqrt(
+      Math.pow(currentPos.x - startPos.x, 2) + Math.pow(currentPos.z - startPos.z, 2)
+    ));
+
+    // If we couldn't reach the goal, break to avoid infinite loop
+    if (!reachedGoal) {
+      const actualMoved = Math.sqrt(
+        Math.pow(currentPos.x - startPos.x, 2) + Math.pow(currentPos.z - startPos.z, 2)
+      );
+      if (actualMoved < 2) {
+        // Barely moved, likely stuck
+        break;
+      }
+    }
+
+    // Check current biome
+    const block = bot.blockAt(bot.entity.position);
+    const currentBiome = getBiomeName(block?.biome);
+
+    // More flexible biome matching
+    const biomeLower = currentBiome.toLowerCase();
+    const targetLower = targetBiome.toLowerCase();
+    const isMatch = biomeLower.includes(targetLower) ||
+                   targetLower.includes(biomeLower) ||
+                   (targetLower === 'plains' && (biomeLower.includes('plain') || biomeLower === 'meadow')) ||
+                   (targetLower === 'forest' && biomeLower.includes('forest')) ||
+                   (targetLower === 'desert' && biomeLower.includes('desert'));
+
+    if (isMatch) {
+      foundBiome = currentBiome;
+      foundAt = bot.entity.position.clone();
+      break;
+    }
+
+    // Also check for target entities while exploring (sheep in this case)
+    const sheep = Object.values(bot.entities).find(e =>
+      e && e.name?.toLowerCase() === "sheep" &&
+      bot.entity.position.distanceTo(e.position) < 30
+    );
+    if (sheep) {
+      return `Found sheep while exploring! At (${Math.floor(sheep.position.x)}, ${Math.floor(sheep.position.y)}, ${Math.floor(sheep.position.z)}) - current biome: ${currentBiome}`;
+    }
+  }
+
+  if (foundBiome && foundAt) {
+    return `Found ${foundBiome} biome at (${Math.floor(foundAt.x)}, ${Math.floor(foundAt.y)}, ${Math.floor(foundAt.z)}) after exploring ${traveled} blocks ${direction}`;
+  }
+
+  const finalPos = bot.entity.position;
+  const finalBlock = bot.blockAt(finalPos);
+  const finalBiome = getBiomeName(finalBlock?.biome);
+
+  const actualDistance = Math.floor(Math.sqrt(
+    Math.pow(finalPos.x - startPos.x, 2) + Math.pow(finalPos.z - startPos.z, 2)
+  ));
+
+  // If we barely moved, suggest the bot might be stuck
+  if (actualDistance < 5) {
+    return `Could only move ${actualDistance} blocks ${direction}. Bot might be stuck or path is blocked. Current biome: ${finalBiome}. Try another direction or clear the path.`;
+  }
+
+  return `Explored ${actualDistance} blocks ${direction} (max: ${maxBlocks}). Current biome: ${finalBiome}. Target biome '${targetBiome}' not found. Try another direction.`;
+}
+
+/**
+ * Dig a 1x2 tunnel in a direction
+ * Auto-equips pickaxe, collects items, reports ores found
+ */
+export async function digTunnel(
+  managed: ManagedBot,
+  direction: "north" | "south" | "east" | "west" | "down",
+  length: number = 10
+): Promise<string> {
+  const bot = managed.bot;
+  const startPos = bot.entity.position.clone();
+  const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+
+  // Direction vectors (no "up" - use pillar_up for that)
+  const dirVectors: Record<string, { dx: number; dy: number; dz: number }> = {
+    north: { dx: 0, dy: 0, dz: -1 },
+    south: { dx: 0, dy: 0, dz: 1 },
+    east: { dx: 1, dy: 0, dz: 0 },
+    west: { dx: -1, dy: 0, dz: 0 },
+    down: { dx: 0, dy: -1, dz: 0 },
+  };
+
+  const dir = dirVectors[direction];
+  if (!dir) {
+    throw new Error(`Invalid direction: ${direction}. Use north/south/east/west/down (for up, use pillar_up)`);
+  }
+
+  // Stop all movement and digging first to prevent conflicts
+  bot.pathfinder.setGoal(null);
+  bot.clearControlStates();
+  try {
+    bot.stopDigging();
+  } catch {
+    // Ignore if not digging
+  }
+  await new Promise(r => setTimeout(r, 150));
+
+  // Auto-equip best pickaxe
+  const pickaxePriority = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe", "wooden_pickaxe"];
+  let equippedTool = "empty hand";
+  for (const toolName of pickaxePriority) {
+    const tool = bot.inventory.items().find(i => i.name === toolName);
+    if (tool) {
+      await bot.equip(tool, "hand");
+      equippedTool = toolName;
+      console.error(`[Tunnel] Equipped ${toolName}`);
+      break;
+    }
+  }
+
+  // Check if we have a pickaxe
+  if (equippedTool === "empty hand") {
+    const inv = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
+    throw new Error(`Cannot dig tunnel - no pickaxe! Need: wooden/stone/iron pickaxe. Have: ${inv}. Craft a pickaxe first.`);
+  }
+
+  let blocksDug = 0;
+  const oresFound: Record<string, number> = {};
+  const currentPos = {
+    x: Math.floor(startPos.x),
+    y: Math.floor(startPos.y),
+    z: Math.floor(startPos.z)
+  };
+
+  console.error(`[Tunnel] Starting ${direction} tunnel from (${currentPos.x}, ${currentPos.y}, ${currentPos.z}), length ${length}`);
+
+  for (let i = 0; i < length; i++) {
+    // Calculate next position
+    const nextX = currentPos.x + dir.dx;
+    const nextY = currentPos.y + dir.dy;
+    const nextZ = currentPos.z + dir.dz;
+
+    // For horizontal tunnels, dig 2 blocks high (feet and head level)
+    // For down tunnels (stairs), dig 1 block
+    const blocksToDig: Array<{ x: number; y: number; z: number }> = [];
+
+    if (direction === "down") {
+      blocksToDig.push({ x: nextX, y: nextY, z: nextZ });
+    } else {
+      // Horizontal: dig at feet level and head level
+      blocksToDig.push({ x: nextX, y: nextY, z: nextZ });      // feet
+      blocksToDig.push({ x: nextX, y: nextY + 1, z: nextZ });  // head
+    }
+
+    // Check for lava ahead before digging
+    let lavaAhead = false;
+    for (const blockPos of blocksToDig) {
+      // Check the block itself and adjacent blocks for lava
+      const checkPositions = [
+        { x: blockPos.x, y: blockPos.y, z: blockPos.z },
+        { x: blockPos.x + dir.dx, y: blockPos.y, z: blockPos.z + dir.dz }, // one block further
+        { x: blockPos.x, y: blockPos.y + 1, z: blockPos.z }, // above
+        { x: blockPos.x, y: blockPos.y - 1, z: blockPos.z }, // below
+      ];
+      for (const pos of checkPositions) {
+        const checkBlock = bot.blockAt(new Vec3(pos.x, pos.y, pos.z));
+        if (checkBlock?.name === "lava") {
+          lavaAhead = true;
+          console.error(`[Tunnel] ⚠️ LAVA detected at (${pos.x}, ${pos.y}, ${pos.z})! Stopping.`);
+          break;
+        }
+      }
+      if (lavaAhead) break;
+    }
+
+    if (lavaAhead) {
+      const msg = `🚨 溶岩を検知！トンネル中断 (${blocksDug}ブロック掘削済み)。溶岩が前方にあります。別方向に掘るか撤退してください。`;
+      console.error(`[Tunnel] ${msg}`);
+      return msg;
+    }
+
+    for (const blockPos of blocksToDig) {
+      const block = bot.blockAt(new Vec3(blockPos.x, blockPos.y, blockPos.z));
+      if (!block || block.name === "air" || block.name === "water" || block.name === "lava") {
+        continue;
+      }
+
+      // Track ores
+      if (block.name.includes("_ore")) {
+        oresFound[block.name] = (oresFound[block.name] || 0) + 1;
+      }
+
+      // Check if unbreakable
+      if (block.hardness < 0) {
+        console.error(`[Tunnel] Hit unbreakable block: ${block.name}`);
+        continue;
+      }
+
+      try {
+        // Look at and dig the block
+        await bot.lookAt(new Vec3(blockPos.x + 0.5, blockPos.y + 0.5, blockPos.z + 0.5));
+        await bot.dig(block, true);
+        blocksDug++;
+
+        // Brief pause for item spawn
+        await delay(100);
+      } catch (err) {
+        console.error(`[Tunnel] Failed to dig ${block.name}: ${err}`);
+      }
+    }
+
+    // Move forward into the tunnel
+    if (direction === "down") {
+      // For down, just wait for gravity
+      await delay(300);
+    } else {
+      // Horizontal: use pathfinder to move into the tunnel
+      const goal = new goals.GoalBlock(nextX, nextY, nextZ);
+      bot.pathfinder.setGoal(goal);
+
+      // Wait for pathfinder to reach goal or timeout (max 5 seconds per block)
+      try {
+        await Promise.race([
+          new Promise<void>((resolve) => {
+            const onReached = () => {
+              bot.removeListener('goal_reached', onReached);
+              resolve();
+            };
+            bot.on('goal_reached', onReached);
+          }),
+          delay(5000)
+        ]);
+      } catch (err) {
+        console.warn(`[Tunnel] Movement timeout, continuing...`);
+      } finally {
+        bot.pathfinder.setGoal(null);
+      }
+    }
+
+    // Update current position
+    currentPos.x = nextX;
+    currentPos.y = nextY;
+    currentPos.z = nextZ;
+
+    // Check HP periodically
+    if (bot.health < 8) {
+      console.error(`[Tunnel] HP low (${bot.health}), stopping`);
+      break;
+    }
+  }
+
+  // Final item collection
+  await delay(500);
+  const inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+  const itemsCollected = inventoryAfter - inventoryBefore;
+
+  // Build result message
+  const finalPos = bot.entity.position;
+  let result = `Tunneled ${blocksDug}/${length} blocks ${direction} with ${equippedTool}.`;
+  result += ` Position: (${Math.floor(finalPos.x)}, ${Math.floor(finalPos.y)}, ${Math.floor(finalPos.z)}).`;
+
+  // Report if stopped early
+  if (blocksDug < length) {
+    const reason = bot.health < 8 ? "HP too low" : "Movement/digging failed";
+    result += ` PARTIAL: Stopped at ${blocksDug}/${length} (${reason}).`;
+  }
+
+  result += ` Items collected: ${itemsCollected}.`;
+
+  if (Object.keys(oresFound).length > 0) {
+    const oreList = Object.entries(oresFound).map(([name, count]) => `${name}x${count}`).join(", ");
+    result += ` ORES FOUND: ${oreList}!`;
+  }
+
+  const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
+  result += ` Inventory: ${newInventory || "empty"}`;
+
+  return result;
+}
+
+/**
+ * Mount an entity (horse, boat, etc.)
+ */
+export async function mount(managed: ManagedBot, entityName?: string): Promise<string> {
+  const bot = managed.bot;
+
+  // Check if entity is mountable using pattern matching
+  // Includes: horses, donkeys, mules, pigs (with saddle), striders, boats, minecarts, camels, llamas
+  const isMountable = (name: string): boolean => {
+    const patterns = ["horse", "donkey", "mule", "pig", "strider", "boat", "minecart", "camel", "llama"];
+    return patterns.some(p => name.includes(p));
+  };
+
+  const searchName = entityName?.toLowerCase();
+
+  const entity = Object.values(bot.entities)
+    .filter(e => {
+      if (!e || e === bot.entity) return false;
+      const name = (e.name || "").toLowerCase();
+      const dist = bot.entity.position.distanceTo(e.position);
+      if (dist > 5) return false;
+
+      if (searchName) {
+        return name.includes(searchName);
+      }
+      return isMountable(name);
+    })
+    .sort((a, b) =>
+      bot.entity.position.distanceTo(a.position) -
+      bot.entity.position.distanceTo(b.position)
+    )[0];
+
+  if (!entity) {
+    const hint = entityName ? entityName : "horse, donkey, pig, boat, minecart, camel, llama";
+    throw new Error(`No mountable entity (${hint}) found within 5 blocks.`);
+  }
+
+  try {
+    bot.mount(entity);
+    return `Mounted ${entity.name || "entity"}.`;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to mount ${entity.name}: ${errMsg}`);
+  }
+}
+
+/**
+ * Dismount from current vehicle
+ */
+export async function dismount(managed: ManagedBot): Promise<string> {
+  const bot = managed.bot;
+  const vehicle = (bot as any).vehicle;
+
+  if (!vehicle) {
+    return "Not mounted on anything.";
+  }
+
+  const vehicleName = vehicle.name || "vehicle";
+
+  try {
+    bot.dismount();
+    return `Dismounted from ${vehicleName}.`;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to dismount: ${errMsg}`);
+  }
+}

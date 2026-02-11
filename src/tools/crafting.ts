@@ -1,4 +1,4 @@
-import { botManager } from "../bot-manager.js";
+import { botManager } from "../bot-manager/index.js";
 
 export const craftingTools = {
   minecraft_get_inventory: {

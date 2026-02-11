@@ -144,21 +144,35 @@ export function buildSystemPromptFromConfig(config: AgentConfig): string {
 優先度: ${sortedPriorities}
 閾値: ${thresholdsText}
 
-## ツール
-- 状態確認: get_status, get_inventory, get_surroundings, get_position
-- Task: スキル発動
-- タスク管理: task_list, task_create, task_update, task_get
+## ツール（スキルベース設計）
+
+【基本ツール】
+- 状態確認: get_status, get_inventory, get_surroundings, get_position, get_nearby_entities
+- 接続: connect, disconnect, chat
 - 記憶: save_memory, recall_memory
 - 掲示板: agent_board_write, agent_board_read
 
-## 行動方針
-1. 毎ループ開始時、task_listで確認
-2. タスクなければtask_createで計画
-3. 状態確認後、Taskでスキル発動
-4. 閾値を超えたら優先行動
-5. 重要な判断はagent_board_writeで記録
+【スキルシステム（推奨）】
+複雑な作業は専門スキルに委譲:
+- list_agent_skills: 利用可能なスキル一覧
+- get_agent_skill { skill_name: "..." }: スキル詳細取得
 
-自律的に計画し、実行してください。`;
+主要スキル:
+- resource-gathering: 自動リソース収集
+- building: シェルター・構造物建築
+- crafting-chain: 複数段階クラフト
+- survival: サバイバル最適化
+- exploration: エリア探索
+- iron-mining, diamond-mining, bed-crafting, nether-gate など
+
+## 行動方針
+1. 状態確認（get_status, get_inventory, get_surroundings）
+2. 複雑な作業は **スキルに委譲**（get_agent_skill → 実行）
+3. 閾値を超えたら優先行動（survival スキル推奨）
+4. 重要な判断は save_memory と agent_board_write で記録
+
+**重要**: 採掘・建築・クラフトなどは専門スキルを使うこと。
+低レベルツール（dig, place, craft等）は利用不可。`;
 }
 
 // Tool prefix for MCP tools (server name = "mineflayer")

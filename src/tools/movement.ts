@@ -1,4 +1,4 @@
-import { botManager } from "../bot-manager.js";
+import { botManager } from "../bot-manager/index.js";
 
 export const movementTools = {
   minecraft_get_position: {

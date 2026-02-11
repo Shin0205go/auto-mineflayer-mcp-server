@@ -1,4 +1,4 @@
-import { botManager } from "../bot-manager.js";
+import { botManager } from "../bot-manager/index.js";
 import { recallLocations } from "./learning.js";
 
 export const environmentTools = {

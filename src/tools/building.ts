@@ -1,4 +1,4 @@
-import { botManager } from "../bot-manager.js";
+import { botManager } from "../bot-manager/index.js";
 
 export const buildingTools = {
   minecraft_place_block: {

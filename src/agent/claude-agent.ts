@@ -235,7 +235,7 @@ class ClaudeAgent {
     const initialPrompt = `接続: host=${MC_HOST}, port=${MC_PORT}, username=${BOT_USERNAME}（変更禁止）
 
 ## 起動手順
-1. minecraft_connect で接続
+1. minecraft_connect で接続（必須: agentType="game" を指定）
 2. minecraft_get_status, minecraft_get_inventory, minecraft_get_surroundings で状況確認
 
 ## サブエージェント活用

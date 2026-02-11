@@ -12,7 +12,6 @@ import * as path from "path";
 
 const DATA_DIR = path.join(process.cwd(), "learning");
 const EXPERIENCE_FILE = path.join(DATA_DIR, "experience.jsonl");
-const REFLECTION_FILE = path.join(DATA_DIR, "reflection.md");
 const MEMORY_FILE = path.join(DATA_DIR, "memory.json");
 // Legacy files (for migration)
 const SKILL_LIBRARY_FILE = path.join(DATA_DIR, "skills.json");
@@ -116,24 +115,6 @@ export const learningTools = {
         outcome_filter: { type: "string", enum: ["success", "failure", "partial", "all"], description: "結果でフィルタ" },
         tag_filter: { type: "string", description: "タグでフィルタ（例: 'mining'）" },
       },
-    },
-  },
-
-  reflect_and_learn: {
-    description: "経験を振り返り、パターンを分析して学びを抽出。定期的に（10ループごと等）呼ぶ。",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        focus_area: { type: "string", description: "特に分析したい領域（mining, crafting, combat等）" },
-      },
-    },
-  },
-
-  get_reflection_insights: {
-    description: "これまでの振り返りで得られた知見を取得。",
-    inputSchema: {
-      type: "object" as const,
-      properties: {},
     },
   },
 
@@ -270,94 +251,6 @@ export function getRecentExperiences(
 }
 
 /**
- * 振り返りを実行して知見を抽出
- */
-export function reflectAndLearn(focusArea?: string): string {
-  ensureDataDir();
-
-  const experiences = getRecentExperiences(50, "all");
-
-  if (experiences.length === 0) {
-    return "経験ログがまだありません。行動を記録してから振り返りを行ってください。";
-  }
-
-  // 統計を計算
-  const stats = {
-    total: experiences.length,
-    success: experiences.filter(e => e.outcome === "success").length,
-    failure: experiences.filter(e => e.outcome === "failure").length,
-    partial: experiences.filter(e => e.outcome === "partial").length,
-  };
-
-  // タグ別の成功率
-  const tagStats: Record<string, { success: number; total: number }> = {};
-  for (const exp of experiences) {
-    for (const tag of exp.tags || []) {
-      if (!tagStats[tag]) {
-        tagStats[tag] = { success: 0, total: 0 };
-      }
-      tagStats[tag].total++;
-      if (exp.outcome === "success") {
-        tagStats[tag].success++;
-      }
-    }
-  }
-
-  // 失敗パターンを抽出
-  const failures = experiences.filter(e => e.outcome === "failure");
-  const failurePatterns: Record<string, number> = {};
-  for (const f of failures) {
-    const key = f.action.split(" ")[0]; // 最初の単語でグループ化
-    failurePatterns[key] = (failurePatterns[key] || 0) + 1;
-  }
-
-  // レポート生成
-  const timestamp = new Date().toLocaleString("ja-JP");
-  let report = `## 振り返りレポート (${timestamp})\n\n`;
-
-  report += `### 全体統計\n`;
-  report += `- 総行動数: ${stats.total}\n`;
-  report += `- 成功: ${stats.success} (${(stats.success / stats.total * 100).toFixed(1)}%)\n`;
-  report += `- 失敗: ${stats.failure} (${(stats.failure / stats.total * 100).toFixed(1)}%)\n`;
-  report += `- 部分的成功: ${stats.partial}\n\n`;
-
-  report += `### カテゴリ別成功率\n`;
-  for (const [tag, stat] of Object.entries(tagStats)) {
-    const rate = (stat.success / stat.total * 100).toFixed(1);
-    report += `- ${tag}: ${rate}% (${stat.success}/${stat.total})\n`;
-  }
-  report += "\n";
-
-  if (Object.keys(failurePatterns).length > 0) {
-    report += `### よくある失敗\n`;
-    const sorted = Object.entries(failurePatterns).sort((a, b) => b[1] - a[1]);
-    for (const [pattern, count] of sorted.slice(0, 5)) {
-      report += `- ${pattern}: ${count}回\n`;
-    }
-    report += "\n";
-  }
-
-  // 学びをまとめる
-  const learnings = experiences
-    .filter(e => e.learning)
-    .map(e => e.learning!)
-    .slice(-10);
-
-  if (learnings.length > 0) {
-    report += `### 最近の学び\n`;
-    for (const learning of learnings) {
-      report += `- ${learning}\n`;
-    }
-    report += "\n";
-  }
-
-  // reflection.mdに追記
-  fs.appendFileSync(REFLECTION_FILE, report + "\n---\n\n");
-
-  return report;
-}
-
-/**
  * スキルを保存
  */
 export function saveSkill(skill: Omit<Skill, "successCount" | "lastUsed">): string {
@@ -414,23 +307,6 @@ export function getSkills(nameFilter?: string): Skill[] {
   } catch {
     return [];
   }
-}
-
-/**
- * 振り返り知見を取得
- */
-export function getReflectionInsights(): string {
-  ensureDataDir();
-
-  if (!fs.existsSync(REFLECTION_FILE)) {
-    return "振り返りの記録がまだありません。reflect_and_learnを実行してください。";
-  }
-
-  const content = fs.readFileSync(REFLECTION_FILE, "utf-8");
-
-  // 最新3つのレポートを返す
-  const reports = content.split("---").filter(r => r.trim());
-  return reports.slice(-3).join("\n---\n");
 }
 
 /**
@@ -876,15 +752,6 @@ export async function handleLearningTool(
       );
 
       return `最近の経験 (${experiences.length}件):\n${lines.join("\n")}`;
-    }
-
-    case "reflect_and_learn": {
-      const focusArea = args.focus_area as string | undefined;
-      return reflectAndLearn(focusArea);
-    }
-
-    case "get_reflection_insights": {
-      return getReflectionInsights();
     }
 
     // === Unified Memory API ===

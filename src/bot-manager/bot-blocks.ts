@@ -1,0 +1,900 @@
+import type { Bot } from "mineflayer";
+import { Vec3 } from "vec3";
+import pkg from "mineflayer-pathfinder";
+const { goals } = pkg;
+
+import type { ManagedBot } from "./types.js";
+import {
+  requiresPickaxe,
+  requiresAxe,
+  requiresShovel,
+  canPickaxeHarvest,
+  getRequiredPickaxeTier,
+} from "./minecraft-utils.js";
+
+// ========== Block Manipulation Methods ==========
+
+/**
+ * Place a block at specified coordinates
+ */
+export async function placeBlock(
+  managed: ManagedBot,
+  blockType: string,
+  x: number,
+  y: number,
+  z: number,
+  useCommand: boolean = false,
+  _delay: (ms: number) => Promise<void>,
+  _getBriefStatus: (username: string) => string
+): Promise<{ success: boolean; message: string }> {
+  const bot = managed.bot;
+  const targetPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
+  const botPos = bot.entity.position;
+  const distance = botPos.distanceTo(targetPos);
+  const REACH_DISTANCE = 4.5;
+
+  if (distance > REACH_DISTANCE) {
+    // Try to move closer to the target position
+    try {
+      // Move to within reach distance of the target
+      const goal = new goals.GoalNear(x, y, z, REACH_DISTANCE - 0.5);
+      bot.pathfinder.setGoal(goal);
+
+      // Wait for movement with timeout
+      const startTime = Date.now();
+      const timeout = 10000; // 10 seconds timeout
+
+      while (bot.entity.position.distanceTo(targetPos) > REACH_DISTANCE && Date.now() - startTime < timeout) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      bot.pathfinder.setGoal(null);
+
+      // Check if we're now within reach
+      const newDistance = bot.entity.position.distanceTo(targetPos);
+      if (newDistance > REACH_DISTANCE) {
+        return {
+          success: false,
+          message: `Could not reach target. Distance: ${newDistance.toFixed(1)} blocks. Max reach is ${REACH_DISTANCE} blocks.`
+        };
+      }
+    } catch (err) {
+      return {
+        success: false,
+        message: `Target is too far (${distance.toFixed(1)} blocks). Failed to move closer: ${err}`
+      };
+    }
+  }
+
+  // Creative mode or OP: use /setblock command
+  if (useCommand) {
+    bot.chat(`/setblock ${Math.floor(x)} ${Math.floor(y)} ${Math.floor(z)} ${blockType}`);
+    return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)})` };
+  }
+
+  // Survival mode: use actual block from inventory
+  const blockItem = bot.inventory.items().find(item =>
+    item.name === blockType || item.name === blockType.replace("minecraft:", "")
+  );
+
+  if (!blockItem) {
+    return {
+      success: false,
+      message: `No ${blockType} in inventory. Available blocks: ${
+        bot.inventory.items()
+          .map(i => `${i.name}(${i.count})`)
+          .join(", ")
+      }`
+    };
+  }
+
+  // Equip the block
+  try {
+    await bot.equip(blockItem, "hand");
+  } catch (err) {
+    return { success: false, message: `Failed to equip ${blockType}: ${err}` };
+  }
+
+  // Find a reference block to place against
+  const referenceBlock = findReferenceBlock(bot, targetPos);
+  if (!referenceBlock) {
+    return {
+      success: false,
+      message: `No adjacent block to place against at (${x}, ${y}, ${z})`
+    };
+  }
+
+  // Place the block
+  try {
+    await bot.placeBlock(referenceBlock.block, referenceBlock.faceVector);
+  } catch (err: any) {
+    // Ignore timeout errors, verify placement below
+    const errMsg = err.message || String(err);
+    if (!errMsg.includes('blockUpdate') && !errMsg.includes('timeout') && !errMsg.includes('did not fire') && !errMsg.includes('Event')) {
+      return { success: false, message: `Failed to place block: ${err}` };
+    }
+  }
+
+  // Wait longer and verify placement multiple times
+  await new Promise(resolve => setTimeout(resolve, 500));
+  for (let i = 0; i < 3; i++) {
+    const placedBlock = bot.blockAt(targetPos);
+    if (placedBlock && (placedBlock.name === blockType || placedBlock.name === blockType.replace("minecraft:", ""))) {
+      return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)})` };
+    }
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+
+  const finalBlock = bot.blockAt(targetPos);
+  return { success: false, message: `Block not placed at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}). Current block: ${finalBlock?.name || "unknown"}` };
+}
+
+function findReferenceBlock(bot: Bot, targetPos: Vec3): { block: any; faceVector: Vec3 } | null {
+  // Check all 6 adjacent positions for a solid block to place against
+  const faces = [
+    { offset: new Vec3(0, -1, 0), face: new Vec3(0, 1, 0) },  // bottom
+    { offset: new Vec3(0, 1, 0), face: new Vec3(0, -1, 0) },  // top
+    { offset: new Vec3(-1, 0, 0), face: new Vec3(1, 0, 0) },  // west
+    { offset: new Vec3(1, 0, 0), face: new Vec3(-1, 0, 0) },  // east
+    { offset: new Vec3(0, 0, -1), face: new Vec3(0, 0, 1) },  // north
+    { offset: new Vec3(0, 0, 1), face: new Vec3(0, 0, -1) },  // south
+  ];
+
+  for (const { offset, face } of faces) {
+    const checkPos = targetPos.plus(offset);
+    const block = bot.blockAt(checkPos);
+    if (block && block.name !== "air" && block.name !== "water" && block.name !== "lava") {
+      return { block, faceVector: face };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Dig a block at specified coordinates
+ */
+export async function digBlock(
+  managed: ManagedBot,
+  x: number,
+  y: number,
+  z: number,
+  useCommand: boolean,
+  delay: (ms: number) => Promise<void>,
+  moveToBasic: (username: string, x: number, y: number, z: number) => Promise<{ success: boolean; message: string }>,
+  getBriefStatus: (username: string) => string
+): Promise<string> {
+  const bot = managed.bot;
+  const username = managed.username;
+  const blockPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
+  const block = bot.blockAt(blockPos);
+
+  if (!block || block.name === "air") {
+    return "No block at that position";
+  }
+
+  const blockName = block.name;
+
+  // Check for lava in adjacent blocks before digging
+  const adjacentPositions = [
+    blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
+    blockPos.offset(0, 1, 0), blockPos.offset(0, -1, 0),
+    blockPos.offset(0, 0, 1), blockPos.offset(0, 0, -1),
+  ];
+  for (const adjPos of adjacentPositions) {
+    const adjBlock = bot.blockAt(adjPos);
+    if (adjBlock?.name === "lava") {
+      console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
+      return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`;
+    }
+  }
+
+  // Creative mode or OP: use command
+  if (useCommand) {
+    bot.chat(`/setblock ${Math.floor(x)} ${Math.floor(y)} ${Math.floor(z)} air destroy`);
+    return `Broke ${blockName} at (${x}, ${y}, ${z})`;
+  }
+
+  // Survival mode: actually dig the block
+  let distance = bot.entity.position.distanceTo(blockPos);
+  console.error(`[Dig] ${blockName} at (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
+
+  // Auto-move closer if too far (Minecraft survival reach is 4.5 blocks)
+  const REACH_DISTANCE = 4.5;
+  if (distance > REACH_DISTANCE) {
+    console.error(`[Dig] Too far, moving closer...`);
+
+    // Try multiple movement strategies
+    let moved = false;
+
+    // Calculate target position considering Y difference
+    const yDiff = Math.abs(bot.entity.position.y - y);
+    let targetRange = 3;
+    if (yDiff > 2) {
+      // If there's significant Y difference, get closer horizontally
+      targetRange = 2;
+    }
+
+    // Configure pathfinder for better vertical movement
+    bot.pathfinder.movements.scafoldingBlocks = bot.registry.blocksArray
+      .filter(block => block.material && block.material === 'rock')
+      .map(block => block.id);
+    bot.pathfinder.movements.allowParkour = false; // Disable parkour for more predictable movement
+    bot.pathfinder.movements.allowSprinting = false; // Disable sprinting to be more careful
+    bot.pathfinder.movements.maxDropDown = 10; // Allow larger drops
+    bot.pathfinder.movements.infiniteLiquidDropdownDistance = true; // Allow dropping into water from any height
+
+    // First try: Get close with pathfinder
+    // Temporarily enable digging to reach difficult blocks
+    const originalCanDig = bot.pathfinder.movements.canDig;
+    bot.pathfinder.movements.canDig = true;
+
+    // For large Y differences, try to build/pillar up first
+    if (yDiff > 2) {
+      console.error(`[Dig] Large Y difference (${yDiff.toFixed(1)}), trying to build up/dig down...`);
+
+      // Move horizontally closer first
+      const horizontalGoal = new goals.GoalXZ(Math.floor(x), Math.floor(z));
+      bot.pathfinder.setGoal(horizontalGoal);
+
+      // Wait for horizontal movement
+      const horizontalStart = Date.now();
+      while (Date.now() - horizontalStart < 10000) {
+        await delay(300);
+        const horizontalDistance = Math.sqrt(
+          Math.pow(bot.entity.position.x - x, 2) +
+          Math.pow(bot.entity.position.z - z, 2)
+        );
+        if (horizontalDistance <= 3 || !bot.pathfinder.isMoving()) {
+          break;
+        }
+      }
+      bot.pathfinder.setGoal(null);
+
+      // After getting horizontally closer, enable building to reach higher blocks
+      // Note: scaffolding blocks are already set above
+      bot.pathfinder.movements.blocksCantBreak.clear(); // Allow breaking blocks if needed
+    }
+
+    const goal = new goals.GoalNear(Math.floor(x), Math.floor(y), Math.floor(z), targetRange);
+    bot.pathfinder.setGoal(goal);
+
+    // Wait for movement (max 25 seconds for difficult vertical movements)
+    const startTime = Date.now();
+    while (Date.now() - startTime < 25000) {
+      await delay(300);
+      distance = bot.entity.position.distanceTo(blockPos);
+      if (distance <= REACH_DISTANCE) {
+        moved = true;
+        break;
+      }
+      if (!bot.pathfinder.isMoving()) {
+        break;
+      }
+    }
+    bot.pathfinder.setGoal(null);
+
+    // Restore original digging setting
+    bot.pathfinder.movements.canDig = originalCanDig;
+
+    // Second try: If still too far, try direct movement
+    if (!moved && distance > REACH_DISTANCE) {
+      console.error(`[Dig] Pathfinder failed, trying direct movement...`);
+
+      // Special handling for large Y differences
+      const yDiff = Math.abs(bot.entity.position.y - y);
+      if (yDiff > 3) {
+        console.error(`[Dig] Large Y difference detected (${yDiff.toFixed(1)} blocks), trying vertical approach...`);
+
+        // Try to move to a position horizontally aligned but at a better Y level
+        // If block is above us, try to pillar up or find a higher position
+        // If block is below us, get closer horizontally
+        if (bot.entity.position.y < y) {
+          // Block is above, try to get to same Y level
+          const targetY = Math.min(y, bot.entity.position.y + 3);
+          try {
+            await moveToBasic(username, x, targetY, z);
+            await delay(500);
+            distance = bot.entity.position.distanceTo(blockPos);
+            if (distance <= REACH_DISTANCE) {
+              moved = true;
+            }
+          } catch (e) {
+            console.error(`[Dig] Vertical upward approach failed: ${e}`);
+          }
+        } else {
+          // Block is below, get closer horizontally first
+          const horizontalDistance = Math.sqrt(
+            Math.pow(bot.entity.position.x - x, 2) +
+            Math.pow(bot.entity.position.z - z, 2)
+          );
+          if (horizontalDistance > 2) {
+            try {
+              // Move closer horizontally while maintaining current Y
+              const direction = new Vec3(x - bot.entity.position.x, 0, z - bot.entity.position.z).normalize();
+              const targetPos = bot.entity.position.plus(direction.scaled(horizontalDistance - 2));
+              await moveToBasic(username, targetPos.x, bot.entity.position.y, targetPos.z);
+              await delay(500);
+              distance = bot.entity.position.distanceTo(blockPos);
+              if (distance <= REACH_DISTANCE) {
+                moved = true;
+              }
+            } catch (e) {
+              console.error(`[Dig] Horizontal approach failed: ${e}`);
+            }
+          }
+        }
+      }
+
+      if (!moved) {
+        const direction = blockPos.minus(bot.entity.position).normalize();
+        const targetPos = blockPos.minus(direction.scaled(3));
+
+        try {
+          await moveToBasic(username, targetPos.x, targetPos.y, targetPos.z);
+          await delay(500);
+          distance = bot.entity.position.distanceTo(blockPos);
+          if (distance <= REACH_DISTANCE) {
+            moved = true;
+          }
+        } catch (e) {
+          console.error(`[Dig] Direct movement failed: ${e}`);
+        }
+      }
+    }
+
+    distance = bot.entity.position.distanceTo(blockPos);
+    console.error(`[Dig] After moving, distance: ${distance.toFixed(1)}`);
+
+    if (distance > REACH_DISTANCE) {
+      // Try to find adjacent reachable position
+      const offsets = [
+        new Vec3(1, 0, 0), new Vec3(-1, 0, 0),
+        new Vec3(0, 0, 1), new Vec3(0, 0, -1),
+        new Vec3(1, 0, 1), new Vec3(-1, 0, 1),
+        new Vec3(1, 0, -1), new Vec3(-1, 0, -1),
+        // Add Y-level variations
+        new Vec3(0, 1, 0), new Vec3(0, -1, 0),
+        new Vec3(1, 1, 0), new Vec3(-1, 1, 0),
+        new Vec3(0, 1, 1), new Vec3(0, 1, -1)
+      ];
+
+      for (const offset of offsets) {
+        const adjPos = blockPos.plus(offset);
+        const adjBlock = bot.blockAt(adjPos);
+        // Find an air block adjacent to target that we can stand near
+        if (!adjBlock || adjBlock.name === "air") {
+          try {
+            await moveToBasic(username, adjPos.x, adjPos.y, adjPos.z);
+            await delay(300);
+            distance = bot.entity.position.distanceTo(blockPos);
+            if (distance <= REACH_DISTANCE) {
+              break;
+            }
+          } catch (e) {
+            // Try next offset
+          }
+        }
+      }
+
+      if (distance > REACH_DISTANCE) {
+        // Provide more detailed error information
+        const yDiff = Math.abs(bot.entity.position.y - y);
+        const horizontalDistance = Math.sqrt(
+          Math.pow(bot.entity.position.x - x, 2) +
+          Math.pow(bot.entity.position.z - z, 2)
+        );
+
+        if (yDiff > 10) {
+          // Y difference too large
+        } else if (horizontalDistance > 20) {
+          // Horizontal distance too large
+        }
+
+        return `Cannot reach block at (${x}, ${y}, ${z}). Stopped ${distance.toFixed(1)} blocks away. Block may be unreachable.`;
+      }
+    }
+  }
+
+  // Check if block is diggable
+  if (block.hardness < 0) {
+    return `Cannot dig ${blockName} (unbreakable like bedrock)`;
+  }
+
+  // Auto-equip the best tool for this block type (using dynamic registry check)
+  let toolType: "pickaxe" | "axe" | "shovel" | null = null;
+  if (requiresPickaxe(bot, blockName)) {
+    toolType = "pickaxe";
+  } else if (requiresAxe(bot, blockName)) {
+    toolType = "axe";
+  } else if (requiresShovel(bot, blockName)) {
+    toolType = "shovel";
+  }
+
+  if (toolType) {
+    const toolPriority = [
+      `netherite_${toolType}`, `diamond_${toolType}`, `iron_${toolType}`, `stone_${toolType}`, `wooden_${toolType}`
+    ];
+    const inventory = bot.inventory.items();
+    let equippedTool: string | null = null;
+    for (const toolName of toolPriority) {
+      const tool = inventory.find(i => i.name === toolName);
+      if (tool) {
+        await bot.equip(tool, "hand");
+        equippedTool = toolName;
+        console.error(`[Dig] Auto-equipped ${toolName} for ${blockName}`);
+        break;
+      }
+    }
+
+    // Check if tool is sufficient for this block (using dynamic registry check)
+    // Warn but don't block mining - player can still dig without proper tool (just no drops)
+    const blockData = bot.registry.blocksByName[blockName];
+    const hasHarvestToolReq = blockData && blockData.harvestTools && Object.keys(blockData.harvestTools).length > 0;
+    if (toolType === "pickaxe" && hasHarvestToolReq && equippedTool) {
+      if (!canPickaxeHarvest(bot, blockName, equippedTool)) {
+        const requiredTier = getRequiredPickaxeTier(bot, blockName);
+        console.error(`[Dig] Warning: ${blockName} requires ${requiredTier || "better pickaxe"} for drops, have ${equippedTool}. Proceeding anyway.`);
+      }
+    } else if (toolType === "pickaxe" && hasHarvestToolReq && !equippedTool) {
+      const requiredTier = getRequiredPickaxeTier(bot, blockName);
+      console.error(`[Dig] Warning: ${blockName} requires ${requiredTier || "wooden_pickaxe"} for drops. No pickaxe equipped. Proceeding anyway.`);
+    }
+  }
+
+  const heldItem = bot.heldItem?.name || "empty hand";
+  const gameMode = bot.game?.gameMode || "unknown";
+  console.error(`[Dig] Held item: ${heldItem}, block hardness: ${block.hardness}, gameMode: ${gameMode}`);
+
+  try {
+    const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+
+    // Check if bot can dig this block
+    const canDig = bot.canDigBlock(block);
+    const currentDistance = bot.entity.position.distanceTo(blockPos);
+    console.error(`[Dig] canDigBlock: ${canDig}, current distance: ${currentDistance.toFixed(1)}`);
+
+    if (!canDig) {
+      // Get more specific error information
+      const reasons = [];
+      if (currentDistance > REACH_DISTANCE) {
+        reasons.push(`too far (${currentDistance.toFixed(1)} blocks, max: ${REACH_DISTANCE})`);
+      }
+      if (block.shapes && block.shapes.length === 0) {
+        reasons.push(`block has no collision shape`);
+      }
+
+      // Check tool requirements dynamically using registry
+      const heldItem = bot.heldItem;
+      const requiredTier = getRequiredPickaxeTier(bot, blockName);
+
+      if (requiredTier && heldItem) {
+        // Check if held pickaxe can harvest this block
+        if (heldItem.name.includes("pickaxe")) {
+          if (!canPickaxeHarvest(bot, blockName, heldItem.name)) {
+            reasons.push(`requires ${requiredTier} or better (have: ${heldItem.name})`);
+          }
+        } else {
+          reasons.push(`requires pickaxe (have: ${heldItem.name})`);
+        }
+      } else if (requiredTier && !heldItem) {
+        reasons.push(`requires ${requiredTier} (have: empty hand)`);
+      }
+
+      // If the only reason is distance or tool, we might still be able to dig
+      // Let's try anyway if we have the right tool
+      if (reasons.length === 0 || (reasons.length === 1 && !reasons[0].includes('too far'))) {
+        // Continue trying to dig even if canDig is false
+      } else {
+        return `Cannot dig ${blockName} at (${x}, ${y}, ${z}) - ${reasons.length > 0 ? reasons.join(', ') : 'unknown reason (may be protected)'}`;
+      }
+    }
+
+    // Look at the block first
+    await bot.lookAt(block.position.offset(0.5, 0.5, 0.5));
+
+    console.error(`[Dig] Starting to dig ${blockName}...`);
+    const digTime = bot.digTime(block);
+    console.error(`[Dig] Estimated dig time: ${digTime}ms`);
+
+    // Stop all movements before digging to prevent "Digging aborted" error
+    bot.clearControlStates();
+    bot.pathfinder.setGoal(null);
+    try { bot.stopDigging(); } catch (_) { /* ignore if not digging */ }
+
+    // Wait until bot velocity is near zero (fully stopped)
+    for (let waitTick = 0; waitTick < 20; waitTick++) {
+      const vel = bot.entity.velocity;
+      if (Math.abs(vel.x) < 0.01 && Math.abs(vel.y) < 0.01 && Math.abs(vel.z) < 0.01) break;
+      bot.clearControlStates();
+      await delay(100);
+    }
+
+    // Ensure bot is on ground before digging
+    for (let groundTick = 0; groundTick < 20; groundTick++) {
+      if (bot.entity.onGround) break;
+      await delay(100);
+    }
+
+    // Re-check block exists before digging
+    const blockBeforeDig = bot.blockAt(blockPos);
+    if (!blockBeforeDig || blockBeforeDig.name === "air") {
+      return `Block at (${x}, ${y}, ${z}) no longer exists`;
+    }
+
+    // Re-look at the block right before digging
+    await bot.lookAt(blockBeforeDig.position.offset(0.5, 0.5, 0.5));
+    await delay(50);
+
+    try {
+      await bot.dig(blockBeforeDig, true);  // forceLook = true
+      console.error(`[Dig] Finished digging ${blockName}`);
+    } catch (digError: any) {
+      console.error(`[Dig] Dig failed: ${digError.message}`);
+
+      // If digging was aborted, it might be due to movement or distance
+      if (digError.message.includes("aborted")) {
+        // Try once more after ensuring we're close and stable
+        const currentDist = bot.entity.position.distanceTo(blockPos);
+        if (currentDist > 4.5) {
+          // Too far, need to get closer
+          return `Failed to dig ${blockName}: Too far away (${currentDist.toFixed(1)} blocks). Move closer first.`;
+        }
+
+        // Clear movements again and retry
+        bot.clearControlStates();
+        bot.pathfinder.setGoal(null);
+        try { bot.stopDigging(); } catch (_) { /* ignore if not digging */ }
+
+        // Wait until bot velocity is near zero (fully stopped)
+        for (let waitTick = 0; waitTick < 15; waitTick++) {
+          const vel = bot.entity.velocity;
+          if (Math.abs(vel.x) < 0.01 && Math.abs(vel.z) < 0.01) break;
+          bot.clearControlStates();
+          await delay(100);
+        }
+
+        // Re-check and re-acquire the block reference
+        const blockRetry = bot.blockAt(blockPos);
+        if (!blockRetry || blockRetry.name === "air") {
+          return `Block at (${x}, ${y}, ${z}) no longer exists`;
+        }
+
+        try {
+          await bot.lookAt(blockRetry.position.offset(0.5, 0.5, 0.5));
+          await delay(50);
+          await bot.dig(blockRetry, true);
+          console.error(`[Dig] Retry successful for ${blockName}`);
+        } catch (retryError: any) {
+          return `Failed to dig ${blockName}: ${retryError.message}`;
+        }
+      } else {
+        return `Failed to dig ${blockName}: ${digError.message}`;
+      }
+    }
+
+    // Verify block is actually gone
+    const blockAfter = bot.blockAt(blockPos);
+    console.error(`[Dig] Block after dig: ${blockAfter?.name || "null"}`);
+    if (blockAfter && blockAfter.name !== "air") {
+      return `Dig seemed to complete but block is still there (${blockAfter.name}). May be protected area.`;
+    }
+
+    // Wait for item to spawn (items spawn after ~100-200ms)
+    await delay(200);
+
+    // Check inventory immediately - items within 1 block are auto-collected
+    let inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+    let pickedUp = inventoryAfter - inventoryBefore;
+    console.error(`[Dig] Inventory check 1: before=${inventoryBefore}, after=${inventoryAfter}, picked=${pickedUp}`);
+
+    // If nothing picked up yet, aggressively move to collect
+    if (pickedUp === 0) {
+      // Step 1: Walk directly through the block position
+      await bot.lookAt(blockPos.offset(0.5, 0, 0.5));
+      bot.setControlState("forward", true);
+      await delay(500);
+      bot.setControlState("forward", false);
+
+      inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+      pickedUp = inventoryAfter - inventoryBefore;
+      console.error(`[Dig] Inventory check 2 (walk through): picked=${pickedUp}`);
+    }
+
+    // Step 2: Try pathfinder if still nothing
+    if (pickedUp === 0) {
+      const goal = new goals.GoalNear(Math.floor(x), Math.floor(y), Math.floor(z), 0);
+      bot.pathfinder.setGoal(goal);
+      await delay(1500);
+      bot.pathfinder.setGoal(null);
+
+      inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+      pickedUp = inventoryAfter - inventoryBefore;
+      console.error(`[Dig] Inventory check 3 (pathfinder): picked=${pickedUp}`);
+    }
+
+    // Step 3: Jump in case item is slightly above
+    if (pickedUp === 0) {
+      bot.setControlState("jump", true);
+      await delay(300);
+      bot.setControlState("jump", false);
+      await delay(300);
+
+      inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+      pickedUp = inventoryAfter - inventoryBefore;
+      console.error(`[Dig] Inventory check 4 (jump): picked=${pickedUp}`);
+    }
+
+    if (pickedUp > 0) {
+      return `Dug ${blockName} with ${heldItem} and picked up ${pickedUp} item(s)!` + getBriefStatus(username);
+    }
+
+    // Look for dropped items nearby that weren't picked up
+    const droppedItems = Object.values(bot.entities).filter(e =>
+      e && e !== bot.entity &&
+      e.position.distanceTo(blockPos) < 5 &&
+      (e.name === "item" || e.type === "object" || e.displayName === "Item")
+    );
+
+    if (droppedItems.length > 0) {
+      // Try one more aggressive collection
+      console.error(`[Dig] Found ${droppedItems.length} uncollected items, attempting pickup...`);
+      for (const item of droppedItems.slice(0, 3)) {
+        await bot.lookAt(item.position);
+        bot.setControlState("forward", true);
+        await delay(400);
+        bot.setControlState("forward", false);
+        await delay(200);
+      }
+
+      inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+      pickedUp = inventoryAfter - inventoryBefore;
+
+      if (pickedUp > 0) {
+        return `Dug ${blockName} and collected ${pickedUp} item(s) after extra effort!` + getBriefStatus(username);
+      }
+
+      return `Dug ${blockName} but ${droppedItems.length} item(s) couldn't be picked up (may be stuck in block)` + getBriefStatus(username);
+    } else {
+      // Check if we expected drops but got none (wrong tool warning)
+      const oresNeedingPickaxe = ["_ore", "stone", "cobblestone", "deepslate"];
+      const isOre = oresNeedingPickaxe.some(s => blockName.includes(s));
+      const hasPickaxe = heldItem.includes("pickaxe");
+
+      if (isOre && !hasPickaxe) {
+        return `WARNING: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED! Need pickaxe for ore/stone!` + getBriefStatus(username);
+      }
+
+      return `Dug ${blockName} with ${heldItem} (no drops or auto-collected).` + getBriefStatus(username);
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[Dig] Error: ${errMsg}`);
+    return `Failed to dig ${blockName}: ${errMsg}`;
+  }
+}
+
+/**
+ * Level ground in an area - dig blocks above target height and fill holes below
+ */
+export async function levelGround(
+  managed: ManagedBot,
+  options: {
+    centerX: number;
+    centerZ: number;
+    radius: number;
+    targetY?: number;
+    fillBlock?: string;
+    mode: "dig" | "fill" | "both";
+  },
+  delay: (ms: number) => Promise<void>,
+  collectNearbyItems: (username: string) => Promise<string>,
+  getBriefStatus: (username: string) => string
+): Promise<string> {
+  const bot = managed.bot;
+  const username = managed.username;
+  const { centerX, centerZ, radius, mode } = options;
+  let { targetY, fillBlock } = options;
+
+  // Step 1: Scan area and determine target Y if not specified
+  const blockHeights: Map<number, number> = new Map(); // y -> count
+  const blocksToProcess: Array<{ x: number; y: number; z: number; action: "dig" | "fill" }> = [];
+
+  console.error(`[LevelGround] Scanning area: center=(${centerX}, ${centerZ}), radius=${radius}`);
+
+  // Scan area to find ground heights
+  for (let dx = -radius; dx <= radius; dx++) {
+    for (let dz = -radius; dz <= radius; dz++) {
+      const x = Math.floor(centerX + dx);
+      const z = Math.floor(centerZ + dz);
+
+      // Find highest solid block at this position (scan from top down)
+      for (let y = 100; y >= -60; y--) {
+        const block = bot.blockAt(new (bot as any).Vec3(x, y, z));
+        if (block && block.name !== "air" && !block.name.includes("leaves") && !block.name.includes("log")) {
+          const count = blockHeights.get(y) || 0;
+          blockHeights.set(y, count + 1);
+          break;
+        }
+      }
+    }
+  }
+
+  // Auto-detect target Y: most common ground level
+  if (targetY === undefined) {
+    let maxCount = 0;
+    for (const [y, count] of blockHeights) {
+      if (count > maxCount) {
+        maxCount = count;
+        targetY = y;
+      }
+    }
+    console.error(`[LevelGround] Auto-detected targetY: ${targetY} (${maxCount} blocks at this level)`);
+  }
+
+  if (targetY === undefined) {
+    return "Failed to detect ground level. Please specify target_y manually.";
+  }
+
+  // Step 2: Identify blocks to dig and positions to fill
+  for (let dx = -radius; dx <= radius; dx++) {
+    for (let dz = -radius; dz <= radius; dz++) {
+      const x = Math.floor(centerX + dx);
+      const z = Math.floor(centerZ + dz);
+
+      // Check blocks above targetY (to dig)
+      if (mode === "dig" || mode === "both") {
+        for (let y = targetY + 1; y <= targetY + 10; y++) {
+          const block = bot.blockAt(new (bot as any).Vec3(x, y, z));
+          if (block && block.name !== "air" && !block.name.includes("bedrock")) {
+            blocksToProcess.push({ x, y, z, action: "dig" });
+          }
+        }
+      }
+
+      // Check if position at targetY needs filling
+      if (mode === "fill" || mode === "both") {
+        const blockAtTarget = bot.blockAt(new (bot as any).Vec3(x, targetY, z));
+        if (!blockAtTarget || blockAtTarget.name === "air" || blockAtTarget.name.includes("water")) {
+          blocksToProcess.push({ x, y: targetY, z, action: "fill" });
+        }
+      }
+    }
+  }
+
+  // Sort: dig from top to bottom, fill from bottom
+  blocksToProcess.sort((a, b) => {
+    if (a.action === "dig" && b.action === "dig") return b.y - a.y; // Top to bottom
+    if (a.action === "fill" && b.action === "fill") return a.y - b.y; // Bottom to top
+    return a.action === "dig" ? -1 : 1; // Dig before fill
+  });
+
+  console.error(`[LevelGround] Found ${blocksToProcess.length} blocks to process`);
+
+  // Auto-select fill block from inventory if not specified
+  if ((mode === "fill" || mode === "both") && !fillBlock) {
+    const fillCandidates = ["dirt", "cobblestone", "stone", "sand", "gravel"];
+    for (const candidate of fillCandidates) {
+      const item = bot.inventory.items().find(i => i.name === candidate);
+      if (item && item.count > 0) {
+        fillBlock = candidate;
+        console.error(`[LevelGround] Auto-selected fill block: ${fillBlock}`);
+        break;
+      }
+    }
+  }
+
+  // Step 3: Process blocks
+  let dugCount = 0;
+  let filledCount = 0;
+  let errorCount = 0;
+  const maxErrors = 5;
+
+  for (const task of blocksToProcess) {
+    if (errorCount >= maxErrors) {
+      console.error(`[LevelGround] Too many errors, stopping`);
+      break;
+    }
+
+    try {
+      // Move to position if too far
+      const distance = Math.sqrt(
+        Math.pow(bot.entity.position.x - task.x, 2) +
+        Math.pow(bot.entity.position.z - task.z, 2)
+      );
+
+      if (distance > 4) {
+        const goal = new goals.GoalNear(task.x, task.y, task.z, 2);
+        bot.pathfinder.setGoal(goal);
+        await delay(2000);
+        bot.pathfinder.setGoal(null);
+      }
+
+      if (task.action === "dig") {
+        const block = bot.blockAt(new (bot as any).Vec3(task.x, task.y, task.z));
+        if (block && block.name !== "air") {
+          await bot.dig(block);
+          dugCount++;
+        }
+      } else if (task.action === "fill" && fillBlock) {
+        const item = bot.inventory.items().find(i => i.name === fillBlock);
+        if (item) {
+          await bot.equip(item, "hand");
+          const blockBelow = bot.blockAt(new (bot as any).Vec3(task.x, task.y - 1, task.z));
+          if (blockBelow && blockBelow.name !== "air") {
+            try {
+              await bot.placeBlock(blockBelow, new (bot as any).Vec3(0, 1, 0));
+              filledCount++;
+            } catch {
+              // Ignore placement errors
+            }
+          }
+        }
+      }
+
+      // Brief delay between operations
+      await delay(100);
+
+    } catch (err) {
+      errorCount++;
+      console.error(`[LevelGround] Error at (${task.x}, ${task.y}, ${task.z}): ${err}`);
+    }
+  }
+
+  // Collect dropped items
+  await collectNearbyItems(username);
+
+  const result = `Leveled ground at (${centerX}, ${centerZ}) radius ${radius}, targetY=${targetY}. ` +
+    `Dug: ${dugCount} blocks, Filled: ${filledCount} blocks` +
+    (errorCount > 0 ? `, Errors: ${errorCount}` : "");
+
+  return result + getBriefStatus(username);
+}
+
+/**
+ * Activate/interact with a block (doors, buttons, chests, etc.)
+ */
+export async function activateBlock(
+  managed: ManagedBot,
+  x: number,
+  y: number,
+  z: number,
+  moveTo: (username: string, x: number, y: number, z: number) => Promise<string>
+): Promise<string> {
+  const bot = managed.bot;
+  const username = managed.username;
+  const pos = new Vec3(x, y, z);
+  const block = bot.blockAt(pos);
+
+  if (!block) {
+    throw new Error(`No block at (${x}, ${y}, ${z})`);
+  }
+
+  const interactableBlocks = [
+    "button", "lever", "door", "trapdoor", "gate",
+    "chest", "barrel", "shulker", "hopper", "dropper", "dispenser",
+    "note_block", "jukebox", "bell", "respawn_anchor",
+    "crafting_table", "furnace", "blast_furnace", "smoker",
+    "brewing_stand", "anvil", "grindstone", "stonecutter",
+    "loom", "cartography_table", "smithing_table"
+  ];
+
+  const isInteractable = interactableBlocks.some(name => block.name.includes(name));
+  if (!isInteractable) {
+    console.error(`[ActivateBlock] Warning: ${block.name} may not be interactable`);
+  }
+
+  const dist = bot.entity.position.distanceTo(pos);
+  if (dist > 5) {
+    // Move closer first
+    await moveTo(username, x, y, z);
+  }
+
+  try {
+    await bot.activateBlock(block);
+    return `Activated ${block.name} at (${x}, ${y}, ${z}).`;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to activate ${block.name}: ${errMsg}`);
+  }
+}

@@ -8,10 +8,17 @@
  */
 
 import { WebSocketServer, WebSocket } from 'ws';
-import { botManager } from "./bot-manager.js";
+import { botManager } from "./bot-manager/index.js";
 import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
 import { learningTools, handleLearningTool, getAgentSkill } from "./tools/learning.js";
 import { taskCreate, taskList, taskGet, taskUpdate, TASK_MANAGEMENT_TOOLS } from "./tools/task-management.js";
+import {
+  minecraft_gather_resources,
+  minecraft_build_structure,
+  minecraft_craft_chain,
+  minecraft_survival_routine,
+  minecraft_explore_area
+} from "./tools/high-level-actions.js";
 import { appendFileSync, readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -323,8 +330,42 @@ const connectionBots = new WeakMap<WebSocket, string>();
 // Track which bots each connection is subscribed to (for event notifications)
 const connectionSubscriptions = new WeakMap<WebSocket, Set<string>>();
 
+// Track agent type for each connection (game or dev)
+const connectionAgentTypes = new WeakMap<WebSocket, string>();
+
 // Track all active WebSocket connections for event broadcasting
 const activeConnections = new Set<WebSocket>();
+
+// Basic tools for Game Agent (high-level operations are accessed via skills)
+const GAME_AGENT_TOOLS = new Set([
+  // Connection
+  "minecraft_connect",
+  "minecraft_disconnect",
+  // Status/Info
+  "minecraft_get_position",
+  "minecraft_get_status",
+  "minecraft_get_inventory",
+  "minecraft_get_surroundings",
+  "minecraft_get_chat_messages",
+  "minecraft_get_nearby_entities",
+  "minecraft_get_biome",
+  // Communication
+  "minecraft_chat",
+  "subscribe_events",
+  // Learning & Memory
+  "save_memory",
+  "recall_memory",
+  "log_experience",
+  "get_recent_experiences",
+  // Skill System (high-level operations via Task)
+  "list_agent_skills",
+  "get_agent_skill",
+  // Coordination
+  "agent_board_read",
+  "agent_board_write",
+  "agent_board_wait",
+  "agent_board_clear",
+]);
 
 // Listen for game events from BotManager and push to clients
 botManager.on("gameEvent", (username: string, event: { type: string; message: string; timestamp: number; data?: Record<string, unknown> }) => {
@@ -373,6 +414,12 @@ const tools = {
         port: { type: "number", default: 25565 },
         username: { type: "string", description: "Bot username (required)" },
         version: { type: "string" },
+        agentType: {
+          type: "string",
+          enum: ["game", "dev"],
+          default: "game",
+          description: "Agent type: 'game' for Game Agent (high-level tools only), 'dev' for Dev Agent (all tools)"
+        },
       },
       required: ["username"],
     },
@@ -798,6 +845,78 @@ const tools = {
       required: ["x", "y", "z", "text"],
     },
   },
+  // High-level action tools
+  minecraft_gather_resources: {
+    description: "High-level resource gathering - automatically finds, mines, and collects specified items",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "Bot username" },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Item name (e.g., 'oak_log', 'cobblestone')" },
+              count: { type: "number", description: "Target quantity" }
+            },
+            required: ["name", "count"]
+          },
+          description: "List of items to gather"
+        },
+        maxDistance: { type: "number", description: "Maximum search distance (default: 32)" }
+      },
+      required: ["username", "items"]
+    }
+  },
+  minecraft_build_structure: {
+    description: "High-level building - constructs predefined structures (shelter, wall, platform, tower)",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "Bot username" },
+        type: { type: "string", enum: ["shelter", "wall", "platform", "tower"], description: "Structure type" },
+        size: { type: "string", enum: ["small", "medium", "large"], description: "Structure size" },
+        materials: { type: "string", description: "Preferred building material (optional)" }
+      },
+      required: ["username", "type", "size"]
+    }
+  },
+  minecraft_craft_chain: {
+    description: "High-level crafting - crafts items with automatic dependency resolution and optional material gathering",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "Bot username" },
+        target: { type: "string", description: "Target item to craft (e.g., 'iron_pickaxe', 'furnace')" },
+        autoGather: { type: "boolean", description: "Automatically gather missing materials (default: false)" }
+      },
+      required: ["username", "target"]
+    }
+  },
+  minecraft_survival_routine: {
+    description: "High-level survival - executes survival priorities (food, shelter, tools) based on current needs",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "Bot username" },
+        priority: { type: "string", enum: ["food", "shelter", "tools", "auto"], description: "Priority mode (auto = intelligent selection)" }
+      },
+      required: ["username", "priority"]
+    }
+  },
+  minecraft_explore_area: {
+    description: "High-level exploration - explores area in spiral pattern, searching for biomes, blocks, or entities",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "Bot username" },
+        radius: { type: "number", description: "Exploration radius in blocks" },
+        target: { type: "string", description: "Optional target to search for (biome, block, or entity name)" }
+      },
+      required: ["username", "radius"]
+    }
+  },
   // Dev Agent tools
   dev_subscribe: {
     description: "Subscribe as a Dev Agent to receive tool execution logs",
@@ -909,6 +1028,7 @@ async function handleTool(
       // Fixed username from env var (set by agent on startup)
       const botUsername = process.env.BOT_USERNAME || (args.username as string);
       const version = args.version as string | undefined;
+      const agentType = (args.agentType as string) || "game";
 
       if (!botUsername) {
         throw new Error("username is required (or set BOT_USERNAME env var)");
@@ -917,7 +1037,8 @@ async function handleTool(
       // Check if bot already exists (reconnection case)
       if (botManager.isConnected(botUsername)) {
         connectionBots.set(ws, botUsername);
-        console.error(`[MCP-WS-Server] Reconnected WebSocket to existing bot: ${botUsername}`);
+        connectionAgentTypes.set(ws, agentType);
+        console.error(`[MCP-WS-Server] Reconnected WebSocket to existing bot: ${botUsername} (agentType: ${agentType})`);
 
         // Ensure viewer is running for this bot
         const viewerPort = botManager.getViewerPort(botUsername) || botManager.startViewer(botUsername);
@@ -928,6 +1049,8 @@ async function handleTool(
 
       const result = await botManager.connect({ host, port, username: botUsername, version });
       connectionBots.set(ws, botUsername);
+      connectionAgentTypes.set(ws, agentType);
+      console.error(`[MCP-WS-Server] Set agentType for ${botUsername}: ${agentType}`);
       return result;
     }
 
@@ -1447,6 +1570,42 @@ async function handleTool(
       return await botManager.updateSign(username, x, y, z, text, back);
     }
 
+    // === High-level action tools ===
+    case "minecraft_gather_resources": {
+      const username = args.username as string;
+      const items = args.items as Array<{ name: string; count: number }>;
+      const maxDistance = (args.maxDistance as number) || 32;
+      return await minecraft_gather_resources(username, items, maxDistance);
+    }
+
+    case "minecraft_build_structure": {
+      const username = args.username as string;
+      const type = args.type as "shelter" | "wall" | "platform" | "tower";
+      const size = args.size as "small" | "medium" | "large";
+      const materials = args.materials as string | undefined;
+      return await minecraft_build_structure(username, type, size, materials);
+    }
+
+    case "minecraft_craft_chain": {
+      const username = args.username as string;
+      const target = args.target as string;
+      const autoGather = (args.autoGather as boolean) || false;
+      return await minecraft_craft_chain(username, target, autoGather);
+    }
+
+    case "minecraft_survival_routine": {
+      const username = args.username as string;
+      const priority = args.priority as "food" | "shelter" | "tools" | "auto";
+      return await minecraft_survival_routine(username, priority);
+    }
+
+    case "minecraft_explore_area": {
+      const username = args.username as string;
+      const radius = args.radius as number;
+      const target = args.target as string | undefined;
+      return await minecraft_explore_area(username, radius, target);
+    }
+
     // === 自己学習ツール ===
     case "log_experience":
     case "get_recent_experiences":
@@ -1495,11 +1654,21 @@ async function handleRequest(ws: WebSocket, request: JSONRPCRequest): Promise<JS
   try {
     switch (method) {
       case 'tools/list': {
-        const toolList = Object.entries(tools).map(([name, tool]) => ({
+        const agentType = connectionAgentTypes.get(ws) || "game";
+
+        // Filter tools based on agent type
+        const allTools = Object.entries(tools);
+        const filteredTools = agentType === "dev"
+          ? allTools  // Dev Agent gets all tools
+          : allTools.filter(([name]) => GAME_AGENT_TOOLS.has(name));  // Game Agent gets basic tools only (complex ops via skills)
+
+        const toolList = filteredTools.map(([name, tool]) => ({
           name,
           description: tool.description,
           inputSchema: tool.inputSchema,
         }));
+
+        console.error(`[MCP-WS-Server] tools/list for agentType=${agentType}: ${toolList.length} tools`);
         return { jsonrpc: '2.0', id, result: { tools: toolList } };
       }
 
