@@ -121,8 +121,16 @@ export async function handleCraftingTool(
 
     case "minecraft_equip": {
       const itemName = args.item_name as string;
-      // equipItem not implemented in multi-bot manager yet
-      return `Equip ${itemName}: Not yet implemented`;
+      if (!itemName) {
+        throw new Error("item_name is required");
+      }
+      try {
+        const result = await botManager.equipItem(username, itemName);
+        return result;
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        return `Failed to equip ${itemName}: ${errorMsg}`;
+      }
     }
 
     case "minecraft_drop_item": {
