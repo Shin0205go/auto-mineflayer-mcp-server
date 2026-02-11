@@ -182,7 +182,8 @@ function getExpectedDrop(blockName: string): string | null {
     // Most other blocks drop themselves
   };
 
-  return oreMappings[blockName] || null;
+  // If not in oreMappings, assume block drops itself (logs, stone, etc.)
+  return oreMappings[blockName] || blockName;
 }
 
 /**
