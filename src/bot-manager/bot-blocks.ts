@@ -11,6 +11,7 @@ import {
   canPickaxeHarvest,
   getRequiredPickaxeTier,
 } from "./minecraft-utils.js";
+import { collectNearbyItems } from "./bot-items.js";
 
 // ========== Block Manipulation Methods ==========
 
@@ -149,6 +150,39 @@ function findReferenceBlock(bot: Bot, targetPos: Vec3): { block: any; faceVector
   }
 
   return null;
+}
+
+/**
+ * Get the expected item drop from breaking a block
+ * @param blockName The name of the block being broken (e.g., "coal_ore")
+ * @returns The expected drop item name (e.g., "coal"), or null if no specific drop expected
+ */
+function getExpectedDrop(blockName: string): string | null {
+  // Ore blocks drop different items than their block name
+  const oreMappings: Record<string, string> = {
+    "coal_ore": "coal",
+    "deepslate_coal_ore": "coal",
+    "iron_ore": "raw_iron",
+    "deepslate_iron_ore": "raw_iron",
+    "gold_ore": "raw_gold",
+    "deepslate_gold_ore": "raw_gold",
+    "copper_ore": "raw_copper",
+    "deepslate_copper_ore": "raw_copper",
+    "diamond_ore": "diamond",
+    "deepslate_diamond_ore": "diamond",
+    "emerald_ore": "emerald",
+    "deepslate_emerald_ore": "emerald",
+    "lapis_ore": "lapis_lazuli",
+    "deepslate_lapis_ore": "lapis_lazuli",
+    "redstone_ore": "redstone",
+    "deepslate_redstone_ore": "redstone",
+    "nether_quartz_ore": "quartz",
+    "nether_gold_ore": "gold_nugget",
+    "ancient_debris": "ancient_debris",
+    // Most other blocks drop themselves
+  };
+
+  return oreMappings[blockName] || null;
 }
 
 /**
@@ -453,7 +487,12 @@ export async function digBlock(
   console.error(`[Dig] Held item: ${heldItem}, block hardness: ${block.hardness}, gameMode: ${gameMode}`);
 
   try {
+    // Get expected drop item name (e.g., coal_ore -> coal, diamond_ore -> diamond)
+    const expectedDrop = getExpectedDrop(blockName);
     const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+    const specificItemBefore = expectedDrop
+      ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
+      : 0;
 
     // Check if bot can dig this block
     const canDig = bot.canDigBlock(block);
@@ -586,16 +625,20 @@ export async function digBlock(
       return `Dig seemed to complete but block is still there (${blockAfter.name}). May be protected area.`;
     }
 
-    // Wait for item to spawn (items spawn after ~100-200ms)
-    await delay(200);
+    // Wait for item to spawn (items can take up to 500ms to spawn on some servers)
+    await delay(500);
 
     // Check inventory immediately - items within 1 block are auto-collected
     let inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
     let pickedUp = inventoryAfter - inventoryBefore;
-    console.error(`[Dig] Inventory check 1: before=${inventoryBefore}, after=${inventoryAfter}, picked=${pickedUp}`);
+    let specificItemAfter = expectedDrop
+      ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
+      : 0;
+    let specificItemGained = specificItemAfter - specificItemBefore;
+    console.error(`[Dig] Inventory check 1: before=${inventoryBefore}, after=${inventoryAfter}, picked=${pickedUp}, ${expectedDrop}: ${specificItemBefore}->${specificItemAfter} (+${specificItemGained})`);
 
     // If nothing picked up yet, aggressively move to collect
-    if (pickedUp === 0) {
+    if (pickedUp === 0 && specificItemGained === 0) {
       // Step 1: Walk directly through the block position
       await bot.lookAt(blockPos.offset(0.5, 0, 0.5));
       bot.setControlState("forward", true);
@@ -604,11 +647,15 @@ export async function digBlock(
 
       inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
       pickedUp = inventoryAfter - inventoryBefore;
-      console.error(`[Dig] Inventory check 2 (walk through): picked=${pickedUp}`);
+      specificItemAfter = expectedDrop
+        ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
+        : 0;
+      specificItemGained = specificItemAfter - specificItemBefore;
+      console.error(`[Dig] Inventory check 2 (walk through): picked=${pickedUp}, ${expectedDrop}: +${specificItemGained}`);
     }
 
     // Step 2: Try pathfinder if still nothing
-    if (pickedUp === 0) {
+    if (pickedUp === 0 && specificItemGained === 0) {
       const goal = new goals.GoalNear(Math.floor(x), Math.floor(y), Math.floor(z), 0);
       bot.pathfinder.setGoal(goal);
       await delay(1500);
@@ -616,11 +663,15 @@ export async function digBlock(
 
       inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
       pickedUp = inventoryAfter - inventoryBefore;
-      console.error(`[Dig] Inventory check 3 (pathfinder): picked=${pickedUp}`);
+      specificItemAfter = expectedDrop
+        ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
+        : 0;
+      specificItemGained = specificItemAfter - specificItemBefore;
+      console.error(`[Dig] Inventory check 3 (pathfinder): picked=${pickedUp}, ${expectedDrop}: +${specificItemGained}`);
     }
 
     // Step 3: Jump in case item is slightly above
-    if (pickedUp === 0) {
+    if (pickedUp === 0 && specificItemGained === 0) {
       bot.setControlState("jump", true);
       await delay(300);
       bot.setControlState("jump", false);
@@ -628,11 +679,18 @@ export async function digBlock(
 
       inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
       pickedUp = inventoryAfter - inventoryBefore;
-      console.error(`[Dig] Inventory check 4 (jump): picked=${pickedUp}`);
+      specificItemAfter = expectedDrop
+        ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
+        : 0;
+      specificItemGained = specificItemAfter - specificItemBefore;
+      console.error(`[Dig] Inventory check 4 (jump): picked=${pickedUp}, ${expectedDrop}: +${specificItemGained}`);
     }
 
-    if (pickedUp > 0) {
-      return `Dug ${blockName} with ${heldItem} and picked up ${pickedUp} item(s)!` + getBriefStatus(username);
+    if (pickedUp > 0 || specificItemGained > 0) {
+      const itemDetail = specificItemGained > 0
+        ? ` (${expectedDrop} x${specificItemGained})`
+        : "";
+      return `Dug ${blockName} with ${heldItem} and picked up ${Math.max(pickedUp, specificItemGained)} item(s)${itemDetail}!` + getBriefStatus(username);
     }
 
     // Look for dropped items nearby that weren't picked up
@@ -655,9 +713,16 @@ export async function digBlock(
 
       inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
       pickedUp = inventoryAfter - inventoryBefore;
+      specificItemAfter = expectedDrop
+        ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
+        : 0;
+      specificItemGained = specificItemAfter - specificItemBefore;
 
-      if (pickedUp > 0) {
-        return `Dug ${blockName} and collected ${pickedUp} item(s) after extra effort!` + getBriefStatus(username);
+      if (pickedUp > 0 || specificItemGained > 0) {
+        const itemDetail = specificItemGained > 0
+          ? ` (${expectedDrop} x${specificItemGained})`
+          : "";
+        return `Dug ${blockName} and collected ${Math.max(pickedUp, specificItemGained)} item(s)${itemDetail} after extra effort!` + getBriefStatus(username);
       }
 
       return `Dug ${blockName} but ${droppedItems.length} item(s) couldn't be picked up (may be stuck in block)` + getBriefStatus(username);

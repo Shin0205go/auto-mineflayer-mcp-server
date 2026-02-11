@@ -1,5 +1,4 @@
 import { botManager } from "../bot-manager/index.js";
-import { Vec3 } from "vec3";
 
 export const buildingTools = {
   minecraft_place_block: {
@@ -102,47 +101,6 @@ export async function handleBuildingTool(
   const username = botManager.requireSingleBot();
 
   switch (name) {
-    case "minecraft_dig_block": {
-      const x = args.x as number;
-      const y = args.y as number;
-      const z = args.z as number;
-
-      const bot = botManager.getBot(username);
-      if (!bot) {
-        throw new Error('Bot not connected');
-      }
-
-      const targetBlock = bot.blockAt(new Vec3(x, y, z));
-      if (!targetBlock || targetBlock.name === 'air') {
-        throw new Error(`No block to dig at (${x}, ${y}, ${z})`);
-      }
-
-      // Check distance
-      const distance = Math.sqrt(
-        Math.pow(bot.entity.position.x - x, 2) + 
-        Math.pow(bot.entity.position.y - y, 2) + 
-        Math.pow(bot.entity.position.z - z, 2)
-      );
-      if (distance > 4.5) {
-        throw new Error(`Target block at (${x}, ${y}, ${z}) is too far away (${distance.toFixed(1)} blocks). Move closer to dig.`);
-      }
-
-      // Equip appropriate tool if available
-      const pickaxes = bot.inventory.items().filter(item => item.name.includes('pickaxe'));
-      if (pickaxes.length > 0) {
-        // Use the best available pickaxe (stone > wooden)
-        const bestPickaxe = pickaxes.find(p => p.name.includes('stone')) || pickaxes[0];
-        await bot.equip(bestPickaxe, 'hand');
-      }
-
-      try {
-        await bot.dig(targetBlock);
-        return `Successfully dug ${targetBlock.name} at (${x}, ${y}, ${z})`;
-      } catch (error: any) {
-        throw new Error(`Cannot dig ${targetBlock.name} - ${error.message}`);
-      }
-    }
-
     case "minecraft_place_block": {
       const blockType = args.block_type as string;
       const x = args.x as number;
