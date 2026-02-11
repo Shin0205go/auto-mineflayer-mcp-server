@@ -16,7 +16,12 @@
     "start:self-improve": "MANAGE_GAME_AGENT=true node dist/agent/dev-agent.js",
     "board": "node dist/realtime-board.js",
     "board:view": "node dist/board-viewer.js",
-    "start:mamba": "cd /Users/shingo/Develop/mamba-agent && ./run.sh"
+    "start:mamba": "cd /Users/shingo/Develop/mamba-agent && ./run.sh",
+    "agent:start": "./scripts/start-agent.sh",
+    "agent:stop": "pm2 stop minecraft-agent mcp-ws-server",
+    "agent:restart": "pm2 restart minecraft-agent",
+    "agent:logs": "pm2 logs minecraft-agent",
+    "agent:status": "pm2 status"
   },
   "keywords": [
     "mcp",
@@ -47,6 +52,7 @@
     "@types/node": "^20.10.0",
     "@types/ws": "^8.18.1",
     "nodemon": "^3.1.11",
+    "pm2": "^6.0.14",
     "typescript": "^5.3.0"
   }
 }

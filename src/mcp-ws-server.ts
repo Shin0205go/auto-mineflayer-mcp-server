@@ -314,36 +314,43 @@ const activeConnections = new Set<WebSocket>();
 
 // Basic tools for Game Agent (high-level operations are accessed via skills)
 const GAME_AGENT_TOOLS = new Set([
-  // Connection
-  "minecraft_connect",
-  "minecraft_disconnect",
-  // Status/Info (unified state getter)
-  "minecraft_get_state",
-  // Communication
+  // Status & Communication (4 tools - connection is automatic)
+  "minecraft_get_state", // Unified state getter
   "minecraft_chat",
   "minecraft_get_chat_messages",
   "subscribe_events",
-  // High-level actions
+  // High-level actions (7 tools)
   "minecraft_gather_resources",
   "minecraft_build_structure",
   "minecraft_craft_chain",
   "minecraft_survival_routine",
   "minecraft_explore_area",
-  // Learning & Memory
+  "minecraft_enchant_item",
+  "minecraft_brew_potion",
+  // Basic operations (3 tools)
+  "minecraft_craft",
+  "minecraft_smelt",
+  "minecraft_check_infrastructure",
+  // Learning & Memory (6 tools)
   "save_memory",
   "recall_memory",
   "log_experience",
   "get_recent_experiences",
-  // Skill System (high-level operations via Task)
   "list_agent_skills",
   "get_agent_skill",
-  // Coordination
+  // Coordination (4 tools)
   "agent_board_read",
   "agent_board_write",
   "agent_board_wait",
   "agent_board_clear",
-  // Loop result publishing
+  // Task Management (4 tools)
+  "task_create",
+  "task_list",
+  "task_get",
+  "task_update",
+  // Dev Agent integration (2 tools)
   "dev_publish_loop_result",
+  "dev_get_loop_results",
 ]);
 
 // Listen for game events from BotManager and push to clients
@@ -1002,6 +1009,12 @@ async function handleRequest(ws: WebSocket, request: JSONRPCRequest): Promise<JS
             error: { code: -32602, message: 'Missing tool name' }
           };
         }
+
+        // Auto-connect disabled for debugging
+        // const skipAutoConnect = ["minecraft_connect", "minecraft_disconnect", "dev_subscribe", "subscribe_events"].includes(toolName);
+        // if (!skipAutoConnect) {
+        //   // ... auto-connect logic
+        // }
 
         const startTime = Date.now();
         const agentName = connectionBots.get(ws) || "unknown";

@@ -143,7 +143,11 @@ class ClaudeAgent {
       const configChanged = !this.agentConfig || newConfig.version !== this.agentConfig.version;
       this.agentConfig = newConfig;
       if (configChanged) {
-        const newPrompt = buildSystemPromptFromConfig(newConfig);
+        const newPrompt = buildSystemPromptFromConfig(newConfig, {
+          host: MC_HOST,
+          port: MC_PORT,
+          username: BOT_USERNAME,
+        });
         this.claude.updateSystemPrompt(newPrompt);
         console.log(`${PREFIX} ${C.green}Config reloaded (v${newConfig.version})${C.reset}`);
       }
@@ -231,12 +235,8 @@ class ClaudeAgent {
       // Rules file doesn't exist yet - that's fine
     }
 
-    // Initial prompt
-    const initialPrompt = `接続: host=${MC_HOST}, port=${MC_PORT}, username=${BOT_USERNAME}（変更禁止）
-
-## 起動手順
-1. minecraft_connect で接続（必須: agentType="game" を指定）
-2. minecraft_get_status, minecraft_get_inventory, minecraft_get_surroundings で状況確認
+    // Initial prompt (connection is automatic)
+    const initialPrompt = `Minecraftサーバーに自動接続済み（${MC_HOST}:${MC_PORT} as ${BOT_USERNAME}）
 
 ## サブエージェント活用
 複雑な作業はTask toolでサブエージェントに委譲可能:
@@ -246,7 +246,7 @@ class ClaudeAgent {
 - nether-gate: ネザーポータル
 
 ${learnedRules ? `## 学習ルール:\n${learnedRules}\n` : ""}
-接続して状況を確認してください。`;
+状況を確認して行動を開始してください。`;
 
     console.log(`${PREFIX} Starting autonomous loop...`);
     await this.runLoop(initialPrompt);

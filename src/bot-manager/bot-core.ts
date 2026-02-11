@@ -18,6 +18,8 @@ export class BotCore extends EventEmitter {
   protected bots: Map<string, ManagedBot> = new Map();
   private viewerPorts: Map<string, number> = new Map(); // username -> viewer port
   private nextViewerPort = 3007;
+  private connectionConfigs: Map<string, BotConfig> = new Map(); // Store connection params for auto-reconnect
+  private connectingPromises: Map<string, Promise<string>> = new Map(); // Track ongoing connections
 
   constructor() {
     super();
@@ -213,7 +215,17 @@ export class BotCore extends EventEmitter {
       return `Bot '${config.username}' is already connected`;
     }
 
-    return new Promise((resolve, reject) => {
+    // If already connecting, wait for that connection to complete
+    if (this.connectingPromises.has(config.username)) {
+      console.error(`[BotManager] ${config.username} is already connecting, waiting...`);
+      return this.connectingPromises.get(config.username)!;
+    }
+
+    // Store connection config for auto-reconnect
+    this.connectionConfigs.set(config.username, config);
+
+    // Create connection promise
+    const connectionPromise = new Promise<string>((resolve, reject) => {
       const bot = mineflayer.createBot({
         host: config.host,
         port: config.port,
@@ -391,7 +403,8 @@ export class BotCore extends EventEmitter {
         let lastOxygenLevel = 20;
         bot.on("breath", () => {
           const oxygen = bot.oxygenLevel ?? 20;
-          if (oxygen < 10 && oxygen < lastOxygenLevel) {
+          // Only emit if oxygen is critically low AND decreasing (avoid false positives)
+          if (oxygen < 5 && oxygen < lastOxygenLevel) {
             addEvent("drowning", `LOW OXYGEN: ${oxygen}/20! Swim up immediately!`, {
               oxygenLevel: oxygen,
             });
@@ -427,13 +440,26 @@ export class BotCore extends EventEmitter {
           }
         });
 
-        // Handle disconnection
+        // Handle disconnection with auto-reconnect
         bot.on("end", () => {
           if (managedBot.particleInterval) {
             clearInterval(managedBot.particleInterval);
           }
           this.bots.delete(config.username);
           console.error(`[BotManager] ${config.username} disconnected`);
+
+          // Auto-reconnect after 5 seconds
+          const savedConfig = this.connectionConfigs.get(config.username);
+          if (savedConfig) {
+            console.error(`[BotManager] Auto-reconnecting ${config.username} in 5 seconds...`);
+            setTimeout(() => {
+              this.connect(savedConfig).then((result) => {
+                console.error(`[BotManager] Auto-reconnect successful: ${result}`);
+              }).catch((error) => {
+                console.error(`[BotManager] Auto-reconnect failed:`, error);
+              });
+            }, 5000);
+          }
         });
 
         bot.on("error", (err) => {
@@ -545,17 +571,25 @@ export class BotCore extends EventEmitter {
         if (gameMode !== "survival") {
           result += `. WARNING: Not in survival mode! Run /gamemode survival ${config.username} for items to drop.`;
         }
+        this.connectingPromises.delete(config.username);
         resolve(result);
       });
 
       bot.once("error", (err) => {
+        this.connectingPromises.delete(config.username);
         reject(new Error(`Connection error: ${err.message || err}`));
       });
 
       bot.once("kicked", (reason) => {
-        reject(new Error(`Kicked: ${reason}`));
+        this.connectingPromises.delete(config.username);
+        const reasonText = typeof reason === 'string' ? reason : JSON.stringify(reason);
+        reject(new Error(`Kicked: ${reasonText}`));
       });
     });
+
+    // Store the promise and return it
+    this.connectingPromises.set(config.username, connectionPromise);
+    return connectionPromise;
   }
 
   async disconnect(username: string): Promise<void> {
@@ -569,6 +603,7 @@ export class BotCore extends EventEmitter {
     }
     managed.bot.quit();
     this.bots.delete(username);
+    this.connectionConfigs.delete(username); // Remove config to prevent auto-reconnect
   }
 
   disconnectAll(): void {

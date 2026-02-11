@@ -1,4 +1,5 @@
 import { botManager } from "../bot-manager/index.js";
+import { Vec3 } from "vec3";
 
 export const buildingTools = {
   minecraft_place_block: {
@@ -111,7 +112,7 @@ export async function handleBuildingTool(
         throw new Error('Bot not connected');
       }
 
-      const targetBlock = bot.blockAt(new (bot as any).Vec3(x, y, z));
+      const targetBlock = bot.blockAt(new Vec3(x, y, z));
       if (!targetBlock || targetBlock.name === 'air') {
         throw new Error(`No block to dig at (${x}, ${y}, ${z})`);
       }

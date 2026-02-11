@@ -908,3 +908,105 @@ export async function useAnvil(managed: ManagedBot, targetItem: string, material
     throw new Error(`Anvil operation failed: ${errMsg}`);
   }
 }
+
+/**
+ * Brew potions at a brewing stand
+ * @param basePotionName - Base potion (e.g., "water_bottle", "awkward_potion")
+ * @param ingredientName - Ingredient to add (e.g., "nether_wart", "glowstone_dust", "redstone")
+ * @param count - Number of potions to brew (1-3)
+ */
+export async function brewPotion(
+  managed: ManagedBot,
+  basePotionName: string,
+  ingredientName: string,
+  count: number = 1
+): Promise<string> {
+  const bot = managed.bot;
+
+  // Find nearby brewing stand
+  const brewingStand = bot.findBlock({
+    matching: (block) => block.name === "brewing_stand",
+    maxDistance: 32,
+  });
+
+  if (!brewingStand) {
+    throw new Error("No brewing stand found within 32 blocks.");
+  }
+
+  // Move closer if needed
+  const dist = bot.entity.position.distanceTo(brewingStand.position);
+  if (dist > 4) {
+    const goal = new goals.GoalNear(brewingStand.position.x, brewingStand.position.y, brewingStand.position.z, 3);
+    bot.pathfinder.setGoal(goal);
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        bot.pathfinder.setGoal(null);
+        resolve();
+      }, 10000);
+      const check = setInterval(() => {
+        const currentDist = bot.entity.position.distanceTo(brewingStand.position);
+        if (currentDist < 4 || !bot.pathfinder.isMoving()) {
+          clearInterval(check);
+          clearTimeout(timeout);
+          bot.pathfinder.setGoal(null);
+          resolve();
+        }
+      }, 300);
+    });
+  }
+
+  // Check for blaze powder (fuel)
+  const blazePowder = bot.inventory.items().find(i => i.name === "blaze_powder");
+  if (!blazePowder) {
+    throw new Error("No blaze powder in inventory - required for brewing fuel.");
+  }
+
+  // Check for base potions
+  const basePotions = bot.inventory.items().filter(i => i.name === basePotionName);
+  const totalBottles = basePotions.reduce((sum, item) => sum + item.count, 0);
+  if (totalBottles < count) {
+    throw new Error(`Need ${count}x ${basePotionName}, but only have ${totalBottles}.`);
+  }
+
+  // Check for ingredient
+  const ingredient = bot.inventory.items().find(i => i.name === ingredientName);
+  if (!ingredient) {
+    throw new Error(`No ${ingredientName} in inventory.`);
+  }
+
+  try {
+    // Open brewing stand
+    const window = await bot.openContainer(brewingStand);
+
+    // Use deposit to add items (Mineflayer will place them in appropriate slots)
+    // Add fuel (blaze powder)
+    await window.deposit(blazePowder.type, null, 1);
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Add ingredient
+    await window.deposit(ingredient.type, null, 1);
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Add base potions (up to 3)
+    const bottlesToBrew = Math.min(count, 3);
+    for (let i = 0; i < bottlesToBrew; i++) {
+      const basePotion = bot.inventory.items().find(item => item.name === basePotionName);
+      if (basePotion) {
+        await window.deposit(basePotion.type, null, 1);
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+
+    // Wait for brewing to complete (20 seconds)
+    console.error(`[BrewPotion] Waiting for brewing to complete (22 seconds)...`);
+    await new Promise(resolve => setTimeout(resolve, 22000));
+
+    // Close window (items automatically return to inventory)
+    bot.closeWindow(window);
+
+    return `Successfully brewed ${bottlesToBrew}x potions using ${basePotionName} + ${ingredientName}.`;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to brew potion: ${errMsg}`);
+  }
+}

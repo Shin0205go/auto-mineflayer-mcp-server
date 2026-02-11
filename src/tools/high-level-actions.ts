@@ -276,10 +276,34 @@ export async function minecraft_craft_chain(
 
               console.error(`[CraftChain] Need ${neededCount}x ${neededItem}`);
 
-              // Check if this item can be crafted or must be gathered
-              const isCraftable = await isItemCraftable(neededItem);
+              // Check if this item can be obtained by smelting
+              if (isItemSmeltable(neededItem)) {
+                const sourceItem = smeltingRecipes[neededItem];
+                console.error(`[CraftChain] ${neededItem} can be smelted from ${sourceItem}`);
 
-              if (isCraftable) {
+                // Check if we have the source material
+                const inventory = botManager.getInventory(username);
+                const sourceInInv = inventory.find(i => i.name === sourceItem);
+
+                if (!sourceInInv || sourceInInv.count < neededCount) {
+                  // Need to gather the source material first
+                  const needToGather = neededCount - (sourceInInv?.count || 0);
+                  console.error(`[CraftChain] Need to gather ${needToGather}x ${sourceItem} first`);
+                  const gatherResult = await minecraft_gather_resources(
+                    username,
+                    [{ name: sourceItem, count: needToGather }],
+                    32
+                  );
+                  results.push(`Gathered for smelting: ${gatherResult}`);
+                }
+
+                // Smelt the source material
+                console.error(`[CraftChain] Smelting ${neededCount}x ${sourceItem} -> ${neededItem}`);
+                const smeltResult = await botManager.smeltItem(username, sourceItem, neededCount);
+                results.push(`Smelted: ${smeltResult}`);
+              }
+              // Check if this item can be crafted
+              else if (await isItemCraftable(neededItem)) {
                 // Recursively craft the dependency
                 await craftRecursive(neededItem, neededCount);
               } else {
@@ -308,26 +332,55 @@ export async function minecraft_craft_chain(
   };
 
   /**
+   * Smelting recipes: output -> input
+   */
+  const smeltingRecipes: Record<string, string> = {
+    // Ores to ingots
+    "iron_ingot": "iron_ore",
+    "gold_ingot": "gold_ore",
+    "copper_ingot": "copper_ore",
+    // Other smelting
+    "glass": "sand",
+    "stone": "cobblestone",
+    "smooth_stone": "stone",
+    // Food
+    "cooked_beef": "beef",
+    "cooked_porkchop": "porkchop",
+    "cooked_chicken": "chicken",
+    "cooked_mutton": "mutton",
+    "cooked_rabbit": "rabbit",
+    "cooked_cod": "cod",
+    "cooked_salmon": "salmon",
+  };
+
+  /**
+   * Check if an item can be obtained by smelting
+   */
+  const isItemSmeltable = (itemName: string): boolean => {
+    return itemName in smeltingRecipes;
+  };
+
+  /**
    * Check if an item can be crafted (has recipes) or must be gathered
    */
   const isItemCraftable = async (itemName: string): Promise<boolean> => {
-    // Items that are typically raw materials (not craftable)
+    // Items that are typically raw materials (not craftable or smeltable)
     const rawMaterials = [
       // Logs and natural blocks
       "oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log",
       "mangrove_log", "cherry_log", "pale_oak_log",
-      "cobblestone", "stone", "dirt", "sand", "gravel",
+      "cobblestone", "dirt", "sand", "gravel",
       // Ores
       "coal_ore", "iron_ore", "gold_ore", "diamond_ore", "lapis_ore", "redstone_ore",
       "copper_ore", "emerald_ore",
-      "coal", "iron_ingot", "gold_ingot", "diamond", "emerald",
+      "coal", "diamond", "emerald",
       // Natural resources
       "wheat", "carrot", "potato", "beetroot",
       "leather", "wool", "string", "feather",
-      "flint", "clay_ball",
+      "flint", "clay_ball", "beef", "porkchop", "chicken", "mutton", "rabbit",
     ];
 
-    return !rawMaterials.includes(itemName);
+    return !rawMaterials.includes(itemName) && !isItemSmeltable(itemName);
   };
 
   try {
@@ -569,5 +622,47 @@ export async function minecraft_explore_area(
     return `Exploration complete. Visited ${visitedPoints} points. Findings: ${findings.join(", ")}`;
   } else {
     return `Exploration complete. Visited ${visitedPoints} points. No notable findings.`;
+  }
+}
+
+/**
+ * Enchant an item at an enchanting table
+ * Requires: enchanting table nearby (within 32 blocks), lapis lazuli, and XP levels
+ */
+export async function minecraft_enchant_item(
+  username: string,
+  itemName: string,
+  enchantmentLevel: number = 1
+): Promise<string> {
+  console.error(`[EnchantItem] Enchanting ${itemName} at level ${enchantmentLevel}`);
+
+  try {
+    const result = await botManager.enchant(username, itemName, enchantmentLevel);
+    return result;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    return `Failed to enchant ${itemName}: ${errMsg}`;
+  }
+}
+
+/**
+ * Brew potions at a brewing stand
+ * Requires: brewing stand nearby (within 32 blocks), blaze powder (fuel), base potion, and ingredient
+ * Note: Currently returns a placeholder as full brewing functionality is under development
+ */
+export async function minecraft_brew_potion(
+  username: string,
+  basePotionName: string,
+  ingredientName: string,
+  count: number = 1
+): Promise<string> {
+  console.error(`[BrewPotion] Brewing ${count}x potions: ${basePotionName} + ${ingredientName}`);
+
+  try {
+    const result = await botManager.brewPotion(username, basePotionName, ingredientName, count);
+    return result;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    return `Failed to brew potion: ${errMsg}`;
   }
 }

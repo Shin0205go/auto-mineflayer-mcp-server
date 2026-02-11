@@ -113,7 +113,10 @@ description: "鉄を集める", prompt: "鉄鉱石を見つけて採掘し、精
  * Build system prompt from AgentConfig
  * Converts personality, priorities, rules, thresholds into prompt text
  */
-export function buildSystemPromptFromConfig(config: AgentConfig): string {
+export function buildSystemPromptFromConfig(
+  config: AgentConfig,
+  connectionParams?: { host: string; port: number; username: string }
+): string {
   // Sort priorities by weight (descending)
   const sortedPriorities = Object.entries(config.priorities)
     .sort(([, a], [, b]) => b - a)
@@ -137,6 +140,11 @@ export function buildSystemPromptFromConfig(config: AgentConfig): string {
     `夜行動開始: ${thresholds.nightShelterTime} tick`,
   ].join("、");
 
+  // Connection parameters text
+  const connectionText = connectionParams
+    ? `host="${connectionParams.host}", port=${connectionParams.port}, username="${connectionParams.username}"`
+    : `指定されたパラメータを使用`;
+
   return `自律的にタスクを管理・実行するエージェント。
 
 ## 設定
@@ -146,18 +154,24 @@ export function buildSystemPromptFromConfig(config: AgentConfig): string {
 
 ## 利用可能なツール
 
-【状態確認】
+【状態確認・通信】
 - minecraft_get_state: 統合状態取得（位置・HP・空腹・インベントリ・周囲・エンティティ・バイオームを一括取得）
+- minecraft_chat, minecraft_get_chat_messages
+※接続は自動管理（手動接続不要）
 
-【接続・通信】
-- minecraft_connect, minecraft_disconnect, minecraft_chat, minecraft_get_chat_messages
-
-【高レベル操作（直接実行可能）】
+【高レベル操作（推奨）】
 - minecraft_gather_resources: 自動リソース収集
 - minecraft_build_structure: 構造物建築
-- minecraft_craft_chain: 複数段階クラフト
+- minecraft_craft_chain: 複数段階クラフト（精錬も自動実行）
+- minecraft_enchant_item: アイテムエンチャント（エンチャントテーブル必要）
+- minecraft_brew_potion: ポーション醸造（醸造台・材料・blaze powder必要）
 - minecraft_survival_routine: サバイバル最適化
 - minecraft_explore_area: エリア探索
+
+【基本操作（高レベルツールが使えない場合のみ）】
+- minecraft_craft: 単一アイテムクラフト
+- minecraft_smelt: 精錬
+- minecraft_check_infrastructure: クラフト台・かまど検索
 
 【記憶・連携】
 - save_memory, recall_memory, log_experience, get_recent_experiences

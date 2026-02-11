@@ -43,6 +43,7 @@ import {
   smeltItem as smeltItemBasic,
   enchant as enchantBasic,
   useAnvil as useAnvilBasic,
+  brewPotion as brewPotionBasic,
 } from "./bot-crafting.js";
 
 // Import bot-items functions
@@ -315,6 +316,12 @@ export class BotManager extends BotCore {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
     return await enchantBasic(managed, itemName, enchantmentLevel);
+  }
+
+  async brewPotion(username: string, basePotionName: string, ingredientName: string, count: number = 1): Promise<string> {
+    const managed = this.getBotByUsername(username);
+    if (!managed) throw new Error(`Bot ${username} not found`);
+    return await brewPotionBasic(managed, basePotionName, ingredientName, count);
   }
 
   async useAnvil(username: string, targetItem: string, materialItem?: string, newName?: string): Promise<string> {
