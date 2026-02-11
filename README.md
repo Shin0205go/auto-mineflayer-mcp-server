@@ -18,9 +18,9 @@
 ## 機能
 
 ### スキルベースアーキテクチャ
-- **Game Agent**: 基本ツール + スキルシステムで自律プレイ
+- **Game Agent**: 30個の厳選MCPツール + スキルシステムで自律プレイ
 - **Dev Agent**: 全ツールアクセス + ソースコード修正 + 設定チューニング
-- **エージェント分離**: Game Agentは複雑な操作を知らず、スキル経由でのみアクセス
+- **エージェント分離**: Game Agentは低レベル操作を知らず、スキル経由でのみアクセス
 
 ### 高レベルスキル（新規）
 - **resource-gathering** - 自動リソース収集（木材、石、鉱石）
@@ -111,85 +111,99 @@ BOT_USERNAME=Claude2 MC_PORT=58896 npm run start:game-agent
 ┌─────────────────┐                  ┌──────────────────┐
 │   Game Agent    │                  │    Dev Agent     │
 │                 │                  │                  │
-│ 基本ツール20個  │                  │ 全ツール45個     │
-│ ├ 接続・状態    │                  │ ├ 基本ツール     │
-│ ├ チャット      │                  │ ├ 低レベル操作   │
-│ ├ 記憶・学習    │                  │ ├ デバッグ       │
-│ └ スキル実行    │                  │ └ 開発用         │
+│ MCPツール30個   │                  │ 全ツール30個     │
+│ ├ 接続・状態    │                  │ (制限なし)       │
+│ ├ 高レベル操作  │                  │                  │
+│ ├ 記憶・学習    │                  │ デバッグ・開発用 │
+│ └ スキル実行    │                  │                  │
 │                 │                  │                  │
-│ 複雑な操作      │                  │ 直接アクセス     │
+│ 低レベル操作    │                  │ 低レベル操作     │
 │   ↓             │                  │   ↓              │
-│ スキル経由のみ  │                  │ 制限なし         │
+│ スキル経由のみ  │                  │ 直接アクセス不可 │
+│                 │                  │ (内部関数のみ)   │
 └─────────────────┘                  └──────────────────┘
 ```
 
-### スキル内部実装
+### 実装階層
 
 ```
-スキル (SKILL.md)
-  ↓
-高レベルツール (high-level-actions.ts)
-  ├ minecraft_gather_resources
-  ├ minecraft_build_structure
-  ├ minecraft_craft_chain
-  ├ minecraft_survival_routine
-  └ minecraft_explore_area
-  ↓
-Bot Manager (11モジュール)
-  ├ bot-core.ts
-  ├ bot-movement.ts
-  ├ bot-blocks.ts
-  ├ bot-crafting.ts
-  └ ...
-  ↓
-Mineflayer API
+┌──────────────────────┐
+│  Game Agent (30 MCP) │  ← MCPツール30個
+└──────────┬───────────┘
+           │
+┌──────────▼───────────┐
+│  Skills (SKILL.md)   │  ← スキル知識
+└──────────┬───────────┘
+           │
+┌──────────▼───────────┐
+│  High-Level Tools    │  ← 5個の高レベルツール
+│  (high-level-actions)│     (minecraft_gather_resources等)
+└──────────┬───────────┘
+           │
+┌──────────▼───────────┐
+│  Internal Functions  │  ← 80個の内部関数
+│  (非MCP)             │     (dig, place, craft等)
+└──────────┬───────────┘
+           │
+┌──────────▼───────────┐
+│  Bot Manager         │  ← 11モジュール
+│  (Mineflayer API)    │
+└──────────────────────┘
 ```
 
-## Game Agent用ツール
+## Game Agent用MCPツール（30個）
 
-Game Agentが使用できるツール（20個）：
-
-### 接続・基本
+### 接続・状態（6個）
 - `minecraft_connect` - サーバーに接続（agentType指定）
 - `minecraft_disconnect` - 切断
-- `minecraft_get_position` - 現在座標
-- `minecraft_get_status` - HP/空腹確認
-- `minecraft_get_inventory` - インベントリ確認
-- `minecraft_get_surroundings` - 周囲の状況
-- `minecraft_get_chat_messages` - チャット履歴
-- `minecraft_get_nearby_entities` - 近くのエンティティ
-- `minecraft_get_biome` - バイオーム確認
-
-### コミュニケーション
+- `minecraft_get_state` - **統合状態取得**（位置、HP、空腹、インベントリ、周囲、エンティティ、バイオームを一括取得）
 - `minecraft_chat` - チャット送信
+- `minecraft_get_chat_messages` - チャット履歴
 - `subscribe_events` - イベント購読
 
-### スキルシステム
-- `list_agent_skills` - 利用可能なスキル一覧
-- `get_agent_skill` - スキル詳細取得
+### 高レベル操作（5個）
+- `minecraft_gather_resources` - 自動リソース収集
+- `minecraft_build_structure` - 建築
+- `minecraft_craft_chain` - 複数段階クラフト
+- `minecraft_survival_routine` - サバイバル最適化
+- `minecraft_explore_area` - エリア探索
 
-### 学習・記憶
+### 記憶・学習（5個）
 - `save_memory` - 重要情報を記憶
 - `recall_memory` - 記憶を参照
 - `log_experience` - 経験を記録
 - `get_recent_experiences` - 経験取得
+- `list_agent_skills` - 利用可能なスキル一覧
+- `get_agent_skill` - スキル詳細取得
 
-### エージェント連携
+### エージェント連携（4個）
 - `agent_board_read` - 掲示板を読む
 - `agent_board_write` - 掲示板に書く
 - `agent_board_wait` - 新着メッセージ待機
 - `agent_board_clear` - クリア
 
-**重要**: Game Agentは採掘・建築・クラフトなどの複雑な操作を直接実行できません。すべてスキル経由でアクセスします。
+### タスク管理（4個）
+- `task_create`, `task_list`, `task_get`, `task_update`
+
+### Dev Agent専用（6個）
+- `dev_subscribe` - ツールログ購読
+- `dev_get_tool_logs` - ログ取得
+- `dev_get_failure_summary` - 失敗サマリー
+- `dev_clear_logs` - ログクリア
+- `dev_get_config` - 設定取得
+- `dev_save_config` - 設定保存
+- 等...
+
+**設計原則**: 低レベル操作（dig, place, move_to, craft等）はMCPツールとして公開されません。すべて内部関数として実装され、高レベルツール経由でのみ使用されます。
 
 ## スキル使用例
 
 ### 初日のサバイバル
 
 ```
-1. list_agent_skills で利用可能なスキル確認
-2. get_agent_skill { skill_name: "survival" } で詳細取得
-3. minecraft_get_status で現在状態確認
+1. minecraft_connect { username: "Claude", agentType: "game" }
+2. minecraft_get_state  → 全状態を一括取得
+3. get_agent_skill { skill_name: "survival" }
 4. survival スキル実行 (priority: "auto")
    → 自動で食料確保 → ツール作成 → シェルター建築
 ```
@@ -197,8 +211,9 @@ Game Agentが使用できるツール（20個）：
 ### リソース収集
 
 ```
-1. get_agent_skill { skill_name: "resource-gathering" }
-2. resource-gathering スキル実行
+1. minecraft_get_state  → 現在状態確認
+2. get_agent_skill { skill_name: "resource-gathering" }
+3. resource-gathering スキル実行
    items: [{ name: "oak_log", count: 20 }]
    → 自動で木を探索・伐採・回収
 ```
@@ -206,8 +221,9 @@ Game Agentが使用できるツール（20個）：
 ### 建築
 
 ```
-1. get_agent_skill { skill_name: "building" }
-2. building スキル実行
+1. minecraft_get_state  → インベントリ確認
+2. get_agent_skill { skill_name: "building" }
+3. building スキル実行
    type: "shelter", size: "medium"
    → 地面整地 → 材料確認 → 自動建築
 ```
@@ -244,15 +260,6 @@ learning/agent-config.json更新
 Game Agent次ループで設定リロード
 ```
 
-### 設定ファイル
-
-| ファイル | 内容 |
-|---------|------|
-| `learning/agent-config.json` | 性格（攻撃性・探索意欲・リスク許容）、優先度、閾値 |
-| `learning/evolution-history.jsonl` | 設定変更履歴（タイムスタンプ・変更内容・理由） |
-| `logs/loop-results.jsonl` | ループ実行結果（成功/失敗・ツール使用・HP/食料） |
-| `logs/tool-execution.jsonl` | ツール実行ログ（成功/失敗・エラー内容） |
-
 ## ディレクトリ構造
 
 ```
@@ -272,13 +279,14 @@ src/
 │   ├── minecraft-utils.ts# ヘルパー関数
 │   └── types.ts          # 型定義
 ├── tools/                # MCPツール実装
-│   ├── high-level-actions.ts  # 高レベル操作（スキル内部用）
-│   ├── connection.ts     # 接続・切断
-│   ├── movement.ts       # 移動
-│   ├── environment.ts    # 環境認識
-│   ├── building.ts       # 建築
-│   ├── crafting.ts       # クラフト
-│   ├── combat.ts         # 戦闘
+│   ├── state.ts          # 統合状態取得（NEW）
+│   ├── high-level-actions.ts  # 高レベル操作（5個）
+│   ├── connection.ts     # 接続・切断（内部関数）
+│   ├── movement.ts       # 移動（内部関数）
+│   ├── environment.ts    # 環境認識（内部関数）
+│   ├── building.ts       # 建築（内部関数）
+│   ├── crafting.ts       # クラフト（内部関数）
+│   ├── combat.ts         # 戦闘（内部関数）
 │   ├── coordination.ts   # 掲示板
 │   └── learning.ts       # 学習・記憶
 ├── agent/                # Claudeエージェント
@@ -325,20 +333,23 @@ CLAUDE_MODEL=opus  # dev-agentのモデル（opus推奨）
 
 ### 1. スキルベース設計
 - 複雑な操作はスキルに集約
-- Game Agentは実装詳細を知らない
+- Game Agentは低レベル実装を知らない
 - 拡張性・保守性の向上
 
 ### 2. エージェント分離
-- Game Agent: ゲームプレイに特化（20ツール）
-- Dev Agent: デバッグ・開発用（45+ツール）
+- Game Agent: ゲームプレイに特化（30ツール）
+- Dev Agent: デバッグ・開発用（同じ30ツール、制限なし）
 - 役割に応じた最適なツールセット
 
-### 3. モジュール化
-- bot-manager: 11ファイルに分割
-- tools: 機能別に整理
-- 各モジュールは単一責任
+### 3. 階層化アーキテクチャ
+- MCPツール（30個） → スキル → 高レベルツール（5個） → 内部関数（80個） → Bot Manager（11モジュール）
+- 明確な責任分離
 
-### 4. 自己改善
+### 4. 統合API
+- `minecraft_get_state` で全状態を一括取得
+- 効率的で簡潔なAPI設計
+
+### 5. 自己改善
 - ソースコード修正で技術的問題を解決
 - 設定チューニングで行動最適化
 - 完全自動化されたフィードバックループ
