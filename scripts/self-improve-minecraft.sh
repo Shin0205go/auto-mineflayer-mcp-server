@@ -98,8 +98,10 @@ PROMPT
   if kill -0 $CLAUDE_PID 2>/dev/null; then
     echo "" | tee -a "$LOGFILE"
     echo "⏱️  Timeout reached (10 minutes), stopping..." | tee -a "$LOGFILE"
-    kill $CLAUDE_PID 2>/dev/null
-    wait $CLAUDE_PID 2>/dev/null
+    kill $CLAUDE_PID 2>/dev/null || true
+    # Kill the entire process group (including tee)
+    pkill -P $CLAUDE_PID 2>/dev/null || true
+    wait $CLAUDE_PID 2>/dev/null || true
     EXIT_CODE=124
   fi
 
