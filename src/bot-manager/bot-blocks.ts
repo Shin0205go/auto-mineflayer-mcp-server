@@ -635,55 +635,22 @@ export async function digBlock(
       ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
       : 0;
     let specificItemGained = specificItemAfter - specificItemBefore;
-    console.error(`[Dig] Inventory check 1: before=${inventoryBefore}, after=${inventoryAfter}, picked=${pickedUp}, ${expectedDrop}: ${specificItemBefore}->${specificItemAfter} (+${specificItemGained})`);
+    console.error(`[Dig] Inventory check (immediate): before=${inventoryBefore}, after=${inventoryAfter}, picked=${pickedUp}, ${expectedDrop}: ${specificItemBefore}->${specificItemAfter} (+${specificItemGained})`);
 
-    // If nothing picked up yet, aggressively move to collect
+    // If nothing picked up yet, use the proven collectNearbyItems function
     if (pickedUp === 0 && specificItemGained === 0) {
-      // Step 1: Walk directly through the block position
-      await bot.lookAt(blockPos.offset(0.5, 0, 0.5));
-      bot.setControlState("forward", true);
-      await delay(500);
-      bot.setControlState("forward", false);
+      console.error(`[Dig] No items auto-collected, using collectNearbyItems()...`);
+      const collectResult = await collectNearbyItems(bot);
+      console.error(`[Dig] collectNearbyItems result: ${collectResult}`);
 
+      // Re-check inventory after collection
       inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
       pickedUp = inventoryAfter - inventoryBefore;
       specificItemAfter = expectedDrop
         ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
         : 0;
       specificItemGained = specificItemAfter - specificItemBefore;
-      console.error(`[Dig] Inventory check 2 (walk through): picked=${pickedUp}, ${expectedDrop}: +${specificItemGained}`);
-    }
-
-    // Step 2: Try pathfinder if still nothing
-    if (pickedUp === 0 && specificItemGained === 0) {
-      const goal = new goals.GoalNear(Math.floor(x), Math.floor(y), Math.floor(z), 0);
-      bot.pathfinder.setGoal(goal);
-      await delay(1500);
-      bot.pathfinder.setGoal(null);
-
-      inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
-      pickedUp = inventoryAfter - inventoryBefore;
-      specificItemAfter = expectedDrop
-        ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
-        : 0;
-      specificItemGained = specificItemAfter - specificItemBefore;
-      console.error(`[Dig] Inventory check 3 (pathfinder): picked=${pickedUp}, ${expectedDrop}: +${specificItemGained}`);
-    }
-
-    // Step 3: Jump in case item is slightly above
-    if (pickedUp === 0 && specificItemGained === 0) {
-      bot.setControlState("jump", true);
-      await delay(300);
-      bot.setControlState("jump", false);
-      await delay(300);
-
-      inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
-      pickedUp = inventoryAfter - inventoryBefore;
-      specificItemAfter = expectedDrop
-        ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
-        : 0;
-      specificItemGained = specificItemAfter - specificItemBefore;
-      console.error(`[Dig] Inventory check 4 (jump): picked=${pickedUp}, ${expectedDrop}: +${specificItemGained}`);
+      console.error(`[Dig] Inventory check (after collectNearbyItems): picked=${pickedUp}, ${expectedDrop}: +${specificItemGained}`);
     }
 
     if (pickedUp > 0 || specificItemGained > 0) {
@@ -693,51 +660,16 @@ export async function digBlock(
       return `Dug ${blockName} with ${heldItem} and picked up ${Math.max(pickedUp, specificItemGained)} item(s)${itemDetail}!` + getBriefStatus(username);
     }
 
-    // Look for dropped items nearby that weren't picked up
-    const droppedItems = Object.values(bot.entities).filter(e =>
-      e && e !== bot.entity &&
-      e.position.distanceTo(blockPos) < 5 &&
-      (e.name === "item" || e.type === "object" || e.displayName === "Item")
-    );
+    // Check if we expected drops but got none (wrong tool warning)
+    const oresNeedingPickaxe = ["_ore", "stone", "cobblestone", "deepslate"];
+    const isOre = oresNeedingPickaxe.some(s => blockName.includes(s));
+    const hasPickaxe = heldItem.includes("pickaxe");
 
-    if (droppedItems.length > 0) {
-      // Try one more aggressive collection
-      console.error(`[Dig] Found ${droppedItems.length} uncollected items, attempting pickup...`);
-      for (const item of droppedItems.slice(0, 3)) {
-        await bot.lookAt(item.position);
-        bot.setControlState("forward", true);
-        await delay(400);
-        bot.setControlState("forward", false);
-        await delay(200);
-      }
-
-      inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
-      pickedUp = inventoryAfter - inventoryBefore;
-      specificItemAfter = expectedDrop
-        ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
-        : 0;
-      specificItemGained = specificItemAfter - specificItemBefore;
-
-      if (pickedUp > 0 || specificItemGained > 0) {
-        const itemDetail = specificItemGained > 0
-          ? ` (${expectedDrop} x${specificItemGained})`
-          : "";
-        return `Dug ${blockName} and collected ${Math.max(pickedUp, specificItemGained)} item(s)${itemDetail} after extra effort!` + getBriefStatus(username);
-      }
-
-      return `Dug ${blockName} but ${droppedItems.length} item(s) couldn't be picked up (may be stuck in block)` + getBriefStatus(username);
-    } else {
-      // Check if we expected drops but got none (wrong tool warning)
-      const oresNeedingPickaxe = ["_ore", "stone", "cobblestone", "deepslate"];
-      const isOre = oresNeedingPickaxe.some(s => blockName.includes(s));
-      const hasPickaxe = heldItem.includes("pickaxe");
-
-      if (isOre && !hasPickaxe) {
-        return `WARNING: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED! Need pickaxe for ore/stone!` + getBriefStatus(username);
-      }
-
-      return `Dug ${blockName} with ${heldItem} (no drops or auto-collected).` + getBriefStatus(username);
+    if (isOre && !hasPickaxe) {
+      return `WARNING: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED! Need pickaxe for ore/stone!` + getBriefStatus(username);
     }
+
+    return `Dug ${blockName} with ${heldItem}. ${pickedUp === 0 ? 'No items dropped (auto-collected or wrong tool).' : ''}` + getBriefStatus(username);
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[Dig] Error: ${errMsg}`);
