@@ -79,7 +79,7 @@ PROMPT
   cat /tmp/minecraft_prompt.md | claude --dangerously-skip-permissions \
     --print \
     --model sonnet \
-    2>&1 | stdbuf -oL tee "$LOGFILE" &
+    2>&1 | tee "$LOGFILE" &
   CLAUDE_PID=$!
 
   # Wait up to 1200 seconds (20 minutes)
