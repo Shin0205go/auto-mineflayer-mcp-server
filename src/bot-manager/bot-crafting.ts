@@ -697,6 +697,15 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         throw lastError;
       }
     }
+
+    // Double-check that the item is actually in inventory
+    const craftedItem = bot.inventory.items().find(i => i.name === itemName);
+    if (!craftedItem) {
+      // Item not in inventory - might have been dropped
+      console.error(`[Craft] CRITICAL: ${itemName} not found in inventory after successful craft!`);
+      throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting. This may be a server configuration issue or the item was dropped. Check nearby for dropped items.`);
+    }
+
     // Check new inventory
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
     return `Crafted ${count}x ${itemName}. Inventory: ${newInventory}` + getBriefStatus(managed);
