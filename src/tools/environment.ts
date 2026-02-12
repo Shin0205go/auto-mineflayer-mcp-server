@@ -215,7 +215,66 @@ export async function handleEnvironmentTool(
 
       diagnostics.push("");
 
-      // 2. Check permissions
+      // 2. Check item pickup (critical for survival)
+      diagnostics.push(`📦 Item Pickup Test:`);
+      try {
+        const bot = botManager.getBot(username);
+        if (!bot) {
+          diagnostics.push(`  ⚠️ Bot not found, skipping item pickup test`);
+        } else {
+          // Try to find a safe block to test (dirt or similar)
+          const testBlock = bot.findBlock({
+            matching: (block: any) => ['dirt', 'grass_block', 'stone', 'cobblestone'].includes(block.name),
+            maxDistance: 10,
+          });
+
+          if (testBlock) {
+            const beforeCount = bot.inventory.items().length;
+
+            // Dig the block
+            await botManager.digBlock(username, testBlock.position.x, testBlock.position.y, testBlock.position.z);
+
+            // Wait briefly for item pickup
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const afterCount = bot.inventory.items().length;
+
+            if (afterCount > beforeCount) {
+              diagnostics.push(`  ✅ Item pickup working normally`);
+            } else {
+              // Check if item entity exists on ground
+              const itemEntity = Object.values(bot.entities).find((e: any) =>
+                e.name === 'item' && e.position && e.position.distanceTo(testBlock.position) < 2
+              );
+
+              if (itemEntity) {
+                diagnostics.push(`  ❌ CRITICAL: Items spawn but CANNOT BE COLLECTED`);
+                diagnostics.push(`  Possible causes:`);
+                diagnostics.push(`    - Server plugin blocking item pickup (EssentialsX, WorldGuard)`);
+                diagnostics.push(`    - Gamemode issue (adventure mode)`);
+                diagnostics.push(`    - Server-side anti-cheat preventing collection`);
+                diagnostics.push(`  Impact: **SURVIVAL GAMEPLAY IMPOSSIBLE** - cannot collect any resources`);
+
+                if (auto_fix) {
+                  botManager.chat(username, "/gamemode survival");
+                  diagnostics.push(`  🔧 Attempted fix: /gamemode survival`);
+                }
+              } else {
+                diagnostics.push(`  ⚠️ WARNING: Block broke but no item spawned`);
+                diagnostics.push(`  Possible cause: /gamerule doTileDrops false`);
+              }
+            }
+          } else {
+            diagnostics.push(`  ⚠️ Could not find test block nearby, skipping item pickup test`);
+          }
+        }
+      } catch (error) {
+        diagnostics.push(`  ⚠️ Item pickup test failed: ${error}`);
+      }
+
+      diagnostics.push("");
+
+      // 3. Check permissions
       diagnostics.push(`🔐 Permission Check:`);
       try {
         botManager.chat(username, "/gamerule");
@@ -241,12 +300,14 @@ export async function handleEnvironmentTool(
 
       diagnostics.push("");
 
-      // 3. Summary and recommendations
+      // 4. Summary and recommendations
       diagnostics.push(`📋 Recommendations:`);
       diagnostics.push(`  1. Ensure bot has OP permissions: /op ${username}`);
       diagnostics.push(`  2. Verify mob spawning: /gamerule doMobSpawning (should be true)`);
       diagnostics.push(`  3. Verify item drops: /gamerule doTileDrops (should be true)`);
       diagnostics.push(`  4. Verify mob loot: /gamerule doMobLoot (should be true)`);
+      diagnostics.push(`  5. Check server plugins that may block item pickup or mob spawning`);
+      diagnostics.push(`  6. Test with vanilla Minecraft server to isolate configuration issues`);
       diagnostics.push(``);
       diagnostics.push(`💡 Run with auto_fix=true to attempt automatic fixes`);
 
