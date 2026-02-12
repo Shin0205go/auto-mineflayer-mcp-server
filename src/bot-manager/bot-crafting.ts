@@ -329,6 +329,90 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     }
   }
 
+  // Special handling for planks -> stick/crafting_table to avoid wood type issues
+  // These recipes work with ANY planks type, so we manually find compatible recipes
+  if (itemName === "stick" || itemName === "crafting_table") {
+    // Find any planks in inventory
+    const anyPlanks = inventoryItems.find(i => i.name.endsWith("_planks"));
+    if (!anyPlanks) {
+      throw new Error(`Cannot craft ${itemName}: Need any type of planks. Craft planks from logs first. Inventory: ${inventory}`);
+    }
+
+    // Check if we have enough planks
+    const totalPlanks = inventoryItems
+      .filter(i => i.name.endsWith("_planks"))
+      .reduce((sum, item) => sum + item.count, 0);
+
+    const requiredPlanks = itemName === "stick" ? 2 : 4;
+    if (totalPlanks < requiredPlanks) {
+      throw new Error(`Cannot craft ${itemName}: Need ${requiredPlanks} planks, have ${totalPlanks}. Craft more planks from logs first. Inventory: ${inventory}`);
+    }
+
+    // Get the specific item ID for the planks we have
+    const planksItemId = mcData.itemsByName[anyPlanks.name]?.id;
+    if (!planksItemId) {
+      throw new Error(`Cannot find item ID for ${anyPlanks.name}`);
+    }
+
+    // Get all recipes and find one that uses the planks type we actually have
+    const allRecipes = bot.recipesAll(item.id, null, null);
+
+    // Try to find a recipe that uses our specific planks type
+    let compatibleRecipe = allRecipes.find(recipe => {
+      const delta = recipe.delta as Array<{ id: number; count: number }>;
+      return delta.some(d => {
+        if (d.count >= 0) return false; // Skip output items
+        return d.id === planksItemId;
+      });
+    });
+
+    // If no exact match, try to find any planks-based recipe and check if we have the materials
+    if (!compatibleRecipe) {
+      compatibleRecipe = allRecipes.find(recipe => {
+        const delta = recipe.delta as Array<{ id: number; count: number }>;
+        // Check if all negative deltas (ingredients) can be satisfied with our planks
+        return delta.every(d => {
+          if (d.count >= 0) return true; // Output items, always ok
+          const ingredientItem = mcData.items[d.id];
+          if (!ingredientItem) return false;
+
+          // If it's any type of planks, we can use our planks
+          if (ingredientItem.name.endsWith("_planks")) {
+            const requiredCount = Math.abs(d.count);
+            return totalPlanks >= requiredCount;
+          }
+
+          return false;
+        });
+      });
+    }
+
+    if (!compatibleRecipe) {
+      throw new Error(`Cannot craft ${itemName}: No compatible recipe found for ${anyPlanks.name}. Available planks: ${totalPlanks}. This may be a Minecraft version compatibility issue.`);
+    }
+
+    console.error(`[Craft] Attempting to craft ${itemName} using ${anyPlanks.name} (have ${totalPlanks} planks)`);
+
+    try {
+      for (let i = 0; i < count; i++) {
+        await bot.craft(compatibleRecipe, 1, undefined);
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
+      return `Crafted ${count}x ${itemName}. Inventory: ${newInventory}` + getBriefStatus(managed);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+
+      // If crafting failed due to ingredient mismatch, suggest crafting more planks
+      if (errMsg.includes("missing ingredient")) {
+        throw new Error(`Failed to craft ${itemName} from ${anyPlanks.name}: ${errMsg}. Try crafting planks from logs first, or this may be a Minecraft version compatibility issue. Inventory: ${inventory}`);
+      }
+
+      throw new Error(`Failed to craft ${itemName}: ${errMsg}. Inventory: ${inventory}`);
+    }
+  }
+
   // Always use recipesAll to get all possible recipes for this item
   // recipesFor sometimes misses valid recipes due to ingredient matching issues
   // First try without crafting table (player inventory 2x2 grid)
