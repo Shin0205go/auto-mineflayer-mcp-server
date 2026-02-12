@@ -513,16 +513,21 @@ export async function digBlock(
     // Check if inventory is full - BLOCK mining to prevent item loss
     // Use bot.inventory.emptySlotCount() which correctly tracks available slots
     const emptySlots = bot.inventory.emptySlotCount();
+    console.error(`[Dig] Empty slots: ${emptySlots}, inventory items: ${bot.inventory.items().length}`);
 
     // Check if expected drop can stack with existing items
     let canStack = false;
     if (expectedDrop) {
-      const existingItem = bot.inventory.items().find(i => i.name === expectedDrop);
-      if (existingItem) {
-        // Item exists - check if it can accept more (max stack size is usually 64)
-        const maxStackSize = existingItem.stackSize || 64;
-        if (existingItem.count < maxStackSize) {
+      const existingItems = bot.inventory.items().filter(i => i.name === expectedDrop);
+      console.error(`[Dig] Found ${existingItems.length} stacks of ${expectedDrop}: ${existingItems.map(i => `${i.count}/${i.stackSize}`).join(', ')}`);
+
+      // Check if ANY existing stack has room
+      for (const item of existingItems) {
+        const maxStackSize = item.stackSize || 64;
+        if (item.count < maxStackSize) {
           canStack = true;
+          console.error(`[Dig] Can stack into existing ${expectedDrop} (${item.count}/${maxStackSize})`);
+          break;
         }
       }
     }

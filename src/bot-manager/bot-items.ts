@@ -354,21 +354,43 @@ export async function useItem(bot: Bot, itemName?: string): Promise<string> {
 }
 
 /**
- * Drop items from inventory
+ * Drop items from inventory (handles multiple stacks)
  */
 export async function dropItem(bot: Bot, itemName: string, count?: number): Promise<string> {
-  const item = bot.inventory.items().find(i => i.name === itemName);
-  if (!item) {
+  const items = bot.inventory.items().filter(i => i.name === itemName);
+  if (items.length === 0) {
     const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
     throw new Error(`No ${itemName} in inventory. Have: ${inventory}`);
   }
 
-  const dropCount = count ? Math.min(count, item.count) : item.count;
+  // Calculate total available
+  const totalAvailable = items.reduce((sum, item) => sum + item.count, 0);
+  const targetCount = count ?? totalAvailable;
+
+  let remaining = targetCount;
+  let totalDropped = 0;
 
   try {
-    await bot.toss(item.type, null, dropCount);
+    // Drop from stacks until we reach the target count
+    // Refetch items each iteration as tossing changes inventory state
+    while (remaining > 0) {
+      const currentItems = bot.inventory.items().filter(i => i.name === itemName);
+      console.error(`[Drop] Remaining: ${remaining}, found ${currentItems.length} stacks of ${itemName}`);
+      if (currentItems.length === 0) break;
+
+      const item = currentItems[0]; // Always take first matching item
+      const dropFromThis = Math.min(remaining, item.count);
+      console.error(`[Drop] Dropping ${dropFromThis} from stack of ${item.count}`);
+      await bot.toss(item.type, null, dropFromThis);
+      totalDropped += dropFromThis;
+      remaining -= dropFromThis;
+
+      // Small delay to let inventory update
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
-    return `Dropped ${dropCount}x ${itemName}. Inventory: ${newInventory}`;
+    return `Dropped ${totalDropped}x ${itemName}. Inventory: ${newInventory}`;
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to drop ${itemName}: ${errMsg}`);
