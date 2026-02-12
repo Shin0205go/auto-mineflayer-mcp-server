@@ -22,11 +22,12 @@ export const GAME_AGENT_TOOLS = new Set([
   "minecraft_get_surroundings",
   "minecraft_find_block",
 
-  // Building (4 tools)
+  // Building (5 tools)
   "minecraft_place_block",
   "minecraft_dig_block",
   "minecraft_collect_items",
   "minecraft_level_ground",
+  "minecraft_pillar_up",
 
   // Coordination (4 tools)
   "agent_board_read",
