@@ -521,9 +521,10 @@ export async function digBlock(
     const expectedDrop = getExpectedDrop(blockName);
 
     // Check if inventory is full - BLOCK mining to prevent item loss
+    // UNLESS autoCollect is false (items will stay on ground for manual pickup)
     // Use bot.inventory.emptySlotCount() which correctly tracks available slots
     const emptySlots = bot.inventory.emptySlotCount();
-    console.error(`[Dig] Empty slots: ${emptySlots}, inventory items: ${bot.inventory.items().length}`);
+    console.error(`[Dig] Empty slots: ${emptySlots}, inventory items: ${bot.inventory.items().length}, autoCollect: ${autoCollect}`);
 
     // Check if expected drop can stack with existing items
     let canStack = false;
@@ -544,9 +545,10 @@ export async function digBlock(
 
     const isFull = emptySlots === 0 && !canStack;
 
-    if (isFull) {
+    // Only block mining if inventory is full AND autoCollect is enabled
+    if (isFull && autoCollect) {
       // Provide helpful suggestions for common items that accumulate
-      let suggestion = "Use minecraft_drop_item to free up space first, then try again.";
+      let suggestion = "Use minecraft_drop_item to free up space first, then try again. Or set auto_collect=false to leave items on ground.";
       if (expectedDrop === "cobblestone") {
         const cobblestoneCount = bot.inventory.items()
           .filter(i => i.name === "cobblestone")
