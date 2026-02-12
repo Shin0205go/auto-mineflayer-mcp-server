@@ -409,6 +409,71 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
 }
 
 /**
+ * Emergency escape - dig straight up until reaching open air (for when trapped underground)
+ */
+export async function emergencyDigUp(managed: ManagedBot, maxBlocks: number = 30): Promise<string> {
+  const bot = managed.bot;
+  const startY = Math.floor(bot.entity.position.y);
+  const startX = Math.floor(bot.entity.position.x);
+  const startZ = Math.floor(bot.entity.position.z);
+
+  console.error(`[EmergencyDigUp] Starting from (${startX}, ${startY}, ${startZ}), max ${maxBlocks} blocks`);
+
+  // Equip pickaxe if available
+  const pickaxe = bot.inventory.items().find(i => i.name.includes("pickaxe"));
+  if (pickaxe) {
+    await bot.equip(pickaxe, "hand");
+  }
+
+  let blocksDug = 0;
+  let currentY = startY;
+
+  for (let i = 0; i < maxBlocks; i++) {
+    currentY++;
+    const checkPos = new Vec3(startX, currentY, startZ);
+    const block = bot.blockAt(checkPos);
+
+    if (!block || block.name === "air" || block.name === "cave_air" || block.name === "void_air") {
+      // Found air - check if we're truly at the surface (can see sky)
+      const lightLevel = (block as any).light ?? 0;
+      if (lightLevel >= 13 || currentY >= startY + 5) {
+        console.error(`[EmergencyDigUp] Reached surface at Y=${currentY}, dug ${blocksDug} blocks`);
+        return `Emergency escape successful! Dug ${blocksDug} blocks up to Y=${currentY}. Now at surface.`;
+      }
+      // Keep going - might just be a cave pocket
+      continue;
+    }
+
+    // Unbreakable block
+    if (block.hardness < 0) {
+      return `Hit bedrock or unbreakable block (${block.name}) at Y=${currentY} after digging ${blocksDug} blocks. Cannot escape this way.`;
+    }
+
+    // Dig the block
+    try {
+      await bot.lookAt(new Vec3(startX + 0.5, currentY + 0.5, startZ + 0.5));
+      await bot.dig(block, false);  // Don't force dig
+      blocksDug++;
+      await delay(150); // Brief pause
+
+      // Check if bot fell - if so, wait for them to land
+      const botY = Math.floor(bot.entity.position.y);
+      if (botY < currentY - 2) {
+        console.error(`[EmergencyDigUp] Bot fell, waiting to land...`);
+        await delay(1000);
+        // Restart from new position
+        return emergencyDigUp(managed, maxBlocks - blocksDug);
+      }
+    } catch (err) {
+      console.error(`[EmergencyDigUp] Failed to dig ${block.name} at Y=${currentY}: ${err}`);
+      return `Failed to dig through ${block.name} at Y=${currentY} after digging ${blocksDug} blocks. Error: ${err}`;
+    }
+  }
+
+  return `Dug ${blocksDug} blocks upward but haven't reached surface yet (now at Y=${currentY}). May need to dig more or try a different location.`;
+}
+
+/**
  * Pillar up by jump-placing blocks
  */
 export async function pillarUp(managed: ManagedBot, height: number = 1): Promise<string> {
@@ -496,7 +561,9 @@ export async function pillarUp(managed: ManagedBot, height: number = 1): Promise
     }
   }
   if (!hasGround) {
-    throw new Error(`Failed to pillar up. No solid ground below. Try moving to open area first.`);
+    // Try emergency dig up instead
+    console.error(`[Pillar] No ground found - attempting emergency dig up instead...`);
+    return emergencyDigUp(managed, 30);
   }
 
   let blocksPlaced = 0;
