@@ -509,13 +509,15 @@ export async function digBlock(
     // Get expected drop item name (e.g., coal_ore -> coal, diamond_ore -> diamond)
     const expectedDrop = getExpectedDrop(blockName);
 
-    // Check if inventory is full - warn but don't block mining
+    // Check if inventory is full - BLOCK mining to prevent item loss
     const inventorySlots = bot.inventory.slots.filter(slot => slot !== null).length;
     const maxSlots = 36; // Player inventory size
     const isFull = inventorySlots >= maxSlots;
 
     if (isFull) {
-      console.error(`[Dig] ⚠️ WARNING: Inventory is full (${inventorySlots}/${maxSlots} slots). Items may drop on ground and not be collected!`);
+      const errorMsg = `⚠️ CANNOT DIG: Inventory is FULL (${inventorySlots}/${maxSlots} slots)! Items would drop and be lost. Use minecraft_drop_item to free up space first, then try again.`;
+      console.error(`[Dig] ${errorMsg}`);
+      return errorMsg;
     }
 
     const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
