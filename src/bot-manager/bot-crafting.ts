@@ -660,27 +660,17 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             );
 
             if (nearbyItems.length > 0) {
-              console.error(`[Craft] Found ${nearbyItems.length} dropped items, collecting...`);
-              for (const itemEntity of nearbyItems) {
-                try {
-                  const distance = itemEntity.position.distanceTo(bot.entity.position);
-                  console.error(`[Craft] Item at distance ${distance.toFixed(1)}m, moving to collect...`);
+              console.error(`[Craft] Found ${nearbyItems.length} dropped items, using collectNearbyItems()...`);
 
-                  await bot.pathfinder.goto(new goals.GoalNear(
-                    Math.floor(itemEntity.position.x),
-                    Math.floor(itemEntity.position.y),
-                    Math.floor(itemEntity.position.z),
-                    1
-                  ));
-
-                  // Wait for pickup
-                  await new Promise(resolve => setTimeout(resolve, 1000));
-                } catch (collectErr) {
-                  console.error(`[Craft] Failed to collect item: ${collectErr}`);
-                }
+              // Use the dedicated collection function from bot-items
+              const { collectNearbyItems } = await import("./bot-items.js");
+              try {
+                await collectNearbyItems(bot);
+              } catch (collectErr) {
+                console.error(`[Craft] collectNearbyItems failed: ${collectErr}`);
               }
 
-              // Final wait to ensure all items are collected
+              // Additional wait after collection attempt
               await new Promise(resolve => setTimeout(resolve, 500));
 
               // Verify item was actually collected
