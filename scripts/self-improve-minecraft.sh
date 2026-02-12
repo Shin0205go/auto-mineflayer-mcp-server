@@ -76,9 +76,10 @@ PROMPT
   echo "   Log: $LOGFILE"
 
   # Run Claude with timeout (20 minutes)
-  # サブシェルで実行してプロセスグループ化
+  # stream-json でリアルタイム出力
   (cat /tmp/minecraft_prompt.md | claude --dangerously-skip-permissions \
     --print \
+    --output-format stream-json \
     --model sonnet) > "$LOGFILE" 2>&1 &
   CLAUDE_PID=$!
 
