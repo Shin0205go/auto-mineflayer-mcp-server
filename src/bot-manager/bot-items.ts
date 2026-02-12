@@ -18,10 +18,12 @@ function delay(ms: number): Promise<void> {
  * Collect dropped items near the bot
  */
 export async function collectNearbyItems(bot: Bot): Promise<string> {
+  console.error(`[CollectItems] Starting collection, bot at ${bot.entity.position.toString()}`);
   const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
 
   // Simplified and more reliable item detection
   const findItems = () => {
+    console.error(`[CollectItems] findItems() called, scanning ${Object.keys(bot.entities).length} entities`);
     const allEntities = Object.values(bot.entities);
 
     return allEntities.filter((entity) => {
@@ -62,8 +64,12 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
       .filter(e => e && e !== bot.entity && e.position && e.position.distanceTo(bot.entity.position) < 15)
       .map(e => `${e.name || e.displayName || "unknown"}(type:${e.type})`)
       .slice(0, 5);
+    console.error(`[CollectItems] No items found after wait. Nearby entities: ${nearbyEntities.join(", ") || "none"}`);
     return `No items nearby. Entities found: ${nearbyEntities.length > 0 ? nearbyEntities.join(", ") : "none"}`;
   }
+
+  console.error(`[CollectItems] Found ${items.length} items to collect`);
+
 
   // Sort by distance
   items.sort((a, b) =>
@@ -87,33 +93,88 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
     const itemPos = item.position.clone();
     const distance = bot.entity.position.distanceTo(itemPos);
 
+    console.error(`[CollectItems] Attempt ${attempt + 1}/${maxAttempts}: Item at distance ${distance.toFixed(2)}, pos: ${itemPos.toString()}`);
+
     try {
       if (distance < 2) {
-        // Very close - move directly to the item position
-        // Auto-pickup range is ~1 block, so get very close
+        console.error(`[CollectItems] Using close-range collection strategy`);
+
+        // Very close - move directly THROUGH the item position to force collision pickup
+        // Auto-pickup sometimes fails, so we need to move through the item multiple times
+
+        // First approach: Look at item and move forward
         await bot.lookAt(itemPos);
         bot.setControlState("forward", true);
-        await delay(800); // Increased from 500 to get even closer
+        await delay(600);
         bot.setControlState("forward", false);
+        await delay(200);
 
-        // If still not close enough, use pathfinder with range 0.5 (not 0, which is too strict)
+        // Check if item still exists
+        if (!bot.entities[item.id]) {
+          // Item was collected, continue to next item
+          continue;
+        }
+
+        // Second approach: Move to exact item position using pathfinder
         const remainingDist = bot.entity.position.distanceTo(itemPos);
-        if (remainingDist > 0.8) {
+        if (remainingDist > 0.3) {
           try {
-            const goal = new goals.GoalNear(
+            // Use GoalBlock to move EXACTLY to the item position
+            const goal = new goals.GoalBlock(
               Math.floor(itemPos.x),
               Math.floor(itemPos.y),
-              Math.floor(itemPos.z),
-              0.5 // Changed from 0 to 0.5 - "exactly at position" is often impossible
+              Math.floor(itemPos.z)
             );
             bot.pathfinder.setGoal(goal);
-            await delay(2000); // Increased timeout from 1500
+
+            // Wait for pathfinding with timeout, checking if item disappears
+            const startTime = Date.now();
+            while (Date.now() - startTime < 3000) {
+              await delay(100);
+
+              // Check if item was collected
+              if (!bot.entities[item.id]) {
+                bot.pathfinder.setGoal(null);
+                break;
+              }
+
+              // Check if we're very close
+              const currentDist = bot.entity.position.distanceTo(itemPos);
+              if (currentDist < 0.3) {
+                break;
+              }
+
+              if (!bot.pathfinder.isMoving()) {
+                break;
+              }
+            }
+
             bot.pathfinder.setGoal(null);
           } catch (_) { /* ignore pathfinder errors */ }
         }
 
-        // Extra wait time for auto-pickup to definitely trigger
-        await delay(500);
+        // Third approach: If item still exists, try moving in a small circle around it
+        if (bot.entities[item.id]) {
+          const directions = [
+            itemPos.offset(0.5, 0, 0),
+            itemPos.offset(-0.5, 0, 0),
+            itemPos.offset(0, 0, 0.5),
+            itemPos.offset(0, 0, -0.5)
+          ];
+
+          for (const dir of directions) {
+            if (!bot.entities[item.id]) break;
+
+            await bot.lookAt(dir);
+            bot.setControlState("forward", true);
+            await delay(300);
+            bot.setControlState("forward", false);
+            await delay(100);
+          }
+        }
+
+        // Final wait for pickup to trigger
+        await delay(300);
       } else {
         // Use pathfinder for longer distances
         const goal = new goals.GoalNear(
