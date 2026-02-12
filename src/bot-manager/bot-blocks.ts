@@ -701,6 +701,21 @@ export async function digBlock(
     // Wait for item to spawn (items can take up to 1500ms to spawn on some servers)
     await delay(1500);
 
+    // Check for nearby item entities on the ground
+    const nearbyItems = bot.nearestEntity(entity => {
+      if (entity.name === 'item' && entity.position) {
+        const dist = entity.position.distanceTo(blockPos);
+        return dist < 3;
+      }
+      return false;
+    });
+
+    if (nearbyItems) {
+      console.error(`[Dig] Found item entity on ground within 3 blocks, attempting collection...`);
+    } else {
+      console.error(`[Dig] No item entities found within 3 blocks of mined block`);
+    }
+
     // Check inventory immediately - items within 1 block are auto-collected
     let inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
     let pickedUp = inventoryAfter - inventoryBefore;
