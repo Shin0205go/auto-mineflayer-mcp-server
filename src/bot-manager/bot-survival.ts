@@ -262,6 +262,11 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
   try {
     await bot.lookAt(target.position.offset(0, target.height * 0.8, 0));
     bot.attack(target);
+
+    // Wait for attack cooldown (Minecraft 1.9+ has attack cooldown)
+    // Diamond sword has ~0.6s cooldown, wait 700ms to be safe
+    await delay(700);
+
     return `Attacked ${target.name} (distance: ${distance.toFixed(1)} blocks)`;
   } catch (err) {
     return `Failed to attack: ${err}`;
