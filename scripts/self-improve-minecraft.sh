@@ -79,6 +79,7 @@ PROMPT
   # stream-json でリアルタイム出力
   (cat /tmp/minecraft_prompt.md | claude --dangerously-skip-permissions \
     --print \
+    --verbose \
     --output-format stream-json \
     --model sonnet) > "$LOGFILE" 2>&1 &
   CLAUDE_PID=$!
