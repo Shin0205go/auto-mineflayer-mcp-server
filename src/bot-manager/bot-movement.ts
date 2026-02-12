@@ -330,10 +330,63 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     return result.message + getBriefStatus(managed);
   }
 
-  // If pathfinder failed, report the reason
+  // If pathfinder failed, try emergency dig-through strategy
+  console.error(`[Move] Pathfinder failed (${result.stuckReason}), attempting emergency dig-through...`);
+
   const finalPos = bot.entity.position;
   const finalDist = finalPos.distanceTo(targetPos);
   const heightDiff = y - finalPos.y;
+
+  // Emergency strategy: dig through obstacles in the direction of target
+  // Find the first solid block between current position and target
+  const direction = targetPos.clone().subtract(finalPos).normalize();
+
+  // Check blocks in line toward target (up to 5 blocks ahead)
+  for (let dist = 1; dist <= 5; dist++) {
+    const checkPos = finalPos.clone().add(direction.scaled(dist)).floor();
+    const block = bot.blockAt(checkPos);
+
+    if (block && block.name !== "air" && block.name !== "cave_air" && block.name !== "water") {
+      // Found solid block - try to dig it
+      console.error(`[Move] Emergency dig: found ${block.name} at (${checkPos.x}, ${checkPos.y}, ${checkPos.z}), distance ${dist}`);
+
+      try {
+        // Import digBlock from bot-blocks
+        const { digBlock } = await import("./bot-blocks.js");
+
+        // Helper functions for digBlock
+        const simpleMoveToBasic = async (_u: string, mx: number, my: number, mz: number) =>
+          moveToBasic(managed, mx, my, mz);
+        const simpleGetBriefStatus = (_u: string) => getBriefStatus(managed);
+
+        const digResult = await digBlock(
+          managed,
+          checkPos.x,
+          checkPos.y,
+          checkPos.z,
+          false, // useCommand
+          delay, // delay function
+          simpleMoveToBasic, // moveToBasic
+          simpleGetBriefStatus, // getBriefStatus
+          true // autoCollect
+        );
+
+        // After digging, retry movement
+        console.error(`[Move] Dig succeeded: ${digResult}, retrying movement...`);
+        const retryResult = await moveToBasic(managed, x, y, z);
+
+        if (retryResult.success) {
+          return `Dug through ${block.name}, then ${retryResult.message}` + getBriefStatus(managed);
+        }
+        // If still failed, continue with error message below
+        break;
+      } catch (digError) {
+        console.error(`[Move] Emergency dig failed: ${digError}`);
+        // Continue to error message
+        break;
+      }
+    }
+  }
 
   let failureMsg = `Cannot reach (${x}, ${y}, ${z}). Current: (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks away.`;
 
