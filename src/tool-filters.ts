@@ -42,7 +42,7 @@ export const GAME_AGENT_TOOLS = new Set([
   "minecraft_drop_item",
   "minecraft_smelt",
 
-  // Combat (7 tools)
+  // Combat (8 tools)
   "minecraft_get_status",
   "minecraft_get_nearby_entities",
   "minecraft_attack",
@@ -50,6 +50,7 @@ export const GAME_AGENT_TOOLS = new Set([
   "minecraft_equip_armor",
   "minecraft_equip_weapon",
   "minecraft_flee",
+  "minecraft_respawn",
 
   // Learning (7 tools)
   "log_experience",
