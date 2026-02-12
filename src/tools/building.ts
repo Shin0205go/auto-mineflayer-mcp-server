@@ -92,6 +92,20 @@ export const buildingTools = {
       required: ["center_x", "center_z"],
     },
   },
+
+  minecraft_pillar_up: {
+    description: "Build a pillar upward by jump-placing blocks. Use this to climb to higher locations.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        height: {
+          type: "number",
+          description: "Number of blocks to pillar up (default: 1, max: 15)",
+        },
+      },
+      required: [],
+    },
+  },
 };
 
 export async function handleBuildingTool(
@@ -195,6 +209,12 @@ export async function handleBuildingTool(
         fillBlock,
         mode,
       });
+      return result;
+    }
+
+    case "minecraft_pillar_up": {
+      const height = Math.min((args.height as number) || 1, 15);
+      const result = await botManager.pillarUp(username, height);
       return result;
     }
 
