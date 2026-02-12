@@ -76,10 +76,10 @@ PROMPT
   echo "   Log: $LOGFILE"
 
   # Run Claude with timeout (20 minutes)
-  cat /tmp/minecraft_prompt.md | claude --dangerously-skip-permissions \
+  # サブシェルで実行してプロセスグループ化
+  (cat /tmp/minecraft_prompt.md | claude --dangerously-skip-permissions \
     --print \
-    --model sonnet \
-    2>&1 | tee "$LOGFILE" &
+    --model sonnet) > "$LOGFILE" 2>&1 &
   CLAUDE_PID=$!
 
   # Wait up to 1200 seconds (20 minutes)
@@ -97,9 +97,9 @@ PROMPT
   if kill -0 $CLAUDE_PID 2>/dev/null; then
     echo "" | tee -a "$LOGFILE"
     echo "⏱️  Timeout reached (20 minutes), stopping..." | tee -a "$LOGFILE"
-    kill $CLAUDE_PID 2>/dev/null || true
-    # Kill the entire process group (including tee)
+    # Kill the subshell and all its children
     pkill -P $CLAUDE_PID 2>/dev/null || true
+    kill $CLAUDE_PID 2>/dev/null || true
     wait $CLAUDE_PID 2>/dev/null || true
     EXIT_CODE=124
   fi
