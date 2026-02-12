@@ -719,7 +719,7 @@ export async function levelGround(
 
       // Find highest solid block at this position (scan from top down)
       for (let y = 100; y >= -60; y--) {
-        const block = bot.blockAt(new (bot as any).Vec3(x, y, z));
+        const block = bot.blockAt(new Vec3(x, y, z));
         if (block && block.name !== "air" && !block.name.includes("leaves") && !block.name.includes("log")) {
           const count = blockHeights.get(y) || 0;
           blockHeights.set(y, count + 1);
@@ -754,7 +754,7 @@ export async function levelGround(
       // Check blocks above targetY (to dig)
       if (mode === "dig" || mode === "both") {
         for (let y = targetY + 1; y <= targetY + 10; y++) {
-          const block = bot.blockAt(new (bot as any).Vec3(x, y, z));
+          const block = bot.blockAt(new Vec3(x, y, z));
           if (block && block.name !== "air" && !block.name.includes("bedrock")) {
             blocksToProcess.push({ x, y, z, action: "dig" });
           }
@@ -763,7 +763,7 @@ export async function levelGround(
 
       // Check if position at targetY needs filling
       if (mode === "fill" || mode === "both") {
-        const blockAtTarget = bot.blockAt(new (bot as any).Vec3(x, targetY, z));
+        const blockAtTarget = bot.blockAt(new Vec3(x, targetY, z));
         if (!blockAtTarget || blockAtTarget.name === "air" || blockAtTarget.name.includes("water")) {
           blocksToProcess.push({ x, y: targetY, z, action: "fill" });
         }
@@ -820,7 +820,7 @@ export async function levelGround(
       }
 
       if (task.action === "dig") {
-        const block = bot.blockAt(new (bot as any).Vec3(task.x, task.y, task.z));
+        const block = bot.blockAt(new Vec3(task.x, task.y, task.z));
         if (block && block.name !== "air") {
           await bot.dig(block);
           dugCount++;
@@ -829,10 +829,10 @@ export async function levelGround(
         const item = bot.inventory.items().find(i => i.name === fillBlock);
         if (item) {
           await bot.equip(item, "hand");
-          const blockBelow = bot.blockAt(new (bot as any).Vec3(task.x, task.y - 1, task.z));
+          const blockBelow = bot.blockAt(new Vec3(task.x, task.y - 1, task.z));
           if (blockBelow && blockBelow.name !== "air") {
             try {
-              await bot.placeBlock(blockBelow, new (bot as any).Vec3(0, 1, 0));
+              await bot.placeBlock(blockBelow, new Vec3(0, 1, 0));
               filledCount++;
             } catch {
               // Ignore placement errors
