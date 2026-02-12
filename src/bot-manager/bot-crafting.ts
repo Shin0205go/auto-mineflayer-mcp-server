@@ -927,9 +927,11 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
   try {
     const furnace = await bot.openFurnace(furnaceBlock);
 
-    // Check if output slot is full and take items if needed
+    // Track initial output count for accurate reporting
+    let existingOutputCount = 0;
     const existingOutput = furnace.outputItem();
     if (existingOutput) {
+      existingOutputCount = existingOutput.count;
       await furnace.takeOutput();
     }
 
@@ -948,14 +950,23 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
 
     // Take output
     const output = furnace.outputItem();
+    let newOutputCount = 0;
     if (output) {
+      newOutputCount = output.count;
       await furnace.takeOutput();
     }
 
     furnace.close();
 
+    const totalGained = existingOutputCount + newOutputCount;
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
-    return `Smelted ${smeltCount}x ${itemName}. Inventory: ${newInventory}`;
+
+    // Report both smelted count and total gained if there was existing output
+    if (existingOutputCount > 0) {
+      return `Smelted ${smeltCount}x ${itemName}, gained ${totalGained} total (${existingOutputCount} were already in furnace). Inventory: ${newInventory}`;
+    } else {
+      return `Smelted ${smeltCount}x ${itemName}. Inventory: ${newInventory}`;
+    }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to smelt ${itemName}: ${errMsg}`);
