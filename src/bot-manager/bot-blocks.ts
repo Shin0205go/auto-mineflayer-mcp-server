@@ -511,12 +511,27 @@ export async function digBlock(
     const expectedDrop = getExpectedDrop(blockName);
 
     // Check if inventory is full - BLOCK mining to prevent item loss
+    // Count non-null slots (occupied inventory slots)
     const inventorySlots = bot.inventory.slots.filter(slot => slot !== null).length;
     const maxSlots = 36; // Player inventory size
-    const isFull = inventorySlots >= maxSlots;
+
+    // Check if expected drop can stack with existing items
+    let canStack = false;
+    if (expectedDrop) {
+      const existingItem = bot.inventory.items().find(i => i.name === expectedDrop);
+      if (existingItem) {
+        // Item exists - check if it can accept more (max stack size is usually 64)
+        const maxStackSize = existingItem.stackSize || 64;
+        if (existingItem.count < maxStackSize) {
+          canStack = true;
+        }
+      }
+    }
+
+    const isFull = inventorySlots >= maxSlots && !canStack;
 
     if (isFull) {
-      const errorMsg = `⚠️ CANNOT DIG: Inventory is FULL (${inventorySlots}/${maxSlots} slots)! Items would drop and be lost. Use minecraft_drop_item to free up space first, then try again.`;
+      const errorMsg = `⚠️ CANNOT DIG: Inventory is FULL (${inventorySlots}/${maxSlots} slots) and ${expectedDrop || 'item'} cannot stack! Items would drop and be lost. Use minecraft_drop_item to free up space first, then try again.`;
       console.error(`[Dig] ${errorMsg}`);
       return errorMsg;
     }
