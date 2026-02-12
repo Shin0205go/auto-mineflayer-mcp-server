@@ -1,6 +1,62 @@
 # Known Issues
 
-## Crafting System Limitation (Critical)
+## Server Configuration Issue: Item Pickup Disabled (Critical)
+
+### Issue
+Items drop from broken blocks but **cannot be picked up** by the bot, making survival gameplay impossible.
+
+### Impact
+- **CRITICAL**: Cannot collect ANY resources (wood, stone, ores, drops)
+- Survival progression completely blocked
+- Cannot test most gameplay features
+
+### Symptoms
+- Blocks break successfully ✅
+- Items spawn on ground ✅
+- Items visible in entity list ✅
+- Automatic pickup fails ❌
+- Manual movement through items fails ❌
+
+### Root Cause
+**Server configuration or plugin blocking item pickup**, not a code bug:
+- WorldGuard, EssentialsX, or GriefPrevention may block item collection
+- Server may have custom anti-cheat preventing entity interaction
+- Gamemode restrictions (adventure mode)
+- Server-side permission issues
+
+### Diagnosis Tool
+Use `minecraft_diagnose_server` to automatically detect this issue:
+```
+minecraft_diagnose_server()
+```
+
+The tool will:
+1. Dig a test block
+2. Detect if items spawn but cannot be collected
+3. Report server configuration issues
+
+### Server Observations (2026-02-13)
+- ✅ Passive mobs (bees) DO spawn - animal spawning works
+- ❌ Item pickup completely disabled
+- ✅ Block breaking works
+- ✅ Hostile mobs spawn
+
+Previous session incorrectly reported "no passive mob spawning" - this was due to location, not server config.
+
+### Recommended Fixes (Server Admin)
+1. Check `/gamerule doTileDrops` - should be `true`
+2. Check `/gamerule doMobLoot` - should be `true`
+3. Temporarily disable server plugins (WorldGuard, EssentialsX, GriefPrevention)
+4. Verify bot has OP permissions: `/op Claude`
+5. Verify gamemode: `/gamemode survival Claude`
+6. Test with vanilla Minecraft server to isolate issue
+
+### Date
+2026-02-13 (Updated)
+
+---
+
+## Crafting System Limitation (Known)
 
 ### Issue
 `minecraft_craft` tool fails with error: `"missing ingredient: pale_oak_planks"` even when `birch_planks` are available in inventory.
