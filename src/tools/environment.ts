@@ -43,6 +43,21 @@ export const environmentTools = {
       required: ["block_name"],
     },
   },
+
+  minecraft_diagnose_server: {
+    description: "Diagnose server configuration issues (mob spawning, item drops, permissions). Use when experiencing gameplay problems like missing animals or items not dropping.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        auto_fix: {
+          type: "boolean",
+          description: "Attempt to automatically fix detected issues (default: false)",
+          default: false
+        }
+      },
+      required: [],
+    },
+  },
 };
 
 export async function handleEnvironmentTool(
@@ -162,6 +177,80 @@ export async function handleEnvironmentTool(
         }
         return `Block search failed: ${errMsg}. Try increasing max_distance or moving to a different area.`;
       }
+    }
+
+    case "minecraft_diagnose_server": {
+      const { auto_fix = false } = _args as { auto_fix?: boolean };
+      const diagnostics: string[] = [];
+
+      diagnostics.push("🔍 Server Configuration Diagnosis\n");
+
+      // 1. Check entity spawning
+      try {
+        const entityInfo = botManager.getNearbyEntities(username, 64, "all");
+        const entities = JSON.parse(entityInfo);
+
+        const hostiles = entities.filter((e: any) => e.type === "hostile");
+        const passives = entities.filter((e: any) => e.type === "passive");
+
+        diagnostics.push(`📊 Entity Spawn Status:`);
+        diagnostics.push(`  - Hostile mobs: ${hostiles.length}`);
+        diagnostics.push(`  - Passive mobs (animals): ${passives.length}`);
+
+        if (hostiles.length > 0 && passives.length === 0) {
+          diagnostics.push(`  ⚠️ WARNING: Animals not spawning! Hostile mobs exist but no passive mobs.`);
+          diagnostics.push(`  Possible cause: /gamerule doMobSpawning issue or passive mob spawning disabled`);
+          diagnostics.push(`  Impact: Cannot obtain food from animals, wool for beds unavailable`);
+
+          if (auto_fix) {
+            botManager.chat(username, "/gamerule doMobSpawning true");
+            diagnostics.push(`  🔧 Attempted fix: /gamerule doMobSpawning true`);
+          }
+        } else if (passives.length > 0) {
+          diagnostics.push(`  ✅ Passive mob spawning appears normal`);
+        }
+      } catch (error) {
+        diagnostics.push(`  ❌ Failed to check entity spawning: ${error}`);
+      }
+
+      diagnostics.push("");
+
+      // 2. Check permissions
+      diagnostics.push(`🔐 Permission Check:`);
+      try {
+        botManager.chat(username, "/gamerule");
+        // Wait briefly to see if response comes
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const messages = botManager.getChatMessages(username, false);
+
+        if (messages.length === 0) {
+          diagnostics.push(`  ⚠️ WARNING: No response to /gamerule command`);
+          diagnostics.push(`  Possible cause: Bot lacks OP permissions or is in LANmode with restricted commands`);
+          diagnostics.push(`  Impact: Cannot verify or modify server gamerules`);
+
+          if (auto_fix) {
+            botManager.chat(username, `/op ${username}`);
+            diagnostics.push(`  🔧 Attempted fix: /op ${username}`);
+          }
+        } else {
+          diagnostics.push(`  ✅ Chat commands responding`);
+        }
+      } catch (error) {
+        diagnostics.push(`  ❌ Failed to check permissions: ${error}`);
+      }
+
+      diagnostics.push("");
+
+      // 3. Summary and recommendations
+      diagnostics.push(`📋 Recommendations:`);
+      diagnostics.push(`  1. Ensure bot has OP permissions: /op ${username}`);
+      diagnostics.push(`  2. Verify mob spawning: /gamerule doMobSpawning (should be true)`);
+      diagnostics.push(`  3. Verify item drops: /gamerule doTileDrops (should be true)`);
+      diagnostics.push(`  4. Verify mob loot: /gamerule doMobLoot (should be true)`);
+      diagnostics.push(``);
+      diagnostics.push(`💡 Run with auto_fix=true to attempt automatic fixes`);
+
+      return diagnostics.join("\n");
     }
 
     default:
