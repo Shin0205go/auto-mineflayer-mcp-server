@@ -511,9 +511,8 @@ export async function digBlock(
     const expectedDrop = getExpectedDrop(blockName);
 
     // Check if inventory is full - BLOCK mining to prevent item loss
-    // Count non-null slots (occupied inventory slots)
-    const inventorySlots = bot.inventory.slots.filter(slot => slot !== null).length;
-    const maxSlots = 36; // Player inventory size
+    // Use bot.inventory.emptySlotCount() which correctly tracks available slots
+    const emptySlots = bot.inventory.emptySlotCount();
 
     // Check if expected drop can stack with existing items
     let canStack = false;
@@ -528,10 +527,10 @@ export async function digBlock(
       }
     }
 
-    const isFull = inventorySlots >= maxSlots && !canStack;
+    const isFull = emptySlots === 0 && !canStack;
 
     if (isFull) {
-      const errorMsg = `⚠️ CANNOT DIG: Inventory is FULL (${inventorySlots}/${maxSlots} slots) and ${expectedDrop || 'item'} cannot stack! Items would drop and be lost. Use minecraft_drop_item to free up space first, then try again.`;
+      const errorMsg = `⚠️ CANNOT DIG: Inventory is FULL (${emptySlots} empty slots) and ${expectedDrop || 'item'} cannot stack! Items would drop and be lost. Use minecraft_drop_item to free up space first, then try again.`;
       console.error(`[Dig] ${errorMsg}`);
       return errorMsg;
     }
@@ -720,7 +719,7 @@ export async function digBlock(
     // If we used correct tool but still got no drops, check inventory fullness first
     if (isOre && hasPickaxe && pickedUp === 0 && specificItemGained === 0) {
       if (isFull) {
-        return `⚠️ WARNING: Dug ${blockName} but items couldn't be collected because inventory is FULL (${inventorySlots}/${maxSlots} slots). Items may have dropped on the ground - free up inventory space with minecraft_drop_item, then use minecraft_collect_items to pick them up!` + getBriefStatus(username);
+        return `⚠️ WARNING: Dug ${blockName} but items couldn't be collected because inventory is FULL (0 empty slots). Items may have dropped on the ground - free up inventory space with minecraft_drop_item, then use minecraft_collect_items to pick them up!` + getBriefStatus(username);
       }
       return `⚠️ CRITICAL: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED! This is likely a Minecraft server configuration issue. Check: 1) /gamerule doTileDrops (should be true), 2) Game mode (should be survival, not creative), 3) Server plugins blocking item drops. Block broken successfully but no loot received.` + getBriefStatus(username);
     }
