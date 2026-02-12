@@ -95,6 +95,20 @@ export const combatTools = {
       required: [],
     },
   },
+
+  minecraft_respawn: {
+    description: "Respawn (strategic death/reset). Only works when HP ≤ 4. Use as last resort when trapped or critically low on health with no recovery options.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        reason: {
+          type: "string",
+          description: "Reason for respawning (e.g., 'No food available, HP critical')",
+        },
+      },
+      required: [],
+    },
+  },
 };
 
 export async function handleCombatTool(
@@ -143,6 +157,11 @@ export async function handleCombatTool(
     case "minecraft_flee": {
       const distance = (args.distance as number) || 20;
       return await botManager.flee(username, distance);
+    }
+
+    case "minecraft_respawn": {
+      const reason = args.reason as string | undefined;
+      return await botManager.respawn(username, reason);
     }
 
     default:
