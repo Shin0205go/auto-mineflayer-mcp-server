@@ -122,11 +122,13 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
         const remainingDist = bot.entity.position.distanceTo(itemPos);
         if (remainingDist > 0.3) {
           try {
-            // Use GoalBlock to move EXACTLY to the item position
-            const goal = new goals.GoalBlock(
-              Math.floor(itemPos.x),
-              Math.floor(itemPos.y),
-              Math.floor(itemPos.z)
+            // Use GoalNear with range 0 to get as close as possible to the EXACT item position
+            // GoalBlock floors coordinates which loses precision - use GoalNear instead
+            const goal = new goals.GoalNear(
+              itemPos.x,
+              itemPos.y,
+              itemPos.z,
+              0
             );
             bot.pathfinder.setGoal(goal);
 
