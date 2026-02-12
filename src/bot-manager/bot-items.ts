@@ -34,17 +34,9 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
       const dist = entity.position.distanceTo(bot.entity.position);
       if (dist > 10) return false; // Reasonable range for item collection
 
-      // Item detection - check multiple conditions for item entities
-      // mineflayer v4.x: entity.name === "item", entity.type can be "other" or "object"
-      // Note: Some servers report items with type "passive" instead (not in type definition)
-      const entityType = entity.type as string;
-      const isItem = entity.id !== bot.entity.id && entity.name === "item" && (
-        entity.type === "other" ||
-        entity.type === "object" ||
-        entityType === "passive" ||
-        entity.displayName === "Item" ||
-        (entity.entityType !== undefined && entity.entityType === 2) // item entity type ID
-      );
+      // Item detection - simplified to just check name
+      // This works because getNearbyEntities shows items with name="item"
+      const isItem = entity.id !== bot.entity.id && entity.name === "item";
 
       if (isItem && dist < 5) {
         console.error(`[CollectItems] Found item: name=${entity.name}, type=${entity.type}, distance=${dist.toFixed(2)}, pos=${entity.position.toString()}`);
@@ -112,11 +104,26 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
         // Very close - move directly THROUGH the item position to force collision pickup
         // Auto-pickup sometimes fails, so we need to move through the item multiple times
 
-        // First approach: Look at item and move forward
+        // If TOO close (< 1 block), back away first to ensure proper approach distance
+        if (distance < 1) {
+          console.error(`[CollectItems] Item very close (${distance.toFixed(2)}), backing away to ~2 blocks`);
+          await bot.lookAt(itemPos);
+          bot.setControlState("back", true);
+          await delay(800); // Back away for longer
+          bot.setControlState("back", false);
+          await delay(300);
+          // Update distance after backing away
+          const newDist = bot.entity.position.distanceTo(itemPos);
+          console.error(`[CollectItems] New distance after backing away: ${newDist.toFixed(2)}`);
+        }
+
+        // First approach: Look at item and move forward while jumping
         await bot.lookAt(itemPos);
         bot.setControlState("forward", true);
+        bot.setControlState("jump", true);
         await delay(600);
         bot.setControlState("forward", false);
+        bot.setControlState("jump", false);
         await delay(200);
 
         // Check if item still exists
@@ -163,12 +170,14 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
 
             bot.pathfinder.setGoal(null);
 
-            // After getting close, aggressively move THROUGH the item position
+            // After getting close, aggressively move THROUGH the item position while jumping
             if (bot.entities[item.id]) {
               await bot.lookAt(itemPos);
               bot.setControlState("forward", true);
+              bot.setControlState("jump", true);
               await delay(500);
               bot.setControlState("forward", false);
+              bot.setControlState("jump", false);
               await delay(300);
             }
           } catch (_) { /* ignore pathfinder errors */ }
@@ -188,8 +197,10 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
 
             await bot.lookAt(dir);
             bot.setControlState("forward", true);
+            bot.setControlState("jump", true);
             await delay(300);
             bot.setControlState("forward", false);
+            bot.setControlState("jump", false);
             await delay(100);
           }
         }
@@ -240,8 +251,10 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
           if (finalDist < 3) {
             await bot.lookAt(itemPos);
             bot.setControlState("forward", true);
+            bot.setControlState("jump", true);
             await delay(1200); // Increased from 1000 to get even closer
             bot.setControlState("forward", false);
+            bot.setControlState("jump", false);
 
             // Extra wait for auto-pickup to trigger
             await delay(500); // Increased from 200
