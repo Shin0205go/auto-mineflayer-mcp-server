@@ -653,8 +653,10 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             await new Promise(resolve => setTimeout(resolve, 300));
 
             // Try to collect any dropped items within 10 blocks
+            // Support multiple entity types for items (varies by server/version)
             const nearbyItems = Object.values(bot.entities).filter(
-              entity => entity.name === "item" && entity.position.distanceTo(bot.entity.position) < 10
+              entity => (entity.name === "item" || entity.type === "object" || entity.type === "orb") &&
+                       entity.position.distanceTo(bot.entity.position) < 10
             );
 
             if (nearbyItems.length > 0) {
@@ -684,7 +686,10 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
               // Verify item was actually collected
               const verifyCollected = bot.inventory.items().find(item => item.name === itemName);
               if (!verifyCollected) {
-                throw new Error(`Failed to collect ${itemName} after crafting. Item dropped but could not be picked up. This may be a server configuration or permission issue.`);
+                // Debug: Show all inventory items to see what we actually have
+                const inventoryNames = bot.inventory.items().map(i => i.name).join(", ");
+                console.error(`[Craft] Expected ${itemName}, but inventory has: ${inventoryNames}`);
+                throw new Error(`Failed to collect ${itemName} after crafting. Item dropped but could not be picked up. Inventory: ${inventoryNames}. This may be a server configuration or permission issue.`);
               }
             } else {
               throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting and no dropped items found nearby. This indicates a server configuration issue or the crafting operation did not complete successfully.`);
