@@ -200,7 +200,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
   if (entityName) {
     target = entities.find(e =>
       e.name?.toLowerCase() === entityName.toLowerCase() &&
-      e.position.distanceTo(bot.entity.position) < 6
+      e.position.distanceTo(bot.entity.position) < 32
     );
   } else {
     // Find nearest hostile (using dynamic registry check)
