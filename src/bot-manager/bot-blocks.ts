@@ -644,8 +644,8 @@ export async function digBlock(
       return `Dig seemed to complete but block is still there (${blockAfter.name}). May be protected area.`;
     }
 
-    // Wait for item to spawn (items can take up to 800ms to spawn on some servers)
-    await delay(800);
+    // Wait for item to spawn (items can take up to 1500ms to spawn on some servers)
+    await delay(1500);
 
     // Check inventory immediately - items within 1 block are auto-collected
     let inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
@@ -663,7 +663,7 @@ export async function digBlock(
       console.error(`[Dig] collectNearbyItems result: ${collectResult}`);
 
       // Wait for collection to complete
-      await delay(500);
+      await delay(1000);
 
       // Re-check inventory after collection
       inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
