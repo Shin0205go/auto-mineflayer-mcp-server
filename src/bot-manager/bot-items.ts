@@ -55,8 +55,8 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
   let items = findItems();
 
   if (items.length === 0) {
-    for (let wait = 0; wait < 5; wait++) {
-      await delay(400);
+    for (let wait = 0; wait < 8; wait++) {
+      await delay(500);
       items = findItems();
       if (items.length > 0) break;
     }
