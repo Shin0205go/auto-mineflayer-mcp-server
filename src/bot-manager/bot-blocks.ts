@@ -535,7 +535,17 @@ export async function digBlock(
     const isFull = emptySlots === 0 && !canStack;
 
     if (isFull) {
-      const errorMsg = `⚠️ CANNOT DIG: Inventory is FULL (${emptySlots} empty slots) and ${expectedDrop || 'item'} cannot stack! Items would drop and be lost. Use minecraft_drop_item to free up space first, then try again.`;
+      // Provide helpful suggestions for common items that accumulate
+      let suggestion = "Use minecraft_drop_item to free up space first, then try again.";
+      if (expectedDrop === "cobblestone") {
+        const cobblestoneCount = bot.inventory.items()
+          .filter(i => i.name === "cobblestone")
+          .reduce((sum, i) => sum + i.count, 0);
+        if (cobblestoneCount > 100) {
+          suggestion = `You have ${cobblestoneCount} cobblestone. Consider dropping excess cobblestone: minecraft_drop_item(item_name="cobblestone", count=${cobblestoneCount - 64})`;
+        }
+      }
+      const errorMsg = `⚠️ CANNOT DIG: Inventory is FULL (${emptySlots} empty slots) and ${expectedDrop || 'item'} cannot stack! Items would drop and be lost. ${suggestion}`;
       console.error(`[Dig] ${errorMsg}`);
       return errorMsg;
     }
