@@ -508,6 +508,16 @@ export async function digBlock(
   try {
     // Get expected drop item name (e.g., coal_ore -> coal, diamond_ore -> diamond)
     const expectedDrop = getExpectedDrop(blockName);
+
+    // Check if inventory is full - warn but don't block mining
+    const inventorySlots = bot.inventory.slots.filter(slot => slot !== null).length;
+    const maxSlots = 36; // Player inventory size
+    const isFull = inventorySlots >= maxSlots;
+
+    if (isFull) {
+      console.error(`[Dig] ⚠️ WARNING: Inventory is full (${inventorySlots}/${maxSlots} slots). Items may drop on ground and not be collected!`);
+    }
+
     const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
     const specificItemBefore = expectedDrop
       ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
@@ -687,8 +697,11 @@ export async function digBlock(
     const isOre = oresNeedingPickaxe.some(s => blockName.includes(s));
     const hasPickaxe = heldItem.includes("pickaxe");
 
-    // If we used correct tool but still got no drops, this is likely a server configuration issue
+    // If we used correct tool but still got no drops, check inventory fullness first
     if (isOre && hasPickaxe && pickedUp === 0 && specificItemGained === 0) {
+      if (isFull) {
+        return `⚠️ WARNING: Dug ${blockName} but items couldn't be collected because inventory is FULL (${inventorySlots}/${maxSlots} slots). Items may have dropped on the ground - free up inventory space with minecraft_drop_item, then use minecraft_collect_items to pick them up!` + getBriefStatus(username);
+      }
       return `⚠️ CRITICAL: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED! This is likely a Minecraft server configuration issue. Check: 1) /gamerule doTileDrops (should be true), 2) Game mode (should be survival, not creative), 3) Server plugins blocking item drops. Block broken successfully but no loot received.` + getBriefStatus(username);
     }
 
