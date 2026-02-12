@@ -135,6 +135,8 @@ Added `minecraft_respawn` tool (commit 4b014cd) to handle this exact scenario:
 - **Trade-off**: Loses inventory (acceptable for survival)
 - Use case: "Trapped, no food, critical HP"
 
+**Bug Fix (commit a410cc6)**: Respawn tool was registered but NOT exposed to Game Agents. Added to `GAME_AGENT_TOOLS` filter so it's now actually callable.
+
 ### Prevention Strategies
 1. **Proactive food management**: Keep food > 12 at all times
 2. **Emergency food crafting**: Prioritize food before mining/exploring
