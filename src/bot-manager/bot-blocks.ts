@@ -728,6 +728,35 @@ export async function digBlock(
     // If nothing picked up yet and auto-collect is enabled, use the proven collectNearbyItems function
     if (autoCollect && pickedUp === 0 && specificItemGained === 0) {
       console.error(`[Dig] No items auto-collected, using collectNearbyItems()...`);
+
+      // First, move to the block position to get closer to items
+      // Items may have spawned at or near the mined block position
+      const distToBlock = bot.entity.position.distanceTo(blockPos);
+      console.error(`[Dig] Distance to mined block: ${distToBlock.toFixed(2)}`);
+
+      if (distToBlock > 1.5) {
+        console.error(`[Dig] Moving closer to mined block position for better item pickup...`);
+        try {
+          // Move right to the mined block position (now air)
+          const goal = new goals.GoalBlock(blockPos.x, blockPos.y, blockPos.z);
+          bot.pathfinder.setGoal(goal);
+
+          const moveStart = Date.now();
+          while (Date.now() - moveStart < 2000) {
+            await delay(100);
+            if (bot.entity.position.distanceTo(blockPos) < 1.5) break;
+            if (!bot.pathfinder.isMoving()) break;
+          }
+          bot.pathfinder.setGoal(null);
+
+          // Wait a bit for auto-pickup to trigger now that we're closer
+          await delay(500);
+          console.error(`[Dig] Moved to mined block, new distance: ${bot.entity.position.distanceTo(blockPos).toFixed(2)}`);
+        } catch (moveErr) {
+          console.error(`[Dig] Failed to move closer: ${moveErr}`);
+        }
+      }
+
       const collectResult = await collectNearbyItems(bot);
       console.error(`[Dig] collectNearbyItems result: ${collectResult}`);
 
