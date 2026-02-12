@@ -655,9 +655,26 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
             // Try to collect any dropped items within 10 blocks
             // Support multiple entity types for items (varies by server/version)
-            // Check for name === "item" which is the most reliable indicator
+            // Use comprehensive item detection logic matching bot-items.ts
             const nearbyItems = Object.values(bot.entities).filter(
-              entity => entity.name === "item" && entity.position && entity.position.distanceTo(bot.entity.position) < 10
+              entity => {
+                if (!entity || entity === bot.entity || !entity.position || !bot.entity.position) {
+                  return false;
+                }
+                const dist = entity.position.distanceTo(bot.entity.position);
+                if (dist > 10) return false;
+
+                // Item detection - check multiple conditions for item entities
+                const isItem = entity.id !== bot.entity.id && (
+                  entity.name === "item" ||
+                  entity.type === "other" ||
+                  entity.type === "object" ||
+                  ((entity.type as string) === "passive" && entity.name === "item") ||
+                  entity.displayName === "Item" ||
+                  (entity.entityType !== undefined && entity.entityType === 2)
+                );
+                return isItem;
+              }
             );
 
             if (nearbyItems.length > 0) {
