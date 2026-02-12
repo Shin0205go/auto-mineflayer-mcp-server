@@ -44,12 +44,12 @@ The tool will:
 Previous session incorrectly reported "no passive mob spawning" - this was due to location, not server config.
 
 ### Recommended Fixes (Server Admin)
-1. Check `/gamerule doTileDrops` - should be `true`
-2. Check `/gamerule doMobLoot` - should be `true`
-3. Temporarily disable server plugins (WorldGuard, EssentialsX, GriefPrevention)
-4. Verify bot has OP permissions: `/op Claude`
-5. Verify gamemode: `/gamemode survival Claude`
-6. Test with vanilla Minecraft server to isolate issue
+1. Check `/gamerule doTileDrops` - should be `true` -> 実施した
+2. Check `/gamerule doMobLoot` - should be `true`　 -> 実施した
+3. Temporarily disable server plugins (WorldGuard,　しらない EssentialsX, GriefPrevention)
+4. Verify bot has OP permissions: `/op Claude`　対象外
+5. Verify gamemode: `/gamemode survival Claude` -> 実施した
+6. Test with vanilla Minecraft server to isolate issue　しらない
 
 ### Date
 2026-02-13 (Updated)
@@ -101,3 +101,48 @@ Choose one:
 
 ### Date
 2026-02-12
+
+---
+
+## Critical Survival Loop: Starvation Death Spiral (Critical)
+
+### Issue
+Bot enters unrecoverable death spiral when HP < 1 and hunger < 2 with no food available. Connection drops when attempting to move in this state.
+
+### Symptoms from 2026-02-13 Session
+- HP: 0.4/20 (one hit from death)
+- Hunger: 1/20 (starving, taking damage)
+- Oxygen: 0/20 (drowning in some cases)
+- No food in inventory
+- Attempting to move → "MCP error -32000: Connection closed"
+
+### Root Cause Analysis
+1. **Starvation damage**: At hunger < 6, bot takes periodic damage
+2. **Movement attempts fatal**: Any pathfinder operation with critical HP causes instability
+3. **No recovery path**: Without food, bot cannot heal
+4. **Connection instability**: WebSocket/MCP connection drops during critical HP movement
+
+### Failed Recovery Attempts
+- ❌ Attack passive mobs (llama) → requires movement → connection drops
+- ❌ Pillar up → no solid ground or confined space
+- ❌ Flee → requires movement → would fail
+- ❌ Eat → no food available
+
+### Solution: Emergency Respawn Tool
+Added `minecraft_respawn` tool (commit 4b014cd) to handle this exact scenario:
+- Only works when HP ≤ 4 (safety guard)
+- Strategic reset to spawn with full HP/hunger
+- **Trade-off**: Loses inventory (acceptable for survival)
+- Use case: "Trapped, no food, critical HP"
+
+### Prevention Strategies
+1. **Proactive food management**: Keep food > 12 at all times
+2. **Emergency food crafting**: Prioritize food before mining/exploring
+3. **HP monitoring**: Flee or find shelter when HP < 8
+4. **Respawn as last resort**: Better to reset than crash
+
+### Recommended Server-Side Fix
+Enable natural passive mob spawning near spawn point to ensure food availability on respawn.
+
+### Date
+2026-02-13
