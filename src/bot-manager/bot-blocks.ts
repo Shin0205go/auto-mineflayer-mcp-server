@@ -796,8 +796,32 @@ export async function digBlock(
 
     // If we used correct tool but still got no drops, check inventory fullness first
     if (isOre && hasPickaxe && pickedUp === 0 && specificItemGained === 0) {
-      if (isFull) {
-        return `⚠️ WARNING: Dug ${blockName} but items couldn't be collected because inventory is FULL (0 empty slots). Items may have dropped on the ground - free up inventory space with minecraft_drop_item, then use minecraft_collect_items to pick them up!` + getBriefStatus(username);
+      // Re-check inventory fullness at this point (inventory state may have changed)
+      const currentEmptySlots = TOTAL_SLOTS - (() => {
+        let used = 0;
+        for (let slot = 0; slot < 36; slot++) {
+          if (bot.inventory.slots[slot] !== null) used++;
+        }
+        return used;
+      })();
+
+      // Re-check if expected drop can stack
+      let currentCanStack = false;
+      if (expectedDrop) {
+        const existingItems = bot.inventory.items().filter(i => i.name === expectedDrop);
+        for (const item of existingItems) {
+          const maxStackSize = item.stackSize || 64;
+          if (item.count < maxStackSize) {
+            currentCanStack = true;
+            break;
+          }
+        }
+      }
+
+      const currentIsFull = currentEmptySlots === 0 && !currentCanStack;
+
+      if (currentIsFull) {
+        return `⚠️ WARNING: Dug ${blockName} but items couldn't be collected because inventory is FULL (${currentEmptySlots} empty slots) and ${expectedDrop || 'items'} cannot stack! Items may have dropped on the ground - free up inventory space with minecraft_drop_item, then use minecraft_collect_items to pick them up!` + getBriefStatus(username);
       }
       return `⚠️ CRITICAL: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED! This is likely a Minecraft server configuration issue. Check: 1) /gamerule doTileDrops (should be true), 2) Game mode (should be survival, not creative), 3) Server plugins blocking item drops. Block broken successfully but no loot received.` + getBriefStatus(username);
     }
