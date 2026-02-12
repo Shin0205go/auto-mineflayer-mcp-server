@@ -680,8 +680,14 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
               // Final wait to ensure all items are collected
               await new Promise(resolve => setTimeout(resolve, 500));
+
+              // Verify item was actually collected
+              const verifyCollected = bot.inventory.items().find(item => item.name === itemName);
+              if (!verifyCollected) {
+                throw new Error(`Failed to collect ${itemName} after crafting. Item dropped but could not be picked up. This may be a server configuration or permission issue.`);
+              }
             } else {
-              console.error(`[Craft] WARNING: No ${itemName} in inventory and no dropped items found. This may indicate a server configuration issue.`);
+              throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting and no dropped items found nearby. This indicates a server configuration issue or the crafting operation did not complete successfully.`);
             }
           }
 
