@@ -924,6 +924,40 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     throw new Error("No fuel in inventory. Need coal, charcoal, or wood.");
   }
 
+  // Determine what the smelted output should be (common smelting recipes)
+  const smeltingOutputMap: Record<string, string> = {
+    'raw_iron': 'iron_ingot',
+    'raw_copper': 'copper_ingot',
+    'raw_gold': 'gold_ingot',
+    'cobblestone': 'stone',
+    'stone': 'smooth_stone',
+    'sand': 'glass',
+    'clay_ball': 'brick',
+    'netherrack': 'nether_brick',
+    'cobbled_deepslate': 'deepslate',
+    'ancient_debris': 'netherite_scrap',
+    // Add wood logs
+    'oak_log': 'charcoal',
+    'birch_log': 'charcoal',
+    'spruce_log': 'charcoal',
+    'jungle_log': 'charcoal',
+    'acacia_log': 'charcoal',
+    'dark_oak_log': 'charcoal',
+    'mangrove_log': 'charcoal',
+    'cherry_log': 'charcoal',
+    // Food items
+    'beef': 'cooked_beef',
+    'porkchop': 'cooked_porkchop',
+    'chicken': 'cooked_chicken',
+    'mutton': 'cooked_mutton',
+    'rabbit': 'cooked_rabbit',
+    'cod': 'cooked_cod',
+    'salmon': 'cooked_salmon',
+    'potato': 'baked_potato',
+    'kelp': 'dried_kelp',
+  };
+  const expectedOutputName = smeltingOutputMap[itemName];
+
   try {
     const furnace = await bot.openFurnace(furnaceBlock);
 
@@ -948,7 +982,7 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     const waitTime = Math.min(smeltCount * 10000, 60000);
     await new Promise(resolve => setTimeout(resolve, waitTime));
 
-    // Take output
+    // Take output and track count
     const output = furnace.outputItem();
     let newOutputCount = 0;
     if (output) {
@@ -960,6 +994,23 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
 
     const totalGained = existingOutputCount + newOutputCount;
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
+
+    // Verify that the smelted output actually entered inventory (handle server with item pickup disabled)
+    // Check for the item that SHOULD have been produced from smelting
+    if (expectedOutputName && (newOutputCount > 0 || existingOutputCount > 0)) {
+      const outputInInventory = bot.inventory.items().find(i => i.name === expectedOutputName);
+      const inventoryHasOutput = !!outputInInventory;
+      const outputCount = outputInInventory?.count || 0;
+
+      // Always include debug info in message
+      const debugInfo = ` [Expected: ${expectedOutputName}, InInventory: ${inventoryHasOutput}${inventoryHasOutput ? ` (${outputCount}x)` : ''}]`;
+
+      if (!outputInInventory) {
+        // Items were smelted but expected output not in inventory - they must have dropped
+        console.error(`[Smelt] WARNING: ${expectedOutputName} not found in inventory after smelting - may have dropped due to server settings`);
+        return `Smelted ${smeltCount}x ${itemName} (WARNING: ${totalGained}x ${expectedOutputName} may have dropped - server has item pickup disabled). Inventory: ${newInventory}${debugInfo}`;
+      }
+    }
 
     // Report both smelted count and total gained if there was existing output
     if (existingOutputCount > 0) {
