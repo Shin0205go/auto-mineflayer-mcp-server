@@ -715,7 +715,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           await bot.craft(tryRecipe, 1, craftingTable || undefined);
 
           // Wait for crafting to complete and item transfer
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Increased timeout to 1500ms to handle slower servers
+          await new Promise(resolve => setTimeout(resolve, 1500));
 
           // Only close window if we used a crafting table (not player inventory)
           // Closing the inventory window can cause items to drop!
