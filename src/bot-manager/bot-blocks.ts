@@ -839,6 +839,12 @@ export async function digBlock(
       if (currentIsFull) {
         return `⚠️ WARNING: Dug ${blockName} but items couldn't be collected because inventory is FULL (${currentEmptySlots} empty slots) and ${expectedDrop || 'items'} cannot stack! Items may have dropped on the ground - free up inventory space with minecraft_drop_item, then use minecraft_collect_items to pick them up!` + getBriefStatus(username);
       }
+
+      // Check if item entities spawned on the ground
+      if (nearbyItems) {
+        return `⚠️ INFO: Dug ${blockName} with ${heldItem}. Items dropped on ground but couldn't be auto-collected - server has item pickup disabled. Items are on the ground near the mined block.` + getBriefStatus(username);
+      }
+
       return `⚠️ CRITICAL: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED! This is likely a Minecraft server configuration issue. Check: 1) /gamerule doTileDrops (should be true), 2) Game mode (should be survival, not creative), 3) Server plugins blocking item drops. Block broken successfully but no loot received.` + getBriefStatus(username);
     }
 
