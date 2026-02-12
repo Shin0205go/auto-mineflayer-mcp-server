@@ -486,6 +486,21 @@ export async function digBlock(
     }
   }
 
+  // Special case: If shears are equipped for non-leaves blocks, unequip them
+  // Shears are only useful for leaves, wool, cobwebs - for wood logs, they prevent drops!
+  if (bot.heldItem?.name === "shears") {
+    const shearsUseful = blockName.includes("leaves") || blockName.includes("wool") ||
+                        blockName.includes("cobweb") || blockName.includes("vine");
+    if (!shearsUseful) {
+      try {
+        await bot.unequip("hand");
+        console.error(`[Dig] Unequipped shears for ${blockName} - not useful for this block`);
+      } catch (err) {
+        console.error(`[Dig] Failed to unequip shears: ${err}`);
+      }
+    }
+  }
+
   const heldItem = bot.heldItem?.name || "empty hand";
   const gameMode = bot.game?.gameMode || "unknown";
   console.error(`[Dig] Held item: ${heldItem}, block hardness: ${block.hardness}, gameMode: ${gameMode}`);
