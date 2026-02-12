@@ -723,6 +723,13 @@ export async function digBlock(
     await delay(1500);
 
     // Check for nearby item entities on the ground
+    // Also scan all entities to diagnose server configuration issues
+    const allNearbyEntities = Object.values(bot.entities)
+      .filter(e => e && e.position && e.position.distanceTo(blockPos) < 5)
+      .map(e => ({ name: e.name || 'unknown', type: e.type, distance: e.position.distanceTo(blockPos).toFixed(2) }));
+
+    console.error(`[Dig] All entities within 5 blocks: ${JSON.stringify(allNearbyEntities)}`);
+
     const nearbyItems = bot.nearestEntity(entity => {
       if (entity.name === 'item' && entity.position) {
         const dist = entity.position.distanceTo(blockPos);
@@ -734,7 +741,12 @@ export async function digBlock(
     if (nearbyItems) {
       console.error(`[Dig] Found item entity on ground within 3 blocks, attempting collection...`);
     } else {
-      console.error(`[Dig] No item entities found within 3 blocks of mined block`);
+      console.error(`[Dig] ⚠️ NO ITEM ENTITIES found within 3 blocks of mined block!`);
+      console.error(`[Dig] This suggests server has item drops disabled via:`);
+      console.error(`[Dig]   1. /gamerule doTileDrops false (blocks don't drop)`);
+      console.error(`[Dig]   2. /gamerule doMobLoot false (mobs don't drop)`);
+      console.error(`[Dig]   3. Server plugin blocking drops`);
+      console.error(`[Dig]   4. Item despawn rate set to 0 (instant despawn)`);
     }
 
     // Check inventory immediately - items within 1 block are auto-collected
@@ -845,7 +857,33 @@ export async function digBlock(
         return `⚠️ INFO: Dug ${blockName} with ${heldItem}. Items dropped on ground but couldn't be auto-collected - server has item pickup disabled. Items are on the ground near the mined block.` + getBriefStatus(username);
       }
 
-      return `⚠️ CRITICAL: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED! This is likely a Minecraft server configuration issue. Check: 1) /gamerule doTileDrops (should be true), 2) Game mode (should be survival, not creative), 3) Server plugins blocking item drops. Block broken successfully but no loot received.` + getBriefStatus(username);
+      // No item entities found - server configuration issue
+      // Provide actionable diagnosis
+      const entityCount = Object.keys(bot.entities).length;
+      const nearbyEntityList = allNearbyEntities.length > 0
+        ? allNearbyEntities.map(e => `${e.name}(${e.distance}m)`).join(', ')
+        : 'none';
+
+      return `⚠️ CRITICAL: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED!\n\n` +
+        `**SERVER CONFIGURATION ISSUE DETECTED**\n` +
+        `Block was successfully broken, but no item entity spawned.\n\n` +
+        `**Diagnosis:**\n` +
+        `- Total entities tracked: ${entityCount}\n` +
+        `- Nearby entities (5 blocks): ${nearbyEntityList}\n` +
+        `- Expected: item entity at mined location\n` +
+        `- Result: NO ITEM ENTITY FOUND\n\n` +
+        `**Likely causes:**\n` +
+        `1. \`/gamerule doTileDrops false\` - blocks don't drop items\n` +
+        `2. \`/gamerule doMobLoot false\` - mobs don't drop loot\n` +
+        `3. Server plugin (e.g., WorldGuard, GriefPrevention) blocking drops\n` +
+        `4. Item despawn rate set to 0 (instant despawn)\n` +
+        `5. Server in creative mode (no drops in creative)\n\n` +
+        `**Recommended fixes:**\n` +
+        `- Check server: \`/gamerule doTileDrops\` and \`/gamerule doMobLoot\` (both should be true)\n` +
+        `- Verify game mode: \`/gamemode survival\`\n` +
+        `- Check server plugins for drop protection\n` +
+        `- Test in different location (may be protected area)\n\n` +
+        getBriefStatus(username);
     }
 
     if (isOre && !hasPickaxe) {
