@@ -583,8 +583,9 @@ export async function digBlock(
     }
 
     const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+    // Count ALL stacks of the expected item, not just the first one
     const specificItemBefore = expectedDrop
-      ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
+      ? bot.inventory.items().filter(i => i.name === expectedDrop).reduce((sum, i) => sum + i.count, 0)
       : 0;
 
     // Check if bot can dig this block
@@ -739,8 +740,9 @@ export async function digBlock(
     // Check inventory immediately - items within 1 block are auto-collected
     let inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
     let pickedUp = inventoryAfter - inventoryBefore;
+    // Count ALL stacks of the expected item, not just the first one
     let specificItemAfter = expectedDrop
-      ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
+      ? bot.inventory.items().filter(i => i.name === expectedDrop).reduce((sum, i) => sum + i.count, 0)
       : 0;
     let specificItemGained = specificItemAfter - specificItemBefore;
     console.error(`[Dig] Inventory check (immediate): before=${inventoryBefore}, after=${inventoryAfter}, picked=${pickedUp}, ${expectedDrop}: ${specificItemBefore}->${specificItemAfter} (+${specificItemGained})`);
@@ -786,8 +788,9 @@ export async function digBlock(
       // Re-check inventory after collection
       inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
       pickedUp = inventoryAfter - inventoryBefore;
+      // Count ALL stacks of the expected item, not just the first one
       specificItemAfter = expectedDrop
-        ? (bot.inventory.items().find(i => i.name === expectedDrop)?.count || 0)
+        ? bot.inventory.items().filter(i => i.name === expectedDrop).reduce((sum, i) => sum + i.count, 0)
         : 0;
       specificItemGained = specificItemAfter - specificItemBefore;
       console.error(`[Dig] Inventory check (after collectNearbyItems): picked=${pickedUp}, ${expectedDrop}: +${specificItemGained}`);
