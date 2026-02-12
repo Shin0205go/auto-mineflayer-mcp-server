@@ -688,8 +688,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 console.error(`[Craft] collectNearbyItems failed: ${collectErr}`);
               }
 
-              // Additional wait after collection attempt
-              await new Promise(resolve => setTimeout(resolve, 500));
+              // Additional wait after collection attempt for inventory sync
+              await new Promise(resolve => setTimeout(resolve, 1500));
 
               // Verify item was actually collected
               const verifyCollected = bot.inventory.items().find(item => item.name === itemName);
