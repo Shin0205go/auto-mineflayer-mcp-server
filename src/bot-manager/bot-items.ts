@@ -36,12 +36,13 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
 
       // Item detection - check multiple conditions for item entities
       // mineflayer v4.x: entity.name === "item", entity.type can be "other" or "object"
-      // Note: Some servers report items with type "passive" instead
+      // Note: Some servers report items with type "passive" instead (not in type definition)
+      const entityType = entity.type as string;
       const isItem = entity.id !== bot.entity.id && (
         entity.name === "item" ||
         entity.type === "other" ||
         entity.type === "object" ||
-        ((entity.type as string) === "passive" && entity.name === "item") ||
+        (entityType === "passive" && entity.name === "item") ||
         entity.displayName === "Item" ||
         (entity.entityType !== undefined && entity.entityType === 2) // item entity type ID
       );
