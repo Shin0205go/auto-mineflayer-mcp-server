@@ -11,13 +11,12 @@ mkdir -p agent_logs
 
 # ループカウンター
 LOOP=0
-MAX_LOOPS=50
 
 echo "🎮 Starting Minecraft Self-Improvement Loop"
-echo "   Max loops: $MAX_LOOPS"
+echo "   Running infinitely (Ctrl+C to stop)"
 echo ""
 
-while [ $LOOP -lt $MAX_LOOPS ]; do
+while true; do
   LOOP=$((LOOP + 1))
   COMMIT=$(git rev-parse --short=6 HEAD)
   TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -123,19 +122,17 @@ PROMPT
   echo "   - Errors: $ERROR_COUNT"
   echo "   - Log: $LOGFILE"
 
-  # Git変更チェック
-  if ! git diff --quiet; then
-    NEW_COMMIT=$(git rev-parse --short=6 HEAD)
-    if [ "$NEW_COMMIT" != "$COMMIT" ]; then
-      echo "🔧 Code improvements detected (new commit: $NEW_COMMIT)"
+  # Git変更チェック（新しいコミットがあるか）
+  NEW_COMMIT=$(git rev-parse --short=6 HEAD)
+  if [ "$NEW_COMMIT" != "$COMMIT" ]; then
+    echo "🔧 Code improvements detected (new commit: $NEW_COMMIT)"
 
-      # 自動プッシュ
-      echo "📤 Pushing to remote..."
-      if git push 2>&1 | tee -a "$LOGFILE"; then
-        echo "✅ Pushed successfully"
-      else
-        echo "⚠️  Push failed (continuing anyway)"
-      fi
+    # 自動プッシュ
+    echo "📤 Pushing to remote..."
+    if git push 2>&1 | tee -a "$LOGFILE"; then
+      echo "✅ Pushed successfully"
+    else
+      echo "⚠️  Push failed (continuing anyway)"
     fi
   fi
 
@@ -145,5 +142,6 @@ PROMPT
 done
 
 echo ""
-echo "🏁 Completed $MAX_LOOPS loops"
+echo "🏁 Self-improvement loop stopped"
+echo "📊 Completed $LOOP loops"
 echo "📁 Logs saved in: agent_logs/"
