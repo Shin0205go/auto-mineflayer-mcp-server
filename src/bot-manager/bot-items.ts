@@ -26,7 +26,7 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
     console.error(`[CollectItems] findItems() called, scanning ${Object.keys(bot.entities).length} entities`);
     const allEntities = Object.values(bot.entities);
 
-    return allEntities.filter((entity) => {
+    const items = allEntities.filter((entity) => {
       if (!entity || entity === bot.entity || !entity.position || !bot.entity.position) {
         return false;
       }
@@ -38,17 +38,23 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
       // mineflayer v4.x: entity.name === "item", entity.type can be "other" or "object"
       // Note: Some servers report items with type "passive" instead (not in type definition)
       const entityType = entity.type as string;
-      const isItem = entity.id !== bot.entity.id && (
-        entity.name === "item" ||
+      const isItem = entity.id !== bot.entity.id && entity.name === "item" && (
         entity.type === "other" ||
         entity.type === "object" ||
-        (entityType === "passive" && entity.name === "item") ||
+        entityType === "passive" ||
         entity.displayName === "Item" ||
         (entity.entityType !== undefined && entity.entityType === 2) // item entity type ID
       );
 
+      if (isItem && dist < 5) {
+        console.error(`[CollectItems] Found item: name=${entity.name}, type=${entity.type}, distance=${dist.toFixed(2)}, pos=${entity.position.toString()}`);
+      }
+
       return isItem;
     });
+
+    console.error(`[CollectItems] findItems() found ${items.length} items within 10 blocks`);
+    return items;
   };
 
   // Wait for items to appear if none found immediately
