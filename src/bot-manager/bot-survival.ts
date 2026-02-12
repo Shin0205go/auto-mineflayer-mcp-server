@@ -402,8 +402,8 @@ export async function fight(
       console.error(`[BotManager] Attack error: ${err}`);
     }
 
-    // Attack cooldown (Minecraft attack speed)
-    await delay(500);
+    // Attack cooldown (Minecraft 1.9+ attack speed, ~0.6s for diamond sword)
+    await delay(700);
   }
 
   return `Combat ended. Attacked ${attackCount} times. Target may still be alive.` + getBriefStatus(bot);
