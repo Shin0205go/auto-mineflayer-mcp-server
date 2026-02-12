@@ -442,6 +442,9 @@ export async function digBlock(
     return `Cannot dig ${blockName} (unbreakable like bedrock)`;
   }
 
+  // Save original held item to restore after digging
+  const originalHeldItem = bot.heldItem;
+
   // Auto-equip the best tool for this block type (using dynamic registry check)
   let toolType: "pickaxe" | "axe" | "shovel" | null = null;
   if (requiresPickaxe(bot, blockName)) {
@@ -673,6 +676,16 @@ export async function digBlock(
 
     if (isOre && !hasPickaxe) {
       return `WARNING: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED! Need pickaxe for ore/stone!` + getBriefStatus(username);
+    }
+
+    // Restore original held item if it was changed
+    if (originalHeldItem && bot.heldItem?.name !== originalHeldItem.name) {
+      try {
+        await bot.equip(originalHeldItem, "hand");
+        console.error(`[Dig] Restored original held item: ${originalHeldItem.name}`);
+      } catch (equipErr) {
+        console.error(`[Dig] Failed to restore original item: ${equipErr}`);
+      }
     }
 
     return `Dug ${blockName} with ${heldItem}. ${pickedUp === 0 ? 'No items dropped (auto-collected or wrong tool).' : ''}` + getBriefStatus(username);

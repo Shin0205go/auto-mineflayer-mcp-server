@@ -77,3 +77,28 @@ Without item drops:
 ## Status: BLOCKED
 
 Cannot progress in survival gameplay without item drops enabled.
+
+---
+
+## Session 2 Update (Same Day)
+
+**Tested Features**:
+1. ✅ Crafting system works - Successfully crafted `stone_pickaxe`
+2. ✅ Block placement works - Successfully placed `torch` at (0, 38, 9)
+3. ✅ Pillar building works - `minecraft_pillar_up` successfully built 15-block pillar
+4. ✅ Block breaking works - Can dig blocks to create tunnels (just no item drops)
+5. ✅ Movement & pathfinding functional
+6. ❌ Item collection still impossible (confirmed copper_ore and stone mining)
+
+**New Evidence**:
+- Mined `copper_ore` at (2, 37, 8) with `stone_pickaxe` - NO DROP
+- Mined `stone` at (2-3, 62, 6) with `stone_pickaxe` - NO DROP
+- Same error message confirms server configuration issue
+
+**Successful Workarounds**:
+- Used existing cobblestone inventory to build structures
+- Created vertical pillar from Y=47 to Y=62 (reached surface level)
+- Carved tunnel through stone to exit enclosed area
+
+**Conclusion**:
+Bot code is functioning correctly. All systems operational except resource gathering due to server-side `/gamerule doTileDrops false` configuration.
