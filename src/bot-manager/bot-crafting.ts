@@ -650,8 +650,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           if (!craftedItemInInventory) {
             console.error(`[Craft] ${itemName} not in inventory after crafting, searching for dropped items...`);
 
-            // Wait a bit longer for item to spawn as entity
-            await new Promise(resolve => setTimeout(resolve, 300));
+            // Wait longer for item to spawn as entity (800ms to match dig_block timing)
+            await new Promise(resolve => setTimeout(resolve, 800));
 
             // Try to collect any dropped items within 10 blocks
             // Support multiple entity types for items (varies by server/version)
@@ -688,8 +688,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 console.error(`[Craft] collectNearbyItems failed: ${collectErr}`);
               }
 
-              // Additional wait after collection attempt for inventory sync
-              await new Promise(resolve => setTimeout(resolve, 1500));
+              // Additional wait after collection attempt for inventory sync (increased to 2000ms)
+              await new Promise(resolve => setTimeout(resolve, 2000));
 
               // Verify item was actually collected
               const verifyCollected = bot.inventory.items().find(item => item.name === itemName);
