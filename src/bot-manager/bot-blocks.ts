@@ -522,9 +522,14 @@ export async function digBlock(
 
     // Check if inventory is full - BLOCK mining to prevent item loss
     // UNLESS autoCollect is false (items will stay on ground for manual pickup)
-    // Calculate empty slots manually as bot.inventory.emptySlotCount() may be stale after dropping items
-    const TOTAL_SLOTS = 36; // Standard Minecraft player inventory (excluding armor/offhand)
-    const usedSlots = bot.inventory.items().length;
+    // Count non-null slots in main inventory (slots 0-35)
+    const TOTAL_SLOTS = 36; // Standard Minecraft player inventory (9 hotbar + 27 main)
+    let usedSlots = 0;
+    for (let slot = 0; slot < 36; slot++) {
+      if (bot.inventory.slots[slot] !== null) {
+        usedSlots++;
+      }
+    }
     const emptySlots = TOTAL_SLOTS - usedSlots;
     console.error(`[Dig] Empty slots: ${emptySlots} (${usedSlots}/${TOTAL_SLOTS} used), autoCollect: ${autoCollect}`);
 
