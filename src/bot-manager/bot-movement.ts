@@ -323,6 +323,17 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     console.error(`[Move] No standable candidate succeeded, falling through to pathfinder for (${x}, ${y}, ${z})`);
   }
 
+  // SAFETY CHECK: If target is significantly lower, prevent fall damage
+  // by refusing to path there if it would require falling more than 3 blocks
+  const currentY = bot.entity.position.y;
+  const targetY = y;
+  const fallDistance = currentY - targetY;
+
+  if (fallDistance > 3) {
+    console.error(`[Move] Safety check: target is ${fallDistance.toFixed(0)} blocks lower - would cause fall damage!`);
+    return `Cannot move to (${x}, ${y}, ${z}) - target is ${fallDistance.toFixed(0)} blocks lower than current position. This would cause fall damage. Use minecraft_dig_block or minecraft_pillar_up to descend safely, or choose a closer target at similar height.` + getBriefStatus(managed);
+  }
+
   // Use pathfinder directly - it handles digging and tower building automatically
   const result = await moveToBasic(managed, x, y, z);
 
