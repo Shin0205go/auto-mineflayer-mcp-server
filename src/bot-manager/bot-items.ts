@@ -431,6 +431,17 @@ export async function equipWeapon(bot: Bot, weaponName?: string): Promise<string
  * Equip a specific item (handles auto-detection of equipment slot)
  */
 export async function equipItem(bot: Bot, itemName: string): Promise<string> {
+  // Support unequipping (switching to empty hand)
+  const normalizedName = itemName.toLowerCase().trim();
+  if (normalizedName === "none" || normalizedName === "empty" || normalizedName === "") {
+    try {
+      await bot.unequip("hand");
+      return `Unequipped hand - now using empty hand`;
+    } catch (err) {
+      return `Failed to unequip hand: ${err}`;
+    }
+  }
+
   const item = bot.inventory.items().find(i =>
     i.name.toLowerCase() === itemName.toLowerCase() ||
     i.name.toLowerCase().includes(itemName.toLowerCase())

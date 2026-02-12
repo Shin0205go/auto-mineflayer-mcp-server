@@ -29,13 +29,13 @@ export const craftingTools = {
   },
 
   minecraft_equip: {
-    description: "Equip an item to hand or armor slot",
+    description: "Equip an item to hand or armor slot. Use 'none' or 'empty' as item_name to unequip and switch to empty hand.",
     inputSchema: {
       type: "object" as const,
       properties: {
         item_name: {
           type: "string",
-          description: "Item name to equip",
+          description: "Item name to equip, or 'none'/'empty' to unequip and use empty hand",
         },
         destination: {
           type: "string",
