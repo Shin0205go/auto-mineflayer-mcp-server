@@ -465,10 +465,20 @@ export async function digBlock(
     for (const toolName of toolPriority) {
       const tool = inventory.find(i => i.name === toolName);
       if (tool) {
-        await bot.equip(tool, "hand");
-        equippedTool = toolName;
-        console.error(`[Dig] Auto-equipped ${toolName} for ${blockName}`);
-        break;
+        try {
+          await bot.equip(tool, "hand");
+          equippedTool = toolName;
+          console.error(`[Dig] Auto-equipped ${toolName} for ${blockName}`);
+          // Verify tool was actually equipped
+          const verifyHeld = bot.heldItem?.name;
+          console.error(`[Dig] Verification: held item after equip = ${verifyHeld}`);
+          if (verifyHeld !== toolName) {
+            console.error(`[Dig] WARNING: Tool equip verification failed! Expected ${toolName}, got ${verifyHeld}`);
+          }
+          break;
+        } catch (equipErr) {
+          console.error(`[Dig] Failed to equip ${toolName}: ${equipErr}`);
+        }
       }
     }
 
@@ -504,7 +514,7 @@ export async function digBlock(
 
   const heldItem = bot.heldItem?.name || "empty hand";
   const gameMode = bot.game?.gameMode || "unknown";
-  console.error(`[Dig] Held item: ${heldItem}, block hardness: ${block.hardness}, gameMode: ${gameMode}`);
+  console.error(`[Dig] Final held item check: ${heldItem}, block hardness: ${block.hardness}, gameMode: ${gameMode}`);
 
   try {
     // Get expected drop item name (e.g., coal_ore -> coal, diamond_ore -> diamond)

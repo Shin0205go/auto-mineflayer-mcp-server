@@ -49,20 +49,49 @@ export function isFoodItem(bot: Bot, itemName: string): boolean {
 /** Check if block requires pickaxe to mine */
 export function requiresPickaxe(bot: Bot, blockName: string): boolean {
   const block = bot.registry.blocksByName[blockName];
-  return block?.material?.includes("pickaxe") || false;
+  if (!block || !block.harvestTools) return false;
+
+  // Check if any pickaxe can harvest this block
+  const pickaxeItems = ["wooden_pickaxe", "stone_pickaxe", "iron_pickaxe", "golden_pickaxe", "diamond_pickaxe", "netherite_pickaxe"];
+  for (const pickaxeName of pickaxeItems) {
+    const pickaxe = bot.registry.itemsByName[pickaxeName];
+    if (pickaxe && block.harvestTools[pickaxe.id] !== undefined) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Check if block requires axe to mine */
 export function requiresAxe(bot: Bot, blockName: string): boolean {
   const block = bot.registry.blocksByName[blockName];
-  const mat = block?.material || "";
-  return mat.includes("axe") && !mat.includes("pickaxe");
+  if (!block || !block.harvestTools) return false;
+
+  // Check if any axe can harvest this block
+  const axeItems = ["wooden_axe", "stone_axe", "iron_axe", "golden_axe", "diamond_axe", "netherite_axe"];
+  for (const axeName of axeItems) {
+    const axe = bot.registry.itemsByName[axeName];
+    if (axe && block.harvestTools[axe.id] !== undefined) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Check if block requires shovel to mine */
 export function requiresShovel(bot: Bot, blockName: string): boolean {
   const block = bot.registry.blocksByName[blockName];
-  return block?.material?.includes("shovel") || false;
+  if (!block || !block.harvestTools) return false;
+
+  // Check if any shovel can harvest this block
+  const shovelItems = ["wooden_shovel", "stone_shovel", "iron_shovel", "golden_shovel", "diamond_shovel", "netherite_shovel"];
+  for (const shovelName of shovelItems) {
+    const shovel = bot.registry.itemsByName[shovelName];
+    if (shovel && block.harvestTools[shovel.id] !== undefined) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Check if item can be used as fuel */
