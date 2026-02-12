@@ -158,8 +158,9 @@ function findReferenceBlock(bot: Bot, targetPos: Vec3): { block: any; faceVector
  * @returns The expected drop item name (e.g., "coal"), or null if no specific drop expected
  */
 function getExpectedDrop(blockName: string): string | null {
-  // Ore blocks drop different items than their block name
-  const oreMappings: Record<string, string> = {
+  // Blocks that drop different items than their block name
+  const dropMappings: Record<string, string> = {
+    // Ore blocks
     "coal_ore": "coal",
     "deepslate_coal_ore": "coal",
     "iron_ore": "raw_iron",
@@ -179,11 +180,23 @@ function getExpectedDrop(blockName: string): string | null {
     "nether_quartz_ore": "quartz",
     "nether_gold_ore": "gold_nugget",
     "ancient_debris": "ancient_debris",
-    // Most other blocks drop themselves
+
+    // Common blocks that don't drop themselves
+    "stone": "cobblestone",
+    "deepslate": "cobbled_deepslate",
+    "grass_block": "dirt",
+    "gravel": "gravel", // Can drop flint, but usually gravel
+    "clay": "clay_ball",
+    "glowstone": "glowstone_dust",
+    "redstone_lamp": "redstone_lamp", // Drops itself
+    "sea_lantern": "prismarine_crystals",
+    "grass": "", // Drops nothing
+    "tall_grass": "", // Drops nothing (or seeds)
+    "fern": "", // Drops nothing (or seeds)
   };
 
-  // If not in oreMappings, assume block drops itself (logs, stone, etc.)
-  return oreMappings[blockName] || blockName;
+  // If not in dropMappings, assume block drops itself (logs, planks, etc.)
+  return dropMappings[blockName] || blockName;
 }
 
 /**
