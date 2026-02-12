@@ -854,7 +854,30 @@ export async function digBlock(
 
       // Check if item entities spawned on the ground
       if (nearbyItems) {
-        return `⚠️ INFO: Dug ${blockName} with ${heldItem}. Items dropped on ground but couldn't be auto-collected - server has item pickup disabled. Items are on the ground near the mined block.` + getBriefStatus(username);
+        const itemPos = nearbyItems.position ? nearbyItems.position.toString() : 'unknown';
+        const itemDist = nearbyItems.position ? nearbyItems.position.distanceTo(bot.entity.position).toFixed(2) : '?';
+        return `⚠️ CRITICAL: Dug ${blockName} with ${heldItem} but items dropped on ground and CANNOT BE COLLECTED!\n\n` +
+          `**SERVER CONFIGURATION ISSUE DETECTED**\n` +
+          `Items are spawning but automatic pickup is disabled.\n\n` +
+          `**Diagnosis:**\n` +
+          `- Block broke successfully: ✅\n` +
+          `- Items spawned on ground: ✅ (at ${itemPos}, ${itemDist}m away)\n` +
+          `- Automatic item pickup: ❌ DISABLED\n` +
+          `- Manual collection attempts: Failed (item entity exists but not collectible)\n\n` +
+          `**Likely causes:**\n` +
+          `1. Server plugin (e.g., EssentialsX, WorldGuard, GriefPrevention) blocking item pickup\n` +
+          `2. \`/gamerule doImmediateRespawn true\` preventing item pickup in some server configs\n` +
+          `3. Player gamemode issue (adventure mode can break blocks but not pick items)\n` +
+          `4. Server-side anti-cheat preventing item collection\n` +
+          `5. Custom server modification disabling auto-pickup\n\n` +
+          `**Recommended fixes:**\n` +
+          `- Check server plugins: Disable WorldGuard, EssentialsX, or similar plugins temporarily\n` +
+          `- Verify gamemode: Run \`/gamemode survival\` to ensure proper mode\n` +
+          `- Check player permissions: Ensure bot has item pickup permissions\n` +
+          `- Test with vanilla Minecraft server to isolate the issue\n` +
+          `- Check server logs for item pickup denial messages\n\n` +
+          `**This makes survival gameplay IMPOSSIBLE** - the bot cannot collect any resources.\n\n` +
+          getBriefStatus(username);
       }
 
       // No item entities found - server configuration issue
