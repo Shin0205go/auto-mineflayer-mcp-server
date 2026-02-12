@@ -155,6 +155,15 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
             }
 
             bot.pathfinder.setGoal(null);
+
+            // After getting close, aggressively move THROUGH the item position
+            if (bot.entities[item.id]) {
+              await bot.lookAt(itemPos);
+              bot.setControlState("forward", true);
+              await delay(500);
+              bot.setControlState("forward", false);
+              await delay(300);
+            }
           } catch (_) { /* ignore pathfinder errors */ }
         }
 
