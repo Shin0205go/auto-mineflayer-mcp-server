@@ -35,10 +35,12 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
       if (dist > 10) return false; // Reasonable range for item collection
 
       // Item detection - check multiple conditions for item entities
-      // mineflayer v4.x: entity.name === "item", entity.type === "other", entity.displayName === "Item"
+      // mineflayer v4.x: entity.name === "item", entity.type can be "other" or "object"
+      // Note: Some servers report items with type "passive" instead
       const isItem = entity.id !== bot.entity.id && (
         entity.name === "item" ||
         entity.type === "other" ||
+        entity.type === "object" ||
         entity.displayName === "Item" ||
         (entity.entityType !== undefined && entity.entityType === 2) // item entity type ID
       );
