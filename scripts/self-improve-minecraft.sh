@@ -75,16 +75,16 @@ PROMPT
   echo "▶️  Starting Claude Code..."
   echo "   Log: $LOGFILE"
 
-  # Run Claude with timeout (10 minutes)
+  # Run Claude with timeout (20 minutes)
   cat /tmp/minecraft_prompt.md | claude --dangerously-skip-permissions \
     --print \
     --model sonnet \
-    2>&1 | tee "$LOGFILE" &
+    2>&1 | stdbuf -oL tee "$LOGFILE" &
   CLAUDE_PID=$!
 
-  # Wait up to 600 seconds (10 minutes)
+  # Wait up to 1200 seconds (20 minutes)
   EXIT_CODE=0
-  for i in {1..600}; do
+  for i in {1..1200}; do
     if ! kill -0 $CLAUDE_PID 2>/dev/null; then
       wait $CLAUDE_PID
       EXIT_CODE=$?
@@ -96,7 +96,7 @@ PROMPT
   # Kill if still running
   if kill -0 $CLAUDE_PID 2>/dev/null; then
     echo "" | tee -a "$LOGFILE"
-    echo "⏱️  Timeout reached (10 minutes), stopping..." | tee -a "$LOGFILE"
+    echo "⏱️  Timeout reached (20 minutes), stopping..." | tee -a "$LOGFILE"
     kill $CLAUDE_PID 2>/dev/null || true
     # Kill the entire process group (including tee)
     pkill -P $CLAUDE_PID 2>/dev/null || true
@@ -108,7 +108,7 @@ PROMPT
   if [ ${EXIT_CODE:-0} -eq 0 ]; then
     echo "✅ Completed successfully"
   elif [ ${EXIT_CODE:-0} -eq 124 ]; then
-    echo "⏱️  Timeout (6 minutes) - moving to next loop"
+    echo "⏱️  Timeout (20 minutes) - moving to next loop"
   else
     echo "❌ Exited with code ${EXIT_CODE:-0}"
   fi
