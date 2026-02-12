@@ -75,6 +75,7 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
   minecraft_equip_armor: { tags: ["combat", "armor", "equip", "protection"], category: "combat", priority: 7 },
   minecraft_equip_weapon: { tags: ["combat", "weapon", "equip", "sword"], category: "combat", priority: 7 },
   minecraft_flee: { tags: ["survival", "flee", "escape", "run"], category: "survival", priority: 8 },
+  minecraft_respawn: { tags: ["survival", "respawn", "death", "reset", "emergency"], category: "survival", priority: 10 },
 
   // Crafting & Items
   minecraft_get_inventory: { tags: ["info", "inventory", "items", "check"], category: "info", priority: 8 },

@@ -20,6 +20,7 @@ import {
   minecraft_explore_area
 } from "./tools/high-level-actions.js";
 import { stateTools, handleStateTool } from "./tools/state.js";
+import { combatTools, handleCombatTool } from "./tools/combat.js";
 import { appendFileSync, readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -376,6 +377,7 @@ const tools = {
     inputSchema: { type: "object", properties: {} },
   },
   ...stateTools,
+  ...combatTools,
   minecraft_chat: {
     description: "Send a chat message",
     inputSchema: {
@@ -984,6 +986,18 @@ async function handleTool(
 
     case "task_update": {
       return await taskUpdate(args as any);
+    }
+
+    // === Combat tools ===
+    case "minecraft_get_status":
+    case "minecraft_get_nearby_entities":
+    case "minecraft_attack":
+    case "minecraft_eat":
+    case "minecraft_equip_armor":
+    case "minecraft_equip_weapon":
+    case "minecraft_flee":
+    case "minecraft_respawn": {
+      return await handleCombatTool(name, args);
     }
 
     default:
