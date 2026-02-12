@@ -654,9 +654,10 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
             // Try to collect any dropped items within 10 blocks
             // Support multiple entity types for items (varies by server/version)
+            // Check for objectType === 'Item' which is the standard entity type for dropped items
             const nearbyItems = Object.values(bot.entities).filter(
-              entity => (entity.name === "item" || entity.type === "object" || entity.type === "orb") &&
-                       entity.position.distanceTo(bot.entity.position) < 10
+              entity => (entity.name === "item" || entity.type === "object" || entity.type === "orb" || (entity as any).objectType === "Item") &&
+                       entity.position && entity.position.distanceTo(bot.entity.position) < 10
             );
 
             if (nearbyItems.length > 0) {
