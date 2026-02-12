@@ -198,10 +198,20 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
   const entities = Object.values(bot.entities);
 
   if (entityName) {
-    target = entities.find(e =>
-      e.name?.toLowerCase() === entityName.toLowerCase() &&
-      e.position.distanceTo(bot.entity.position) < 32
-    );
+    const targetLower = entityName.toLowerCase();
+    target = entities.find(e => {
+      if (!e || e === bot.entity) return false;
+      const dist = e.position.distanceTo(bot.entity.position);
+      if (dist > 32) return false;
+
+      const name = (e.name || "").toLowerCase();
+      const displayName = ((e as any).displayName || "").toLowerCase();
+
+      return name === targetLower ||
+             name.includes(targetLower) ||
+             displayName === targetLower ||
+             displayName.includes(targetLower);
+    });
   } else {
     // Find nearest hostile (using dynamic registry check)
     target = entities
