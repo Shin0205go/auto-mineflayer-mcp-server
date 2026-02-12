@@ -135,8 +135,19 @@ export async function handleCraftingTool(
 
     case "minecraft_drop_item": {
       const itemName = args.item_name as string;
-      // dropItem not implemented in multi-bot manager yet
-      return `Drop ${itemName}: Not yet implemented`;
+      const count = args.count as number | undefined;
+
+      if (!itemName) {
+        throw new Error("item_name is required");
+      }
+
+      try {
+        const result = await botManager.dropItem(username, itemName, count);
+        return result;
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        return `Failed to drop ${itemName}: ${errorMsg}`;
+      }
     }
 
     case "minecraft_smelt": {
