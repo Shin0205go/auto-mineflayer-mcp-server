@@ -41,6 +41,7 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
         entity.name === "item" ||
         entity.type === "other" ||
         entity.type === "object" ||
+        ((entity.type as string) === "passive" && entity.name === "item") ||
         entity.displayName === "Item" ||
         (entity.entityType !== undefined && entity.entityType === 2) // item entity type ID
       );
