@@ -44,6 +44,10 @@ export const buildingTools = {
           type: "number",
           description: "Z coordinate",
         },
+        auto_collect: {
+          type: "boolean",
+          description: "Automatically collect dropped items after digging (default: true). Set to false if you want to manually control item pickup or if you're clearing inventory space.",
+        },
       },
       required: ["x", "y", "z"],
     },
@@ -141,6 +145,7 @@ export async function handleBuildingTool(
       const x = args.x as number;
       const y = args.y as number;
       const z = args.z as number;
+      const autoCollect = args.auto_collect !== undefined ? (args.auto_collect as boolean) : true;
 
       // Check if bot is connected first
       const bot = botManager.getBot(username);
@@ -151,23 +156,23 @@ export async function handleBuildingTool(
       // Check if bot can navigate to target position
       if (bot) {
         const distance = Math.sqrt(
-          Math.pow(bot.entity.position.x - x, 2) + 
-          Math.pow(bot.entity.position.y - y, 2) + 
+          Math.pow(bot.entity.position.x - x, 2) +
+          Math.pow(bot.entity.position.y - y, 2) +
           Math.pow(bot.entity.position.z - z, 2)
         );
-        
+
         // If too far, suggest movement instead of failing immediately
         if (distance > 6) {
           throw new Error(`Target position (${x}, ${y}, ${z}) is too far away (${distance.toFixed(1)} blocks). Use minecraft_move_to to get closer first, then try digging again. Current position: (${bot.entity.position.x.toFixed(1)}, ${bot.entity.position.y.toFixed(1)}, ${bot.entity.position.z.toFixed(1)})`);
         }
-        
+
         // Give bot time to position properly before mining
         await new Promise(resolve => setTimeout(resolve, 300));
       }
 
       try {
         // Always survival mode - actually mine the block
-        const result = await botManager.digBlock(username, x, y, z, false);
+        const result = await botManager.digBlock(username, x, y, z, false, autoCollect);
         return result;
       } catch (error) {
         if (error instanceof Error) {

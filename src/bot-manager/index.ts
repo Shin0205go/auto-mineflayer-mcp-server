@@ -230,7 +230,7 @@ export class BotManager extends BotCore {
     );
   }
 
-  async digBlock(username: string, x: number, y: number, z: number, useCommand: boolean = false): Promise<string> {
+  async digBlock(username: string, x: number, y: number, z: number, useCommand: boolean = false, autoCollect: boolean = true): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
 
@@ -248,7 +248,8 @@ export class BotManager extends BotCore {
       useCommand,
       this.delay.bind(this),
       moveToBasicWrapper,
-      this.getBriefStatus.bind(this)
+      this.getBriefStatus.bind(this),
+      autoCollect
     );
   }
 

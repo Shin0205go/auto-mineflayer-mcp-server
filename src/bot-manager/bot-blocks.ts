@@ -197,7 +197,8 @@ export async function digBlock(
   useCommand: boolean,
   delay: (ms: number) => Promise<void>,
   moveToBasic: (username: string, x: number, y: number, z: number) => Promise<{ success: boolean; message: string }>,
-  getBriefStatus: (username: string) => string
+  getBriefStatus: (username: string) => string,
+  autoCollect: boolean = true
 ): Promise<string> {
   const bot = managed.bot;
   const username = managed.username;
@@ -668,8 +669,8 @@ export async function digBlock(
     let specificItemGained = specificItemAfter - specificItemBefore;
     console.error(`[Dig] Inventory check (immediate): before=${inventoryBefore}, after=${inventoryAfter}, picked=${pickedUp}, ${expectedDrop}: ${specificItemBefore}->${specificItemAfter} (+${specificItemGained})`);
 
-    // If nothing picked up yet, use the proven collectNearbyItems function
-    if (pickedUp === 0 && specificItemGained === 0) {
+    // If nothing picked up yet and auto-collect is enabled, use the proven collectNearbyItems function
+    if (autoCollect && pickedUp === 0 && specificItemGained === 0) {
       console.error(`[Dig] No items auto-collected, using collectNearbyItems()...`);
       const collectResult = await collectNearbyItems(bot);
       console.error(`[Dig] collectNearbyItems result: ${collectResult}`);
@@ -685,6 +686,8 @@ export async function digBlock(
         : 0;
       specificItemGained = specificItemAfter - specificItemBefore;
       console.error(`[Dig] Inventory check (after collectNearbyItems): picked=${pickedUp}, ${expectedDrop}: +${specificItemGained}`);
+    } else if (!autoCollect) {
+      console.error(`[Dig] Auto-collect disabled, skipping item collection`);
     }
 
     if (pickedUp > 0 || specificItemGained > 0) {
