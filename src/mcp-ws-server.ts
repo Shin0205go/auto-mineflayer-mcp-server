@@ -11,6 +11,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { botManager } from "./bot-manager.js";
 import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
 import { learningTools, handleLearningTool } from "./tools/learning.js";
+import { highLevelActionTools, handleHighLevelActionTool } from "./tools/high-level-actions-mcp.js";
 
 interface JSONRPCRequest {
   jsonrpc: '2.0';
@@ -379,6 +380,9 @@ const tools = {
 
   // === 自己学習ツール ===
   ...learningTools,
+
+  // === 高レベルアクションツール ===
+  ...highLevelActionTools,
 };
 
 // Handle tool calls
@@ -636,6 +640,16 @@ async function handleTool(
       const direction = (args.direction as "north" | "south" | "east" | "west" | "random") || "random";
       const maxBlocks = (args.max_blocks as number) || 200;
       return await botManager.exploreForBiome(username, targetBiome, direction, maxBlocks);
+    }
+
+    // === 高レベルアクションツール ===
+    case "minecraft_gather_resources":
+    case "minecraft_build_structure":
+    case "minecraft_craft_chain":
+    case "minecraft_survival_routine":
+    case "minecraft_explore_area":
+    case "minecraft_validate_survival_environment": {
+      return await handleHighLevelActionTool(name, args);
     }
 
     // === 自己学習ツール ===

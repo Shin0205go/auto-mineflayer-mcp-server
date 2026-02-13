@@ -451,8 +451,6 @@ export async function minecraft_survival_routine(
     } else {
       selectedPriority = "shelter";
     }
-
-    console.error(`[SurvivalRoutine] Auto-selected priority: ${selectedPriority}`);
   }
 
   const results: string[] = [];
