@@ -104,6 +104,18 @@ description: "鉄を集める", prompt: "鉄鉱石を見つけて採掘し、精
 - recall_locations: 保存した場所を思い出す（タイプや距離でフィルタ可能）
 - forget_location: 不要な場所を削除
 
+### 自己学習（重要！）
+- log_experience: 重要な行動の結果を記録（成功・失敗問わず）
+- get_recent_experiences: 過去の経験を振り返る
+- reflect_and_learn: 経験からパターンを分析、改善点を抽出
+- save_skill: 成功した手順をスキルとして保存
+- get_skills: 保存したスキルを参照
+
+### 場所記憶（重要！）
+- remember_location: **作業台・かまど・チェスト・拠点を設置したら必ず記憶！**
+- recall_locations: 保存した場所を思い出す（タイプや距離でフィルタ可能）
+- forget_location: 不要な場所を削除
+
 ## 行動ルール
 1. 接続は最初に一度だけ
 2. **毎ターン最初にminecraft_get_surroundingsを呼ぶ！** 周囲状況を把握してから行動
