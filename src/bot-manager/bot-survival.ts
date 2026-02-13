@@ -689,22 +689,26 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
   const oldHP = bot.health;
   const oldFood = bot.food;
 
-  // Guard: Don't respawn if HP is still okay
-  if (oldHP > 4) {
-    const inventory = bot.inventory.items();
-    const itemList = inventory.map(i => `${i.name}(${i.count})`).join(", ");
+  // Guard: Only refuse respawn if HP > 10 AND player has food
+  // Allow respawn in desperate situations (HP low, no food, etc.)
+  const inventory = bot.inventory.items();
+  const itemList = inventory.map(i => `${i.name}(${i.count})`).join(", ");
 
-    // Check if player has any food items
-    const foodKeywords = ['food', 'cooked', 'bread', 'apple', 'carrot', 'potato', 'beetroot', 'melon', 'berry', 'stew', 'soup', 'pie', 'cookie', 'cake', 'beef', 'porkchop', 'mutton', 'chicken', 'rabbit', 'cod', 'salmon', 'fish', 'rotten_flesh'];
-    const hasFood = inventory.some(item =>
-      foodKeywords.some(keyword => item.name.toLowerCase().includes(keyword))
-    );
+  // Check if player has any food items
+  const foodKeywords = ['food', 'cooked', 'bread', 'apple', 'carrot', 'potato', 'beetroot', 'melon', 'berry', 'stew', 'soup', 'pie', 'cookie', 'cake', 'beef', 'porkchop', 'mutton', 'chicken', 'rabbit', 'cod', 'salmon', 'fish', 'rotten_flesh'];
+  const hasFood = inventory.some(item =>
+    foodKeywords.some(keyword => item.name.toLowerCase().includes(keyword))
+  );
 
-    if (!hasFood) {
-      return `Refused to respawn: HP is ${oldHP}/20. ⚠️ NO FOOD in inventory. Consider using minecraft_validate_survival_environment to check for food sources, or explore to find passive mobs/crops. Inventory: ${itemList}`;
-    }
+  // Allow respawn if HP ≤ 10 OR no food
+  if (oldHP > 10 && hasFood) {
+    return `Refused to respawn: HP is ${oldHP}/20 (still healthy). Try eating, fleeing, or pillar_up first. Inventory: ${itemList}`;
+  }
 
-    return `Refused to respawn: HP is ${oldHP}/20 (still survivable). Try eating, fleeing, or pillar_up first. Inventory: ${itemList}`;
+  if (oldHP > 10 && !hasFood) {
+    console.error(`[Respawn] Allowing strategic respawn at HP=${oldHP} due to no food in inventory`);
+  } else if (oldHP <= 10) {
+    console.error(`[Respawn] Allowing respawn due to low HP=${oldHP}`);
   }
 
   console.error(`[Respawn] Intentional death requested. Reason: ${reason || "unspecified"}`);
