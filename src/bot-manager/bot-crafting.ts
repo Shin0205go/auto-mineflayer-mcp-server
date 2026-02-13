@@ -379,8 +379,25 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       throw new Error(`Cannot find item ID for ${anyPlanks.name}`);
     }
 
-    // Get all recipes and find one that uses the planks type we actually have
-    const allRecipes = bot.recipesAll(item.id, null, null);
+    // Try to get recipes in multiple ways:
+    // 1. Without crafting table (2x2 grid)
+    // 2. With crafting table if available (3x3 grid)
+    // 3. Using different plank types
+
+    let allRecipes = bot.recipesAll(item.id, null, null);
+
+    // If no recipes found, try with crafting table
+    if (allRecipes.length === 0) {
+      const craftingTableId = mcData.blocksByName.crafting_table?.id;
+      const nearbyTable = bot.findBlock({
+        matching: craftingTableId,
+        maxDistance: 5,
+      });
+
+      if (nearbyTable) {
+        allRecipes = bot.recipesAll(item.id, null, nearbyTable);
+      }
+    }
 
     // Try to find a recipe that uses our specific planks type
     let compatibleRecipe = allRecipes.find(recipe => {
@@ -419,7 +436,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     }
 
     if (!compatibleRecipe) {
-      throw new Error(`Cannot craft ${itemName}: No compatible recipe found for ${anyPlanks.name}. Available planks: ${totalPlanks}. This may be a Minecraft version compatibility issue.`);
+      throw new Error(`Cannot craft ${itemName}: No compatible recipe found for ${anyPlanks.name}. Available planks: ${totalPlanks}, Available recipes: ${allRecipes.length}. This may be a Minecraft version compatibility issue.`);
     }
 
     console.error(`[Craft] Attempting to craft ${itemName} using ${anyPlanks.name} (have ${totalPlanks} planks)`);
