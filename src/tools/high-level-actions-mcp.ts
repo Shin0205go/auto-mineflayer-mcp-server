@@ -4,6 +4,7 @@ import {
   minecraft_craft_chain,
   minecraft_survival_routine,
   minecraft_explore_area,
+  minecraft_validate_survival_environment,
 } from "./high-level-actions.js";
 
 export const highLevelActionTools = {
@@ -77,6 +78,17 @@ export const highLevelActionTools = {
       required: ["username", "radius"]
     }
   },
+  minecraft_validate_survival_environment: {
+    description: "Validate if environment has sufficient food sources for survival - checks for passive mobs, edible plants, and fishing viability. Run this at session start to detect unplayable environments.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "Bot username" },
+        searchRadius: { type: "number", description: "Search radius in blocks (default: 100)" }
+      },
+      required: ["username"]
+    }
+  },
 };
 
 export async function handleHighLevelActionTool(name: string, args: Record<string, unknown>): Promise<string> {
@@ -110,6 +122,11 @@ export async function handleHighLevelActionTool(name: string, args: Record<strin
       const radius = args.radius as number;
       const target = args.target as string | undefined;
       return await minecraft_explore_area(username, radius, target);
+    }
+
+    case "minecraft_validate_survival_environment": {
+      const searchRadius = args.searchRadius as number | undefined;
+      return await minecraft_validate_survival_environment(username, searchRadius);
     }
 
     default:

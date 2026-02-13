@@ -771,3 +771,90 @@ export async function minecraft_brew_potion(
     return `Failed to brew potion: ${errMsg}`;
   }
 }
+
+/**
+ * Validate if the environment has sufficient food sources for survival
+ * Checks for: passive mobs, edible plants, and fishing viability
+ * Returns a report with viability status and recommendations
+ */
+export async function minecraft_validate_survival_environment(
+  username: string,
+  searchRadius: number = 100
+): Promise<string> {
+  console.error(`[ValidateEnvironment] Checking survival viability within ${searchRadius} blocks`);
+
+  const findings: string[] = [];
+  let foodSourcesFound = 0;
+
+  // Check for passive mobs (primary food source)
+  const passiveMobs = ["cow", "pig", "chicken", "sheep", "rabbit"];
+  for (const mobType of passiveMobs) {
+    const entityResult = botManager.findEntities(username, mobType, searchRadius);
+    if (!entityResult.startsWith("No") && entityResult.includes(mobType)) {
+      findings.push(`✅ Found ${mobType} (huntable food)`);
+      foodSourcesFound++;
+    }
+  }
+
+  // Check for edible plants
+  const ediblePlants = ["sweet_berry_bush", "melon", "kelp", "wheat", "carrots", "potatoes"];
+  for (const plantType of ediblePlants) {
+    const blockResult = botManager.findBlock(username, plantType, searchRadius);
+    if (!blockResult.includes("No") && !blockResult.includes("not found")) {
+      findings.push(`✅ Found ${plantType} (harvestable food)`);
+      foodSourcesFound++;
+    }
+  }
+
+  // Check for fishing viability (water + string for fishing rod)
+  const waterResult = botManager.findBlock(username, "water", searchRadius);
+  const hasWater = !waterResult.includes("No") && !waterResult.includes("not found");
+
+  if (hasWater) {
+    const inventory = botManager.getInventory(username);
+    const hasString = inventory.some(item => item.name === "string");
+    const hasSticks = inventory.some(item => item.name === "stick");
+
+    if (hasString && hasSticks) {
+      findings.push("✅ Fishing viable (water + string + sticks)");
+      foodSourcesFound++;
+    } else if (hasSticks) {
+      findings.push("⚠️ Water found but missing string for fishing rod");
+    }
+  }
+
+  // Generate viability report
+  const status = botManager.getStatus(username);
+  let currentHunger = 20;
+  try {
+    const statusObj = JSON.parse(status);
+    const hungerMatch = statusObj.hunger?.match(/([\d.]+)\//);
+    if (hungerMatch) currentHunger = parseFloat(hungerMatch[1]);
+  } catch (e) {
+    // Ignore parse errors
+  }
+
+  const header = `\n=== SURVIVAL ENVIRONMENT VALIDATION ===\nCurrent Hunger: ${currentHunger}/20\nSearch Radius: ${searchRadius} blocks\n`;
+
+  if (foodSourcesFound === 0) {
+    return header +
+      `\n❌ CRITICAL: NO FOOD SOURCES DETECTED\n` +
+      `\nFindings:\n- No passive mobs found\n- No edible plants found\n- No fishing viability\n` +
+      `\n⚠️ WARNING: Survival may be impossible in this environment!\n` +
+      `\nRecommendations:\n` +
+      `1. Check server configuration (mob spawning may be disabled)\n` +
+      `2. Move to a different area with /tp command\n` +
+      `3. Use creative mode or /give commands to obtain food\n` +
+      `4. Enable mob spawning in server.properties (spawn-monsters=true, spawn-animals=true)`;
+  } else if (foodSourcesFound < 2) {
+    return header +
+      `\n⚠️ LIMITED FOOD SOURCES (${foodSourcesFound} type found)\n` +
+      `\nFindings:\n${findings.join("\n")}\n` +
+      `\nStatus: Survival possible but challenging. Food scarcity may occur.`;
+  } else {
+    return header +
+      `\n✅ ENVIRONMENT VIABLE (${foodSourcesFound} food source types found)\n` +
+      `\nFindings:\n${findings.join("\n")}\n` +
+      `\nStatus: Good survival conditions detected.`;
+  }
+}
