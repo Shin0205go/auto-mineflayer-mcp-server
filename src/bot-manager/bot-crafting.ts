@@ -861,6 +861,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 export async function smeltItem(managed: ManagedBot, itemName: string, count: number = 1): Promise<string> {
   const bot = managed.bot;
 
+  console.error(`[SMELT-DEBUG-2026] Starting smelt: ${itemName} x${count}`);
+
   // Check if bot is still connected
   if (!bot || !bot.entity) {
     throw new Error("Bot is not connected to the server. Please reconnect.");
@@ -1002,6 +1004,8 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
 
       try {
         await furnace.takeOutput();
+        // Wait for item to transfer to inventory
+        await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (takeErr) {
         furnace.close();
         const takeErrMsg = takeErr instanceof Error ? takeErr.message : String(takeErr);
@@ -1052,6 +1056,7 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
       if (output && output.count > 0) {
         totalOutputTaken += output.count;
         await furnace.takeOutput();
+        await new Promise(resolve => setTimeout(resolve, 500)); // Wait for transfer
         console.error(`[Smelt] Took ${output.count}x output (total: ${totalOutputTaken}/${targetCount})`);
       }
     }
@@ -1061,6 +1066,7 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     if (finalOutput && finalOutput.count > 0) {
       totalOutputTaken += finalOutput.count;
       await furnace.takeOutput();
+      await new Promise(resolve => setTimeout(resolve, 500)); // Wait for transfer
       console.error(`[Smelt] Final take: ${finalOutput.count}x output (total: ${totalOutputTaken}/${targetCount})`);
     }
 
