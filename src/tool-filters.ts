@@ -5,7 +5,7 @@
  * Dev Agent: All tools (for debugging and development)
  */
 
-// All tools for Game Agent (43 tools total)
+// All tools for Game Agent (44 tools total)
 export const GAME_AGENT_TOOLS = new Set([
   // Connection (3 tools)
   "minecraft_connect",
@@ -64,12 +64,13 @@ export const GAME_AGENT_TOOLS = new Set([
   // Tool Search (1 tool)
   "search_tools",
 
-  // High-Level Actions (5 tools) - for skills
+  // High-Level Actions (6 tools) - for skills
   "minecraft_gather_resources",
   "minecraft_build_structure",
   "minecraft_craft_chain",
   "minecraft_survival_routine",
   "minecraft_explore_area",
+  "minecraft_validate_survival_environment",
 ]);
 
 export type AgentType = "game" | "dev";
