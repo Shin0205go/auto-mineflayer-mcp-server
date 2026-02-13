@@ -1008,9 +1008,28 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
       await furnace.putFuel(fuel.type, null, Math.min(fuel.count, 8));
     }
 
+    // Check if furnace input slot is already occupied
+    const existingInput = furnace.inputItem();
+    if (existingInput) {
+      // Try to take existing input first to clear the slot
+      try {
+        await furnace.takeInput();
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (inputErr) {
+        furnace.close();
+        throw new Error(`Furnace input slot occupied with ${existingInput.name} x${existingInput.count}. Cannot add new items. Clear furnace first.`);
+      }
+    }
+
     // Put item to smelt
     const smeltCount = Math.min(count, itemToSmelt.count);
-    await furnace.putInput(itemToSmelt.type, null, smeltCount);
+    try {
+      await furnace.putInput(itemToSmelt.type, null, smeltCount);
+    } catch (putErr) {
+      furnace.close();
+      const putErrMsg = putErr instanceof Error ? putErr.message : String(putErr);
+      throw new Error(`Cannot put ${itemName} into furnace (${putErrMsg}). Inventory may be full or furnace state is invalid. Try dropping some items first.`);
+    }
 
     // Wait for smelting (roughly 10 seconds per item)
     const waitTime = Math.min(smeltCount * 10000, 60000);
