@@ -965,11 +965,11 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
   const expectedOutputName = smeltingOutputMap[itemName];
 
   try {
-    // Track initial inventory count for accurate verification
+    // Track initial inventory count for accurate verification (sum ALL stacks)
     let initialOutputCount = 0;
     if (expectedOutputName) {
-      const initialOutput = bot.inventory.items().find(i => i.name === expectedOutputName);
-      initialOutputCount = initialOutput?.count || 0;
+      const allStacks = bot.inventory.items().filter(i => i.name === expectedOutputName);
+      initialOutputCount = allStacks.reduce((sum, item) => sum + item.count, 0);
     }
     const furnace = await bot.openFurnace(furnaceBlock);
 
@@ -1057,14 +1057,14 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     // Verify that the smelted output actually entered inventory (handle server with item pickup disabled)
     // Check for the item that SHOULD have been produced from smelting
     if (expectedOutputName && (newOutputCount > 0 || existingOutputCount > 0)) {
-      const outputInInventory = bot.inventory.items().find(i => i.name === expectedOutputName);
-      const finalOutputCount = outputInInventory?.count || 0;
+      const outputInInventory = bot.inventory.items().filter(i => i.name === expectedOutputName);
+      const finalOutputCount = outputInInventory.reduce((sum, item) => sum + item.count, 0);
       const actualGained = finalOutputCount - initialOutputCount;
 
       // Always include debug info in message
       const debugInfo = ` [Expected: ${expectedOutputName}, Initial: ${initialOutputCount}, Final: ${finalOutputCount}, Gained: ${actualGained}, SmeltCount: ${smeltCount}, ExistingInFurnace: ${existingOutputCount}]`;
 
-      if (!outputInInventory) {
+      if (outputInInventory.length === 0) {
         // Items were smelted but expected output not in inventory - they must have dropped
         console.error(`[Smelt] CRITICAL: ${expectedOutputName} not found in inventory after smelting - output lost permanently`);
         throw new Error(`Cannot smelt ${itemName}: Server has item pickup disabled or inventory sync failed. ${totalGained}x ${expectedOutputName} was produced but lost. Raw materials consumed but output disappeared. This indicates a critical server configuration issue.${debugInfo}`);
