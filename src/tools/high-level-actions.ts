@@ -413,12 +413,21 @@ export async function minecraft_survival_routine(
 
   if (priority === "auto") {
     // Auto-detect priority based on current state
-    const statusMatch = status.match(/Health: ([\d.]+)\/20, Food: ([\d.]+)\/20/);
-    if (!statusMatch) {
-      return `Failed to parse status: ${status}`;
+    // Parse JSON status: {"health":"X/20","hunger":"Y/20",...}
+    let food = 20;
+
+    try {
+      const statusObj = JSON.parse(status);
+      const hungerMatch = statusObj.hunger?.match(/([\d.]+)\//);
+      if (hungerMatch) food = parseFloat(hungerMatch[1]);
+    } catch (e) {
+      // Fallback: try old text format
+      const statusMatch = status.match(/Health: ([\d.]+)\/20, Food: ([\d.]+)\/20/);
+      if (statusMatch) {
+        food = parseFloat(statusMatch[2]);
+      }
     }
 
-    const food = parseFloat(statusMatch[2]);
     const hasPickaxe = inventory.some(item => item.name.includes("pickaxe"));
 
     if (food < 10) {
