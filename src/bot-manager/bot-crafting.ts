@@ -972,6 +972,28 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     const existingOutput = furnace.outputItem();
     if (existingOutput) {
       existingOutputCount = existingOutput.count;
+
+      // Check if inventory has space before taking output
+      const inventorySlots = bot.inventory.slots;
+      const emptySlots = inventorySlots.filter((slot, idx) =>
+        idx >= bot.inventory.inventoryStart &&
+        idx < bot.inventory.inventoryEnd &&
+        !slot
+      ).length;
+
+      if (emptySlots === 0) {
+        // Check if we can stack with existing items
+        const canStack = bot.inventory.items().some(item =>
+          item.name === expectedOutputName &&
+          item.count < item.stackSize
+        );
+
+        if (!canStack) {
+          furnace.close();
+          throw new Error(`Inventory full (0 empty slots). Cannot take output from furnace. Drop items first.`);
+        }
+      }
+
       await furnace.takeOutput();
     }
 
