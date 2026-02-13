@@ -586,6 +586,9 @@ export async function minecraft_explore_area(
 
   const findings: string[] = [];
   let visitedPoints = 0;
+  const maxVisitedPoints = Math.min(50, Math.floor(radius / 5)); // Limit exploration points
+  const startTime = Date.now();
+  const maxDuration = 120000; // 2 minutes max
 
   // Spiral pattern exploration
   let x = startX;
@@ -595,7 +598,9 @@ export async function minecraft_explore_area(
   let segmentLength = 1;
   let segmentPassed = 0;
 
-  while (Math.abs(x - startX) <= radius && Math.abs(z - startZ) <= radius) {
+  while (Math.abs(x - startX) <= radius && Math.abs(z - startZ) <= radius &&
+         visitedPoints < maxVisitedPoints &&
+         (Date.now() - startTime) < maxDuration) {
     visitedPoints++;
 
     try {
@@ -630,7 +635,19 @@ export async function minecraft_explore_area(
       }
 
       // Move to next point
-      await botManager.moveTo(username, x, startPos.y, z);
+      try {
+        await botManager.moveTo(username, x, startPos.y, z);
+      } catch (moveErr) {
+        console.error(`[ExploreArea] Move failed at (${x}, ${z}): ${moveErr}`);
+        // Skip this point and continue
+        x += dx;
+        z += dz;
+        segmentPassed++;
+        continue;
+      }
+
+      // Small delay to prevent overwhelming the connection
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Categorize target type to avoid false matches
       const knownBiomes = ["plains", "forest", "taiga", "desert", "savanna", "jungle", "swamp", "mountains", "ocean", "river", "beach", "snowy", "ice", "mushroom", "nether", "end"];
@@ -692,10 +709,7 @@ export async function minecraft_explore_area(
         }
       }
 
-      // Break if we've explored enough
-      if (visitedPoints >= 100) {
-        break;
-      }
+      // No need for additional break - loop condition handles it
 
     } catch (err) {
       console.error(`[ExploreArea] Error at (${x}, ${z}): ${err}`);
