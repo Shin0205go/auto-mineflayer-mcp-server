@@ -923,7 +923,7 @@ export async function digBlock(
       }
     }
 
-    return `Dug ${blockName} with ${heldItem}. ${pickedUp === 0 ? 'No items dropped (auto-collected or wrong tool).' : ''}` + getBriefStatus(username);
+    return `Dug ${blockName} with ${heldItem}${pickedUp > 0 ? ` and picked up ${pickedUp} item(s)!` : ' (already in inventory or no drops)'}` + getBriefStatus(username);
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[Dig] Error: ${errMsg}`);
