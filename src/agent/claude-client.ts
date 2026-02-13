@@ -421,11 +421,7 @@ export class ClaudeClient extends EventEmitter {
     this.config = {
       model: process.env.CLAUDE_MODEL || "haiku",
       systemInstruction: DEFAULT_SYSTEM_INSTRUCTION,
-<<<<<<< Updated upstream
-      maxTurns: 50,
-=======
       maxTurns: 100,
->>>>>>> Stashed changes
       mcpServerUrl: "ws://localhost:8765",
       agentName: "Claude",
       ...config,

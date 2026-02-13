@@ -110,11 +110,7 @@ class ClaudeAgent {
 
   constructor() {
     this.claude = new ClaudeClient({
-<<<<<<< Updated upstream
       maxTurns: 300,  // サブエージェントが完了まで動けるように大幅増
-=======
-      maxTurns: 100,
->>>>>>> Stashed changes
       mcpServerUrl: MCP_WS_URL,
     });
 
