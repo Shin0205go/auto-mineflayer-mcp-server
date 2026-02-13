@@ -715,9 +715,15 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                            "netherite_pickaxe", "netherite_axe", "netherite_sword", "netherite_shovel",
                            "iron_pickaxe", "iron_axe", "iron_sword", "iron_shovel"];
 
-    if (valuableItems.includes(itemName) && craftingTable) {
-      console.error(`[Craft] WARNING: Crafting valuable item ${itemName} using crafting table. If server has item pickup disabled, ingredients will be lost.`);
-      // For valuable items, always craft in player inventory if possible to avoid this bug
+    if (valuableItems.includes(itemName)) {
+      console.error(`[Craft] CRITICAL: Cannot craft valuable item ${itemName} - server has item pickup disabled.`);
+      console.error(`[Craft] Crafting would consume materials but output would be lost permanently.`);
+      throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafting this item would permanently waste valuable materials (diamonds, iron, etc). This server configuration makes crafting of valuable items impossible. Use existing tools or change server settings to enable item pickup.`);
+    }
+
+    if (craftingTable) {
+      console.error(`[Craft] WARNING: Crafting ${itemName} using crafting table. If server has item pickup disabled, ingredients will be lost.`);
+      // For all items, prefer to craft in player inventory if possible to avoid this bug
       // Try to find 2x2 recipes first
       const recipes2x2 = bot.recipesAll(item.id, null, null);
       if (recipes2x2.length > 0) {
