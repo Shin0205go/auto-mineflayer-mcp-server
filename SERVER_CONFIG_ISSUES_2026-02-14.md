@@ -7,19 +7,21 @@
 
 ## Critical Issues Detected
 
-### 1. Item Pickup Disabled (CRITICAL)
-**Status:** Server configuration prevents item collection
-**Impact:** Blocks mining impossible - resources cannot be gathered
+### 1. Items Cannot Enter Inventory (CRITICAL - SERVER BROKEN)
+**Status:** Server completely prevents items from entering inventory
+**Impact:** ALL item acquisition methods fail - server is unplayable
 
 **Evidence:**
-- Mining coal_ore at (6, 93, 18) succeeded
-- Item dropped at coordinates (5.875, 91, 17.284656713190504)
-- Bot unable to collect dropped item despite auto_collect=true
-- Error message: "Items dropped but server has item pickup disabled"
+- Mining: coal_ore dropped at (18.875, 95, 48.125) but not collected
+- Crafting: birch_planks crafted, consumed birch_log, but planks dropped and lost
+- Commands: `/give Claude3 cooked_beef 16` executed but no items received
+- Gamerules: doTileDrops=true, doMobLoot=true, doEntityDrops=true (all correctly set)
 
-**Result:** Block mining works but resource collection is impossible
+**Result:** Items cannot enter inventory through ANY method
 
-**Code Location:** `src/bot-manager/bot-blocks.ts:914`
+**Root Cause:** Unknown server plugin/configuration blocking ALL inventory additions
+
+**Code Location:** `src/bot-manager/bot-blocks.ts:914`, `src/bot-manager/bot-crafting.ts:873`
 
 ### 2. No Passive Mob Spawning (CRITICAL)
 **Status:** Environment validation shows zero passive mobs
@@ -80,10 +82,13 @@ spawn-npcs=true
 - ✅ Combat (can attack mobs)
 
 ### What Doesn't Work:
-- ❌ Item collection from ground
+- ❌ Item collection from ground (drops spawn but can't be picked up)
+- ❌ Crafting (items crafted but drop on ground, materials lost)
+- ❌ `/give` commands (items don't enter inventory)
 - ❌ Resource gathering (items don't enter inventory)
-- ❌ Food acquisition (no mobs to hunt)
+- ❌ Food acquisition (no mobs to hunt + can't obtain food anyway)
 - ❌ Sustainable survival gameplay
+- ❌ **ANY method of adding items to inventory**
 
 ## Session Details
 
