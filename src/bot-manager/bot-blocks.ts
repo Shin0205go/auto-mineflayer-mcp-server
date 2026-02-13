@@ -749,6 +749,17 @@ export async function digBlock(
     // Wait for item to spawn (items can take up to 1500ms to spawn on some servers)
     await delay(1500);
 
+    // Check if bot died during dig (e.g., fall damage, lava, mob attack)
+    // After respawn, bot position will have changed dramatically
+    const posAfterDig = bot.entity.position;
+    const posChanged = posAfterDig.distanceTo(new Vec3(x, y, z)) > 50;
+    if (posChanged) {
+      return `⚠️ CRITICAL: Bot position changed dramatically during dig operation! ` +
+        `Expected to be near (${x}, ${y}, ${z}) but now at (${posAfterDig.x.toFixed(1)}, ${posAfterDig.y.toFixed(1)}, ${posAfterDig.z.toFixed(1)}). ` +
+        `This usually indicates bot died and respawned. Check for: fall damage, lava, mob attacks, or other hazards. ` +
+        `Mining operation aborted.` + getBriefStatus(username);
+    }
+
     // Check for nearby item entities on the ground
     // Also scan all entities to diagnose server configuration issues
     const allNearbyEntities = Object.values(bot.entities)
