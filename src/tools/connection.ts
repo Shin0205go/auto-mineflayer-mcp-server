@@ -94,7 +94,20 @@ export async function handleConnectionTool(
           await new Promise(resolve => setTimeout(resolve, 2000));
 
           try {
+            // Check if bot is still connected before validation
+            if (!botManager.isConnected(username)) {
+              console.error(`[Connection] Bot ${username} disconnected before validation could start`);
+              return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})\n\n⚠️ WARNING: Bot disconnected shortly after connection. Validation skipped.`;
+            }
+
             const validationResult = await minecraft_validate_survival_environment(username, 100);
+
+            // Check if bot is still connected after validation
+            if (!botManager.isConnected(username)) {
+              console.error(`[Connection] Bot ${username} disconnected during validation`);
+              return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})\n\n⚠️ WARNING: Bot disconnected during validation. Results may be incomplete:\n${validationResult}`;
+            }
+
             if (validationResult.includes("❌ CRITICAL")) {
               // Return warning but don't block connection
               return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})\n\n${validationResult}`;

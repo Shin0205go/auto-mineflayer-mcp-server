@@ -827,39 +827,61 @@ export async function minecraft_validate_survival_environment(
   let foodSourcesFound = 0;
 
   // Check for passive mobs (primary food source)
+  // Use smaller search radius initially to avoid timeout
+  const quickSearchRadius = Math.min(searchRadius, 50);
   const passiveMobs = ["cow", "pig", "chicken", "sheep", "rabbit"];
   for (const mobType of passiveMobs) {
-    const entityResult = botManager.findEntities(username, mobType, searchRadius);
+    // Check if bot still connected (avoid timeout issues)
+    if (!botManager.isConnected(username)) {
+      console.error(`[ValidateEnvironment] Bot disconnected during validation`);
+      break;
+    }
+
+    const entityResult = botManager.findEntities(username, mobType, quickSearchRadius);
     if (!entityResult.startsWith("No") && entityResult.includes(mobType)) {
       findings.push(`✅ Found ${mobType} (huntable food)`);
       foodSourcesFound++;
+      // Early exit if we found food
+      if (foodSourcesFound >= 2) break;
     }
   }
 
-  // Check for edible plants
-  const ediblePlants = ["sweet_berry_bush", "melon", "kelp", "wheat", "carrots", "potatoes"];
-  for (const plantType of ediblePlants) {
-    const blockResult = botManager.findBlock(username, plantType, searchRadius);
-    if (!blockResult.includes("No") && !blockResult.includes("not found")) {
-      findings.push(`✅ Found ${plantType} (harvestable food)`);
-      foodSourcesFound++;
+  // Check for edible plants (only if no mobs found)
+  if (foodSourcesFound < 2) {
+    const ediblePlants = ["sweet_berry_bush", "melon", "kelp", "wheat", "carrots", "potatoes"];
+    for (const plantType of ediblePlants) {
+      // Check if bot still connected
+      if (!botManager.isConnected(username)) {
+        console.error(`[ValidateEnvironment] Bot disconnected during validation`);
+        break;
+      }
+
+      const blockResult = botManager.findBlock(username, plantType, quickSearchRadius);
+      if (!blockResult.includes("No") && !blockResult.includes("not found")) {
+        findings.push(`✅ Found ${plantType} (harvestable food)`);
+        foodSourcesFound++;
+        // Early exit if we found enough food sources
+        if (foodSourcesFound >= 2) break;
+      }
     }
   }
 
-  // Check for fishing viability (water + string for fishing rod)
-  const waterResult = botManager.findBlock(username, "water", searchRadius);
-  const hasWater = !waterResult.includes("No") && !waterResult.includes("not found");
+  // Check for fishing viability (water + string for fishing rod) - only if still need food sources
+  if (foodSourcesFound < 2 && botManager.isConnected(username)) {
+    const waterResult = botManager.findBlock(username, "water", quickSearchRadius);
+    const hasWater = !waterResult.includes("No") && !waterResult.includes("not found");
 
-  if (hasWater) {
-    const inventory = botManager.getInventory(username);
-    const hasString = inventory.some(item => item.name === "string");
-    const hasSticks = inventory.some(item => item.name === "stick");
+    if (hasWater) {
+      const inventory = botManager.getInventory(username);
+      const hasString = inventory.some(item => item.name === "string");
+      const hasSticks = inventory.some(item => item.name === "stick");
 
-    if (hasString && hasSticks) {
-      findings.push("✅ Fishing viable (water + string + sticks)");
-      foodSourcesFound++;
-    } else if (hasSticks) {
-      findings.push("⚠️ Water found but missing string for fishing rod");
+      if (hasString && hasSticks) {
+        findings.push("✅ Fishing viable (water + string + sticks)");
+        foodSourcesFound++;
+      } else if (hasSticks) {
+        findings.push("⚠️ Water found but missing string for fishing rod");
+      }
     }
   }
 
@@ -874,7 +896,7 @@ export async function minecraft_validate_survival_environment(
     // Ignore parse errors
   }
 
-  const header = `\n=== SURVIVAL ENVIRONMENT VALIDATION ===\nCurrent Hunger: ${currentHunger}/20\nSearch Radius: ${searchRadius} blocks\n`;
+  const header = `\n=== SURVIVAL ENVIRONMENT VALIDATION ===\nCurrent Hunger: ${currentHunger}/20\nSearch Radius: ${quickSearchRadius} blocks (optimized for performance)\n`;
 
   if (foodSourcesFound === 0) {
     return header +
