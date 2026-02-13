@@ -1045,6 +1045,10 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     const waitTime = Math.min(smeltCount * 10000, 180000); // Cap at 3 minutes (18 items max)
     await new Promise(resolve => setTimeout(resolve, waitTime));
 
+    // Track inventory count BEFORE taking output
+    const inventoryBefore = bot.inventory.items().find(i => i.name === expectedOutputName);
+    const countBefore = inventoryBefore?.count || 0;
+
     // Take output and track count
     const output = furnace.outputItem();
     let newOutputCount = 0;
@@ -1054,6 +1058,14 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     }
 
     furnace.close();
+
+    // Small delay to ensure items are transferred to inventory
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Track inventory count AFTER taking output
+    const inventoryAfter = bot.inventory.items().find(i => i.name === expectedOutputName);
+    const countAfter = inventoryAfter?.count || 0;
+    const actualGained = countAfter - countBefore;
 
     const totalGained = existingOutputCount + newOutputCount;
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
@@ -1066,11 +1078,11 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
       const outputCount = outputInInventory?.count || 0;
 
       // Always include debug info in message
-      const debugInfo = ` [Expected: ${expectedOutputName}, InInventory: ${inventoryHasOutput}${inventoryHasOutput ? ` (${outputCount}x)` : ''}]`;
+      const debugInfo = ` [Expected: ${expectedOutputName}, InInventory: ${inventoryHasOutput}${inventoryHasOutput ? ` (${outputCount}x)` : ''}, Gained: ${actualGained}/${totalGained}]`;
 
-      if (!outputInInventory) {
-        // Items were smelted but expected output not in inventory - they must have dropped
-        console.error(`[Smelt] WARNING: ${expectedOutputName} not found in inventory after smelting - may have dropped due to server settings`);
+      if (actualGained === 0 && totalGained > 0) {
+        // Items were smelted but didn't enter inventory - they must have dropped or there's a transfer issue
+        console.error(`[Smelt] WARNING: ${expectedOutputName} not transferred to inventory after smelting - may have dropped due to server settings`);
         return `Smelted ${smeltCount}x ${itemName} (WARNING: ${totalGained}x ${expectedOutputName} may have dropped - server has item pickup disabled). Inventory: ${newInventory}${debugInfo}`;
       }
     }
