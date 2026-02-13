@@ -450,7 +450,34 @@ export async function minecraft_survival_routine(
         results.push(`Food gathering failed: ${err}`);
       }
     } else {
-      results.push("No food sources (animals) found nearby");
+      // No animals found - try fishing as emergency fallback
+      console.error("[SurvivalRoutine] No animals found, attempting fishing");
+
+      try {
+        // Check if we have a fishing rod
+        const hasFishingRod = inventory.some(item => item.name === "fishing_rod");
+
+        if (hasFishingRod) {
+          const fishResult = await botManager.fish(username, 30);
+          results.push(`Emergency fishing: ${fishResult}`);
+        } else {
+          // Try to craft a fishing rod (requires 3 sticks + 2 string)
+          const hasSticks = inventory.some(item => item.name === "stick" && item.count >= 3);
+          const hasString = inventory.some(item => item.name === "string" && item.count >= 2);
+
+          if (hasSticks && hasString) {
+            const craftResult = await botManager.craftItem(username, "fishing_rod", 1);
+            results.push(`Crafted fishing rod: ${craftResult}`);
+
+            const fishResult = await botManager.fish(username, 30);
+            results.push(`Emergency fishing: ${fishResult}`);
+          } else {
+            results.push("No food sources found. Need: animals nearby OR fishing rod OR (3 sticks + 2 string to craft rod)");
+          }
+        }
+      } catch (err) {
+        results.push(`Emergency fishing failed: ${err}`);
+      }
     }
   }
 
@@ -563,13 +590,24 @@ export async function minecraft_explore_area(
     visitedPoints++;
 
     try {
-      // Safety check: abort if hunger is critical
+      // Safety check: abort if hunger is critical (unless searching for food)
       const status = botManager.getStatus(username);
       const statusMatch = status.match(/Food: ([\d.]+)\/20/);
       if (statusMatch) {
         const food = parseFloat(statusMatch[1]);
         if (food < 6) {
-          return `Exploration aborted at ${visitedPoints} points due to critical hunger (${food}/20). Return to safety and eat! Findings so far: ${findings.length > 0 ? findings.join(", ") : "none"}`;
+          // Emergency mode: allow short-range search for food animals
+          const foodAnimals = ["cow", "pig", "chicken", "sheep", "rabbit"];
+          const isSearchingForFood = target && foodAnimals.includes(target.toLowerCase());
+
+          if (!isSearchingForFood) {
+            return `Exploration aborted at ${visitedPoints} points due to critical hunger (${food}/20). Return to safety and eat! Findings so far: ${findings.length > 0 ? findings.join(", ") : "none"}`;
+          }
+
+          // In emergency mode, limit search radius to 30 blocks max
+          if (visitedPoints > 20) {
+            return `Emergency food search completed at ${visitedPoints} points. Hunger: ${food}/20. Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
+          }
         }
       }
 
