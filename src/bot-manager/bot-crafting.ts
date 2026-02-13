@@ -967,6 +967,13 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
   try {
     const furnace = await bot.openFurnace(furnaceBlock);
 
+    // Check if inventory has space for output
+    const emptySlots = bot.inventory.emptySlotCount();
+    if (emptySlots === 0) {
+      furnace.close();
+      throw new Error("Inventory full - no space for smelted items. Drop or store some items first.");
+    }
+
     // Track initial output count for accurate reporting
     let existingOutputCount = 0;
     const existingOutput = furnace.outputItem();
