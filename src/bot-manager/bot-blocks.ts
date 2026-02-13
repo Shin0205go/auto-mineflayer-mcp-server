@@ -909,28 +909,9 @@ export async function digBlock(
       if (nearbyItems) {
         const itemPos = nearbyItems.position ? nearbyItems.position.toString() : 'unknown';
         const itemDist = nearbyItems.position ? nearbyItems.position.distanceTo(bot.entity.position).toFixed(2) : '?';
-        return `⚠️ CRITICAL: Dug ${blockName} with ${heldItem} but items dropped on ground and CANNOT BE COLLECTED!\n\n` +
-          `**SERVER CONFIGURATION ISSUE DETECTED**\n` +
-          `Items are spawning but automatic pickup is disabled.\n\n` +
-          `**Diagnosis:**\n` +
-          `- Block broke successfully: ✅\n` +
-          `- Items spawned on ground: ✅ (at ${itemPos}, ${itemDist}m away)\n` +
-          `- Automatic item pickup: ❌ DISABLED\n` +
-          `- Manual collection attempts: Failed (item entity exists but not collectible)\n\n` +
-          `**Likely causes:**\n` +
-          `1. Server plugin (e.g., EssentialsX, WorldGuard, GriefPrevention) blocking item pickup\n` +
-          `2. \`/gamerule doImmediateRespawn true\` preventing item pickup in some server configs\n` +
-          `3. Player gamemode issue (adventure mode can break blocks but not pick items)\n` +
-          `4. Server-side anti-cheat preventing item collection\n` +
-          `5. Custom server modification disabling auto-pickup\n\n` +
-          `**Recommended fixes:**\n` +
-          `- Check server plugins: Disable WorldGuard, EssentialsX, or similar plugins temporarily\n` +
-          `- Verify gamemode: Run \`/gamemode survival\` to ensure proper mode\n` +
-          `- Check player permissions: Ensure bot has item pickup permissions\n` +
-          `- Test with vanilla Minecraft server to isolate the issue\n` +
-          `- Check server logs for item pickup denial messages\n\n` +
-          `**This makes survival gameplay IMPOSSIBLE** - the bot cannot collect any resources.\n\n` +
-          getBriefStatus(username);
+        console.error(`[Dig] ⚠️ Server config issue: items spawn but can't be collected (at ${itemPos}, ${itemDist}m)`);
+        // Return success message since block was actually mined successfully
+        return `✅ Dug ${blockName} with ${heldItem}. ⚠️ NOTE: Items dropped at ${itemPos} but server has item pickup disabled. Block mining works but resource collection impossible due to server configuration.` + getBriefStatus(username);
       }
 
       // No item entities found - server configuration issue
@@ -940,26 +921,9 @@ export async function digBlock(
         ? allNearbyEntities.map(e => `${e.name}(${e.distance}m)`).join(', ')
         : 'none';
 
-      return `⚠️ CRITICAL: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED!\n\n` +
-        `**SERVER CONFIGURATION ISSUE DETECTED**\n` +
-        `Block was successfully broken, but no item entity spawned.\n\n` +
-        `**Diagnosis:**\n` +
-        `- Total entities tracked: ${entityCount}\n` +
-        `- Nearby entities (5 blocks): ${nearbyEntityList}\n` +
-        `- Expected: item entity at mined location\n` +
-        `- Result: NO ITEM ENTITY FOUND\n\n` +
-        `**Likely causes:**\n` +
-        `1. \`/gamerule doTileDrops false\` - blocks don't drop items\n` +
-        `2. \`/gamerule doMobLoot false\` - mobs don't drop loot\n` +
-        `3. Server plugin (e.g., WorldGuard, GriefPrevention) blocking drops\n` +
-        `4. Item despawn rate set to 0 (instant despawn)\n` +
-        `5. Server in creative mode (no drops in creative)\n\n` +
-        `**Recommended fixes:**\n` +
-        `- Check server: \`/gamerule doTileDrops\` and \`/gamerule doMobLoot\` (both should be true)\n` +
-        `- Verify game mode: \`/gamemode survival\`\n` +
-        `- Check server plugins for drop protection\n` +
-        `- Test in different location (may be protected area)\n\n` +
-        getBriefStatus(username);
+      console.error(`[Dig] ⚠️ Server config issue: No item entity spawned after mining ${blockName}. Entities=${entityCount}, nearby=${nearbyEntityList}`);
+      // Return success message since block was actually mined successfully
+      return `✅ Dug ${blockName} with ${heldItem}. ⚠️ NOTE: No items dropped due to server configuration (likely doTileDrops=false or plugin blocking drops). Block mining works but no resources obtained.` + getBriefStatus(username);
     }
 
     if (isOre && !hasPickaxe) {
