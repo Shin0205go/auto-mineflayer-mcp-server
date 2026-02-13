@@ -1040,7 +1040,12 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
 
     // Check if inventory has space for output
     const emptySlots = bot.inventory.emptySlotCount();
-    if (emptySlots === 0) {
+
+    // Also check if we have existing output items that can stack
+    const existingOutputItem = expectedOutputName ? bot.inventory.items().find(i => i.name === expectedOutputName) : null;
+    const canStackOutput = existingOutputItem && existingOutputItem.count < 64;
+
+    if (emptySlots === 0 && !canStackOutput) {
       furnace.close();
       throw new Error("Inventory full - no space for smelted items. Drop or store some items first.");
     }
