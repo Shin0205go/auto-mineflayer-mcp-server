@@ -17,7 +17,8 @@ import {
   minecraft_build_structure,
   minecraft_craft_chain,
   minecraft_survival_routine,
-  minecraft_explore_area
+  minecraft_explore_area,
+  minecraft_validate_survival_environment
 } from "./tools/high-level-actions.js";
 import { stateTools, handleStateTool } from "./tools/state.js";
 import { combatTools, handleCombatTool } from "./tools/combat.js";
@@ -492,6 +493,17 @@ const tools = {
         target: { type: "string", description: "Optional target to search for (biome, block, or entity name)" }
       },
       required: ["username", "radius"]
+    }
+  },
+  minecraft_validate_survival_environment: {
+    description: "Validate if environment has sufficient food sources for survival - checks for passive mobs, edible plants, and fishing viability. Run this at session start to detect unplayable environments.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "Bot username" },
+        searchRadius: { type: "number", description: "Search radius in blocks (default: 100)", default: 100 }
+      },
+      required: ["username"]
     }
   },
   // Coordination
@@ -1015,6 +1027,12 @@ async function handleTool(
       const radius = args.radius as number;
       const target = args.target as string | undefined;
       return await minecraft_explore_area(username, radius, target);
+    }
+
+    case "minecraft_validate_survival_environment": {
+      const username = args.username as string;
+      const searchRadius = (args.searchRadius as number) || 100;
+      return await minecraft_validate_survival_environment(username, searchRadius);
     }
 
     // === 自己学習ツール ===

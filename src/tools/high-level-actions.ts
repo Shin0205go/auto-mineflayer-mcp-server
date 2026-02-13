@@ -808,13 +808,18 @@ export async function minecraft_validate_survival_environment(
 
   // Check if bot is critically low on health - validation takes time and bot might die
   const initialStatus = botManager.getStatus(username);
+  console.error(`[ValidateEnvironment] Current status: ${initialStatus}`);
   try {
     const statusObj = JSON.parse(initialStatus);
     const healthMatch = statusObj.health?.match(/([\d.]+)\//);
-    if (healthMatch && parseFloat(healthMatch[1]) < 1.0) {
-      return `\n⚠️ VALIDATION SKIPPED: Bot health too low (${healthMatch[1]} HP)\nBot may die during validation. Please heal first or use creative mode.`;
+    const health = healthMatch ? parseFloat(healthMatch[1]) : null;
+    console.error(`[ValidateEnvironment] Parsed health: ${health}`);
+    if (health !== null && health < 1.0) {
+      console.error(`[ValidateEnvironment] SKIPPING - health too low: ${health} HP`);
+      return `\n⚠️ VALIDATION SKIPPED: Bot health too low (${health} HP)\nBot may die during validation. Please heal first or use creative mode.`;
     }
   } catch (e) {
+    console.error(`[ValidateEnvironment] Error parsing status:`, e);
     // Continue if status parsing fails
   }
 
