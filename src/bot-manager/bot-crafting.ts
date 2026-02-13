@@ -395,7 +395,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     if (!compatibleRecipe) {
       compatibleRecipe = allRecipes.find(recipe => {
         const delta = recipe.delta as Array<{ id: number; count: number }>;
-        // Check if all negative deltas (ingredients) can be satisfied with our planks
+        // Check if all negative deltas (ingredients) can be satisfied with our planks and sticks
         return delta.every(d => {
           if (d.count >= 0) return true; // Output items, always ok
           const ingredientItem = mcData.items[d.id];
@@ -405,6 +405,12 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           if (ingredientItem.name.endsWith("_planks")) {
             const requiredCount = Math.abs(d.count);
             return totalPlanks >= requiredCount;
+          }
+
+          // If it's sticks, check if we have enough
+          if (ingredientItem.name === "stick") {
+            const requiredCount = Math.abs(d.count);
+            return totalSticks >= requiredCount;
           }
 
           return false;
