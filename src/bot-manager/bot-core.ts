@@ -564,10 +564,13 @@ export class BotCore extends EventEmitter {
         this.bots.set(config.username, managedBot);
         console.error(`[BotManager] ${config.username} connected`);
 
-        // Start prismarine-viewer for first-person view in browser
-        const viewerPort = this.startViewer(config.username);
-        if (viewerPort) {
-          console.error(`[BotManager] Open http://localhost:${viewerPort} to see the first-person view`);
+        // Start prismarine-viewer for first-person view in browser (unless disabled)
+        let viewerPort: number | null = null;
+        if (!config.disableViewer) {
+          viewerPort = this.startViewer(config.username);
+          if (viewerPort) {
+            console.error(`[BotManager] Open http://localhost:${viewerPort} to see the first-person view`);
+          }
         }
 
         // Return connection info with game mode warning

@@ -81,7 +81,9 @@ export async function handleConnectionTool(
       setAgentType(agentType);
 
       try {
-        await botManager.connect({ host, port, username, version });
+        // Disable viewer for stdio MCP connections to avoid port conflicts
+        // Viewer is only useful for WebSocket connections where agents run persistently
+        await botManager.connect({ host, port, username, version, disableViewer: true });
         return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})`;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
