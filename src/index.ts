@@ -183,6 +183,17 @@ async function main() {
   console.error("Mineflayer MCP Server running on stdio");
 }
 
+// Add global error handlers to prevent crashes
+process.on('uncaughtException', (error) => {
+  console.error('[MCP-Stdio] Uncaught exception:', error);
+  // Don't exit - try to continue running
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[MCP-Stdio] Unhandled rejection at:', promise, 'reason:', reason);
+  // Don't exit - try to continue running
+});
+
 main().catch((error) => {
   console.error("Fatal error:", error);
   process.exit(1);
