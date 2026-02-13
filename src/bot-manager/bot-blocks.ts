@@ -745,8 +745,8 @@ export async function digBlock(
       return `Dig seemed to complete but block is still there (${blockAfter.name}). May be protected area.`;
     }
 
-    // Wait for item to spawn (items can take up to 1500ms to spawn on some servers)
-    await delay(1500);
+    // Wait longer for item to spawn and stabilize (items can take up to 2000ms on some servers)
+    await delay(2000);
 
     // Check for nearby item entities on the ground
     // Also scan all entities to diagnose server configuration issues
@@ -756,10 +756,15 @@ export async function digBlock(
 
     console.error(`[Dig] All entities within 5 blocks: ${JSON.stringify(allNearbyEntities)}`);
 
+    // Find nearby item entities - check distance to BOTH blockPos AND bot position
+    // Item entities sometimes have delayed/incorrect position updates
     const nearbyItems = bot.nearestEntity(entity => {
-      if (entity.name === 'item' && entity.position) {
-        const dist = entity.position.distanceTo(blockPos);
-        return dist < 3;
+      if (entity.name === 'item' && entity.position && bot.entity.position) {
+        const distToBlock = entity.position.distanceTo(blockPos);
+        const distToBot = entity.position.distanceTo(bot.entity.position);
+        // Accept items within 5 blocks of block OR within 3 blocks of bot
+        // (in case item spawned slightly away or server has weird positioning)
+        return distToBlock < 5 || distToBot < 3;
       }
       return false;
     });
@@ -802,20 +807,42 @@ export async function digBlock(
           bot.pathfinder.setGoal(goal);
 
           const moveStart = Date.now();
-          while (Date.now() - moveStart < 2000) {
+          while (Date.now() - moveStart < 3000) {
             await delay(100);
             if (bot.entity.position.distanceTo(blockPos) < 1.5) break;
             if (!bot.pathfinder.isMoving()) break;
           }
           bot.pathfinder.setGoal(null);
 
-          // Wait a bit for auto-pickup to trigger now that we're closer
-          await delay(500);
+          // Wait longer for auto-pickup to trigger now that we're closer
+          await delay(1000);
           console.error(`[Dig] Moved to mined block, new distance: ${bot.entity.position.distanceTo(blockPos).toFixed(2)}`);
         } catch (moveErr) {
           console.error(`[Dig] Failed to move closer: ${moveErr}`);
         }
       }
+
+      // Try a second collection pass with more aggressive movement
+      // Walk in a small circle around the mined block position
+      console.error(`[Dig] Trying aggressive collection: walking around mined block position...`);
+      const circlePositions = [
+        blockPos.offset(1, 0, 0),
+        blockPos.offset(0, 0, 1),
+        blockPos.offset(-1, 0, 0),
+        blockPos.offset(0, 0, -1)
+      ];
+
+      for (const pos of circlePositions) {
+        try {
+          const goal = new goals.GoalNear(pos.x, pos.y, pos.z, 0.5);
+          bot.pathfinder.setGoal(goal);
+          await delay(800);
+          bot.pathfinder.setGoal(null);
+        } catch (_) {
+          // Ignore movement errors
+        }
+      }
+      await delay(500);
 
       const collectResult = await collectNearbyItems(bot);
       console.error(`[Dig] collectNearbyItems result: ${collectResult}`);
