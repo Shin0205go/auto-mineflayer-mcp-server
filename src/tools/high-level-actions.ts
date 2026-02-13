@@ -835,7 +835,13 @@ export async function minecraft_validate_survival_environment(
   const passiveMobs = ["cow", "pig", "chicken", "sheep", "rabbit"];
   for (const mobType of passiveMobs) {
     const entityResult = botManager.findEntities(username, mobType, searchRadius);
-    if (!entityResult.startsWith("No") && entityResult.includes(mobType)) {
+    // More strict check: Must not start with "No" AND must contain distance/position info
+    // This prevents false positives from stale cached entity data
+    const hasValidEntity = !entityResult.startsWith("No") &&
+                          entityResult.includes(mobType) &&
+                          (entityResult.includes("blocks") || entityResult.includes("distance"));
+
+    if (hasValidEntity) {
       findings.push(`✅ Found ${mobType} (huntable food)`);
       foodSourcesFound++;
     }
