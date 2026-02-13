@@ -750,6 +750,17 @@ export async function pillarUp(managed: ManagedBot, height: number = 1): Promise
 
 /**
  * Flee from danger
+ *
+ * BUG NOTE (2026-02-14): This function sometimes causes WebSocket connection closure
+ * during pathfinding. The root cause appears to be either:
+ * 1. Minecraft server disconnecting the bot during movement
+ * 2. Mineflayer internal error during pathfinding
+ * 3. MCP WebSocket transport not handling bot disconnection gracefully
+ *
+ * When this occurs, subsequent reconnection attempts via minecraft_connect fail with
+ * "Connection closed" error. Workaround: Restart the MCP WS server.
+ *
+ * TODO: Add better error handling and automatic recovery in MCPWebSocketClientTransport
  */
 export async function flee(managed: ManagedBot, distance: number = 20): Promise<string> {
   const bot = managed.bot;
