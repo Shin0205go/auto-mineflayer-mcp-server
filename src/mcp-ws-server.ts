@@ -925,7 +925,69 @@ async function handleTool(
       const username = args.username as string;
       const items = args.items as Array<{ name: string; count: number }>;
       const maxDistance = (args.maxDistance as number) || 32;
-      return await minecraft_gather_resources(username, items, maxDistance);
+
+      // Use local botManager instead of the one imported by high-level-actions
+      // to ensure we're using the same instance where the bot is registered
+      const results: string[] = [];
+
+      for (const item of items) {
+        let collected = 0;
+        const targetCount = item.count;
+        let attempts = 0;
+        const maxAttempts = targetCount * 3;
+
+        while (collected < targetCount && attempts < maxAttempts) {
+          attempts++;
+
+          try {
+            const findResult = botManager.findBlock(username, item.name, maxDistance);
+
+            if (findResult.includes("No") || findResult.includes("not found")) {
+              break;
+            }
+
+            const posMatch = findResult.match(/\((-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\)/);
+            if (!posMatch) {
+              break;
+            }
+
+            const x = parseFloat(posMatch[1]);
+            const y = parseFloat(posMatch[2]);
+            const z = parseFloat(posMatch[3]);
+
+            const moveResult = await botManager.moveTo(username, x, y, z);
+            if (!moveResult.includes("Reached") && !moveResult.includes("Moved")) {
+              continue;
+            }
+
+            const invBefore = botManager.getInventory(username);
+            const beforeCount = invBefore.find(i => i.name === item.name)?.count || 0;
+
+            await botManager.digBlock(username, Math.floor(x), Math.floor(y), Math.floor(z));
+            await botManager.collectNearbyItems(username);
+
+            const invAfter = botManager.getInventory(username);
+            const afterCount = invAfter.find(i => i.name === item.name)?.count || 0;
+            const gained = afterCount - beforeCount;
+
+            if (gained > 0) {
+              collected += gained;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+          } catch (err) {
+            console.error(`[GatherResources] Error: ${err}`);
+            continue;
+          }
+        }
+
+        results.push(`${item.name}: ${collected}/${targetCount}`);
+      }
+
+      const inventory = botManager.getInventory(username);
+      const invStr = inventory.map(i => `${i.name}(${i.count})`).join(", ");
+
+      return `Gathering complete. ${results.join(", ")}. Inventory: ${invStr}`;
     }
 
     case "minecraft_build_structure": {
