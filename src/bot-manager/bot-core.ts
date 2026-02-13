@@ -29,6 +29,13 @@ export class BotCore extends EventEmitter {
    * Start prismarine-viewer for a bot
    */
   startViewer(username: string): number | null {
+    // Disable viewer in stdio MCP mode to prevent process crashes
+    // Set ENABLE_VIEWER=true to enable viewer
+    if (process.env.ENABLE_VIEWER !== 'true') {
+      console.error(`[BotManager] Viewer disabled (set ENABLE_VIEWER=true to enable)`);
+      return null;
+    }
+
     const managed = this.bots.get(username);
     if (!managed) {
       console.error(`[BotManager] Cannot start viewer: bot '${username}' not found`);
