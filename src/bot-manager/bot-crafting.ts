@@ -709,16 +709,32 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   }
 
   try {
-    // CRITICAL SAFETY CHECK: For valuable items, warn about potential loss if server has item pickup disabled
+    // CRITICAL SAFETY CHECK: For valuable items, only block if we have strong evidence server has item pickup disabled
+    // Check if player has successfully collected ANY items in their inventory - if yes, pickup must be working
     const valuableItems = ["diamond_pickaxe", "diamond_axe", "diamond_sword", "diamond_shovel", "diamond_hoe",
                            "diamond_helmet", "diamond_chestplate", "diamond_leggings", "diamond_boots",
                            "netherite_pickaxe", "netherite_axe", "netherite_sword", "netherite_shovel",
                            "iron_pickaxe", "iron_axe", "iron_sword", "iron_shovel"];
 
     if (valuableItems.includes(itemName)) {
-      console.error(`[Craft] CRITICAL: Cannot craft valuable item ${itemName} - server has item pickup disabled.`);
-      console.error(`[Craft] Crafting would consume materials but output would be lost permanently.`);
-      throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafting this item would permanently waste valuable materials (diamonds, iron, etc). This server configuration makes crafting of valuable items impossible. Use existing tools or change server settings to enable item pickup.`);
+      // Check if player has ANY items in inventory - this proves item pickup is working
+      const hasAnyItems = bot.inventory.items().length > 0;
+      // Check if player has valuable materials (diamonds, iron) - proves they collected them successfully
+      const hasValuableMaterials = bot.inventory.items().some(i =>
+        i.name.includes("diamond") || i.name.includes("iron") || i.name.includes("gold")
+      );
+
+      if (!hasAnyItems) {
+        console.error(`[Craft] CRITICAL: Cannot craft valuable item ${itemName} - empty inventory suggests server issue.`);
+        throw new Error(`Cannot craft ${itemName}: Empty inventory suggests server has item pickup disabled. Crafting would waste materials.`);
+      }
+
+      if (!hasValuableMaterials) {
+        console.error(`[Craft] WARNING: Crafting valuable item ${itemName} without valuable materials in inventory. May indicate server issue.`);
+        console.error(`[Craft] Proceeding anyway since basic item collection seems to work.`);
+      } else {
+        console.error(`[Craft] Item pickup confirmed working (have valuable materials). Safe to craft ${itemName}.`);
+      }
     }
 
     if (craftingTable) {
