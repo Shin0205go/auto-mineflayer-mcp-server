@@ -1038,43 +1038,65 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     }
 
     // Wait for smelting (roughly 10 seconds per item)
-    const waitTime = Math.min(smeltCount * 10000, 60000);
-    await new Promise(resolve => setTimeout(resolve, waitTime));
+    // For multiple items, wait and periodically take output to prevent output slot from filling
+    let totalOutputTaken = 0;
+    const targetCount = smeltCount;
+    const maxWaitTime = targetCount * 12000; // 12 seconds per item (10s smelt + 2s buffer)
+    const startTime = Date.now();
 
-    // Take output and track count
-    const output = furnace.outputItem();
-    let newOutputCount = 0;
-    if (output) {
-      newOutputCount = output.count;
+    // Poll for output items and take them as they become available
+    while (totalOutputTaken < targetCount && (Date.now() - startTime) < maxWaitTime) {
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Check every 2 seconds
+
+      const output = furnace.outputItem();
+      if (output && output.count > 0) {
+        totalOutputTaken += output.count;
+        await furnace.takeOutput();
+        console.error(`[Smelt] Took ${output.count}x output (total: ${totalOutputTaken}/${targetCount})`);
+      }
+    }
+
+    // Final check for any remaining output
+    const finalOutput = furnace.outputItem();
+    if (finalOutput && finalOutput.count > 0) {
+      totalOutputTaken += finalOutput.count;
       await furnace.takeOutput();
+      console.error(`[Smelt] Final take: ${finalOutput.count}x output (total: ${totalOutputTaken}/${targetCount})`);
     }
 
     furnace.close();
+
+    const newOutputCount = totalOutputTaken;
 
     const totalGained = existingOutputCount + newOutputCount;
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
 
     // Verify that the smelted output actually entered inventory (handle server with item pickup disabled)
     // Check for the item that SHOULD have been produced from smelting
-    if (expectedOutputName && (newOutputCount > 0 || existingOutputCount > 0)) {
+    if (expectedOutputName) {
       const outputInInventory = bot.inventory.items().filter(i => i.name === expectedOutputName);
       const finalOutputCount = outputInInventory.reduce((sum, item) => sum + item.count, 0);
       const actualGained = finalOutputCount - initialOutputCount;
 
       // Always include debug info in message
-      const debugInfo = ` [Expected: ${expectedOutputName}, Initial: ${initialOutputCount}, Final: ${finalOutputCount}, Gained: ${actualGained}, SmeltCount: ${smeltCount}, ExistingInFurnace: ${existingOutputCount}]`;
+      const debugInfo = ` [Expected: ${expectedOutputName}, Initial: ${initialOutputCount}, Final: ${finalOutputCount}, Gained: ${actualGained}, SmeltCount: ${smeltCount}, TakenFromFurnace: ${totalGained}]`;
 
-      if (outputInInventory.length === 0) {
-        // Items were smelted but expected output not in inventory - they must have dropped
+      if (outputInInventory.length === 0 && totalGained > 0) {
+        // Items were taken from furnace but expected output not in inventory - they must have dropped
         console.error(`[Smelt] CRITICAL: ${expectedOutputName} not found in inventory after smelting - output lost permanently`);
-        throw new Error(`Cannot smelt ${itemName}: Server has item pickup disabled or inventory sync failed. ${totalGained}x ${expectedOutputName} was produced but lost. Raw materials consumed but output disappeared. This indicates a critical server configuration issue.${debugInfo}`);
+        throw new Error(`Cannot smelt ${itemName}: Server has item pickup disabled or inventory sync failed. ${totalGained}x ${expectedOutputName} was taken from furnace but lost. Raw materials consumed but output disappeared. This indicates a critical server configuration issue.${debugInfo}`);
       }
 
       // CRITICAL CHECK: Verify that the expected number of items were actually gained
-      const expectedGain = smeltCount + existingOutputCount;
-      if (actualGained < expectedGain) {
-        console.error(`[Smelt] WARNING: Expected to gain ${expectedGain}x ${expectedOutputName} but only gained ${actualGained}x`);
-        throw new Error(`Smelting ${itemName} lost items! Expected to gain ${expectedGain}x ${expectedOutputName} (${smeltCount} smelted + ${existingOutputCount} from furnace) but only gained ${actualGained}x. Missing ${expectedGain - actualGained} items. This indicates a critical bug in the smelting system.${debugInfo}`);
+      // We should gain exactly what we took from the furnace
+      if (actualGained < totalGained) {
+        console.error(`[Smelt] WARNING: Expected to gain ${totalGained}x ${expectedOutputName} but only gained ${actualGained}x`);
+        throw new Error(`Smelting ${itemName} lost items! Expected to gain ${totalGained}x ${expectedOutputName} from furnace but only gained ${actualGained}x in inventory. Missing ${totalGained - actualGained} items. This indicates a critical bug in the smelting system.${debugInfo}`);
+      }
+
+      // Also warn if we didn't smelt the expected amount
+      if (totalGained < smeltCount) {
+        console.error(`[Smelt] WARNING: Only smelted ${totalGained}x out of ${smeltCount}x items. Smelting may have been incomplete.`);
       }
     }
 
