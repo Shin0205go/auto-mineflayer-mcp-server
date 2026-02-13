@@ -637,11 +637,20 @@ export async function minecraft_explore_area(
         }
       }
 
-      // Check for target entity
-      if (target) {
+      // Check for target entity (skip "passive" keyword as it matches items too)
+      if (target && target !== "passive" && target !== "hostile" && target !== "all") {
         const entityResult = botManager.findEntities(username, target, 16);
         if (entityResult.includes(target)) {
           findings.push(`${target} entity at current location`);
+        }
+      } else if (target === "passive") {
+        // For passive mobs, filter out dropped items
+        const entityResult = botManager.findEntities(username, "passive", 16);
+        const passiveMobs = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "cat", "ocelot", "parrot", "wolf", "llama", "turtle", "panda", "fox", "bee", "axolotl", "frog", "goat"];
+        for (const mobType of passiveMobs) {
+          if (entityResult.includes(mobType)) {
+            findings.push(`${mobType} at current location`);
+          }
         }
       }
 
