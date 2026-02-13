@@ -44,15 +44,26 @@ The tool will:
 Previous session incorrectly reported "no passive mob spawning" - this was due to location, not server config.
 
 ### Recommended Fixes (Server Admin)
-1. Check `/gamerule doTileDrops` - should be `true` -> 実施した
+1. Check `/gamerule doTileDrops` - should be `true` -> ✅ Tested 2026-02-13 - NO EFFECT
 2. Check `/gamerule doMobLoot` - should be `true`　 -> 実施した
 3. Temporarily disable server plugins (WorldGuard,　しらない EssentialsX, GriefPrevention)
 4. Verify bot has OP permissions: `/op Claude`　対象外
 5. Verify gamemode: `/gamemode survival Claude` -> 実施した
 6. Test with vanilla Minecraft server to isolate issue　しらない
 
+### Latest Test Results (2026-02-13 09:30)
+**Confirmed**: Item pickup completely broken even after gamerule changes
+- Executed `/gamerule doTileDrops true` via chat → No effect
+- Mined dirt block at (8, 109, -1)
+- Item entity spawned at (8.7, 109.0, 0.1)
+- Bot position (8.8, 109.0, 0.3) = **0.4 blocks away**
+- Item remained on ground for 60+ seconds
+- Auto-pickup never triggered (vanilla range is ~1 block)
+- Manual collection via `minecraft_collect_items()` failed
+- **Conclusion**: This is a server plugin or core configuration issue, not a gamerule issue
+
 ### Date
-2026-02-13 (Updated)
+2026-02-13 (Updated - Confirmed Blocking)
 
 ---
 
