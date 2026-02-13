@@ -601,22 +601,31 @@ export async function minecraft_explore_area(
     try {
       // Safety check: abort if hunger is critical (unless searching for food)
       const status = botManager.getStatus(username);
-      const statusMatch = status.match(/Food: ([\d.]+)\/20/);
-      if (statusMatch) {
-        const food = parseFloat(statusMatch[1]);
-        if (food < 6) {
-          // Emergency mode: allow short-range search for food animals
-          const foodAnimals = ["cow", "pig", "chicken", "sheep", "rabbit"];
-          const isSearchingForFood = target && foodAnimals.includes(target.toLowerCase());
 
-          if (!isSearchingForFood) {
-            return `Exploration aborted at ${visitedPoints} points due to critical hunger (${food}/20). Return to safety and eat! Findings so far: ${findings.length > 0 ? findings.join(", ") : "none"}`;
-          }
+      // Parse status - handle both JSON and old text format
+      let food = 20;
+      try {
+        const statusObj = JSON.parse(status);
+        const hungerMatch = statusObj.hunger?.match(/([\d.]+)\//);
+        if (hungerMatch) food = parseFloat(hungerMatch[1]);
+      } catch (e) {
+        // Fallback: try old text format
+        const statusMatch = status.match(/Food: ([\d.]+)\/20/);
+        if (statusMatch) food = parseFloat(statusMatch[1]);
+      }
 
-          // In emergency mode, limit search radius to 30 blocks max
-          if (visitedPoints > 20) {
-            return `Emergency food search completed at ${visitedPoints} points. Hunger: ${food}/20. Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
-          }
+      if (food < 6) {
+        // Emergency mode: allow short-range search for food animals
+        const foodAnimals = ["cow", "pig", "chicken", "sheep", "rabbit"];
+        const isSearchingForFood = target && foodAnimals.includes(target.toLowerCase());
+
+        if (!isSearchingForFood) {
+          return `Exploration aborted at ${visitedPoints} points due to critical hunger (${food}/20). Return to safety and eat! Findings so far: ${findings.length > 0 ? findings.join(", ") : "none"}`;
+        }
+
+        // In emergency mode, limit search radius to 30 blocks max
+        if (visitedPoints > 20) {
+          return `Emergency food search completed at ${visitedPoints} points. Hunger: ${food}/20. Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
         }
       }
 
