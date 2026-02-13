@@ -691,8 +691,20 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
 
   // Guard: Don't respawn if HP is still okay
   if (oldHP > 4) {
-    const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
-    return `Refused to respawn: HP is ${oldHP}/20 (still survivable). Try eating, fleeing, or pillar_up first. Inventory: ${inventory}`;
+    const inventory = bot.inventory.items();
+    const itemList = inventory.map(i => `${i.name}(${i.count})`).join(", ");
+
+    // Check if player has any food items
+    const foodKeywords = ['food', 'cooked', 'bread', 'apple', 'carrot', 'potato', 'beetroot', 'melon', 'berry', 'stew', 'soup', 'pie', 'cookie', 'cake', 'beef', 'porkchop', 'mutton', 'chicken', 'rabbit', 'cod', 'salmon', 'fish', 'rotten_flesh'];
+    const hasFood = inventory.some(item =>
+      foodKeywords.some(keyword => item.name.toLowerCase().includes(keyword))
+    );
+
+    if (!hasFood) {
+      return `Refused to respawn: HP is ${oldHP}/20. ⚠️ NO FOOD in inventory. Consider using minecraft_validate_survival_environment to check for food sources, or explore to find passive mobs/crops. Inventory: ${itemList}`;
+    }
+
+    return `Refused to respawn: HP is ${oldHP}/20 (still survivable). Try eating, fleeing, or pillar_up first. Inventory: ${itemList}`;
   }
 
   console.error(`[Respawn] Intentional death requested. Reason: ${reason || "unspecified"}`);
