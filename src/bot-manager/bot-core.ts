@@ -340,6 +340,21 @@ export class BotCore extends EventEmitter {
           addEvent("chat", `${username}: ${message}`, { username, message });
         });
 
+        // Listen to all messages including system messages (for gamerule responses, etc.)
+        bot.on("message", (jsonMsg) => {
+          const textMsg = jsonMsg.toString();
+          // Skip if it's a regular chat message (already handled above)
+          if (textMsg.match(/^<.*?>/) || textMsg.startsWith('[')) {
+            return;
+          }
+          // Capture system messages (gamerule responses, server messages, etc.)
+          managedBot.chatMessages.push({
+            username: textMsg,  // Use message text as username for system messages
+            message: textMsg,   // Full message
+            timestamp: Date.now(),
+          });
+        });
+
         // Item collected
         bot.on("playerCollect", (collector, collected) => {
           if (collector.username === config.username) {
