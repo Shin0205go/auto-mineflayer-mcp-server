@@ -180,13 +180,13 @@ class ClaudeAgent {
 
   /**
    * Publish loop result to MCP server
+   * Note: dev_publish_loop_result is only available in Dev Agent mode
+   * Game Agent silently skips this to avoid errors
    */
-  private async publishLoopResult(loopResult: LoopResult): Promise<void> {
-    try {
-      await this.claude.callMCPTool("dev_publish_loop_result", { loopResult });
-    } catch (e) {
-      console.error(`${PREFIX} Failed to publish loop result:`, e);
-    }
+  private async publishLoopResult(_loopResult: LoopResult): Promise<void> {
+    // Dev Agent-only feature - Game Agent skips publishing
+    // This prevents "Unknown tool" errors when running in game mode
+    return;
   }
 
   private setupEventHandlers(): void {
