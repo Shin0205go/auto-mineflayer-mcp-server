@@ -279,6 +279,13 @@ export class BotCore extends EventEmitter {
           bot.chat(`/gamemode survival ${config.username}`);
         }
 
+        // Fix gamerule to enable item drops and pickup
+        // This is critical for resource gathering to work properly
+        console.error(`[BotManager] Enabling item drops and pickup via gamerules...`);
+        bot.chat("/gamerule doTileDrops true");
+        bot.chat("/gamerule doMobLoot true");
+        bot.chat("/gamerule doEntityDrops true");
+
         const managedBot: ManagedBot = {
           bot,
           username: config.username,

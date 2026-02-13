@@ -424,3 +424,104 @@ To https://github.com/Shin0205go/minecraftAIViewer.git
 
 ▶️  Starting Claude Code...
    Log: agent_logs/loop_27_2be388_20260213_120511.log
+
+✅ Completed successfully
+📊 Stats:
+   - Tools used: 18
+   - Errors: 2
+   - Log: agent_logs/loop_27_2be388_20260213_120511.log
+🔧 Code improvements detected (new commit: b7463c)
+📤 Pushing to remote...
+Everything up-to-date
+✅ Pushed successfully
+
+⏳ Waiting 10 seconds before next loop...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Loop #28 (commit: b7463c)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▶️  Starting Claude Code...
+   Log: agent_logs/loop_28_b7463c_20260213_120906.log
+
+✅ Completed successfully
+📊 Stats:
+   - Tools used: 1
+   - Errors: 0
+   - Log: agent_logs/loop_28_b7463c_20260213_120906.log
+
+⏳ Waiting 10 seconds before next loop...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Loop #29 (commit: b7463c)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▶️  Starting Claude Code...
+   Log: agent_logs/loop_29_b7463c_20260213_120935.log
+
+⏱️  Timeout reached (20 minutes), stopping...
+
+⏱️  Timeout (20 minutes) - moving to next loop
+📊 Stats:
+   - Tools used: 43
+   - Errors: 9
+   - Log: agent_logs/loop_29_b7463c_20260213_120935.log
+🔧 Code improvements detected (new commit: 4075c6)
+📤 Pushing to remote...
+remote: This repository moved. Please use the new location:        
+remote:   https://github.com/Shin0205go/auto-mineflayer-mcp-server.git        
+To https://github.com/Shin0205go/minecraftAIViewer.git
+   b7463c4..4075c6f  claude/mineflayer-mcp-setup-pqbsS -> claude/mineflayer-mcp-setup-pqbsS
+✅ Pushed successfully
+
+⏳ Waiting 10 seconds before next loop...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Loop #30 (commit: 4075c6)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▶️  Starting Claude Code...
+   Log: agent_logs/loop_30_4075c6_20260213_123027.log
+
+✅ Completed successfully
+📊 Stats:
+   - Tools used: 1
+   - Errors: 2
+   - Log: agent_logs/loop_30_4075c6_20260213_123027.log
+
+⏳ Waiting 10 seconds before next loop...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Loop #31 (commit: 4075c6)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▶️  Starting Claude Code...
+   Log: agent_logs/loop_31_4075c6_20260213_123115.log
+
+⏱️  Timeout reached (20 minutes), stopping...
+
+⏱️  Timeout (20 minutes) - moving to next loop
+📊 Stats:
+   - Tools used: 8
+   - Errors: 0
+   - Log: agent_logs/loop_31_4075c6_20260213_123115.log
+
+⏳ Waiting 10 seconds before next loop...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Loop #32 (commit: 4075c6)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▶️  Starting Claude Code...
+   Log: agent_logs/loop_32_4075c6_20260213_125159.log
+
+⏱️  Timeout reached (20 minutes), stopping...
+
+⏱️  Timeout (20 minutes) - moving to next loop
+📊 Stats:
+   - Tools used: 8
+   - Errors: 0
+   - Log: agent_logs/loop_32_4075c6_20260213_125159.log
+
+⏳ Waiting 10 seconds before next loop...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Loop #33 (commit: 4075c6)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▶️  Starting Claude Code...
+   Log: agent_logs/loop_33_4075c6_20260213_131243.log
