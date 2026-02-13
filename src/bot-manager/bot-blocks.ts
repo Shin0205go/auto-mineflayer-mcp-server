@@ -883,6 +883,18 @@ export async function digBlock(
       if (nearbyItems) {
         const itemPos = nearbyItems.position ? nearbyItems.position.toString() : 'unknown';
         const itemDist = nearbyItems.position ? nearbyItems.position.distanceTo(bot.entity.position).toFixed(2) : '?';
+
+        // Check if bot fell during mining (significant Y change)
+        const yChanged = Math.abs(bot.entity.position.y - blockPos.y) > 2;
+
+        if (yChanged) {
+          // Bot fell during mining - items spawned far away, not a server config issue
+          return `⚠️ WARNING: Dug ${blockName} but bot fell during mining! Items spawned far away and couldn't be collected. ` +
+            `Item location: ${itemPos}, distance: ${itemDist}m. Use minecraft_collect_items to try manual pickup, or avoid mining blocks that cause falling.` +
+            getBriefStatus(username);
+        }
+
+        // If no Y change, this might be a genuine server configuration issue
         return `⚠️ CRITICAL: Dug ${blockName} with ${heldItem} but items dropped on ground and CANNOT BE COLLECTED!\n\n` +
           `**SERVER CONFIGURATION ISSUE DETECTED**\n` +
           `Items are spawning but automatic pickup is disabled.\n\n` +
