@@ -333,8 +333,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   // Special handling for planks -> stick/crafting_table/wooden_tools to avoid wood type issues
   // These recipes work with ANY planks type, so we manually find compatible recipes
-  const woodenTools = ["stick", "crafting_table", "wooden_pickaxe", "wooden_axe", "wooden_sword", "wooden_shovel", "wooden_hoe"];
-  if (woodenTools.includes(itemName)) {
+  // NOTE: Only handle stick and crafting_table here (2x2 recipes). Let wooden tools use general path.
+  const simpleWoodenRecipes = ["stick", "crafting_table"];
+  if (simpleWoodenRecipes.includes(itemName)) {
     // Find any planks in inventory
     const anyPlanks = inventoryItems.find(i => i.name.endsWith("_planks"));
     if (!anyPlanks) {
@@ -385,65 +386,68 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     // 3. Using different plank types
 
     let allRecipes = bot.recipesAll(item.id, null, null);
+    let craftingTableBlock = null;
+    console.error(`[Craft] recipesAll(${item.id}, null, null) returned ${allRecipes.length} recipes`);
 
     // If no recipes found, try with crafting table
     if (allRecipes.length === 0) {
       const craftingTableId = mcData.blocksByName.crafting_table?.id;
-      const nearbyTable = bot.findBlock({
+      craftingTableBlock = bot.findBlock({
         matching: craftingTableId,
         maxDistance: 5,
       });
 
-      if (nearbyTable) {
-        allRecipes = bot.recipesAll(item.id, null, nearbyTable);
+      if (craftingTableBlock) {
+        allRecipes = bot.recipesAll(item.id, null, craftingTableBlock);
+        console.error(`[Craft] recipesAll with crafting table returned ${allRecipes.length} recipes`);
+      } else {
+        console.error(`[Craft] No crafting table found within 5 blocks`);
       }
     }
 
-    // Try to find a recipe that uses our specific planks type
-    let compatibleRecipe = allRecipes.find(recipe => {
+    // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
+    // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
+    const compatibleRecipe = allRecipes.find(recipe => {
       const delta = recipe.delta as Array<{ id: number; count: number }>;
-      return delta.some(d => {
-        if (d.count >= 0) return false; // Skip output items
-        return d.id === planksItemId;
-      });
+
+      // Check if this recipe uses planks and sticks (wooden tool pattern)
+      let needsPlanks = false;
+      let needsSticks = false;
+      let planksCount = 0;
+      let sticksCount = 0;
+
+      for (const d of delta) {
+        if (d.count >= 0) continue; // Skip output items
+
+        const ingredientItem = mcData.items[d.id];
+        if (!ingredientItem) continue;
+
+        if (ingredientItem.name.endsWith("_planks")) {
+          needsPlanks = true;
+          planksCount = Math.abs(d.count);
+        } else if (ingredientItem.name === "stick") {
+          needsSticks = true;
+          sticksCount = Math.abs(d.count);
+        }
+      }
+
+      // Verify we have enough materials
+      const hasEnoughPlanks = planksCount === 0 || totalPlanks >= planksCount;
+      const hasEnoughSticks = sticksCount === 0 || totalSticks >= sticksCount;
+
+      return (needsPlanks || needsSticks) && hasEnoughPlanks && hasEnoughSticks;
     });
 
-    // If no exact match, try to find any planks-based recipe and check if we have the materials
     if (!compatibleRecipe) {
-      compatibleRecipe = allRecipes.find(recipe => {
-        const delta = recipe.delta as Array<{ id: number; count: number }>;
-        // Check if all negative deltas (ingredients) can be satisfied with our planks and sticks
-        return delta.every(d => {
-          if (d.count >= 0) return true; // Output items, always ok
-          const ingredientItem = mcData.items[d.id];
-          if (!ingredientItem) return false;
-
-          // If it's any type of planks, we can use our planks
-          if (ingredientItem.name.endsWith("_planks")) {
-            const requiredCount = Math.abs(d.count);
-            return totalPlanks >= requiredCount;
-          }
-
-          // If it's sticks, check if we have enough
-          if (ingredientItem.name === "stick") {
-            const requiredCount = Math.abs(d.count);
-            return totalSticks >= requiredCount;
-          }
-
-          return false;
-        });
-      });
-    }
-
-    if (!compatibleRecipe) {
-      throw new Error(`Cannot craft ${itemName}: No compatible recipe found for ${anyPlanks.name}. Available planks: ${totalPlanks}, Available recipes: ${allRecipes.length}. This may be a Minecraft version compatibility issue.`);
+      throw new Error(`Cannot craft ${itemName}: No compatible recipe found. Have ${totalPlanks} planks and ${totalSticks} sticks. Found ${allRecipes.length} recipes total. This may be a Minecraft version compatibility issue.`);
     }
 
     console.error(`[Craft] Attempting to craft ${itemName} using ${anyPlanks.name} (have ${totalPlanks} planks)`);
 
     try {
       for (let i = 0; i < count; i++) {
-        await bot.craft(compatibleRecipe, 1, undefined);
+        // Pass crafting table if recipe requires it
+        await bot.craft(compatibleRecipe, 1, craftingTableBlock || undefined);
 
         // Wait for crafting to complete (match timing from general crafting path)
         await new Promise(resolve => setTimeout(resolve, 1500));
