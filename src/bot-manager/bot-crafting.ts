@@ -994,7 +994,13 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
         }
       }
 
-      await furnace.takeOutput();
+      try {
+        await furnace.takeOutput();
+      } catch (takeErr) {
+        furnace.close();
+        const takeErrMsg = takeErr instanceof Error ? takeErr.message : String(takeErr);
+        throw new Error(`Cannot take existing output from furnace (inventory may be full): ${takeErrMsg}. Clear inventory space first.`);
+      }
     }
 
     // Put fuel if needed
