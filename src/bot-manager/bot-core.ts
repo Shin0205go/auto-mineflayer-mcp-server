@@ -45,7 +45,16 @@ export class BotCore extends EventEmitter {
     const viewerPort = this.nextViewerPort++;
     try {
       console.error(`[BotManager] Starting viewer for ${username} on port ${viewerPort}...`);
-      mineflayerViewer(managed.bot, { port: viewerPort, firstPerson: true, viewDistance: 6 });
+      const viewer = mineflayerViewer(managed.bot, { port: viewerPort, firstPerson: true, viewDistance: 6 });
+
+      // Handle viewer server errors to prevent process crash
+      if (viewer && viewer.on) {
+        viewer.on('error', (err: Error) => {
+          console.error(`[BotManager] Viewer error on port ${viewerPort}:`, err.message);
+          // Don't crash - just log and continue
+        });
+      }
+
       this.viewerPorts.set(username, viewerPort);
       console.error(`[BotManager] Viewer started at http://localhost:${viewerPort}`);
       return viewerPort;
