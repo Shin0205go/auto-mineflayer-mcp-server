@@ -371,6 +371,7 @@ Game Agentが使用できるツール（20個）：
 - `agent_board_wait` - 新着メッセージ待機
 - `agent_board_clear` - クリア
 
+<<<<<<< Updated upstream
 **設計原則**: Game Agentは採掘・建築・クラフトなどの複雑な操作を直接実行できません。すべてスキル経由でアクセスします。
 
 ## スキルシステム
@@ -425,6 +426,20 @@ Game Agentが使用できるツール（20個）：
 │ (低レベル操作)   │
 └──────────────────┘
 ```
+=======
+### 自己学習（Reflexion）
+- `log_experience` - 行動と結果を記録（成功・失敗問わず）
+- `get_recent_experiences` - 過去の経験を振り返る
+- `reflect_and_learn` - 経験からパターン分析、改善点抽出
+- `save_skill` - 成功手順をスキルとして保存
+- `get_skills` - 保存スキルを参照
+- `get_reflection_insights` - 振り返り知見を取得
+
+学習データは `learning/` ディレクトリに保存:
+- `experience.jsonl` - 経験ログ
+- `reflection.md` - 振り返りレポート
+- `skills.json` - スキルライブラリ
+>>>>>>> Stashed changes
 
 ## 環境変数
 

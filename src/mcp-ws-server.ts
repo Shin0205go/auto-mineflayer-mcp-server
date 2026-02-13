@@ -10,6 +10,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { botManager } from "./bot-manager/index.js";
 import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
+<<<<<<< Updated upstream
 import { learningTools, handleLearningTool, getAgentSkill } from "./tools/learning.js";
 import { taskCreate, taskList, taskGet, taskUpdate, TASK_MANAGEMENT_TOOLS } from "./tools/task-management.js";
 import {
@@ -285,6 +286,9 @@ function throwOnFailureResult(toolName: string, result: string): string {
 
   return result;
 }
+=======
+import { learningTools, handleLearningTool } from "./tools/learning.js";
+>>>>>>> Stashed changes
 
 interface JSONRPCRequest {
   jsonrpc: '2.0';
@@ -404,9 +408,18 @@ const tools = {
       required: ["username"],
     },
   },
+<<<<<<< Updated upstream
   // Tool Search
   search_tools: {
     description: "Search for available tools by keyword or category. Use this to discover relevant tools without loading all tool definitions. Categories: connection, info, communication, actions, crafting, learning, coordination, tasks, dev",
+=======
+  minecraft_get_surroundings: {
+    description: "詳細な周囲情報を取得。移動可能方向、光レベル、時刻、天気、危険（溶岩/敵）、近くの資源（座標付き）、動物など。状況判断に重要！",
+    inputSchema: { type: "object", properties: {} },
+  },
+  minecraft_find_block: {
+    description: "Find specific block type nearby and get its exact coordinates",
+>>>>>>> Stashed changes
     inputSchema: {
       type: "object",
       properties: {
@@ -565,8 +578,71 @@ const tools = {
       },
     },
   },
+<<<<<<< Updated upstream
   dev_clear_logs: {
     description: "Clear tool execution logs",
+=======
+  minecraft_eat: {
+    description: "Eat food from inventory to restore hunger",
+    inputSchema: {
+      type: "object",
+      properties: {
+        food_name: { type: "string" },
+      },
+    },
+  },
+  minecraft_equip_item: {
+    description: "Equip any item from inventory (pickaxe, axe, sword, etc.)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        item_name: { type: "string", description: "Item to equip (e.g., 'wooden_pickaxe', 'stone_axe')" },
+      },
+      required: ["item_name"],
+    },
+  },
+  minecraft_pillar_up: {
+    description: "Jump and place blocks below to climb up. Auto-digs obstacles above. Use untilSky=true to escape caves/underground!",
+    inputSchema: {
+      type: "object",
+      properties: {
+        height: { type: "number", default: 1, description: "How many blocks to go up (ignored if untilSky=true)" },
+        untilSky: { type: "boolean", default: false, description: "Keep going up until reaching open sky (great for escaping caves)" },
+      },
+    },
+  },
+  minecraft_tunnel: {
+    description: "Dig a 1x2 tunnel in a direction. Efficient for mining, escaping underground, or creating paths. Auto-equips pickaxe and collects items. Reports ores found!",
+    inputSchema: {
+      type: "object",
+      properties: {
+        direction: { type: "string", enum: ["north", "south", "east", "west", "up", "down"], description: "Direction to dig" },
+        length: { type: "number", default: 10, description: "How many blocks to dig (default: 10)" },
+      },
+      required: ["direction"],
+    },
+  },
+  minecraft_flee: {
+    description: "Run away from danger",
+    inputSchema: {
+      type: "object",
+      properties: {
+        distance: { type: "number", default: 20 },
+      },
+    },
+  },
+  minecraft_respawn: {
+    description: "Intentionally die and respawn. Use when situation is HOPELESS: stuck underground with no food, very low HP, no escape route. Loses all inventory but gets fresh start at spawn!",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reason: { type: "string", description: "Why respawning (e.g., 'stuck underground no food')" },
+      },
+    },
+  },
+  minecraft_get_biome: {
+    description: "Get current biome information. Useful for finding where specific mobs spawn (e.g., sheep spawn in plains, meadow, forest)",
+>>>>>>> Stashed changes
     inputSchema: { type: "object", properties: {} },
   },
 
@@ -591,6 +667,7 @@ const tools = {
       },
     },
   },
+<<<<<<< Updated upstream
   dev_get_config: {
     description: "Get current agent-config.json",
     inputSchema: { type: "object", properties: {} },
@@ -626,6 +703,11 @@ const tools = {
       inputSchema: tool.inputSchema
     }])
   ),
+=======
+
+  // === 自己学習ツール ===
+  ...learningTools,
+>>>>>>> Stashed changes
 };
 
 // Handle tool calls
@@ -829,6 +911,7 @@ async function handleTool(
       return "Tool logs cleared";
     }
 
+<<<<<<< Updated upstream
     // === Dev Agent v2 tools ===
     case "dev_publish_loop_result": {
       const loopResult = args.loopResult as LoopResult;
@@ -864,6 +947,20 @@ async function handleTool(
 
       console.log(`[MCP-WS-Server] Loop result #${loopResult.loopNumber} published (success=${loopResult.success})`);
       return `Loop result #${loopResult.loopNumber} published`;
+=======
+    case "minecraft_pillar_up": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const height = (args.height as number) || 1;
+      const untilSky = (args.untilSky as boolean) || false;
+      return await botManager.pillarUp(username, height, untilSky);
+    }
+
+    case "minecraft_tunnel": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const direction = args.direction as "north" | "south" | "east" | "west" | "up" | "down";
+      const length = (args.length as number) || 10;
+      return await botManager.digTunnel(username, direction, length);
+>>>>>>> Stashed changes
     }
 
     case "dev_get_loop_results": {
@@ -879,6 +976,7 @@ async function handleTool(
       return JSON.stringify(results, null, 2);
     }
 
+<<<<<<< Updated upstream
     case "dev_get_config": {
       try {
         const configContent = readFileSync(AGENT_CONFIG_FILE, "utf-8");
@@ -886,6 +984,17 @@ async function handleTool(
       } catch (e) {
         throw new Error(`Failed to read agent-config.json: ${e}`);
       }
+=======
+    case "minecraft_respawn": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      const reason = args.reason as string | undefined;
+      return await botManager.respawn(username, reason);
+    }
+
+    case "minecraft_get_biome": {
+      if (!username) throw new Error("Not connected. Call minecraft_connect first.");
+      return await botManager.getBiome(username);
+>>>>>>> Stashed changes
     }
 
     case "dev_save_config": {
@@ -1081,6 +1190,19 @@ async function handleTool(
     case "minecraft_flee":
     case "minecraft_respawn": {
       return await handleCombatTool(name, args);
+    }
+
+    // === 自己学習ツール ===
+    case "log_experience":
+    case "get_recent_experiences":
+    case "reflect_and_learn":
+    case "save_skill":
+    case "get_skills":
+    case "get_reflection_insights":
+    case "remember_location":
+    case "recall_locations":
+    case "forget_location": {
+      return await handleLearningTool(name, args);
     }
 
     default:
