@@ -444,8 +444,8 @@ export async function minecraft_survival_routine(
   const results: string[] = [];
 
   if (selectedPriority === "food") {
-    // Find and hunt animals for food
-    const nearbyEntities = botManager.findEntities(username, "passive", 32);
+    // Find and hunt animals for food - increased radius to 128 blocks for better coverage
+    const nearbyEntities = botManager.findEntities(username, "passive", 128);
 
     if (nearbyEntities.includes("cow") || nearbyEntities.includes("pig") || nearbyEntities.includes("chicken") || nearbyEntities.includes("sheep")) {
       try {
