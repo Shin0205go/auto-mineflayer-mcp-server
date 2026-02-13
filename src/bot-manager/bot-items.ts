@@ -398,8 +398,9 @@ export async function dropItem(bot: Bot, itemName: string, count?: number): Prom
       totalDropped += dropFromThis;
       remaining -= dropFromThis;
 
-      // Small delay to let inventory update
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Increased delay to let server inventory update propagate
+      // Server needs time to sync inventory changes, especially when dropping multiple stacks
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
 
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
