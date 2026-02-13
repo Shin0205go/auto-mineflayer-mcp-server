@@ -331,23 +331,46 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     }
   }
 
-  // Special handling for planks -> stick/crafting_table to avoid wood type issues
+  // Special handling for planks -> stick/crafting_table/wooden_tools to avoid wood type issues
   // These recipes work with ANY planks type, so we manually find compatible recipes
-  if (itemName === "stick" || itemName === "crafting_table") {
+  const woodenTools = ["stick", "crafting_table", "wooden_pickaxe", "wooden_axe", "wooden_sword", "wooden_shovel", "wooden_hoe"];
+  if (woodenTools.includes(itemName)) {
     // Find any planks in inventory
     const anyPlanks = inventoryItems.find(i => i.name.endsWith("_planks"));
     if (!anyPlanks) {
       throw new Error(`Cannot craft ${itemName}: Need any type of planks. Craft planks from logs first. Inventory: ${inventory}`);
     }
 
-    // Check if we have enough planks
+    // Check if we have enough planks and sticks for wooden tools
     const totalPlanks = inventoryItems
       .filter(i => i.name.endsWith("_planks"))
       .reduce((sum, item) => sum + item.count, 0);
 
-    const requiredPlanks = itemName === "stick" ? 2 : 4;
-    if (totalPlanks < requiredPlanks) {
-      throw new Error(`Cannot craft ${itemName}: Need ${requiredPlanks} planks, have ${totalPlanks}. Craft more planks from logs first. Inventory: ${inventory}`);
+    const stickItem = inventoryItems.find(i => i.name === "stick");
+    const totalSticks = stickItem ? stickItem.count : 0;
+
+    // Define required materials for each wooden tool
+    const requirements: Record<string, {planks: number, sticks: number}> = {
+      "stick": {planks: 2, sticks: 0},
+      "crafting_table": {planks: 4, sticks: 0},
+      "wooden_pickaxe": {planks: 3, sticks: 2},
+      "wooden_axe": {planks: 3, sticks: 2},
+      "wooden_sword": {planks: 2, sticks: 1},
+      "wooden_shovel": {planks: 1, sticks: 2},
+      "wooden_hoe": {planks: 2, sticks: 2},
+    };
+
+    const required = requirements[itemName];
+    if (!required) {
+      throw new Error(`Unknown wooden tool: ${itemName}`);
+    }
+
+    if (totalPlanks < required.planks) {
+      throw new Error(`Cannot craft ${itemName}: Need ${required.planks} planks, have ${totalPlanks}. Craft more planks from logs first. Inventory: ${inventory}`);
+    }
+
+    if (totalSticks < required.sticks) {
+      throw new Error(`Cannot craft ${itemName}: Need ${required.sticks} sticks, have ${totalSticks}. Craft sticks from planks first (2 planks → 4 sticks). Inventory: ${inventory}`);
     }
 
     // Get the specific item ID for the planks we have
