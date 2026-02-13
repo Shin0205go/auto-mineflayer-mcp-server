@@ -709,32 +709,44 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   }
 
   try {
-    // CRITICAL SAFETY CHECK: For valuable items, only block if we have strong evidence server has item pickup disabled
-    // Check if player has successfully collected ANY items in their inventory - if yes, pickup must be working
+    // CRITICAL SAFETY CHECK: For valuable items, test item pickup capability BEFORE crafting
+    // Having items in inventory is NOT proof that pickup works NOW - items could be from before config change
     const valuableItems = ["diamond_pickaxe", "diamond_axe", "diamond_sword", "diamond_shovel", "diamond_hoe",
                            "diamond_helmet", "diamond_chestplate", "diamond_leggings", "diamond_boots",
                            "netherite_pickaxe", "netherite_axe", "netherite_sword", "netherite_shovel",
                            "iron_pickaxe", "iron_axe", "iron_sword", "iron_shovel"];
 
     if (valuableItems.includes(itemName)) {
-      // Check if player has ANY items in inventory - this proves item pickup is working
-      const hasAnyItems = bot.inventory.items().length > 0;
-      // Check if player has valuable materials (diamonds, iron) - proves they collected them successfully
-      const hasValuableMaterials = bot.inventory.items().some(i =>
-        i.name.includes("diamond") || i.name.includes("iron") || i.name.includes("gold")
-      );
+      // Test item pickup by checking if there are any item entities on the ground nearby
+      // If items exist on ground but can't be collected, pickup is disabled
+      const nearbyItems = bot.nearestEntity(entity => {
+        if (entity.name === 'item' && entity.position) {
+          const dist = entity.position.distanceTo(bot.entity.position);
+          return dist < 10;
+        }
+        return false;
+      });
 
-      if (!hasAnyItems) {
-        console.error(`[Craft] CRITICAL: Cannot craft valuable item ${itemName} - empty inventory suggests server issue.`);
-        throw new Error(`Cannot craft ${itemName}: Empty inventory suggests server has item pickup disabled. Crafting would waste materials.`);
+      if (nearbyItems) {
+        // There are items on the ground - this is a red flag
+        // Try to approach them and see if they get auto-collected
+        const itemPos = nearbyItems.position;
+        if (itemPos) {
+          const distToItem = bot.entity.position.distanceTo(itemPos);
+          console.error(`[Craft] SAFETY CHECK: Found items on ground ${distToItem.toFixed(1)}m away. Testing pickup capability...`);
+
+          // If items are very close but still not collected, pickup is clearly disabled
+          if (distToItem < 1.5) {
+            console.error(`[Craft] CRITICAL: Items on ground within pickup range but not collected. Server has item pickup DISABLED.`);
+            throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled (items on ground cannot be collected). Crafting valuable items would permanently waste materials. Use existing tools or change server settings.`);
+          }
+
+          // Warn but allow if items are further away (might just be old drops)
+          console.error(`[Craft] WARNING: Items on ground nearby. If these cannot be collected, crafting will fail and waste materials.`);
+        }
       }
 
-      if (!hasValuableMaterials) {
-        console.error(`[Craft] WARNING: Crafting valuable item ${itemName} without valuable materials in inventory. May indicate server issue.`);
-        console.error(`[Craft] Proceeding anyway since basic item collection seems to work.`);
-      } else {
-        console.error(`[Craft] Item pickup confirmed working (have valuable materials). Safe to craft ${itemName}.`);
-      }
+      console.error(`[Craft] No nearby ground items detected. Proceeding with ${itemName} craft (will verify after).`);
     }
 
     if (craftingTable) {
