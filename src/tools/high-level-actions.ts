@@ -640,7 +640,8 @@ export async function minecraft_explore_area(
       // Check for target entity (skip "passive" keyword as it matches items too)
       if (target && target !== "passive" && target !== "hostile" && target !== "all") {
         const entityResult = botManager.findEntities(username, target, 16);
-        if (entityResult.includes(target)) {
+        // Only count as found if NOT starting with "No" (avoid false positives)
+        if (entityResult.includes(target) && !entityResult.startsWith("No")) {
           findings.push(`${target} entity at current location`);
         }
       } else if (target === "passive") {
