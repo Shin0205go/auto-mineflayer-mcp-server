@@ -89,9 +89,12 @@ export async function placeBlock(
     };
   }
 
-  // Equip the block
+  // Equip the block (skip if already equipped)
   try {
-    await bot.equip(blockItem, "hand");
+    const currentHand = bot.heldItem;
+    if (!currentHand || currentHand.type !== blockItem.type) {
+      await bot.equip(blockItem, "hand");
+    }
   } catch (err) {
     return { success: false, message: `Failed to equip ${blockType}: ${err}` };
   }
