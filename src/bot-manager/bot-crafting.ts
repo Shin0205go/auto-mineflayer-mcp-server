@@ -420,6 +420,77 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     }
   }
 
+  // Special handling for torch to handle coal/charcoal substitution
+  // Torches can be crafted with either coal OR charcoal, but recipes may specify one or the other
+  if (itemName === "torch") {
+    // Find either coal or charcoal in inventory
+    const fuel = inventoryItems.find(i => i.name === "coal" || i.name === "charcoal");
+    const stick = inventoryItems.find(i => i.name === "stick");
+
+    if (!fuel) {
+      throw new Error(`Cannot craft torch: Need coal or charcoal. Craft charcoal by smelting logs, or mine coal ore. Inventory: ${inventory}`);
+    }
+    if (!stick) {
+      throw new Error(`Cannot craft torch: Need stick. Craft sticks from planks first. Inventory: ${inventory}`);
+    }
+
+    // Check counts
+    const fuelCount = inventoryItems.filter(i => i.name === fuel.name).reduce((sum, item) => sum + item.count, 0);
+    const stickCount = inventoryItems.filter(i => i.name === "stick").reduce((sum, item) => sum + item.count, 0);
+
+    if (fuelCount < count || stickCount < count) {
+      throw new Error(`Cannot craft ${count}x torch: Need ${count} ${fuel.name} (have ${fuelCount}) and ${count} stick (have ${stickCount}). Inventory: ${inventory}`);
+    }
+
+    // Get the specific item ID for the fuel we have
+    const fuelItemId = mcData.itemsByName[fuel.name]?.id;
+    if (!fuelItemId) {
+      throw new Error(`Cannot find item ID for ${fuel.name}`);
+    }
+
+    // Get all torch recipes and find one that uses our fuel type (coal or charcoal)
+    const allRecipes = bot.recipesAll(item.id, null, null);
+
+    // Try to find a recipe that uses our specific fuel type
+    let compatibleRecipe = allRecipes.find(recipe => {
+      const delta = recipe.delta as Array<{ id: number; count: number }>;
+      return delta.some(d => {
+        if (d.count >= 0) return false; // Skip output items
+        return d.id === fuelItemId;
+      });
+    });
+
+    if (!compatibleRecipe) {
+      throw new Error(`Cannot craft torch: No compatible recipe found for ${fuel.name}. Have: ${fuelCount}x ${fuel.name}, ${stickCount}x stick. This may be a Minecraft version compatibility issue. Inventory: ${inventory}`);
+    }
+
+    console.error(`[Craft] Attempting to craft ${count}x torch using ${fuel.name} (have ${fuelCount} fuel, ${stickCount} sticks)`);
+
+    try {
+      for (let i = 0; i < count; i++) {
+        await bot.craft(compatibleRecipe, 1, undefined);
+
+        // Wait for crafting to complete (match timing from general crafting path)
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // Additional wait for inventory synchronization
+        await new Promise(resolve => setTimeout(resolve, 700));
+      }
+
+      const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
+      return `Crafted ${count}x torch using ${fuel.name}. Inventory: ${newInventory}` + getBriefStatus(managed);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+
+      // If crafting failed due to ingredient mismatch, provide helpful error
+      if (errMsg.includes("missing ingredient")) {
+        throw new Error(`Failed to craft torch from ${fuel.name}: ${errMsg}. This may be a Minecraft version compatibility issue. Inventory: ${inventory}`);
+      }
+
+      throw new Error(`Failed to craft torch: ${errMsg}. Inventory: ${inventory}`);
+    }
+  }
+
   // Always use recipesAll to get all possible recipes for this item
   // recipesFor sometimes misses valid recipes due to ingredient matching issues
   // First try without crafting table (player inventory 2x2 grid)
