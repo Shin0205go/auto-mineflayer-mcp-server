@@ -49,6 +49,13 @@ export async function minecraft_gather_resources(
 
         console.error(`[GatherResources] Found ${item.name} at (${x}, ${y}, ${z})`);
 
+        // Safety check: Don't mine logs/blocks while high up (Y > 80) to prevent fall damage
+        const botPos = botManager.getPosition(username);
+        if (botPos && botPos.y > 80 && (item.name.includes("log") || item.name.includes("leaves"))) {
+          console.error(`[GatherResources] Skipping ${item.name} at high altitude (Y:${botPos.y}) to prevent fall damage`);
+          continue;
+        }
+
         // Move to the block
         const moveResult = await botManager.moveTo(username, x, y, z);
         if (!moveResult.includes("Reached") && !moveResult.includes("Moved")) {
