@@ -769,9 +769,10 @@ function startServer(port: number = 8765) {
       }
     });
 
-    ws.on('close', () => {
+    ws.on('close', (code, reason) => {
       const username = connectionBots.get(ws);
-      console.log(`[MCP-WS-Server] Client disconnected: ${clientAddr} (bot: ${username || 'none'})`);
+      const reasonStr = reason ? reason.toString() : 'No reason provided';
+      console.log(`[MCP-WS-Server] Client disconnected: ${clientAddr} (bot: ${username || 'none'}), code: ${code}, reason: ${reasonStr}`);
       // Remove from active connections
       activeConnections.delete(ws);
       // Note: We don't disconnect the bot here - it persists for reconnection
