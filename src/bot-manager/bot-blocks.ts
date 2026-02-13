@@ -99,9 +99,35 @@ export async function placeBlock(
   // Find a reference block to place against
   const referenceBlock = findReferenceBlock(bot, targetPos);
   if (!referenceBlock) {
+    // Check nearby blocks to suggest better placement location
+    const nearbyBlocks = [];
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dz = -2; dz <= 2; dz++) {
+          const checkPos = new Vec3(Math.floor(x) + dx, Math.floor(y) + dy, Math.floor(z) + dz);
+          const block = bot.blockAt(checkPos);
+          if (block && block.name !== "air" && block.name !== "water" && block.name !== "lava") {
+            // Check if we can place on top of this block
+            const abovePos = checkPos.offset(0, 1, 0);
+            const aboveBlock = bot.blockAt(abovePos);
+            if (aboveBlock && aboveBlock.name === "air") {
+              nearbyBlocks.push(`${checkPos.x},${checkPos.y + 1},${checkPos.z} (on ${block.name})`);
+              if (nearbyBlocks.length >= 3) break;
+            }
+          }
+        }
+        if (nearbyBlocks.length >= 3) break;
+      }
+      if (nearbyBlocks.length >= 3) break;
+    }
+
+    const suggestion = nearbyBlocks.length > 0
+      ? ` Try these locations: ${nearbyBlocks.slice(0, 3).join(', ')}`
+      : ' No suitable nearby locations found. You may need to place a block on the ground first.';
+
     return {
       success: false,
-      message: `No adjacent block to place against at (${x}, ${y}, ${z})`
+      message: `No adjacent block to place against at (${x}, ${y}, ${z}).${suggestion}`
     };
   }
 
