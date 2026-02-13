@@ -445,7 +445,8 @@ export async function minecraft_survival_routine(
 
   if (selectedPriority === "food") {
     // Find and hunt animals for food - increased radius to 128 blocks for better coverage
-    const nearbyEntities = botManager.findEntities(username, "passive", 128);
+    // Check for ALL entities (don't filter by "passive" since it's not a valid entity type)
+    const nearbyEntities = botManager.findEntities(username, undefined, 128);
 
     // Determine which food animal is actually available
     const foodAnimals = ["cow", "pig", "chicken", "sheep"];
