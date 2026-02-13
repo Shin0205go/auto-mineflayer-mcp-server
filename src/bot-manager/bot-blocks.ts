@@ -99,12 +99,36 @@ export async function placeBlock(
     return { success: false, message: `Failed to equip ${blockType}: ${err}` };
   }
 
+  // Check if target position is already occupied
+  const targetBlock = bot.blockAt(targetPos);
+  if (targetBlock && targetBlock.name !== "air") {
+    return {
+      success: false,
+      message: `Target position (${x}, ${y}, ${z}) is already occupied by ${targetBlock.name}. Choose an empty (air) position.`
+    };
+  }
+
   // Find a reference block to place against
   const referenceBlock = findReferenceBlock(bot, targetPos);
   if (!referenceBlock) {
+    // Provide detailed debugging info about surrounding blocks
+    const surroundingBlocks = [];
+    const offsets = [
+      { pos: new Vec3(0, -1, 0), dir: "below" },
+      { pos: new Vec3(0, 1, 0), dir: "above" },
+      { pos: new Vec3(-1, 0, 0), dir: "west" },
+      { pos: new Vec3(1, 0, 0), dir: "east" },
+      { pos: new Vec3(0, 0, -1), dir: "north" },
+      { pos: new Vec3(0, 0, 1), dir: "south" }
+    ];
+    for (const { pos, dir } of offsets) {
+      const checkPos = targetPos.plus(pos);
+      const block = bot.blockAt(checkPos);
+      surroundingBlocks.push(`${dir}:${block?.name || "null"}`);
+    }
     return {
       success: false,
-      message: `No adjacent block to place against at (${x}, ${y}, ${z})`
+      message: `No adjacent solid block to place against at (${x}, ${y}, ${z}). Surrounding blocks: ${surroundingBlocks.join(", ")}. Need at least one solid block adjacent to target position.`
     };
   }
 
