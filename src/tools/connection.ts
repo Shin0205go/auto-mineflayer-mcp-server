@@ -84,6 +84,27 @@ export async function handleConnectionTool(
         // Disable viewer for stdio MCP connections to avoid port conflicts
         // Viewer is only useful for WebSocket connections where agents run persistently
         await botManager.connect({ host, port, username, version, disableViewer: true });
+
+        // Auto-validate survival environment for Game Agents
+        if (agentType === "game") {
+          // Import validation function dynamically to avoid circular dependency
+          const { minecraft_validate_survival_environment } = await import("./high-level-actions.js");
+
+          // Wait 2 seconds for the world to load
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          try {
+            const validationResult = await minecraft_validate_survival_environment(username, 100);
+            if (validationResult.includes("❌ CRITICAL")) {
+              // Return warning but don't block connection
+              return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})\n\n${validationResult}`;
+            }
+          } catch (validationError) {
+            // Validation failed, but don't block connection
+            console.error(`[Connection] Survival validation failed: ${validationError}`);
+          }
+        }
+
         return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})`;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
