@@ -258,18 +258,38 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
     distance = target.position.distanceTo(bot.entity.position);
   }
 
-  // Attack
+  // Attack repeatedly until entity is dead or too far
+  const targetId = target.id;
+  let attacks = 0;
+  const maxAttacks = 20; // Safety limit (20 attacks should kill most mobs)
+
   try {
-    await bot.lookAt(target.position.offset(0, target.height * 0.8, 0));
-    bot.attack(target);
+    while (attacks < maxAttacks) {
+      // Check if target still exists
+      const currentTarget = Object.values(bot.entities).find(e => e.id === targetId);
+      if (!currentTarget) {
+        return `Killed ${target.name} after ${attacks} attacks`;
+      }
 
-    // Wait for attack cooldown (Minecraft 1.9+ has attack cooldown)
-    // Diamond sword has ~0.6s cooldown, wait 700ms to be safe
-    await delay(700);
+      // Check if target is too far
+      const currentDist = currentTarget.position.distanceTo(bot.entity.position);
+      if (currentDist > 6) {
+        return `Target ${target.name} escaped after ${attacks} attacks (distance: ${currentDist.toFixed(1)} blocks)`;
+      }
 
-    return `Attacked ${target.name} (distance: ${distance.toFixed(1)} blocks)`;
+      // Attack
+      await bot.lookAt(currentTarget.position.offset(0, currentTarget.height * 0.8, 0));
+      bot.attack(currentTarget);
+      attacks++;
+
+      // Wait for attack cooldown (Minecraft 1.9+ has attack cooldown)
+      // Diamond sword has ~0.6s cooldown, wait 700ms to be safe
+      await delay(700);
+    }
+
+    return `Attacked ${target.name} ${attacks} times (may not be dead, stopped at safety limit)`;
   } catch (err) {
-    return `Failed to attack: ${err}`;
+    return `Failed to attack after ${attacks} attempts: ${err}`;
   }
 }
 
