@@ -709,6 +709,23 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   }
 
   try {
+    // CRITICAL SAFETY CHECK: For valuable items, warn about potential loss if server has item pickup disabled
+    const valuableItems = ["diamond_pickaxe", "diamond_axe", "diamond_sword", "diamond_shovel", "diamond_hoe",
+                           "diamond_helmet", "diamond_chestplate", "diamond_leggings", "diamond_boots",
+                           "netherite_pickaxe", "netherite_axe", "netherite_sword", "netherite_shovel",
+                           "iron_pickaxe", "iron_axe", "iron_sword", "iron_shovel"];
+
+    if (valuableItems.includes(itemName) && craftingTable) {
+      console.error(`[Craft] WARNING: Crafting valuable item ${itemName} using crafting table. If server has item pickup disabled, ingredients will be lost.`);
+      // For valuable items, always craft in player inventory if possible to avoid this bug
+      // Try to find 2x2 recipes first
+      const recipes2x2 = bot.recipesAll(item.id, null, null);
+      if (recipes2x2.length > 0) {
+        craftingTable = null;
+        console.error(`[Craft] Using player inventory (2x2) instead to avoid potential item loss`);
+      }
+    }
+
     // Before crafting, ensure we have the exact items needed
     // Sometimes the bot needs specific item types even if we have compatible ones
     // This is a workaround for mineflayer's strict recipe matching
