@@ -92,7 +92,7 @@ export async function listAllRecipes(_managed: ManagedBot, category?: string): P
       { name: "chest", ingredients: "8 planks" },
       { name: "furnace", ingredients: "8 cobblestone" },
       { name: "torch", ingredients: "1 coal + 1 stick" },
-      { name: "bed", ingredients: "3 wool + 3 planks" },
+      { name: "white_bed", ingredients: "3 white_wool + 3 planks" },
       { name: "bucket", ingredients: "3 iron_ingot" },
     ],
     food: [
@@ -168,7 +168,7 @@ export async function listCraftableNow(managed: ManagedBot): Promise<string> {
     { name: "iron_axe", needs: { iron_ingot: 3, stick: 2 } },
     { name: "bucket", needs: { iron_ingot: 3 } },
     { name: "shield", needs: { oak_planks: 6, iron_ingot: 1 }, alt: ["birch_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"] },
-    { name: "bed", needs: { oak_planks: 3, white_wool: 3 }, alt: ["birch_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"] },
+    { name: "white_bed", needs: { oak_planks: 3, white_wool: 3 }, alt: ["birch_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"] },
     { name: "bread", needs: { wheat: 3 } },
     { name: "iron_helmet", needs: { iron_ingot: 5 } },
     { name: "iron_chestplate", needs: { iron_ingot: 8 } },

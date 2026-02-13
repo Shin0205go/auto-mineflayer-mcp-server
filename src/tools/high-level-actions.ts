@@ -510,9 +510,9 @@ export async function minecraft_survival_routine(
   }
 
   if (selectedPriority === "shelter") {
-    // Check if we have a bed
-    const hasBed = inventory.some(item => item.name === "bed");
-    const hasWool = inventory.some(item => item.name === "wool");
+    // Check if we have a bed (any color)
+    const hasBed = inventory.some(item => item.name.includes("_bed"));
+    const hasWool = inventory.some(item => item.name.includes("wool"));
     const hasPlanks = inventory.some(item => item.name.includes("planks"));
 
     if (!hasBed) {
@@ -520,13 +520,14 @@ export async function minecraft_survival_routine(
         // Need to find sheep and shear them
         const sheepResult = botManager.findEntities(username, "sheep", 64);
         if (sheepResult.includes("sheep")) {
-          return "Found sheep nearby. Craft shears (2 iron_ingot) first, then use minecraft_craft_chain for 'bed'.";
+          return "Found sheep nearby. Craft shears (2 iron_ingot) first, then use minecraft_craft_chain for 'white_bed'.";
         }
       }
 
       if (hasWool && hasPlanks) {
         try {
-          const bedResult = await botManager.craftItem(username, "bed", 1);
+          // Minecraft requires color-specific bed name
+          const bedResult = await botManager.craftItem(username, "white_bed", 1);
           results.push(`Shelter: ${bedResult}`);
         } catch (err) {
           results.push(`Bed crafting failed: ${err}`);
