@@ -283,8 +283,9 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       attacks++;
 
       // Wait for attack cooldown (Minecraft 1.9+ has attack cooldown)
-      // Diamond sword has ~0.6s cooldown, wait 700ms to be safe
-      await delay(700);
+      // Diamond sword has ~0.6s cooldown, but 700ms was too slow allowing health regen
+      // Reduced to 650ms for faster kills
+      await delay(650);
     }
 
     return `Attacked ${target.name} ${attacks} times (may not be dead, stopped at safety limit)`;
@@ -423,7 +424,8 @@ export async function fight(
     }
 
     // Attack cooldown (Minecraft 1.9+ attack speed, ~0.6s for diamond sword)
-    await delay(700);
+    // Reduced to 650ms to ensure faster kills before health regeneration
+    await delay(650);
   }
 
   return `Combat ended. Attacked ${attackCount} times. Target may still be alive.` + getBriefStatus(bot);
