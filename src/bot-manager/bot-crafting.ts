@@ -282,12 +282,13 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   const isSimpleRecipe = simpleRecipes.includes(itemName) || itemName.endsWith("_planks");
 
-  // First check nearby (4 blocks) - but skip for simple recipes
+  // First check nearby (5 blocks) - but skip for simple recipes
+  // Using 5 blocks to be more forgiving of bot positioning
   let craftingTable = null;
   if (!isSimpleRecipe) {
     craftingTable = bot.findBlock({
       matching: craftingTableId,
-      maxDistance: 4,
+      maxDistance: 5,
     });
   }
 
@@ -321,10 +322,11 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         }, 300);
       });
 
-      // Re-check nearby
+      // Re-check nearby - use maxDistance 5 to account for pathfinding settling at goal distance 3
+      // This prevents false negatives when bot stops at ~3.5 blocks from table
       craftingTable = bot.findBlock({
         matching: craftingTableId,
-        maxDistance: 4,
+        maxDistance: 5,
       });
     }
   }

@@ -258,6 +258,7 @@ export async function minecraft_craft_chain(
     console.error(`[CraftChain] Attempting to craft ${itemName} x${count}`);
 
     // Try to craft directly first
+    // Note: craftItem already handles automatic movement to crafting tables within 32 blocks
     try {
       const craftResult = await botManager.craftItem(username, itemName, count);
       results.push(craftResult);
@@ -266,6 +267,11 @@ export async function minecraft_craft_chain(
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`[CraftChain] Direct craft failed: ${errMsg}`);
+
+      // If error is about crafting table placement, provide more helpful message
+      if (errMsg.includes("crafting_table") && errMsg.includes("Place one nearby")) {
+        throw new Error(`${itemName} requires a crafting_table. ${errMsg}`);
+      }
 
       // If autoGather is enabled and error is about missing ingredients, try to gather/craft them
       if (autoGather && errMsg.includes("missing ingredient")) {
