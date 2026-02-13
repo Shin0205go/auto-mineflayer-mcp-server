@@ -444,7 +444,7 @@ export async function minecraft_survival_routine(
 
     const hasPickaxe = inventory.some(item => item.name.includes("pickaxe"));
 
-    if (food < 10) {
+    if (food < 14) {
       selectedPriority = "food";
     } else if (!hasPickaxe) {
       selectedPriority = "tools";
