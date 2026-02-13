@@ -396,7 +396,12 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     try {
       for (let i = 0; i < count; i++) {
         await bot.craft(compatibleRecipe, 1, undefined);
-        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Wait for crafting to complete (match timing from general crafting path)
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // Additional wait for inventory synchronization
+        await new Promise(resolve => setTimeout(resolve, 700));
       }
 
       const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
