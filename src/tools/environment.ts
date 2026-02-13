@@ -276,6 +276,15 @@ export async function handleEnvironmentTool(
               } else {
                 diagnostics.push(`  ⚠️ WARNING: Block broke but no item spawned`);
                 diagnostics.push(`  Possible cause: /gamerule doTileDrops false`);
+
+                if (auto_fix) {
+                  botManager.chat(username, "/gamerule doTileDrops true");
+                  botManager.chat(username, "/gamerule doMobLoot true");
+                  botManager.chat(username, "/gamerule doEntityDrops true");
+                  diagnostics.push(`  🔧 Attempted fix: /gamerule doTileDrops true`);
+                  diagnostics.push(`  🔧 Attempted fix: /gamerule doMobLoot true`);
+                  diagnostics.push(`  🔧 Attempted fix: /gamerule doEntityDrops true`);
+                }
               }
             }
           } else {
