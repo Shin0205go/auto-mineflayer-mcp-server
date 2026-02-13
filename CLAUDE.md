@@ -396,35 +396,18 @@ Game Agentが使用できるツール（20個）：
 
 各スキルは `.claude/skills/<skill-name>/SKILL.md` に保存された専門知識とツールセットを持つ。
 
-### スキル内部実装
+### 自己学習（Reflexion）
+- `log_experience` - 行動と結果を記録（成功・失敗問わず）
+- `get_recent_experiences` - 過去の経験を振り返る
+- `reflect_and_learn` - 経験からパターン分析、改善点抽出
+- `save_skill` - 成功手順をスキルとして保存
+- `get_skills` - 保存スキルを参照
+- `get_reflection_insights` - 振り返り知見を取得
 
-```
-┌──────────────────┐
-│  Game Agent      │
-│  get_agent_skill │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  SKILL.md        │  ← スキル知識（Game Agentが読む）
-│  - 使用方法      │
-│  - パラメータ    │
-│  - Tips          │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│ high-level tool  │  ← 高レベルツール（スキル内部で使用）
-│ (Game Agentは   │
-│  知らない)       │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│ Bot Manager      │  ← 11モジュール
-│ (低レベル操作)   │
-└──────────────────┘
-```
+学習データは `learning/` ディレクトリに保存:
+- `experience.jsonl` - 経験ログ
+- `reflection.md` - 振り返りレポート
+- `skills.json` - スキルライブラリ
 
 ## 環境変数
 

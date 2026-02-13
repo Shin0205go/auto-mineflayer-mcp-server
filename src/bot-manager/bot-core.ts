@@ -448,12 +448,12 @@ export class BotCore extends EventEmitter {
         });
 
         // Handle disconnection with auto-reconnect
-        bot.on("end", () => {
+        bot.on("end", (reason) => {
           if (managedBot.particleInterval) {
             clearInterval(managedBot.particleInterval);
           }
           this.bots.delete(config.username);
-          console.error(`[BotManager] ${config.username} disconnected`);
+          console.error(`[BotManager] ${config.username} disconnected. Reason:`, reason || "Unknown");
 
           // Auto-reconnect after 5 seconds
           const savedConfig = this.connectionConfigs.get(config.username);
