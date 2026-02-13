@@ -519,13 +519,30 @@ export async function fish(managed: ManagedBot, duration: number = 30): Promise<
   // Fishing loop
   while (Date.now() - startTime < maxDuration) {
     try {
+      // Take inventory snapshot before fishing
+      const inventoryBefore: Record<string, number> = {};
+      bot.inventory.items().forEach(item => {
+        inventoryBefore[item.name] = (inventoryBefore[item.name] || 0) + item.count;
+      });
+
+      // Fish
       await bot.fish();
-      // Check what was caught (last item in inventory that wasn't there before)
-      const inv = bot.inventory.items();
-      if (inv.length > 0) {
-        const lastItem = inv[inv.length - 1];
-        caughtItems.push(lastItem.name);
-        console.error(`[Fish] Caught: ${lastItem.name}`);
+
+      // Check what changed in inventory
+      const inventoryAfter: Record<string, number> = {};
+      bot.inventory.items().forEach(item => {
+        inventoryAfter[item.name] = (inventoryAfter[item.name] || 0) + item.count;
+      });
+
+      // Find new items
+      for (const itemName in inventoryAfter) {
+        const before = inventoryBefore[itemName] || 0;
+        const after = inventoryAfter[itemName];
+        if (after > before) {
+          caughtItems.push(itemName);
+          console.error(`[Fish] Caught: ${itemName}`);
+          break; // Only one item caught per cast
+        }
       }
     } catch (err) {
       // Fish was interrupted or failed, try again
