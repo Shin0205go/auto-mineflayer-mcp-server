@@ -623,14 +623,23 @@ export async function minecraft_explore_area(
       // Move to next point
       await botManager.moveTo(username, x, startPos.y, z);
 
-      // Check biome
-      const biome = await botManager.getBiome(username);
-      if (target && biome.includes(target)) {
-        findings.push(`${target} biome at (${x}, ${z})`);
+      // Categorize target type to avoid false matches
+      const knownBiomes = ["plains", "forest", "taiga", "desert", "savanna", "jungle", "swamp", "mountains", "ocean", "river", "beach", "snowy", "ice", "mushroom", "nether", "end"];
+      const knownEntities = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "cat", "ocelot", "parrot", "wolf", "llama", "turtle", "panda", "fox", "bee", "axolotl", "frog", "goat", "zombie", "skeleton", "spider", "creeper", "enderman"];
+
+      const isBiomeSearch = target && knownBiomes.some(b => target.toLowerCase().includes(b));
+      const isEntitySearch = target && knownEntities.some(e => target.toLowerCase().includes(e) || e.includes(target.toLowerCase()));
+
+      // Check biome (only if explicitly searching for biome)
+      if (isBiomeSearch) {
+        const biome = await botManager.getBiome(username);
+        if (biome.includes(target)) {
+          findings.push(`${target} biome at (${x}, ${z})`);
+        }
       }
 
-      // Check for target block
-      if (target) {
+      // Check for target block (only if not searching for entity)
+      if (target && !isEntitySearch) {
         const blockResult = botManager.findBlock(username, target, 16);
         if (!blockResult.includes("No") && !blockResult.includes("not found")) {
           findings.push(`${target} block at current location`);
