@@ -388,6 +388,7 @@ async function handleTool(
   args: Record<string, unknown>
 ): Promise<string> {
   const username = connectionBots.get(ws);
+  console.error(`[MCP-WS-Server] handleTool called: ${name}, username from map: ${username}`);
 
   switch (name) {
     case "minecraft_connect": {
@@ -410,6 +411,7 @@ async function handleTool(
 
       const result = await botManager.connect({ host, port, username: botUsername, version });
       connectionBots.set(ws, botUsername);
+      console.error(`[MCP-WS-Server] Set connectionBots for ${botUsername}, can retrieve: ${connectionBots.get(ws)}`);
       return result;
     }
 
