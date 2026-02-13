@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "mineflayer": {
+      "url": "ws://localhost:8765"
+    }
+  }
+}
