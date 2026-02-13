@@ -965,6 +965,11 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
   }
 
   if (!furnaceBlock) {
+    // Check if player has a furnace in inventory
+    const furnaceInInventory = bot.inventory.items().find(i => i.name === "furnace");
+    if (furnaceInInventory) {
+      throw new Error("No furnace found within 32 blocks, but you have one in inventory. Place it first using minecraft_place_block, then try smelting again.");
+    }
     throw new Error("No furnace found within 32 blocks. Craft one with 8 cobblestone.");
   }
 
