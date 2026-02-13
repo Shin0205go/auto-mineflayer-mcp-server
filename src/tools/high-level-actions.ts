@@ -642,7 +642,11 @@ export async function minecraft_explore_area(
       if (food < 8) {
         // Emergency mode: allow short-range search for food animals only
         const foodAnimals = ["cow", "pig", "chicken", "sheep", "rabbit"];
-        const isSearchingForFood = target && foodAnimals.includes(target.toLowerCase());
+        const foodSearchTerms = ["animal", "passive", "mob", "food", "meat"];
+        const isSearchingForFood = target && (
+          foodAnimals.includes(target.toLowerCase()) ||
+          foodSearchTerms.some(term => target.toLowerCase().includes(term))
+        );
 
         if (!isSearchingForFood) {
           return `Exploration aborted at ${visitedPoints} points due to low hunger (${food}/20). Return to safety and eat! Findings so far: ${findings.length > 0 ? findings.join(", ") : "none"}`;
