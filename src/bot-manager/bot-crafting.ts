@@ -1060,8 +1060,8 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
 
       if (!outputInInventory) {
         // Items were smelted but expected output not in inventory - they must have dropped
-        console.error(`[Smelt] WARNING: ${expectedOutputName} not found in inventory after smelting - may have dropped due to server settings`);
-        return `Smelted ${smeltCount}x ${itemName} (WARNING: ${totalGained}x ${expectedOutputName} may have dropped - server has item pickup disabled). Inventory: ${newInventory}${debugInfo}`;
+        console.error(`[Smelt] CRITICAL: ${expectedOutputName} not found in inventory after smelting - output lost permanently`);
+        throw new Error(`Cannot smelt ${itemName}: Server has item pickup disabled or inventory sync failed. ${totalGained}x ${expectedOutputName} was produced but lost. Raw materials consumed but output disappeared. This indicates a critical server configuration issue.${debugInfo}`);
       }
     }
 
