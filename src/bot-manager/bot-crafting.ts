@@ -943,7 +943,7 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
   // Find a furnace nearby
   let furnaceBlock = bot.findBlock({
     matching: mcData.blocksByName.furnace?.id,
-    maxDistance: 4,
+    maxDistance: 8,
   });
 
   // If not nearby, search wider and move to it
@@ -979,7 +979,7 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
       // Re-check nearby
       furnaceBlock = bot.findBlock({
         matching: mcData.blocksByName.furnace?.id,
-        maxDistance: 4,
+        maxDistance: 8,
       });
     }
   }
