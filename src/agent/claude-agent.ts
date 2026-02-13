@@ -100,6 +100,7 @@ class ClaudeAgent {
     this.claude = new ClaudeClient({
       maxTurns: 100,
       mcpServerUrl: MCP_WS_URL,
+      agentName: BOT_USERNAME,
     });
 
     this.setupEventHandlers();
