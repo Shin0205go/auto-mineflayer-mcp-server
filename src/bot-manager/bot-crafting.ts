@@ -1049,10 +1049,12 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     const startTime = Date.now();
 
     // Poll for output items and take them as they become available
+    console.error(`[Smelt] Starting polling loop: targetCount=${targetCount}, maxWaitTime=${maxWaitTime}ms`);
     while (totalOutputTaken < targetCount && (Date.now() - startTime) < maxWaitTime) {
       await new Promise(resolve => setTimeout(resolve, 2000)); // Check every 2 seconds
 
       const output = furnace.outputItem();
+      console.error(`[Smelt] Poll check: output=${output ? `${output.count}x ${output.name}` : 'null'}, totalTaken=${totalOutputTaken}/${targetCount}, elapsed=${Date.now() - startTime}ms`);
       if (output && output.count > 0) {
         totalOutputTaken += output.count;
         await furnace.takeOutput();
@@ -1060,6 +1062,7 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
         console.error(`[Smelt] Took ${output.count}x output (total: ${totalOutputTaken}/${targetCount})`);
       }
     }
+    console.error(`[Smelt] Polling loop finished: totalTaken=${totalOutputTaken}/${targetCount}`);
 
     // Final check for any remaining output
     const finalOutput = furnace.outputItem();
@@ -1094,10 +1097,11 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
       }
 
       // CRITICAL CHECK: Verify that the expected number of items were actually gained
-      // We should gain exactly what we took from the furnace
-      if (actualGained < totalGained) {
-        console.error(`[Smelt] WARNING: Expected to gain ${totalGained}x ${expectedOutputName} but only gained ${actualGained}x`);
-        throw new Error(`Smelting ${itemName} lost items! Expected to gain ${totalGained}x ${expectedOutputName} from furnace but only gained ${actualGained}x in inventory. Missing ${totalGained - actualGained} items. This indicates a critical bug in the smelting system.${debugInfo}`);
+      // We should gain exactly what we took from the furnace (newOutputCount, not totalGained)
+      // totalGained includes existingOutputCount which was already in inventory before smelting started
+      if (actualGained < newOutputCount) {
+        console.error(`[Smelt] WARNING: Expected to gain ${newOutputCount}x ${expectedOutputName} but only gained ${actualGained}x`);
+        throw new Error(`Smelting ${itemName} lost items! Expected to gain ${newOutputCount}x ${expectedOutputName} from furnace but only gained ${actualGained}x in inventory. Missing ${newOutputCount - actualGained} items. This indicates a critical bug in the smelting system.${debugInfo}`);
       }
 
       // Also warn if we didn't smelt the expected amount
