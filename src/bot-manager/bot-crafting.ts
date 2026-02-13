@@ -965,6 +965,12 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
   const expectedOutputName = smeltingOutputMap[itemName];
 
   try {
+    // Track initial inventory count for accurate verification
+    let initialOutputCount = 0;
+    if (expectedOutputName) {
+      const initialOutput = bot.inventory.items().find(i => i.name === expectedOutputName);
+      initialOutputCount = initialOutput?.count || 0;
+    }
     const furnace = await bot.openFurnace(furnaceBlock);
 
     // Track initial output count for accurate reporting
@@ -1052,16 +1058,23 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     // Check for the item that SHOULD have been produced from smelting
     if (expectedOutputName && (newOutputCount > 0 || existingOutputCount > 0)) {
       const outputInInventory = bot.inventory.items().find(i => i.name === expectedOutputName);
-      const inventoryHasOutput = !!outputInInventory;
-      const outputCount = outputInInventory?.count || 0;
+      const finalOutputCount = outputInInventory?.count || 0;
+      const actualGained = finalOutputCount - initialOutputCount;
 
       // Always include debug info in message
-      const debugInfo = ` [Expected: ${expectedOutputName}, InInventory: ${inventoryHasOutput}${inventoryHasOutput ? ` (${outputCount}x)` : ''}]`;
+      const debugInfo = ` [Expected: ${expectedOutputName}, Initial: ${initialOutputCount}, Final: ${finalOutputCount}, Gained: ${actualGained}, SmeltCount: ${smeltCount}, ExistingInFurnace: ${existingOutputCount}]`;
 
       if (!outputInInventory) {
         // Items were smelted but expected output not in inventory - they must have dropped
         console.error(`[Smelt] CRITICAL: ${expectedOutputName} not found in inventory after smelting - output lost permanently`);
         throw new Error(`Cannot smelt ${itemName}: Server has item pickup disabled or inventory sync failed. ${totalGained}x ${expectedOutputName} was produced but lost. Raw materials consumed but output disappeared. This indicates a critical server configuration issue.${debugInfo}`);
+      }
+
+      // CRITICAL CHECK: Verify that the expected number of items were actually gained
+      const expectedGain = smeltCount + existingOutputCount;
+      if (actualGained < expectedGain) {
+        console.error(`[Smelt] WARNING: Expected to gain ${expectedGain}x ${expectedOutputName} but only gained ${actualGained}x`);
+        throw new Error(`Smelting ${itemName} lost items! Expected to gain ${expectedGain}x ${expectedOutputName} (${smeltCount} smelted + ${existingOutputCount} from furnace) but only gained ${actualGained}x. Missing ${expectedGain - actualGained} items. This indicates a critical bug in the smelting system.${debugInfo}`);
       }
     }
 
