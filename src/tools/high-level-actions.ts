@@ -619,19 +619,25 @@ export async function minecraft_explore_area(
         if (statusMatch) food = parseFloat(statusMatch[1]);
       }
 
-      if (food < 6) {
-        // Emergency mode: allow short-range search for food animals
+      // More aggressive hunger monitoring to prevent starvation
+      if (food < 8) {
+        // Emergency mode: allow short-range search for food animals only
         const foodAnimals = ["cow", "pig", "chicken", "sheep", "rabbit"];
         const isSearchingForFood = target && foodAnimals.includes(target.toLowerCase());
 
         if (!isSearchingForFood) {
-          return `Exploration aborted at ${visitedPoints} points due to critical hunger (${food}/20). Return to safety and eat! Findings so far: ${findings.length > 0 ? findings.join(", ") : "none"}`;
+          return `Exploration aborted at ${visitedPoints} points due to low hunger (${food}/20). Return to safety and eat! Findings so far: ${findings.length > 0 ? findings.join(", ") : "none"}`;
         }
 
-        // In emergency mode, limit search radius to 30 blocks max
-        if (visitedPoints > 20) {
+        // In emergency mode, limit search to just a few nearby points
+        if (visitedPoints > 6) {
           return `Emergency food search completed at ${visitedPoints} points. Hunger: ${food}/20. Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
         }
+      }
+
+      // Also warn and limit exploration when hunger is moderately low
+      if (food < 12 && visitedPoints > Math.min(15, maxVisitedPoints / 2)) {
+        return `Exploration limited at ${visitedPoints} points due to moderate hunger (${food}/20). Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
       }
 
       // Move to next point
