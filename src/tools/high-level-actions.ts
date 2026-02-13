@@ -563,6 +563,16 @@ export async function minecraft_explore_area(
     visitedPoints++;
 
     try {
+      // Safety check: abort if hunger is critical
+      const status = botManager.getStatus(username);
+      const statusMatch = status.match(/Food: ([\d.]+)\/20/);
+      if (statusMatch) {
+        const food = parseFloat(statusMatch[1]);
+        if (food < 6) {
+          return `Exploration aborted at ${visitedPoints} points due to critical hunger (${food}/20). Return to safety and eat! Findings so far: ${findings.length > 0 ? findings.join(", ") : "none"}`;
+        }
+      }
+
       // Move to next point
       await botManager.moveTo(username, x, startPos.y, z);
 
