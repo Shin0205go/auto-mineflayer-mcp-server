@@ -870,9 +870,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
     if (!craftedItem) {
       // Item not in inventory - might have been dropped due to server config
-      console.error(`[Craft] WARNING: ${itemName} not found in inventory after crafting - may have dropped due to server settings`);
-      // Return success with a warning message instead of throwing error
-      return `Crafted ${count}x ${itemName} (WARNING: Item may have dropped - server has item pickup disabled). Inventory: ${newInventory}` + getBriefStatus(managed);
+      console.error(`[Craft] ERROR: ${itemName} not found in inventory after crafting - server has item pickup disabled`);
+      // THROW ERROR instead of returning success - this prevents wasting materials
+      throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
     }
 
     // Success - item is in inventory
