@@ -447,10 +447,14 @@ export async function minecraft_survival_routine(
     // Find and hunt animals for food - increased radius to 128 blocks for better coverage
     const nearbyEntities = botManager.findEntities(username, "passive", 128);
 
-    if (nearbyEntities.includes("cow") || nearbyEntities.includes("pig") || nearbyEntities.includes("chicken") || nearbyEntities.includes("sheep")) {
+    // Determine which food animal is actually available
+    const foodAnimals = ["cow", "pig", "chicken", "sheep"];
+    const availableAnimal = foodAnimals.find(animal => nearbyEntities.includes(animal));
+
+    if (availableAnimal) {
       try {
-        // Fight passive mobs for food (this will attack them)
-        const fightResult = await botManager.fight(username, "cow"); // Try cow first
+        // Fight the available food animal
+        const fightResult = await botManager.fight(username, availableAnimal);
         results.push(`Food: ${fightResult}`);
 
         // Collect drops
