@@ -49,11 +49,12 @@ export async function minecraft_gather_resources(
 
         console.error(`[GatherResources] Found ${item.name} at (${x}, ${y}, ${z})`);
 
-        // Safety check: Don't mine logs/blocks while high up (Y > 80) to prevent fall damage
+        // Safety check: Don't mine ANY blocks while high up (Y > 80) to prevent fall damage
+        // Mining causes pathfinding which can lead to falls from high structures
         const botPos = botManager.getPosition(username);
-        if (botPos && botPos.y > 80 && (item.name.includes("log") || item.name.includes("leaves"))) {
-          console.error(`[GatherResources] Skipping ${item.name} at high altitude (Y:${botPos.y}) to prevent fall damage`);
-          continue;
+        if (botPos && botPos.y > 80) {
+          console.error(`[GatherResources] Aborting resource gathering - bot at dangerous altitude (Y:${botPos.y}). Descend to ground level (Y < 80) before mining.`);
+          break; // Abort the entire gathering operation
         }
 
         // Move to the block
