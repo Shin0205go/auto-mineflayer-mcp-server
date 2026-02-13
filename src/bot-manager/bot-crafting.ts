@@ -789,12 +789,11 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 // Debug: Show all inventory items to see what we actually have
                 const inventoryNames = bot.inventory.items().map(i => i.name).join(", ");
                 console.error(`[Craft] Expected ${itemName}, but inventory has: ${inventoryNames}`);
-                console.error(`[Craft] WARNING: Item pickup may be disabled on this server - crafting succeeded but item could not be collected`);
+                console.error(`[Craft] CRITICAL: Item pickup disabled on server - crafted item lost permanently`);
 
-                // Don't throw error - crafting succeeded (ingredients were consumed)
-                // Just log the warning and continue
-                crafted = true;
-                break;
+                // CRITICAL BUG FIX: Throw error to prevent resource waste
+                // Ingredients were consumed but output is lost - this is a failure, not success
+                throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
               }
             } else {
               throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting and no dropped items found nearby. This indicates a server configuration issue or the crafting operation did not complete successfully.`);
