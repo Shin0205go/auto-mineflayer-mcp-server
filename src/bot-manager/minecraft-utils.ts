@@ -51,9 +51,9 @@ export function isFoodItem(bot: Bot, itemName: string): boolean {
   // Check if item has food property in registry
   const item = bot.registry.itemsByName[itemName];
   if (!item) return false;
-  // Common food items end with these suffixes or are known foods
-  const foodPatterns = ["_beef", "_porkchop", "_mutton", "_chicken", "_rabbit",
-    "_cod", "_salmon", "bread", "apple", "carrot", "potato", "beetroot",
+  // Common food items - use patterns that match both with and without prefix
+  const foodPatterns = ["beef", "porkchop", "mutton", "chicken", "rabbit",
+    "cod", "salmon", "bread", "apple", "carrot", "potato", "beetroot",
     "melon_slice", "sweet_berries", "glow_berries", "cookie", "pie", "cake",
     "stew", "soup", "dried_kelp", "rotten_flesh", "spider_eye", "chorus_fruit"];
   return foodPatterns.some(p => itemName.includes(p)) ||
