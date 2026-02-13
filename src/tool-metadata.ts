@@ -94,6 +94,8 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
  */
 export function searchTools(query: string, availableTools: Set<string>): string[] {
   const lowerQuery = query.toLowerCase().trim();
+  console.error(`[searchTools] Query: "${lowerQuery}", availableTools count: ${availableTools.size}`);
+  console.error(`[searchTools] availableTools:`, Array.from(availableTools).join(', '));
 
   // If query is empty, return high-priority tools
   if (!lowerQuery) {
@@ -111,13 +113,23 @@ export function searchTools(query: string, availableTools: Set<string>): string[
   const results = Array.from(availableTools)
     .filter(name => {
       const metadata = TOOL_METADATA[name];
-      if (!metadata) return false;
+      if (!metadata) {
+        console.error(`[searchTools] No metadata for tool: ${name}`);
+        return false;
+      }
 
       // Check if query matches category
-      if (metadata.category.includes(lowerQuery)) return true;
+      if (metadata.category.includes(lowerQuery)) {
+        console.error(`[searchTools] "${name}" matched on category: ${metadata.category}`);
+        return true;
+      }
 
       // Check if query matches any tag
-      return metadata.tags.some(tag => tag.includes(lowerQuery));
+      const tagMatch = metadata.tags.some(tag => tag.includes(lowerQuery));
+      if (tagMatch) {
+        console.error(`[searchTools] "${name}" matched on tags: ${metadata.tags.join(', ')}`);
+      }
+      return tagMatch;
     })
     .sort((a, b) => {
       // Sort by priority, then by relevance

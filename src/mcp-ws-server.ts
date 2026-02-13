@@ -730,9 +730,12 @@ async function handleTool(
       // IMPORTANT: search_tools always searches ALL tools (Progressive Disclosure)
       // Only tools/list is filtered by agent type
       const availableTools = new Set(Object.keys(tools));
+      console.error(`[search_tools handler] availableTools size: ${availableTools.size}`);
+      console.error(`[search_tools handler] Has minecraft_survival_routine: ${availableTools.has('minecraft_survival_routine')}`);
 
       // Search for matching tools
       const matchedTools = searchTools(query, availableTools);
+      console.error(`[search_tools handler] matchedTools: ${matchedTools.join(', ')}`);
 
       if (detail === "brief") {
         // Return brief info: name and category only

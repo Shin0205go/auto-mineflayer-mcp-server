@@ -15,6 +15,7 @@ import { coordinationTools, handleCoordinationTool } from "./tools/coordination.
 import { craftingTools, handleCraftingTool } from "./tools/crafting.js";
 import { combatTools, handleCombatTool } from "./tools/combat.js";
 import { learningTools, handleLearningTool } from "./tools/learning.js";
+import { highLevelActionTools, handleHighLevelActionTool } from "./tools/high-level-actions-mcp.js";
 import { GAME_AGENT_TOOLS } from "./tool-filters.js";
 import { getAgentType } from "./agent-state.js";
 import { searchTools, TOOL_METADATA } from "./tool-metadata.js";
@@ -29,6 +30,7 @@ const allTools = {
   ...craftingTools,
   ...combatTools,
   ...learningTools,
+  ...highLevelActionTools,
   // Tool Search
   search_tools: {
     description: "Search for available tools by keyword or category. Use this to discover relevant tools without loading all tool definitions. Categories: connection, info, communication, actions, crafting, learning, coordination, tasks",
@@ -109,6 +111,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       result = await handleCombatTool(name, toolArgs);
     } else if (name in learningTools) {
       result = await handleLearningTool(name, toolArgs);
+    } else if (name in highLevelActionTools) {
+      result = await handleHighLevelActionTool(name, toolArgs);
     } else if (name === "search_tools") {
       const query = (toolArgs.query as string) || "";
       const detail = (toolArgs.detail as "brief" | "full") || "brief";
