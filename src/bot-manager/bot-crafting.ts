@@ -882,8 +882,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             await new Promise(resolve => setTimeout(resolve, 300));
           }
 
-          // Additional wait for inventory synchronization
-          await new Promise(resolve => setTimeout(resolve, 700));
+          // Additional wait for inventory synchronization (increased from 700ms to 1500ms to reduce false positives)
+          // Simple recipes (planks, sticks) crafted in player inventory can take time to sync
+          await new Promise(resolve => setTimeout(resolve, 1500));
 
           // CRITICAL: Check if item appears in inventory
           // If not, it may have been dropped as an entity
