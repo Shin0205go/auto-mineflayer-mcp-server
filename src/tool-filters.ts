@@ -5,7 +5,7 @@
  * Dev Agent: All tools (for debugging and development)
  */
 
-// All tools for Game Agent (45 tools total)
+// All tools for Game Agent (48 tools total)
 export const GAME_AGENT_TOOLS = new Set([
   // Connection (3 tools)
   "minecraft_connect",
@@ -43,12 +43,12 @@ export const GAME_AGENT_TOOLS = new Set([
   "minecraft_smelt",
 
   // Storage (4 tools)
-  "minecraft_list_chest",
   "minecraft_open_chest",
   "minecraft_take_from_chest",
   "minecraft_store_in_chest",
+  "minecraft_list_chest",
 
-  // Combat (9 tools)
+  // Combat (8 tools)
   "minecraft_get_status",
   "minecraft_get_nearby_entities",
   "minecraft_attack",
@@ -57,7 +57,6 @@ export const GAME_AGENT_TOOLS = new Set([
   "minecraft_equip_weapon",
   "minecraft_flee",
   "minecraft_respawn",
-  "minecraft_fish",
 
   // Learning (7 tools)
   "log_experience",

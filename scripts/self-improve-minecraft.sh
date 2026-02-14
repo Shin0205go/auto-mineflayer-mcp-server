@@ -14,6 +14,8 @@ set -e
 # ボットID（引数で指定、デフォルト: 1）
 BOT_ID=${1:-1}
 BOT_NAME="Claude${BOT_ID}"
+# モデル（引数2で指定、デフォルト: sonnet）
+MODEL=${2:-sonnet}
 
 # ログディレクトリ（ボットごとに分離）
 LOG_DIR="agent_logs/bot${BOT_ID}"
@@ -24,9 +26,17 @@ LOOP=0
 
 echo "🎮 Starting Minecraft Self-Improvement Loop"
 echo "   Bot: $BOT_NAME (ID: $BOT_ID)"
+echo "   Model: $MODEL"
 echo "   Log directory: $LOG_DIR"
 echo "   Running infinitely (Ctrl+C to stop)"
 echo ""
+
+# 起動タイミングをずらす（競合回避）
+STARTUP_DELAY=$((BOT_ID * 10))
+if [ $STARTUP_DELAY -gt 0 ]; then
+  echo "⏳ Waiting ${STARTUP_DELAY}s to avoid connection conflicts..."
+  sleep $STARTUP_DELAY
+fi
 
 while true; do
   LOOP=$((LOOP + 1))
@@ -62,37 +72,33 @@ while true; do
 
   # プロンプトファイル作成（前回のログを含む）
   cat > /tmp/minecraft_prompt_bot${BOT_ID}.md << PROMPT
-# Minecraft自己改善エージェント - $BOT_NAME
+# Minecraft - $BOT_NAME
 
-## あなたの役割
+あなたは **$BOT_NAME** です。今すぐMinecraftをプレイしてください。
 
-Minecraftサーバー（localhost:25565）でサバイバルプレイをしながら、自己改善してください。
-あなたは **$BOT_NAME** です（複数ボットが並行稼働中）。
+## 最初のアクション（必須）
 
-## タスク
+1. \`minecraft_get_status()\` - 現在の状態確認
+2. \`minecraft_get_position()\` - 現在地確認
+3. \`minecraft_get_surroundings()\` - 周囲確認
 
-1. **接続**: \`minecraft_connect(host="localhost", port=25565, username="$BOT_NAME", agentType="game")\`
-2. **状態確認**: \`minecraft_get_status()\` でHP/空腹度確認
-3. **サバイバル**: 5分間プレイ
-   - 食料確保（\`minecraft_eat\`）
-   - 資源収集（\`minecraft_dig_block\`, \`minecraft_collect_items\`）
-   - ツール作成（\`minecraft_craft\`）
-   - 敵対MOB対策（\`minecraft_attack\`, \`minecraft_flee\`）
-4. **エラー時の対応**:
-   - ツール実行でエラーが発生したら：
-     - ソースコードを読んで原因を特定
-     - \`Edit\`ツールで修正
-     - \`npm run build\` でビルド
-     - 修正内容をGitコミット（コミットメッセージに[$BOT_NAME]を含める）
-5. **終了**: 5分経過したら \`/exit\` で終了
+## その後
 
-## 重要
+- 木を探して採掘
+- アイテムを収集
+- ツールを作成
+- 敵から逃げる
+- 食料を食べる
 
-- エラーが発生しても**諦めずに修正**してください
-- 修正後は必ず \`npm run build\` を実行
-- 修正内容は明確なコミットメッセージでGit保存
-- コミットメッセージの先頭に **[$BOT_NAME]** を付けてください
-- 他のボット（Claude1, Claude2...）が同じワールドでプレイしている可能性があります
+## 絶対禁止
+
+- ❌ **ファイル作成・編集・削除禁止**（Write, Edit, Bashでのファイル操作）
+- ❌ **BUGレポート作成禁止**
+- ❌ git操作禁止
+- ❌ MCP設定変更禁止
+- ❌ Read/Grepでのソースコード読み込み禁止
+
+**ゲームプレイだけに集中！今すぐ minecraft_get_status() を実行！**
 
 PROMPT
 
@@ -117,7 +123,7 @@ PROMPT
     --print \
     --verbose \
     --output-format stream-json \
-    --model sonnet) > "$LOGFILE" 2>&1 &
+    --model $MODEL) > "$LOGFILE" 2>&1 &
   CLAUDE_PID=$!
 
   # Wait up to 1200 seconds (20 minutes)

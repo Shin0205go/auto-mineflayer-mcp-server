@@ -469,7 +469,9 @@ export async function minecraft_survival_routine(
     if (availableAnimal) {
       try {
         // Fight the available food animal
-        const fightResult = await botManager.fight(username, availableAnimal);
+        // CRITICAL: When hunting for food in survival mode, allow fighting even at low HP
+        // because we NEED food to restore health. Set flee threshold to 0 for food animals.
+        const fightResult = await botManager.fight(username, availableAnimal, 0);
         results.push(`Food: ${fightResult}`);
 
         // Collect drops
@@ -478,41 +480,74 @@ export async function minecraft_survival_routine(
         results.push(`Food gathering failed: ${err}`);
       }
     } else {
-      // No animals found - try fishing as emergency fallback
-      console.error("[SurvivalRoutine] No animals found, attempting fishing");
+      // No animals found - try alternative food sources
+      console.error("[SurvivalRoutine] No food animals found (checked: cow, pig, chicken, sheep within 128 blocks), trying alternatives");
 
-      try {
-        // Check if we have a fishing rod
-        const hasFishingRod = inventory.some(item => item.name === "fishing_rod");
+      // EMERGENCY FALLBACK 1: Hunt zombies for rotten_flesh (better than starving)
+      if (nearbyEntities.includes("zombie")) {
+        console.error("[SurvivalRoutine] Found zombie - hunting for rotten_flesh (emergency food)");
+        try {
+          const fightResult = await botManager.fight(username, "zombie", 6); // flee at 6 HP
+          results.push(`Emergency zombie hunt: ${fightResult}`);
+          await botManager.collectNearbyItems(username);
 
-        if (hasFishingRod) {
-          const fishResult = await botManager.fish(username, 30);
-          results.push(`Emergency fishing: ${fishResult}`);
-        } else {
-          // Try to craft a fishing rod (requires 3 sticks + 2 string)
-          const hasSticks = inventory.some(item => item.name === "stick" && item.count >= 3);
-          const hasString = inventory.some(item => item.name === "string" && item.count >= 2);
+          // Check if we got rotten flesh and eat it immediately if hunger is critical
+          const currentStatus = botManager.getStatus(username);
+          const statusObj = JSON.parse(currentStatus);
+          const hungerMatch = statusObj.hunger?.match(/([\d.]+)\//);
+          const currentHunger = hungerMatch ? parseFloat(hungerMatch[1]) : 20;
 
-          if (hasSticks && hasString) {
-            const craftResult = await botManager.craftItem(username, "fishing_rod", 1);
-            results.push(`Crafted fishing rod: ${craftResult}`);
+          if (currentHunger < 6) {
+            const updatedInventory = botManager.getInventory(username);
+            if (updatedInventory.some(item => item.name === "rotten_flesh")) {
+              console.error("[SurvivalRoutine] Critical hunger - eating rotten_flesh immediately");
+              try {
+                const eatResult = await botManager.eat(username, "rotten_flesh");
+                results.push(`Ate rotten_flesh: ${eatResult}`);
+              } catch (eatErr) {
+                console.error(`[SurvivalRoutine] Failed to eat rotten_flesh: ${eatErr}`);
+              }
+            }
+          }
+        } catch (err) {
+          results.push(`Emergency zombie hunt failed: ${err}`);
+        }
+      } else {
+        // EMERGENCY FALLBACK 2: Try fishing
+        console.error("[SurvivalRoutine] No zombies nearby, attempting fishing");
+        try {
+          // Check if we have a fishing rod
+          const hasFishingRod = inventory.some(item => item.name === "fishing_rod");
 
+          if (hasFishingRod) {
             const fishResult = await botManager.fish(username, 30);
             results.push(`Emergency fishing: ${fishResult}`);
           } else {
-            results.push("No food sources found. Need: animals nearby OR fishing rod OR (3 sticks + 2 string to craft rod)");
+            // Try to craft a fishing rod (requires 3 sticks + 2 string)
+            const hasSticks = inventory.some(item => item.name === "stick" && item.count >= 3);
+            const hasString = inventory.some(item => item.name === "string" && item.count >= 2);
+
+            if (hasSticks && hasString) {
+              const craftResult = await botManager.craftItem(username, "fishing_rod", 1);
+              results.push(`Crafted fishing rod: ${craftResult}`);
+
+              const fishResult = await botManager.fish(username, 30);
+              results.push(`Emergency fishing: ${fishResult}`);
+            } else {
+              results.push("No food sources found. Need: animals nearby OR zombies for rotten_flesh OR fishing rod OR (3 sticks + 2 string to craft rod)");
+            }
           }
+        } catch (err) {
+          results.push(`Emergency fishing failed: ${err}`);
         }
-      } catch (err) {
-        results.push(`Emergency fishing failed: ${err}`);
       }
     }
   }
 
   if (selectedPriority === "shelter") {
-    // Check if we have a bed
-    const hasBed = inventory.some(item => item.name === "bed");
-    const hasWool = inventory.some(item => item.name === "wool");
+    // Check if we have a bed (any color)
+    const hasBed = inventory.some(item => item.name.includes("_bed"));
+    const hasWool = inventory.some(item => item.name.includes("wool"));
     const hasPlanks = inventory.some(item => item.name.includes("planks"));
 
     if (!hasBed) {
@@ -520,13 +555,14 @@ export async function minecraft_survival_routine(
         // Need to find sheep and shear them
         const sheepResult = botManager.findEntities(username, "sheep", 64);
         if (sheepResult.includes("sheep")) {
-          return "Found sheep nearby. Craft shears (2 iron_ingot) first, then use minecraft_craft_chain for 'bed'.";
+          return "Found sheep nearby. Craft shears (2 iron_ingot) first, then use minecraft_craft_chain for 'white_bed'.";
         }
       }
 
       if (hasWool && hasPlanks) {
         try {
-          const bedResult = await botManager.craftItem(username, "bed", 1);
+          // Minecraft requires color-specific bed name
+          const bedResult = await botManager.craftItem(username, "white_bed", 1);
           results.push(`Shelter: ${bedResult}`);
         } catch (err) {
           results.push(`Bed crafting failed: ${err}`);
@@ -605,9 +641,9 @@ export async function minecraft_explore_area(
 
   const findings: string[] = [];
   let visitedPoints = 0;
-  const maxVisitedPoints = Math.min(10, Math.floor(radius / 10)); // Reduced from 50 to prevent timeout
+  const maxVisitedPoints = Math.min(50, Math.floor(radius / 5)); // Limit exploration points
   const startTime = Date.now();
-  const maxDuration = 30000; // Reduced from 120s to 30s to prevent connection timeout
+  const maxDuration = 120000; // 2 minutes max
 
   // Spiral pattern exploration
   let x = startX;
@@ -623,11 +659,6 @@ export async function minecraft_explore_area(
     visitedPoints++;
 
     try {
-      // Safety check: verify bot is still connected
-      if (!botManager.getBot(username)) {
-        return `Exploration aborted at ${visitedPoints} points - bot disconnected. Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
-      }
-
       // Safety check: abort if hunger is critical (unless searching for food)
       const status = botManager.getStatus(username);
 
@@ -680,8 +711,8 @@ export async function minecraft_explore_area(
         continue;
       }
 
-      // Delay to prevent overwhelming the connection (increased from 100ms to 500ms)
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Small delay to prevent overwhelming the connection
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Categorize target type to avoid false matches
       const knownBiomes = ["plains", "forest", "taiga", "desert", "savanna", "jungle", "swamp", "mountains", "ocean", "river", "beach", "snowy", "ice", "mushroom", "nether", "end"];
@@ -819,7 +850,7 @@ export async function minecraft_validate_survival_environment(
     const healthMatch = statusObj.health?.match(/([\d.]+)\//);
     const health = healthMatch ? parseFloat(healthMatch[1]) : null;
     console.error(`[ValidateEnvironment] Parsed health: ${health}`);
-    if (health !== null && health < 1.0) {
+    if (health !== null && health < 10.0) {
       console.error(`[ValidateEnvironment] SKIPPING - health too low: ${health} HP`);
       return `\n⚠️ VALIDATION SKIPPED: Bot health too low (${health} HP)\nBot may die during validation. Please heal first or use creative mode.`;
     }
@@ -832,45 +863,61 @@ export async function minecraft_validate_survival_environment(
   let foodSourcesFound = 0;
 
   // Check for passive mobs (primary food source)
+  // Use smaller search radius initially to avoid timeout
+  const quickSearchRadius = Math.min(searchRadius, 50);
   const passiveMobs = ["cow", "pig", "chicken", "sheep", "rabbit"];
   for (const mobType of passiveMobs) {
-    const entityResult = botManager.findEntities(username, mobType, searchRadius);
-    // More strict check: Must not start with "No" AND must contain distance/position info
-    // This prevents false positives from stale cached entity data
-    const hasValidEntity = !entityResult.startsWith("No") &&
-                          entityResult.includes(mobType) &&
-                          (entityResult.includes("blocks") || entityResult.includes("distance"));
+    // Check if bot still connected (avoid timeout issues)
+    if (!botManager.isConnected(username)) {
+      console.error(`[ValidateEnvironment] Bot disconnected during validation`);
+      break;
+    }
 
-    if (hasValidEntity) {
+    const entityResult = botManager.findEntities(username, mobType, quickSearchRadius);
+    if (!entityResult.startsWith("No") && entityResult.includes(mobType)) {
       findings.push(`✅ Found ${mobType} (huntable food)`);
       foodSourcesFound++;
+      // Early exit if we found food
+      if (foodSourcesFound >= 2) break;
     }
   }
 
-  // Check for edible plants
-  const ediblePlants = ["sweet_berry_bush", "melon", "kelp", "wheat", "carrots", "potatoes"];
-  for (const plantType of ediblePlants) {
-    const blockResult = botManager.findBlock(username, plantType, searchRadius);
-    if (!blockResult.includes("No") && !blockResult.includes("not found")) {
-      findings.push(`✅ Found ${plantType} (harvestable food)`);
-      foodSourcesFound++;
+  // Check for edible plants (only if no mobs found)
+  if (foodSourcesFound < 2) {
+    const ediblePlants = ["sweet_berry_bush", "melon", "kelp", "wheat", "carrots", "potatoes"];
+    for (const plantType of ediblePlants) {
+      // Check if bot still connected
+      if (!botManager.isConnected(username)) {
+        console.error(`[ValidateEnvironment] Bot disconnected during validation`);
+        break;
+      }
+
+      const blockResult = botManager.findBlock(username, plantType, quickSearchRadius);
+      if (!blockResult.includes("No") && !blockResult.includes("not found")) {
+        findings.push(`✅ Found ${plantType} (harvestable food)`);
+        foodSourcesFound++;
+        // Early exit if we found enough food sources
+        if (foodSourcesFound >= 2) break;
+      }
     }
   }
 
-  // Check for fishing viability (water + string for fishing rod)
-  const waterResult = botManager.findBlock(username, "water", searchRadius);
-  const hasWater = !waterResult.includes("No") && !waterResult.includes("not found");
+  // Check for fishing viability (water + string for fishing rod) - only if still need food sources
+  if (foodSourcesFound < 2 && botManager.isConnected(username)) {
+    const waterResult = botManager.findBlock(username, "water", quickSearchRadius);
+    const hasWater = !waterResult.includes("No") && !waterResult.includes("not found");
 
-  if (hasWater) {
-    const inventory = botManager.getInventory(username);
-    const hasString = inventory.some(item => item.name === "string");
-    const hasSticks = inventory.some(item => item.name === "stick");
+    if (hasWater) {
+      const inventory = botManager.getInventory(username);
+      const hasString = inventory.some(item => item.name === "string");
+      const hasSticks = inventory.some(item => item.name === "stick");
 
-    if (hasString && hasSticks) {
-      findings.push("✅ Fishing viable (water + string + sticks)");
-      foodSourcesFound++;
-    } else if (hasSticks) {
-      findings.push("⚠️ Water found but missing string for fishing rod");
+      if (hasString && hasSticks) {
+        findings.push("✅ Fishing viable (water + string + sticks)");
+        foodSourcesFound++;
+      } else if (hasSticks) {
+        findings.push("⚠️ Water found but missing string for fishing rod");
+      }
     }
   }
 
@@ -885,9 +932,22 @@ export async function minecraft_validate_survival_environment(
     // Ignore parse errors
   }
 
-  const header = `\n=== SURVIVAL ENVIRONMENT VALIDATION ===\nCurrent Hunger: ${currentHunger}/20\nSearch Radius: ${searchRadius} blocks\n`;
+  const header = `\n=== SURVIVAL ENVIRONMENT VALIDATION ===\nCurrent Hunger: ${currentHunger}/20\nSearch Radius: ${quickSearchRadius} blocks (optimized for performance)\n`;
 
   if (foodSourcesFound === 0) {
+    // If hunger is not critically low, treat as warning instead of CRITICAL
+    // Bot might have food in inventory or can explore to find food
+    if (currentHunger > 10) {
+      return header +
+        `\n⚠️ WARNING: NO IMMEDIATE FOOD SOURCES DETECTED\n` +
+        `\nFindings:\n- No passive mobs found in ${quickSearchRadius} block radius\n- No edible plants found\n- No fishing viability\n` +
+        `\nCurrent Status: Hunger at ${currentHunger}/20 - not critical yet\n` +
+        `\nRecommendations:\n` +
+        `1. Check inventory for existing food\n` +
+        `2. Explore beyond ${quickSearchRadius} blocks to find food sources\n` +
+        `3. If persistent, check server configuration (mob spawning may be disabled)`;
+    }
+
     return header +
       `\n❌ CRITICAL: NO FOOD SOURCES DETECTED\n` +
       `\nFindings:\n- No passive mobs found\n- No edible plants found\n- No fishing viability\n` +

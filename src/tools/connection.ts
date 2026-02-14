@@ -81,27 +81,54 @@ export async function handleConnectionTool(
       setAgentType(agentType);
 
       try {
-        await botManager.connect({ host, port, username, version });
+        // Disable viewer for stdio MCP connections to avoid port conflicts
+        // Viewer is only useful for WebSocket connections where agents run persistently
+        await botManager.connect({ host, port, username, version, disableViewer: true });
 
-        // Wait 2 seconds for bot to fully spawn and stabilize
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Auto-validate survival environment for Game Agents
+        // Can be disabled with SKIP_VALIDATION=true for debugging
+        // DISABLED: Validation was too strict and blocked gameplay even when food was available
+        // Bot can check inventory and explore for food after connecting
+        const skipValidation = process.env.SKIP_VALIDATION === "true" || true; // Always skip for now
+        if (agentType === "game" && !skipValidation) {
+          // Import validation function dynamically to avoid circular dependency
+          const { minecraft_validate_survival_environment } = await import("./high-level-actions.js");
 
-        // Get initial state information
-        try {
-          const position = botManager.getPosition(username);
-          const status = botManager.getStatus(username);
-          const inventory = botManager.getInventory(username);
+          // Wait 2 seconds for the world to load
+          await new Promise(resolve => setTimeout(resolve, 2000));
 
-          let stateInfo = `\n\nInitial state:`;
-          stateInfo += `\nPosition: (${Math.round(position.x)}, ${Math.round(position.y)}, ${Math.round(position.z)})`;
-          stateInfo += `\n${status}`;
-          stateInfo += `\nInventory: ${inventory.length > 0 ? inventory.map(i => `${i.name}:${i.count}`).join(', ') : 'Empty'}`;
+          try {
+            // Check if bot is still connected before validation
+            if (!botManager.isConnected(username)) {
+              console.error(`[Connection] Bot ${username} disconnected before validation could start`);
+              throw new Error(`Bot ${username} disconnected shortly after connection. Validation skipped.\n\nPossible causes:\n1. Server kicked the bot\n2. Network connection lost\n3. Server is not accepting connections\n\nCheck server logs for details.`);
+            }
 
-          return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})${stateInfo}`;
-        } catch (stateError) {
-          // If state retrieval fails, just return basic connection info
-          return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})`;
+            const validationResult = await minecraft_validate_survival_environment(username, 100);
+
+            // Check if bot is still connected after validation
+            if (!botManager.isConnected(username)) {
+              console.error(`[Connection] Bot ${username} disconnected during validation`);
+              throw new Error(`Bot ${username} disconnected during environment validation.\n\nValidation results:\n${validationResult}\n\nThe bot was kicked or disconnected by the server during the validation check.`);
+            }
+
+            if (validationResult.includes("❌ CRITICAL")) {
+              // CRITICAL: Log warning but allow connection - bot might have food in inventory
+              // or food might be available further away
+              console.warn(`[Connection] CRITICAL validation warning:\n${validationResult}`);
+              console.warn(`[Connection] Proceeding with connection - bot may need to find food sources`);
+              // Return validation result as part of success message instead of blocking
+              return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})\n\n⚠️ ENVIRONMENT WARNING:\n${validationResult}\n\nConnection allowed - check inventory for food or explore to find food sources.`;
+            }
+          } catch (validationError) {
+            // Validation failed critically - re-throw to block connection
+            const errorMsg = validationError instanceof Error ? validationError.message : String(validationError);
+            console.error(`[Connection] Survival validation failed: ${errorMsg}`);
+            throw validationError;
+          }
         }
+
+        return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})`;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         throw new Error(`Failed to connect to ${host}:${port}: ${errorMessage}`);

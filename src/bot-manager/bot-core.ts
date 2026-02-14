@@ -300,6 +300,10 @@ export class BotCore extends EventEmitter {
           gameEvents: [],
           thinkingState: "idle",
           particleInterval: null,
+          // CRITICAL: Reset item pickup flag on connection
+          // Disconnecting and reconnecting clears server-side state
+          serverHasItemPickupDisabled: false,
+          serverHasItemPickupDisabledTimestamp: undefined,
         };
 
         // Helper to add event with max 50 events kept
@@ -454,12 +458,13 @@ export class BotCore extends EventEmitter {
         });
 
         // Handle disconnection with auto-reconnect
-        bot.on("end", () => {
+        bot.on("end", (reason) => {
           if (managedBot.particleInterval) {
             clearInterval(managedBot.particleInterval);
           }
           this.bots.delete(config.username);
-          console.error(`[BotManager] ${config.username} disconnected`);
+          const reasonStr = typeof reason === 'string' ? reason : JSON.stringify(reason);
+          console.error(`[BotManager] ${config.username} disconnected. Reason: ${reasonStr}`);
 
           // Auto-reconnect after 5 seconds
           const savedConfig = this.connectionConfigs.get(config.username);
@@ -472,6 +477,8 @@ export class BotCore extends EventEmitter {
                 console.error(`[BotManager] Auto-reconnect failed:`, error);
               });
             }, 5000);
+          } else {
+            console.error(`[BotManager] No saved config for ${config.username}, skipping auto-reconnect`);
           }
         });
 
@@ -570,10 +577,13 @@ export class BotCore extends EventEmitter {
         this.bots.set(config.username, managedBot);
         console.error(`[BotManager] ${config.username} connected`);
 
-        // Start prismarine-viewer for first-person view in browser
-        const viewerPort = this.startViewer(config.username);
-        if (viewerPort) {
-          console.error(`[BotManager] Open http://localhost:${viewerPort} to see the first-person view`);
+        // Start prismarine-viewer for first-person view in browser (unless disabled)
+        let viewerPort: number | null = null;
+        if (!config.disableViewer) {
+          viewerPort = this.startViewer(config.username);
+          if (viewerPort) {
+            console.error(`[BotManager] Open http://localhost:${viewerPort} to see the first-person view`);
+          }
         }
 
         // Return connection info with game mode warning

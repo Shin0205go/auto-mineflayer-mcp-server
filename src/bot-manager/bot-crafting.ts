@@ -8,108 +8,6 @@ import { isFuelItem } from "./minecraft-utils.js";
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
 
 /**
- * Validates if the server allows item pickup by dropping and collecting a test item.
- * Caches result per bot session to avoid repeated testing.
- * @param bot The mineflayer bot instance
- * @returns true if item pickup works, false otherwise
- */
-async function validateItemPickup(bot: any): Promise<boolean> {
-  // Check if we've already validated this session successfully
-  // Only cache successful validations - retry failed validations to avoid permanent blocking
-  if ((bot as any)._itemPickupValidated === true) {
-    return true;
-  }
-
-  try {
-    // Find an expendable item to test with
-    const testItem = bot.inventory.items().find((i: any) =>
-      i.name === "dirt" || i.name === "cobblestone" || i.name === "gravel"
-    );
-
-    if (!testItem) {
-      // No expendable items to test with - assume pickup works
-      console.warn("[Craft] No expendable items to test pickup, assuming it works");
-      (bot as any)._itemPickupValidated = true;
-      return true;
-    }
-
-    const testItemName = testItem.name;
-
-    // Count items before dropping
-    const beforeCount = bot.inventory.items()
-      .filter((i: any) => i.name === testItemName)
-      .reduce((sum: number, i: any) => sum + i.count, 0);
-
-    console.log(`[Craft] Testing pickup: ${testItemName} count before=${beforeCount}`);
-
-    // Drop 1 item
-    await bot.toss(testItem.type, null, 1);
-
-    // Wait for item to spawn in world
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Count items immediately after drop to establish baseline
-    // If auto-pickup is disabled, item should NOT be in inventory yet
-    const afterDropCount = bot.inventory.items()
-      .filter((i: any) => i.name === testItemName)
-      .reduce((sum: number, i: any) => sum + i.count, 0);
-
-    console.log(`[Craft] After drop: ${testItemName} count=${afterDropCount}`);
-
-    // If item already returned to inventory, auto-pickup is working (good!)
-    if (afterDropCount >= beforeCount) {
-      console.log(`[Craft] Auto-pickup is ENABLED - crafted items will be collected automatically`);
-      (bot as any)._itemPickupValidated = true;
-      return true;
-    }
-
-    // Item is not in inventory - try manual collection
-    console.log(`[Craft] Attempting manual collection...`);
-    const { collectNearbyItems } = await import("./bot-items.js");
-    const collectResult = await collectNearbyItems(bot);
-    console.log(`[Craft] Collection result: ${collectResult}`);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Count items after attempting manual pickup
-    const afterCount = bot.inventory.items()
-      .filter((i: any) => i.name === testItemName)
-      .reduce((sum: number, i: any) => sum + i.count, 0);
-
-    console.log(`[Craft] After collection: ${testItemName} count=${afterCount}`);
-
-    // If we recovered the item through manual collection, pickup works
-    const pickupWorks = (afterCount >= beforeCount);
-    (bot as any)._itemPickupValidated = pickupWorks;
-
-    if (!pickupWorks) {
-      console.error(`[Craft] Item pickup validation FAILED: dropped ${testItemName} (before=${beforeCount}, after=${afterCount})`);
-      console.error(`[Craft] This may be a timing issue. Trying one more time with longer wait...`);
-
-      // One more attempt with longer wait
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      const finalCount = bot.inventory.items()
-        .filter((i: any) => i.name === testItemName)
-        .reduce((sum: number, i: any) => sum + i.count, 0);
-
-      if (finalCount >= beforeCount) {
-        console.log(`[Craft] Item pickup validation PASSED on retry (finalCount=${finalCount})`);
-        (bot as any)._itemPickupValidated = true;
-        return true;
-      }
-    } else {
-      console.log(`[Craft] Item pickup validation PASSED`);
-    }
-
-    return pickupWorks;
-
-  } catch (err) {
-    console.error(`[Craft] Item pickup test failed: ${err}`);
-    (bot as any)._itemPickupValidated = false;
-    return false;
-  }
-}
-
-/**
  * Get brief status for appending to responses (Mamba mode only)
  */
 function getBriefStatus(managed: ManagedBot): string {
@@ -194,7 +92,7 @@ export async function listAllRecipes(_managed: ManagedBot, category?: string): P
       { name: "chest", ingredients: "8 planks" },
       { name: "furnace", ingredients: "8 cobblestone" },
       { name: "torch", ingredients: "1 coal + 1 stick" },
-      { name: "bed", ingredients: "3 wool + 3 planks" },
+      { name: "white_bed", ingredients: "3 white_wool + 3 planks" },
       { name: "bucket", ingredients: "3 iron_ingot" },
     ],
     food: [
@@ -252,25 +150,25 @@ export async function listCraftableNow(managed: ManagedBot): Promise<string> {
 
   // Define recipes with requirements
   const allRecipes = [
-    { name: "planks", needs: { oak_log: 1 }, noTable: true, output: 4, alt: ["birch_log", "spruce_log"] },
-    { name: "stick", needs: { oak_planks: 2 }, noTable: true, output: 4, alt: ["birch_planks", "spruce_planks"] },
-    { name: "crafting_table", needs: { oak_planks: 4 }, noTable: true, alt: ["birch_planks", "spruce_planks"] },
-    { name: "chest", needs: { oak_planks: 8 }, alt: ["birch_planks", "spruce_planks"] },
+    { name: "planks", needs: { oak_log: 1 }, noTable: true, output: 4, alt: ["birch_log", "spruce_log", "jungle_log", "acacia_log", "dark_oak_log", "mangrove_log", "cherry_log"] },
+    { name: "stick", needs: { oak_planks: 2 }, noTable: true, output: 4, alt: ["birch_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"] },
+    { name: "crafting_table", needs: { oak_planks: 4 }, noTable: true, alt: ["birch_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"] },
+    { name: "chest", needs: { oak_planks: 8 }, alt: ["birch_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"] },
     { name: "furnace", needs: { cobblestone: 8 } },
     { name: "torch", needs: { coal: 1, stick: 1 }, output: 4 },
-    { name: "wooden_pickaxe", needs: { oak_planks: 3, stick: 2 }, alt: ["birch_planks", "spruce_planks"] },
+    { name: "wooden_pickaxe", needs: { oak_planks: 3, stick: 2 }, alt: ["birch_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"] },
     { name: "stone_pickaxe", needs: { cobblestone: 3, stick: 2 } },
     { name: "iron_pickaxe", needs: { iron_ingot: 3, stick: 2 } },
     { name: "diamond_pickaxe", needs: { diamond: 3, stick: 2 } },
-    { name: "wooden_sword", needs: { oak_planks: 2, stick: 1 }, alt: ["birch_planks", "spruce_planks"] },
+    { name: "wooden_sword", needs: { oak_planks: 2, stick: 1 }, alt: ["birch_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"] },
     { name: "stone_sword", needs: { cobblestone: 2, stick: 1 } },
     { name: "iron_sword", needs: { iron_ingot: 2, stick: 1 } },
-    { name: "wooden_axe", needs: { oak_planks: 3, stick: 2 }, alt: ["birch_planks", "spruce_planks"] },
+    { name: "wooden_axe", needs: { oak_planks: 3, stick: 2 }, alt: ["birch_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"] },
     { name: "stone_axe", needs: { cobblestone: 3, stick: 2 } },
     { name: "iron_axe", needs: { iron_ingot: 3, stick: 2 } },
     { name: "bucket", needs: { iron_ingot: 3 } },
-    { name: "shield", needs: { oak_planks: 6, iron_ingot: 1 }, alt: ["birch_planks", "spruce_planks"] },
-    { name: "bed", needs: { oak_planks: 3, white_wool: 3 }, alt: ["birch_planks", "spruce_planks"] },
+    { name: "shield", needs: { oak_planks: 6, iron_ingot: 1 }, alt: ["birch_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"] },
+    { name: "white_bed", needs: { oak_planks: 3, white_wool: 3 }, alt: ["birch_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"] },
     { name: "bread", needs: { wheat: 3 } },
     { name: "iron_helmet", needs: { iron_ingot: 5 } },
     { name: "iron_chestplate", needs: { iron_ingot: 8 } },
@@ -354,6 +252,14 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     throw new Error("Bot is not connected to the server. Please reconnect.");
   }
 
+  // CRITICAL: Check if server has item pickup disabled
+  // This prevents wasting materials on crafting when items can't be collected
+  // IMPORTANT: Do NOT auto-clear this flag - server config issues are permanent until reconnect
+  if (managed.serverHasItemPickupDisabled === true && managed.serverHasItemPickupDisabledTimestamp) {
+    const timeSinceSet = Date.now() - managed.serverHasItemPickupDisabledTimestamp;
+    throw new Error(`Cannot craft ${itemName}: Server item pickup recently failed (${Math.floor(timeSinceSet / 1000)}s ago). Disconnect and reconnect to reset this flag. This prevents wasting materials if pickup is truly broken.`);
+  }
+
   // Dynamic import of minecraft-data
   const minecraftData = await import("minecraft-data");
   const mcData = minecraftData.default(bot.version);
@@ -433,23 +339,48 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     }
   }
 
-  // Special handling for planks -> stick/crafting_table to avoid wood type issues
-  // These recipes work with ANY planks type, so we manually find compatible recipes
-  if (itemName === "stick" || itemName === "crafting_table") {
+  // Special handling for planks -> stick/crafting_table/wooden_tools to avoid wood type issues
+  // NOTE: Disabled for both "stick" and "crafting_table" due to persistent "missing ingredient" errors
+  // General crafting path with material substitution (lines 511-574) works better for both
+  // The findCompatibleItem function properly handles all plank types as substitutes
+  const simpleWoodenRecipes: string[] = [];
+  if (simpleWoodenRecipes.includes(itemName)) {
     // Find any planks in inventory
     const anyPlanks = inventoryItems.find(i => i.name.endsWith("_planks"));
     if (!anyPlanks) {
       throw new Error(`Cannot craft ${itemName}: Need any type of planks. Craft planks from logs first. Inventory: ${inventory}`);
     }
 
-    // Check if we have enough planks
+    // Check if we have enough planks and sticks for wooden tools
     const totalPlanks = inventoryItems
       .filter(i => i.name.endsWith("_planks"))
       .reduce((sum, item) => sum + item.count, 0);
 
-    const requiredPlanks = itemName === "stick" ? 2 : 4;
-    if (totalPlanks < requiredPlanks) {
-      throw new Error(`Cannot craft ${itemName}: Need ${requiredPlanks} planks, have ${totalPlanks}. Craft more planks from logs first. Inventory: ${inventory}`);
+    const stickItem = inventoryItems.find(i => i.name === "stick");
+    const totalSticks = stickItem ? stickItem.count : 0;
+
+    // Define required materials for each wooden tool
+    const requirements: Record<string, {planks: number, sticks: number}> = {
+      "stick": {planks: 2, sticks: 0},
+      "crafting_table": {planks: 4, sticks: 0},
+      "wooden_pickaxe": {planks: 3, sticks: 2},
+      "wooden_axe": {planks: 3, sticks: 2},
+      "wooden_sword": {planks: 2, sticks: 1},
+      "wooden_shovel": {planks: 1, sticks: 2},
+      "wooden_hoe": {planks: 2, sticks: 2},
+    };
+
+    const required = requirements[itemName];
+    if (!required) {
+      throw new Error(`Unknown wooden tool: ${itemName}`);
+    }
+
+    if (totalPlanks < required.planks) {
+      throw new Error(`Cannot craft ${itemName}: Need ${required.planks} planks, have ${totalPlanks}. Craft more planks from logs first. Inventory: ${inventory}`);
+    }
+
+    if (totalSticks < required.sticks) {
+      throw new Error(`Cannot craft ${itemName}: Need ${required.sticks} sticks, have ${totalSticks}. Craft sticks from planks first (2 planks → 4 sticks). Inventory: ${inventory}`);
     }
 
     // Get the specific item ID for the planks we have
@@ -458,48 +389,82 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       throw new Error(`Cannot find item ID for ${anyPlanks.name}`);
     }
 
-    // Get all recipes and find one that uses the planks type we actually have
-    const allRecipes = bot.recipesAll(item.id, null, null);
+    // Try to get recipes in multiple ways:
+    // 1. Without crafting table (2x2 grid) - preferred for stick and crafting_table
+    // 2. With crafting table if available (3x3 grid) - but NEVER for stick or crafting_table
 
-    // Try to find a recipe that uses our specific planks type
-    let compatibleRecipe = allRecipes.find(recipe => {
-      const delta = recipe.delta as Array<{ id: number; count: number }>;
-      return delta.some(d => {
-        if (d.count >= 0) return false; // Skip output items
-        return d.id === planksItemId;
+    let allRecipes = bot.recipesAll(item.id, null, null);
+    let craftingTableBlock = null;
+    console.error(`[Craft] recipesAll(${item.id}, null, null) returned ${allRecipes.length} recipes`);
+
+    // IMPORTANT: stick and crafting_table should NEVER use a crafting table (they're 2x2 recipes)
+    // If no recipes found and it's NOT stick/crafting_table, try with crafting table
+    if (allRecipes.length === 0 && itemName !== "stick" && itemName !== "crafting_table") {
+      const craftingTableId = mcData.blocksByName.crafting_table?.id;
+      craftingTableBlock = bot.findBlock({
+        matching: craftingTableId,
+        maxDistance: 5,
       });
-    });
 
-    // If no exact match, try to find any planks-based recipe and check if we have the materials
-    if (!compatibleRecipe) {
-      compatibleRecipe = allRecipes.find(recipe => {
-        const delta = recipe.delta as Array<{ id: number; count: number }>;
-        // Check if all negative deltas (ingredients) can be satisfied with our planks
-        return delta.every(d => {
-          if (d.count >= 0) return true; // Output items, always ok
-          const ingredientItem = mcData.items[d.id];
-          if (!ingredientItem) return false;
-
-          // If it's any type of planks, we can use our planks
-          if (ingredientItem.name.endsWith("_planks")) {
-            const requiredCount = Math.abs(d.count);
-            return totalPlanks >= requiredCount;
-          }
-
-          return false;
-        });
-      });
+      if (craftingTableBlock) {
+        allRecipes = bot.recipesAll(item.id, null, craftingTableBlock);
+        console.error(`[Craft] recipesAll with crafting table returned ${allRecipes.length} recipes`);
+      } else {
+        console.error(`[Craft] No crafting table found within 5 blocks`);
+      }
     }
 
+    // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
+    // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
+    const compatibleRecipe = allRecipes.find(recipe => {
+      const delta = recipe.delta as Array<{ id: number; count: number }>;
+
+      // Check if this recipe uses planks and sticks (wooden tool pattern)
+      let needsPlanks = false;
+      let needsSticks = false;
+      let planksCount = 0;
+      let sticksCount = 0;
+
+      for (const d of delta) {
+        if (d.count >= 0) continue; // Skip output items
+
+        const ingredientItem = mcData.items[d.id];
+        if (!ingredientItem) continue;
+
+        if (ingredientItem.name.endsWith("_planks")) {
+          needsPlanks = true;
+          planksCount = Math.abs(d.count);
+        } else if (ingredientItem.name === "stick") {
+          needsSticks = true;
+          sticksCount = Math.abs(d.count);
+        }
+      }
+
+      // Verify we have enough materials
+      const hasEnoughPlanks = planksCount === 0 || totalPlanks >= planksCount;
+      const hasEnoughSticks = sticksCount === 0 || totalSticks >= sticksCount;
+
+      return (needsPlanks || needsSticks) && hasEnoughPlanks && hasEnoughSticks;
+    });
+
     if (!compatibleRecipe) {
-      throw new Error(`Cannot craft ${itemName}: No compatible recipe found for ${anyPlanks.name}. Available planks: ${totalPlanks}. This may be a Minecraft version compatibility issue.`);
+      throw new Error(`Cannot craft ${itemName}: No compatible recipe found. Have ${totalPlanks} planks and ${totalSticks} sticks. Found ${allRecipes.length} recipes total. This may be a Minecraft version compatibility issue.`);
     }
 
     console.error(`[Craft] Attempting to craft ${itemName} using ${anyPlanks.name} (have ${totalPlanks} planks)`);
+    console.error(`[Craft] Compatible recipe found: ${JSON.stringify({
+      requiresTable: compatibleRecipe.requiresTable,
+      delta: compatibleRecipe.delta,
+      craftingTableBlock: craftingTableBlock ? 'present' : 'null'
+    })}`);
 
     try {
       for (let i = 0; i < count; i++) {
-        await bot.craft(compatibleRecipe, 1, undefined);
+        // Pass crafting table if recipe requires it
+        // IMPORTANT: For stick/crafting_table, always pass undefined (never use table)
+        const tableToUse = (itemName === "stick" || itemName === "crafting_table") ? undefined : (craftingTableBlock || undefined);
+        console.error(`[Craft] Calling bot.craft() with table: ${tableToUse ? 'YES' : 'NO'}`);
+        await bot.craft(compatibleRecipe, 1, tableToUse);
 
         // Wait for crafting to complete (match timing from general crafting path)
         await new Promise(resolve => setTimeout(resolve, 1500));
@@ -522,77 +487,6 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     }
   }
 
-  // Special handling for torch to handle coal/charcoal substitution
-  // Torches can be crafted with either coal OR charcoal, but recipes may specify one or the other
-  if (itemName === "torch") {
-    // Find either coal or charcoal in inventory
-    const fuel = inventoryItems.find(i => i.name === "coal" || i.name === "charcoal");
-    const stick = inventoryItems.find(i => i.name === "stick");
-
-    if (!fuel) {
-      throw new Error(`Cannot craft torch: Need coal or charcoal. Craft charcoal by smelting logs, or mine coal ore. Inventory: ${inventory}`);
-    }
-    if (!stick) {
-      throw new Error(`Cannot craft torch: Need stick. Craft sticks from planks first. Inventory: ${inventory}`);
-    }
-
-    // Check counts
-    const fuelCount = inventoryItems.filter(i => i.name === fuel.name).reduce((sum, item) => sum + item.count, 0);
-    const stickCount = inventoryItems.filter(i => i.name === "stick").reduce((sum, item) => sum + item.count, 0);
-
-    if (fuelCount < count || stickCount < count) {
-      throw new Error(`Cannot craft ${count}x torch: Need ${count} ${fuel.name} (have ${fuelCount}) and ${count} stick (have ${stickCount}). Inventory: ${inventory}`);
-    }
-
-    // Get the specific item ID for the fuel we have
-    const fuelItemId = mcData.itemsByName[fuel.name]?.id;
-    if (!fuelItemId) {
-      throw new Error(`Cannot find item ID for ${fuel.name}`);
-    }
-
-    // Get all torch recipes and find one that uses our fuel type (coal or charcoal)
-    const allRecipes = bot.recipesAll(item.id, null, null);
-
-    // Try to find a recipe that uses our specific fuel type
-    let compatibleRecipe = allRecipes.find(recipe => {
-      const delta = recipe.delta as Array<{ id: number; count: number }>;
-      return delta.some(d => {
-        if (d.count >= 0) return false; // Skip output items
-        return d.id === fuelItemId;
-      });
-    });
-
-    if (!compatibleRecipe) {
-      throw new Error(`Cannot craft torch: No compatible recipe found for ${fuel.name}. Have: ${fuelCount}x ${fuel.name}, ${stickCount}x stick. This may be a Minecraft version compatibility issue. Inventory: ${inventory}`);
-    }
-
-    console.error(`[Craft] Attempting to craft ${count}x torch using ${fuel.name} (have ${fuelCount} fuel, ${stickCount} sticks)`);
-
-    try {
-      for (let i = 0; i < count; i++) {
-        await bot.craft(compatibleRecipe, 1, undefined);
-
-        // Wait for crafting to complete (match timing from general crafting path)
-        await new Promise(resolve => setTimeout(resolve, 1500));
-
-        // Additional wait for inventory synchronization
-        await new Promise(resolve => setTimeout(resolve, 700));
-      }
-
-      const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
-      return `Crafted ${count}x torch using ${fuel.name}. Inventory: ${newInventory}` + getBriefStatus(managed);
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-
-      // If crafting failed due to ingredient mismatch, provide helpful error
-      if (errMsg.includes("missing ingredient")) {
-        throw new Error(`Failed to craft torch from ${fuel.name}: ${errMsg}. This may be a Minecraft version compatibility issue. Inventory: ${inventory}`);
-      }
-
-      throw new Error(`Failed to craft torch: ${errMsg}. Inventory: ${inventory}`);
-    }
-  }
-
   // Always use recipesAll to get all possible recipes for this item
   // recipesFor sometimes misses valid recipes due to ingredient matching issues
   // First try without crafting table (player inventory 2x2 grid)
@@ -601,6 +495,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   // Check if any recipes can be done without crafting table
   const canCraftInInventory = recipes.length > 0;
 
+  console.error(`[Craft] ${itemName}: found ${recipes.length} 2x2 recipes, craftingTable=${!!craftingTable}`);
+
   // If we can craft in inventory, prefer that to avoid crafting table bugs
   if (canCraftInInventory) {
     craftingTable = null;
@@ -608,7 +504,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   } else if (craftingTable) {
     // Only use crafting table if we must (no 2x2 recipes available)
     recipes = bot.recipesAll(item.id, null, craftingTable);
-    console.error(`[Craft] Using crafting table (3x3) for ${itemName}`);
+    console.error(`[Craft] Using crafting table (3x3) for ${itemName}, found ${recipes.length} recipes`);
+  } else {
+    console.error(`[Craft] No 2x2 recipes and no crafting table found for ${itemName}`);
   }
 
   // Helper function to check if we have a compatible item
@@ -705,6 +603,41 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
       return false;
     });
+  });
+
+  // CRITICAL FIX: Sort recipes to prioritize those using EXACT ingredients we have
+  // Mineflayer's bot.craft() does strict ID matching and won't substitute materials
+  // So recipes requiring items we don't have (like pale_oak_planks) will fail even if we have substitutes
+  craftableRecipes.sort((a, b) => {
+    const deltaA = a.delta as Array<{ id: number; count: number }>;
+    const deltaB = b.delta as Array<{ id: number; count: number }>;
+
+    // Count how many ingredients are EXACT matches vs substitutes
+    let exactMatchesA = 0;
+    let exactMatchesB = 0;
+
+    for (const d of deltaA) {
+      if (d.count >= 0) continue;
+      const ingredientItem = mcData.items[d.id];
+      const ingredientName = ingredientItem?.name;
+      if (!ingredientName) continue;
+
+      const exactMatches = inventoryItems.filter(i => i.name === ingredientName);
+      if (exactMatches.length > 0) exactMatchesA++;
+    }
+
+    for (const d of deltaB) {
+      if (d.count >= 0) continue;
+      const ingredientItem = mcData.items[d.id];
+      const ingredientName = ingredientItem?.name;
+      if (!ingredientName) continue;
+
+      const exactMatches = inventoryItems.filter(i => i.name === ingredientName);
+      if (exactMatches.length > 0) exactMatchesB++;
+    }
+
+    // Prefer recipes with more exact matches (fewer substitutes needed)
+    return exactMatchesB - exactMatchesA;
   });
 
   if (craftableRecipes.length === 0) {
@@ -881,23 +814,18 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     throw new Error(`${itemName} requires a crafting table nearby (within 4 blocks). Inventory: ${inventory}`);
   }
 
-  // PRE-FLIGHT CHECK: Verify item pickup is enabled on server
-  // NOTE: This test checks GROUND pickup, but crafting uses WINDOW pickup which may work
-  // even when ground pickup is disabled. So we only warn, not block completely.
-  // Can be disabled with SKIP_PICKUP_CHECK environment variable for testing
-  const skipPickupCheck = process.env.SKIP_PICKUP_CHECK === 'true';
-  if (!skipPickupCheck) {
-    const canPickupItems = await validateItemPickup(bot);
-    if (!canPickupItems) {
-      console.warn(
-        `[Craft] Ground item pickup validation failed, but crafting may still work via window pickup. ` +
-        `Attempting to craft ${itemName} anyway. If items are lost, set SKIP_PICKUP_CHECK=true.`
-      );
-      // Don't throw - crafting window pickup is different from ground pickup
-      // The crafting code has collection logic that works even without ground pickup
-    }
-  } else {
-    console.warn(`[Craft] SKIP_PICKUP_CHECK enabled - bypassing pickup validation`);
+  // CRITICAL FIX: Check for server item pickup disabled BEFORE consuming materials
+  // This prevents permanent resource loss when crafted items drop but can't be collected
+  // CRITICAL: Do NOT allow retry until disconnect/reconnect - server config is permanent!
+  if (managed.serverHasItemPickupDisabled === true && managed.serverHasItemPickupDisabledTimestamp) {
+    const timeSinceSet = Date.now() - managed.serverHasItemPickupDisabledTimestamp;
+    const timeSince = Math.floor(timeSinceSet / 1000);
+    throw new Error(
+      `Cannot craft ${itemName}: Server has item pickup disabled (detected ${timeSince}s ago). ` +
+      `Crafted items will drop on ground and be permanently lost. ` +
+      `Disconnect and reconnect to reset this flag. ` +
+      `Inventory: ${inventory}`
+    );
   }
 
   try {
@@ -911,15 +839,16 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
       for (const tryRecipe of craftableRecipes) {
         try {
-          // Debug logging
-          console.error(`[Craft] Attempting to craft ${itemName} (iteration ${i+1}/${count})`);
-          console.error(`[Craft] craftingTable=${craftingTable ? `at ${craftingTable.position}` : 'null'}`);
-          console.error(`[Craft] recipe.requiresTable=${tryRecipe.requiresTable}`);
-          console.error(`[Craft] bot position=${bot.entity.position}`);
-          if (craftingTable) {
-            const distance = bot.entity.position.distanceTo(craftingTable.position);
-            console.error(`[Craft] distance to crafting table=${distance.toFixed(2)} blocks`);
-          }
+          // Debug: Log recipe details before attempting craft
+          const recipeDelta = tryRecipe.delta as Array<{ id: number; count: number }>;
+          const recipeIngredients = recipeDelta
+            .filter(d => d.count < 0)
+            .map(d => {
+              const ing = mcData.items[d.id];
+              return `${ing?.name || d.id}x${Math.abs(d.count)}`;
+            })
+            .join(", ");
+          console.error(`[Craft] Attempting recipe: ${recipeIngredients}`);
 
           await bot.craft(tryRecipe, 1, craftingTable || undefined);
 
@@ -927,113 +856,85 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           // Increased timeout to 1500ms to handle slower servers
           await new Promise(resolve => setTimeout(resolve, 1500));
 
-          // CRITICAL: Collect from crafting window BEFORE closing it
-          // Check if item appears in inventory, if not try to collect from window
-          let craftedItemInInventory = bot.inventory.items().find(item => item.name === itemName);
-
-          if (!craftedItemInInventory) {
-            console.error(`[Craft] ${itemName} not in inventory after crafting, checking crafting window...`);
-
-            // Debug: log current window state
-            console.error(`[Craft] DEBUG: craftingTable=${craftingTable}, currentWindow=${bot.currentWindow ? 'exists' : 'null'}`);
-            console.error(`[Craft] DEBUG: inventory.slots[0]=${bot.inventory.slots[0] ? bot.inventory.slots[0].name : 'null'}`);
-
-            // For player inventory crafting (no crafting table), output slot is at index 0 of inventory.slots
-            // For crafting table, output slot is at index 0 of currentWindow.slots
-            const window = craftingTable ? bot.currentWindow : bot.inventory;
-
-            if (window && window.slots) {
-              // Log all slots to debug
-              console.error(`[Craft] DEBUG: Scanning slots 0-9 for ${itemName}...`);
-              for (let i = 0; i < Math.min(10, window.slots.length); i++) {
-                const slot = window.slots[i];
-                if (slot) {
-                  console.error(`[Craft] DEBUG: slot[${i}] = ${slot.name} x${slot.count}`);
-                }
-              }
-
-              const outputSlot = window.slots[0];
-
-              if (outputSlot && outputSlot.name === itemName) {
-                console.error(`[Craft] Found ${itemName} in crafting output slot, clicking to collect...`);
-                try {
-                  // Click the output slot to move item to inventory
-                  if (craftingTable && bot.currentWindow) {
-                    await bot.clickWindow(0, 0, 0);
-                  } else {
-                    // For player inventory, use inventory.slots
-                    await bot.simpleClick.leftMouse(0);
-                  }
-                  await new Promise(resolve => setTimeout(resolve, 500));
-                } catch (clickErr) {
-                  console.error(`[Craft] Failed to click output slot: ${clickErr}`);
-                }
-              } else {
-                console.error(`[Craft] ERROR: Output slot empty or wrong item. Expected ${itemName}, got ${outputSlot ? outputSlot.name : 'null'}`);
-              }
-            } else {
-              console.error(`[Craft] ERROR: No window or slots available`);
-            }
-
-            // Re-check inventory after attempting to collect from window
-            craftedItemInInventory = bot.inventory.items().find(item => item.name === itemName);
-            if (!craftedItemInInventory) {
-              // Still not in inventory - might have dropped as entity
-              console.error(`[Craft] ${itemName} still not in inventory after window click, searching for dropped items...`);
-
-              // Wait for item to spawn as entity
-              await new Promise(resolve => setTimeout(resolve, 800));
-
-              // Try to collect any dropped items within 10 blocks
-              const nearbyItems = Object.values(bot.entities).filter(
-                entity => {
-                  if (!entity || entity === bot.entity || !entity.position || !bot.entity.position) {
-                    return false;
-                  }
-                  const dist = entity.position.distanceTo(bot.entity.position);
-                  if (dist > 10) return false;
-
-                  // Item detection
-                  const isItem = entity.id !== bot.entity.id && entity.name === "item";
-                  return isItem;
-                }
-              );
-
-              if (nearbyItems.length > 0) {
-                console.error(`[Craft] Found ${nearbyItems.length} dropped items, attempting to collect...`);
-
-                // Use the dedicated collection function from bot-items
-                const { collectNearbyItems } = await import("./bot-items.js");
-                try {
-                  await collectNearbyItems(bot);
-                } catch (collectErr) {
-                  console.error(`[Craft] collectNearbyItems failed: ${collectErr}`);
-                }
-
-                // Wait for inventory sync
-                await new Promise(resolve => setTimeout(resolve, 2000));
-
-                // Verify item was actually collected
-                const verifyCollected = bot.inventory.items().find(item => item.name === itemName);
-                if (!verifyCollected) {
-                  const inventoryNames = bot.inventory.items().map(i => i.name).join(", ");
-                  console.error(`[Craft] Expected ${itemName}, but inventory has: ${inventoryNames}`);
-                  console.error(`[Craft] WARNING: Item pickup may be disabled on server`);
-
-                  // Don't throw error - just warn and continue
-                  // The item might be in a different form or the crafting succeeded but pickup failed
-                  console.error(`[Craft] Continuing despite missing item - crafting may have succeeded`);
-                }
-              } else {
-                console.error(`[Craft] No dropped items found - crafting may have failed silently`);
-              }
-            }
-          }
-
-          // Close crafting table window AFTER collecting the item
+          // Only close window if we used a crafting table (not player inventory)
+          // Closing the inventory window can cause items to drop!
           if (craftingTable && bot.currentWindow) {
             bot.closeWindow(bot.currentWindow);
             await new Promise(resolve => setTimeout(resolve, 300));
+          }
+
+          // Additional wait for inventory synchronization (increased from 700ms to 1500ms to reduce false positives)
+          // Simple recipes (planks, sticks) crafted in player inventory can take time to sync
+          await new Promise(resolve => setTimeout(resolve, 1500));
+
+          // CRITICAL: Check if item appears in inventory
+          // If not, it may have been dropped as an entity
+          const craftedItemInInventory = bot.inventory.items().find(item => item.name === itemName);
+
+          if (!craftedItemInInventory) {
+            console.error(`[Craft] ${itemName} not in inventory after crafting, searching for dropped items...`);
+
+            // Wait longer for item to spawn as entity (800ms to match dig_block timing)
+            await new Promise(resolve => setTimeout(resolve, 800));
+
+            // Try to collect any dropped items within 10 blocks
+            // Support multiple entity types for items (varies by server/version)
+            // Use comprehensive item detection logic matching bot-items.ts
+            const nearbyItems = Object.values(bot.entities).filter(
+              entity => {
+                if (!entity || entity === bot.entity || !entity.position || !bot.entity.position) {
+                  return false;
+                }
+                const dist = entity.position.distanceTo(bot.entity.position);
+                if (dist > 10) return false;
+
+                // Item detection - check multiple conditions for item entities
+                const isItem = entity.id !== bot.entity.id && (
+                  entity.name === "item" ||
+                  entity.type === "other" ||
+                  entity.type === "object" ||
+                  ((entity.type as string) === "passive" && entity.name === "item") ||
+                  entity.displayName === "Item" ||
+                  (entity.entityType !== undefined && entity.entityType === 2)
+                );
+                return isItem;
+              }
+            );
+
+            if (nearbyItems.length > 0) {
+              console.error(`[Craft] Found ${nearbyItems.length} dropped items, using collectNearbyItems()...`);
+
+              // Use the dedicated collection function from bot-items
+              const { collectNearbyItems } = await import("./bot-items.js");
+              try {
+                await collectNearbyItems(managed);
+              } catch (collectErr) {
+                console.error(`[Craft] collectNearbyItems failed: ${collectErr}`);
+              }
+
+              // Additional wait after collection attempt for inventory sync (increased to 3500ms to reduce false positives)
+              // Network lag or server lag can delay item pickup, so we give it more time before declaring failure
+              await new Promise(resolve => setTimeout(resolve, 3500));
+
+              // Verify item was actually collected
+              const verifyCollected = bot.inventory.items().find(item => item.name === itemName);
+              if (!verifyCollected) {
+                // Debug: Show all inventory items to see what we actually have
+                const inventoryNames = bot.inventory.items().map(i => i.name).join(", ");
+                console.error(`[Craft] Expected ${itemName}, but inventory has: ${inventoryNames}`);
+                console.error(`[Craft] CRITICAL: Item pickup disabled on server - crafted item lost permanently`);
+
+                // Set flag to prevent future crafting attempts (with timestamp for expiry)
+                managed.serverHasItemPickupDisabled = true;
+                managed.serverHasItemPickupDisabledTimestamp = Date.now();
+
+                // CRITICAL BUG FIX: Throw error to prevent resource waste
+                // Ingredients were consumed but output is lost - this is a failure, not success
+                throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
+              }
+            } else {
+              throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting and no dropped items found nearby. This indicates a server configuration issue or the crafting operation did not complete successfully.`);
+            }
           }
 
           crafted = true;
@@ -1055,23 +956,20 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
     if (!craftedItem) {
       // Item not in inventory - might have been dropped due to server config
-      console.error(`[Craft] WARNING: ${itemName} not found in inventory after crafting - may have dropped due to server settings`);
-      // Return success with a warning message instead of throwing error
-      return `Crafted ${count}x ${itemName} (WARNING: Item may have dropped - server has item pickup disabled). Inventory: ${newInventory}` + getBriefStatus(managed);
+      console.error(`[Craft] ERROR: ${itemName} not found in inventory after crafting - server has item pickup disabled`);
+
+      // Set flag to prevent future crafting attempts (with timestamp for expiry)
+      managed.serverHasItemPickupDisabled = true;
+      managed.serverHasItemPickupDisabledTimestamp = Date.now();
+
+      // THROW ERROR instead of returning success - this prevents wasting materials
+      throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
     }
 
     // Success - item is in inventory
     return `Crafted ${count}x ${itemName}. Inventory: ${newInventory}` + getBriefStatus(managed);
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
-
-    // If error is windowOpen timeout, suggest placing a new crafting table
-    if (errMsg.includes('windowOpen') && errMsg.includes('timeout')) {
-      const suggestedFix = `The existing crafting table appears to be bugged (windowOpen timeout). ` +
-                          `WORKAROUND: Craft a new crafting_table and place it nearby, then retry. ` +
-                          `This is a known issue with pre-existing crafting tables in some Minecraft worlds.`;
-      throw new Error(`Failed to craft ${itemName}: ${errMsg}. ${suggestedFix}. Inventory: ${inventory}`);
-    }
 
     // If error is about missing ingredients, add more context
     if (errMsg.includes("missing ingredient")) {
@@ -1116,7 +1014,7 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
   // Find a furnace nearby
   let furnaceBlock = bot.findBlock({
     matching: mcData.blocksByName.furnace?.id,
-    maxDistance: 8,
+    maxDistance: 4,
   });
 
   // If not nearby, search wider and move to it
@@ -1152,12 +1050,17 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
       // Re-check nearby
       furnaceBlock = bot.findBlock({
         matching: mcData.blocksByName.furnace?.id,
-        maxDistance: 8,
+        maxDistance: 4,
       });
     }
   }
 
   if (!furnaceBlock) {
+    // Check if player has a furnace in inventory
+    const furnaceInInventory = bot.inventory.items().find(i => i.name === "furnace");
+    if (furnaceInInventory) {
+      throw new Error("No furnace found within 32 blocks, but you have one in inventory. Place it first using minecraft_place_block, then try smelting again.");
+    }
     throw new Error("No furnace found within 32 blocks. Craft one with 8 cobblestone.");
   }
 
@@ -1211,18 +1114,6 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
   try {
     const furnace = await bot.openFurnace(furnaceBlock);
 
-    // Check if inventory has space for output
-    const emptySlots = bot.inventory.emptySlotCount();
-
-    // Also check if we have existing output items that can stack
-    const existingOutputItem = expectedOutputName ? bot.inventory.items().find(i => i.name === expectedOutputName) : null;
-    const canStackOutput = existingOutputItem && existingOutputItem.count < 64;
-
-    if (emptySlots === 0 && !canStackOutput) {
-      furnace.close();
-      throw new Error("Inventory full - no space for smelted items. Drop or store some items first.");
-    }
-
     // Track initial output count for accurate reporting
     let existingOutputCount = 0;
     const existingOutput = furnace.outputItem();
@@ -1240,9 +1131,14 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     const smeltCount = Math.min(count, itemToSmelt.count);
     await furnace.putInput(itemToSmelt.type, null, smeltCount);
 
-    // Wait for smelting (roughly 10 seconds per item)
-    const waitTime = Math.min(smeltCount * 10000, 60000);
+    // Wait for smelting (roughly 10 seconds per item, with reasonable max)
+    // Minecraft takes 10s per item, so allow time for all items to finish
+    const waitTime = Math.min(smeltCount * 10000, 180000); // Cap at 3 minutes (18 items max)
     await new Promise(resolve => setTimeout(resolve, waitTime));
+
+    // Track inventory count BEFORE taking output
+    const inventoryBefore = bot.inventory.items().find(i => i.name === expectedOutputName);
+    const countBefore = inventoryBefore?.count || 0;
 
     // Take output and track count
     const output = furnace.outputItem();
@@ -1253,6 +1149,14 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     }
 
     furnace.close();
+
+    // Small delay to ensure items are transferred to inventory
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Track inventory count AFTER taking output
+    const inventoryAfter = bot.inventory.items().find(i => i.name === expectedOutputName);
+    const countAfter = inventoryAfter?.count || 0;
+    const actualGained = countAfter - countBefore;
 
     const totalGained = existingOutputCount + newOutputCount;
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
@@ -1265,11 +1169,11 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
       const outputCount = outputInInventory?.count || 0;
 
       // Always include debug info in message
-      const debugInfo = ` [Expected: ${expectedOutputName}, InInventory: ${inventoryHasOutput}${inventoryHasOutput ? ` (${outputCount}x)` : ''}]`;
+      const debugInfo = ` [Expected: ${expectedOutputName}, InInventory: ${inventoryHasOutput}${inventoryHasOutput ? ` (${outputCount}x)` : ''}, Gained: ${actualGained}/${totalGained}]`;
 
-      if (!outputInInventory) {
-        // Items were smelted but expected output not in inventory - they must have dropped
-        console.error(`[Smelt] WARNING: ${expectedOutputName} not found in inventory after smelting - may have dropped due to server settings`);
+      if (actualGained === 0 && totalGained > 0) {
+        // Items were smelted but didn't enter inventory - they must have dropped or there's a transfer issue
+        console.error(`[Smelt] WARNING: ${expectedOutputName} not transferred to inventory after smelting - may have dropped due to server settings`);
         return `Smelted ${smeltCount}x ${itemName} (WARNING: ${totalGained}x ${expectedOutputName} may have dropped - server has item pickup disabled). Inventory: ${newInventory}${debugInfo}`;
       }
     }

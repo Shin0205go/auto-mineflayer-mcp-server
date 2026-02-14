@@ -1,6 +1,7 @@
 import type { Bot } from "mineflayer";
 import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
+import type { ManagedBot } from "./types.js";
 
 /**
  * Item-related bot operations
@@ -17,7 +18,8 @@ function delay(ms: number): Promise<void> {
 /**
  * Collect dropped items near the bot
  */
-export async function collectNearbyItems(bot: Bot): Promise<string> {
+export async function collectNearbyItems(managed: ManagedBot): Promise<string> {
+  const bot = managed.bot;
   console.error(`[CollectItems] Starting collection, bot at ${bot.entity.position.toString()}`);
   const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
 
@@ -259,6 +261,32 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
 
       if (!bot.entities[item.id]) {
         collectedCount++;
+      } else {
+        // Item still exists - try manual pickup by right-clicking on it
+        // Some servers have auto-pickup disabled and require manual collection
+        console.error(`[CollectItems] Item still exists after movement - trying manual pickup`);
+        try {
+          const itemEntity = bot.entities[item.id];
+          if (itemEntity && itemEntity.position) {
+            // Look at the item and try to activate/use it (right-click)
+            await bot.lookAt(itemEntity.position);
+            await delay(100);
+
+            // Try activating entity (some servers support right-click pickup)
+            if (bot.entity.position.distanceTo(itemEntity.position) < 4) {
+              bot.activateEntity(itemEntity);
+              await delay(300);
+
+              // Check if it worked
+              if (!bot.entities[item.id]) {
+                console.error(`[CollectItems] Manual pickup successful!`);
+                collectedCount++;
+              }
+            }
+          }
+        } catch (manualErr) {
+          console.error(`[CollectItems] Manual pickup failed: ${manualErr}`);
+        }
       }
 
     } catch (error) {
@@ -269,6 +297,25 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
 
   const inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
   const actuallyCollected = inventoryAfter - inventoryBefore;
+
+  // CRITICAL: Detect if server has item pickup disabled
+  // Only flag if items exist AND we got very close to them but still couldn't collect
+  // This prevents false positives from unreachable/stuck items
+  if (items.length > 0 && actuallyCollected === 0 && collectedCount >= 2) {
+    // Check if we actually got close to items (< 2 blocks)
+    const closestItemDist = items.length > 0 ?
+      Math.min(...items.map(item => item.position.distanceTo(bot.entity.position))) : 999;
+
+    if (closestItemDist < 2) {
+      // We got very close to items but couldn't collect them - likely pickup is disabled
+      console.error(`[CollectItems] CRITICAL: ${items.length} items exist, got within ${closestItemDist.toFixed(2)} blocks, but 0 collected - server likely has item pickup disabled!`);
+      managed.serverHasItemPickupDisabled = true;
+      managed.serverHasItemPickupDisabledTimestamp = Date.now();
+      return `CRITICAL: Server has item pickup disabled! Found ${items.length} items but cannot collect them. Survival impossible without admin intervention. Use /give command or fix server config.`;
+    } else {
+      console.error(`[CollectItems] Items exist but too far away (${closestItemDist.toFixed(2)} blocks) - not flagging as pickup disabled`);
+    }
+  }
 
   if (actuallyCollected > 0) {
     return `Collected ${actuallyCollected} items (inventory: ${inventoryAfter} total)`;
@@ -390,8 +437,9 @@ export async function dropItem(bot: Bot, itemName: string, count?: number): Prom
       totalDropped += dropFromThis;
       remaining -= dropFromThis;
 
-      // Small delay to let inventory update
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Increased delay to let server inventory update propagate
+      // Server needs time to sync inventory changes, especially when dropping multiple stacks
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
 
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
