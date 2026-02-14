@@ -13,6 +13,7 @@ import { environmentTools, handleEnvironmentTool } from "./tools/environment.js"
 import { buildingTools, handleBuildingTool } from "./tools/building.js";
 import { coordinationTools, handleCoordinationTool } from "./tools/coordination.js";
 import { craftingTools, handleCraftingTool } from "./tools/crafting.js";
+import { storageTools, handleStorageTool } from "./tools/storage.js";
 import { combatTools, handleCombatTool } from "./tools/combat.js";
 import { learningTools, handleLearningTool } from "./tools/learning.js";
 import { highLevelActionTools, handleHighLevelActionTool } from "./tools/high-level-actions-mcp.js";
@@ -28,6 +29,7 @@ const allTools = {
   ...buildingTools,
   ...coordinationTools,
   ...craftingTools,
+  ...storageTools,
   ...combatTools,
   ...learningTools,
   ...highLevelActionTools,
@@ -107,6 +109,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       result = await handleCoordinationTool(name, toolArgs);
     } else if (name in craftingTools) {
       result = await handleCraftingTool(name, toolArgs);
+    } else if (name in storageTools) {
+      result = await handleStorageTool(name, toolArgs);
     } else if (name in combatTools) {
       result = await handleCombatTool(name, toolArgs);
     } else if (name in learningTools) {
