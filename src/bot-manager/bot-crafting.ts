@@ -255,8 +255,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   // CRITICAL: Check if server has item pickup disabled
   // This prevents wasting materials on crafting when items can't be collected
   // IMPORTANT: This flag should persist for the entire session to prevent repeated material loss
-  // We use a 30-minute validity period to allow for potential server configuration changes
-  const FLAG_VALIDITY_DURATION = 30 * 60 * 1000; // 30 minutes
+  // We use a 3-minute validity period to allow for transient issues while still protecting against permanent problems
+  // Reduced from 30min to 3min because false positives (network lag, timing issues) were blocking crafting too long
+  const FLAG_VALIDITY_DURATION = 3 * 60 * 1000; // 3 minutes
   if (managed.serverHasItemPickupDisabled === true && managed.serverHasItemPickupDisabledTimestamp) {
     const timeSinceSet = Date.now() - managed.serverHasItemPickupDisabledTimestamp;
     if (timeSinceSet < FLAG_VALIDITY_DURATION) {
@@ -857,8 +858,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 console.error(`[Craft] collectNearbyItems failed: ${collectErr}`);
               }
 
-              // Additional wait after collection attempt for inventory sync (increased to 2000ms)
-              await new Promise(resolve => setTimeout(resolve, 2000));
+              // Additional wait after collection attempt for inventory sync (increased to 3500ms to reduce false positives)
+              // Network lag or server lag can delay item pickup, so we give it more time before declaring failure
+              await new Promise(resolve => setTimeout(resolve, 3500));
 
               // Verify item was actually collected
               const verifyCollected = bot.inventory.items().find(item => item.name === itemName);
