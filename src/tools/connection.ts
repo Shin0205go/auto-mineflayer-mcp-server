@@ -116,8 +116,10 @@ export async function handleConnectionTool(
               throw new Error(`CRITICAL: Survival environment validation failed!\n\n${validationResult}\n\n🚨 SERVER CONFIGURATION ISSUE DETECTED:\nThe Minecraft server has NO FOOD SOURCES (no passive mob spawning, no edible plants).\nSurvival gameplay is IMPOSSIBLE and will result in starvation death.\n\nREQUIRED ACTIONS:\n1. Request server admin to enable mob spawning (spawn-animals=true in server.properties)\n2. OR use /gamemode creative\n3. OR use /give ${username} bread 64\n4. OR wait for server admin to fix the environment\n\nConnection has been automatically closed to prevent unplayable gameplay.`);
             }
           } catch (validationError) {
-            // Validation failed, but don't block connection
-            console.error(`[Connection] Survival validation failed: ${validationError}`);
+            // Validation failed critically - re-throw to block connection
+            const errorMsg = validationError instanceof Error ? validationError.message : String(validationError);
+            console.error(`[Connection] Survival validation failed: ${errorMsg}`);
+            throw validationError;
           }
         }
 
