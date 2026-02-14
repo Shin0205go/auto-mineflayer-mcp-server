@@ -69,12 +69,12 @@ export async function handleConnectionTool(
     case "minecraft_connect": {
       const host = (args.host as string) || process.env.MC_HOST || "localhost";
       const port = (args.port as number) || parseInt(process.env.MC_PORT || "25565");
-      const username = args.username as string;
+      const username = (args.username as string) || process.env.BOT_USERNAME || "";
       const version = args.version as string | undefined;
       const agentType = (args.agentType as "game" | "dev") || "dev";
 
       if (!username) {
-        throw new Error("Username is required");
+        throw new Error("Username is required (pass username arg or set BOT_USERNAME env var)");
       }
 
       // Set agent type for tool filtering
