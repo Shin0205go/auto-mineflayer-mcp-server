@@ -325,13 +325,34 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
 
   // SAFETY CHECK: If target is significantly lower, prevent fall damage
   // by refusing to path there if it would require falling more than 3 blocks
+  // EXCEPTION: Allow if target is water (no fall damage in water)
   const currentY = bot.entity.position.y;
   const targetY = y;
   const fallDistance = currentY - targetY;
 
   if (fallDistance > 3) {
-    console.error(`[Move] Safety check: target is ${fallDistance.toFixed(0)} blocks lower - would cause fall damage!`);
-    return `Cannot move to (${x}, ${y}, ${z}) - target is ${fallDistance.toFixed(0)} blocks lower than current position. This would cause fall damage. Use minecraft_dig_block or minecraft_pillar_up to descend safely, or choose a closer target at similar height.` + getBriefStatus(managed);
+    // Check if target or nearby blocks are water
+    const isWaterNearby = () => {
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dz = -1; dz <= 1; dz++) {
+            const checkPos = targetPos.offset(dx, dy, dz);
+            const block = bot.blockAt(checkPos);
+            if (block && block.name === "water") {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    };
+
+    if (!isWaterNearby()) {
+      console.error(`[Move] Safety check: target is ${fallDistance.toFixed(0)} blocks lower - would cause fall damage!`);
+      return `Cannot move to (${x}, ${y}, ${z}) - target is ${fallDistance.toFixed(0)} blocks lower than current position. This would cause fall damage. Use minecraft_dig_block or minecraft_pillar_up to descend safely, or choose a closer target at similar height.` + getBriefStatus(managed);
+    } else {
+      console.error(`[Move] Safety check: target is ${fallDistance.toFixed(0)} blocks lower but water detected - allowing movement`);
+    }
   }
 
   // Use pathfinder directly - it handles digging and tower building automatically

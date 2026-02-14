@@ -755,11 +755,30 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
   console.error(`[Respawn] Intentional death requested. Reason: ${reason || "unspecified"}`);
   console.error(`[Respawn] Before: HP=${oldHP}, Food=${oldFood}, Pos=(${oldPos.x.toFixed(1)}, ${oldPos.y.toFixed(1)}, ${oldPos.z.toFixed(1)})`);
 
+  // Listen for chat messages to detect /kill failure
+  let killFailed = false;
+  const chatListener = (_username: string, message: string) => {
+    if (message.includes("Unknown or incomplete command") ||
+        message.includes("You do not have permission") ||
+        message.includes("cannot be found")) {
+      killFailed = true;
+    }
+  };
+  bot.on('chat', chatListener);
+
   // Use /kill command
   bot.chat(`/kill ${managed.username}`);
 
   // Wait for death and respawn
   await delay(3000);
+
+  // Log if kill command failed
+  if (killFailed) {
+    console.error(`[Respawn] /kill command was rejected by server`);
+  }
+
+  // Remove listener
+  bot.removeListener('chat', chatListener);
 
   // Check new status
   const newPos = bot.entity.position;
@@ -767,6 +786,11 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
   const newFood = bot.food;
 
   console.error(`[Respawn] After: HP=${newHP}, Food=${newFood}, Pos=(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}, ${newPos.z.toFixed(1)})`);
+
+  // If HP didn't change, the /kill command likely failed
+  if (newHP === oldHP && Math.abs(newPos.x - oldPos.x) < 1 && Math.abs(newPos.z - oldPos.z) < 1) {
+    throw new Error(`Respawn failed: /kill command did not work (bot may lack OP permissions or command is disabled). HP unchanged: ${newHP}/20. Server admin needs to: (1) /op ${managed.username}, or (2) enable commands, or (3) enable mob spawning for food sources.`);
+  }
 
   return `Respawned! Old: (${oldPos.x.toFixed(0)}, ${oldPos.y.toFixed(0)}, ${oldPos.z.toFixed(0)}) HP:${oldHP?.toFixed(0)}/20 Food:${oldFood}/20 → New: (${newPos.x.toFixed(0)}, ${newPos.y.toFixed(0)}, ${newPos.z.toFixed(0)}) HP:${newHP?.toFixed(0)}/20 Food:${newFood}/20. Reason: ${reason || "strategic reset"}. Inventory lost!`;
 }
