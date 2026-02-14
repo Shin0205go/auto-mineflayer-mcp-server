@@ -481,7 +481,7 @@ export async function minecraft_survival_routine(
       }
     } else {
       // No animals found - try fishing as emergency fallback
-      console.error("[SurvivalRoutine] No animals found, attempting fishing");
+      console.error("[SurvivalRoutine] No food animals found (checked: cow, pig, chicken, sheep within 128 blocks), attempting fishing");
 
       try {
         // Check if we have a fishing rod
