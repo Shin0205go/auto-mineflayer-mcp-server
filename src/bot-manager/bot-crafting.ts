@@ -840,11 +840,44 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 // Debug: Show all inventory items to see what we actually have
                 const inventoryNames = bot.inventory.items().map(i => i.name).join(", ");
                 console.error(`[Craft] Expected ${itemName}, but inventory has: ${inventoryNames}`);
-                console.error(`[Craft] CRITICAL: Item pickup disabled on server - crafted item lost permanently`);
 
-                // CRITICAL BUG FIX: Throw error to prevent resource waste
-                // Ingredients were consumed but output is lost - this is a failure, not success
-                throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
+                // Check if items were dropped but collection failed
+                // Re-scan for dropped items to confirm they're still there
+                const stillOnGround = Object.values(bot.entities).filter(
+                  entity => entity.name === "item" && entity.position &&
+                    entity.position.distanceTo(bot.entity.position) < 5
+                );
+
+                if (stillOnGround.length > 0) {
+                  console.error(`[Craft] Items still on ground after collection attempt. Trying manual pickup...`);
+
+                  // Try one more time with explicit movement to item location
+                  for (const itemEntity of stillOnGround.slice(0, 3)) {
+                    if (itemEntity.position) {
+                      try {
+                        await bot.pathfinder.goto(new goals.GoalNear(
+                          itemEntity.position.x,
+                          itemEntity.position.y,
+                          itemEntity.position.z,
+                          0.5
+                        ));
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                      } catch (e) {
+                        console.error(`[Craft] Manual pickup failed: ${e}`);
+                      }
+                    }
+                  }
+
+                  // Final check
+                  const finalCheck = bot.inventory.items().find(item => item.name === itemName);
+                  if (!finalCheck) {
+                    throw new Error(`Cannot craft ${itemName}: Crafted item dropped on ground but could not be collected after multiple attempts. Items may be stuck or inaccessible. Ingredients consumed.`);
+                  }
+                } else {
+                  // No items on ground - they vanished completely
+                  console.error(`[Craft] CRITICAL: Items not on ground and not in inventory - server configuration issue`);
+                  throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
+                }
               }
             } else {
               throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting and no dropped items found nearby. This indicates a server configuration issue or the crafting operation did not complete successfully.`);
