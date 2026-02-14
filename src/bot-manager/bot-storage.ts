@@ -1,4 +1,5 @@
 import { Vec3 } from "vec3";
+import { goals } from "mineflayer-pathfinder";
 import type { ManagedBot } from "./types.js";
 
 /**
@@ -22,7 +23,7 @@ export async function openChest(
   const distance = bot.entity.position.distanceTo(chestPos);
   if (distance > 4) {
     const pathfinder = bot.pathfinder;
-    const { GoalNear } = require("mineflayer-pathfinder").goals;
+    const { GoalNear } = goals;
     await pathfinder.goto(new GoalNear(chestPos.x, chestPos.y, chestPos.z, 2));
   }
 
@@ -75,7 +76,7 @@ export async function storeInChest(
   const distance = bot.entity.position.distanceTo(pos);
   if (distance > 4) {
     const pathfinder = bot.pathfinder;
-    const { GoalNear } = require("mineflayer-pathfinder").goals;
+    const { GoalNear } = goals;
     await pathfinder.goto(new GoalNear(pos.x, pos.y, pos.z, 2));
   }
 
@@ -119,7 +120,7 @@ export async function takeFromChest(
   const distance = bot.entity.position.distanceTo(pos);
   if (distance > 4) {
     const pathfinder = bot.pathfinder;
-    const { GoalNear } = require("mineflayer-pathfinder").goals;
+    const { GoalNear } = goals;
     await pathfinder.goto(new GoalNear(pos.x, pos.y, pos.z, 2));
   }
 
@@ -169,7 +170,7 @@ export async function listChest(managed: ManagedBot): Promise<string> {
   const distance = bot.entity.position.distanceTo(pos);
   if (distance > 4) {
     const pathfinder = bot.pathfinder;
-    const { GoalNear } = require("mineflayer-pathfinder").goals;
+    const { GoalNear } = goals;
     await pathfinder.goto(new GoalNear(pos.x, pos.y, pos.z, 2));
   }
 
