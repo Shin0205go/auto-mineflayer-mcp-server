@@ -882,24 +882,22 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   }
 
   // PRE-FLIGHT CHECK: Verify item pickup is enabled on server
-  // This prevents resource waste by testing pickup capability before crafting
+  // NOTE: This test checks GROUND pickup, but crafting uses WINDOW pickup which may work
+  // even when ground pickup is disabled. So we only warn, not block completely.
   // Can be disabled with SKIP_PICKUP_CHECK environment variable for testing
   const skipPickupCheck = process.env.SKIP_PICKUP_CHECK === 'true';
   if (!skipPickupCheck) {
     const canPickupItems = await validateItemPickup(bot);
     if (!canPickupItems) {
       console.warn(
-        `[Craft] Item pickup validation failed for ${itemName}. ` +
-        `Set SKIP_PICKUP_CHECK=true to bypass this check (RISKY - items may be lost).`
+        `[Craft] Ground item pickup validation failed, but crafting may still work via window pickup. ` +
+        `Attempting to craft ${itemName} anyway. If items are lost, set SKIP_PICKUP_CHECK=true.`
       );
-      throw new Error(
-        `Cannot craft ${itemName}: Server has item pickup disabled. ` +
-        `Crafting would consume materials permanently without receiving the item. ` +
-        `Contact server admin to enable item pickup for this bot.`
-      );
+      // Don't throw - crafting window pickup is different from ground pickup
+      // The crafting code has collection logic that works even without ground pickup
     }
   } else {
-    console.warn(`[Craft] SKIP_PICKUP_CHECK enabled - bypassing pickup validation (items may be lost)`);
+    console.warn(`[Craft] SKIP_PICKUP_CHECK enabled - bypassing pickup validation`);
   }
 
   try {
