@@ -820,6 +820,21 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     throw new Error(`${itemName} requires a crafting table nearby (within 4 blocks). Inventory: ${inventory}`);
   }
 
+  // CRITICAL FIX: Check for server item pickup disabled BEFORE consuming materials
+  // This prevents permanent resource loss when crafted items drop but can't be collected
+  // Do NOT allow retry - flag should only be cleared on disconnect/reconnect
+  if (managed.serverHasItemPickupDisabled === true) {
+    const timeSince = managed.serverHasItemPickupDisabledTimestamp
+      ? Math.floor((Date.now() - managed.serverHasItemPickupDisabledTimestamp) / 1000)
+      : 0;
+    throw new Error(
+      `Cannot craft ${itemName}: Server has item pickup disabled (detected ${timeSince}s ago). ` +
+      `Crafted items will drop on ground and be permanently lost. ` +
+      `To retry: disconnect and reconnect (clears flag), or use creative mode/commands. ` +
+      `Inventory: ${inventory}`
+    );
+  }
+
   try {
     // Before crafting, ensure we have the exact items needed
     // Sometimes the bot needs specific item types even if we have compatible ones
