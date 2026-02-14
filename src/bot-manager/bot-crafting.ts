@@ -921,22 +921,48 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           // Check if item appears in inventory, if not try to collect from window
           let craftedItemInInventory = bot.inventory.items().find(item => item.name === itemName);
 
-          if (!craftedItemInInventory && bot.currentWindow) {
+          if (!craftedItemInInventory) {
             console.error(`[Craft] ${itemName} not in inventory after crafting, checking crafting window...`);
 
-            // Try to find the crafted item in the current window (crafting output slot)
-            // The output slot for crafting table is typically slot 0
-            const outputSlot = bot.currentWindow.slots[0];
+            // Debug: log current window state
+            console.error(`[Craft] DEBUG: craftingTable=${craftingTable}, currentWindow=${bot.currentWindow ? 'exists' : 'null'}`);
+            console.error(`[Craft] DEBUG: inventory.slots[0]=${bot.inventory.slots[0] ? bot.inventory.slots[0].name : 'null'}`);
 
-            if (outputSlot && outputSlot.name === itemName) {
-              console.error(`[Craft] Found ${itemName} in crafting output slot, clicking to collect...`);
-              try {
-                // Click the output slot to move item to inventory
-                await bot.clickWindow(0, 0, 0);
-                await new Promise(resolve => setTimeout(resolve, 500));
-              } catch (clickErr) {
-                console.error(`[Craft] Failed to click output slot: ${clickErr}`);
+            // For player inventory crafting (no crafting table), output slot is at index 0 of inventory.slots
+            // For crafting table, output slot is at index 0 of currentWindow.slots
+            const window = craftingTable ? bot.currentWindow : bot.inventory;
+
+            if (window && window.slots) {
+              // Log all slots to debug
+              console.error(`[Craft] DEBUG: Scanning slots 0-9 for ${itemName}...`);
+              for (let i = 0; i < Math.min(10, window.slots.length); i++) {
+                const slot = window.slots[i];
+                if (slot) {
+                  console.error(`[Craft] DEBUG: slot[${i}] = ${slot.name} x${slot.count}`);
+                }
               }
+
+              const outputSlot = window.slots[0];
+
+              if (outputSlot && outputSlot.name === itemName) {
+                console.error(`[Craft] Found ${itemName} in crafting output slot, clicking to collect...`);
+                try {
+                  // Click the output slot to move item to inventory
+                  if (craftingTable && bot.currentWindow) {
+                    await bot.clickWindow(0, 0, 0);
+                  } else {
+                    // For player inventory, use inventory.slots
+                    await bot.simpleClick.leftMouse(0);
+                  }
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                } catch (clickErr) {
+                  console.error(`[Craft] Failed to click output slot: ${clickErr}`);
+                }
+              } else {
+                console.error(`[Craft] ERROR: Output slot empty or wrong item. Expected ${itemName}, got ${outputSlot ? outputSlot.name : 'null'}`);
+              }
+            } else {
+              console.error(`[Craft] ERROR: No window or slots available`);
             }
 
             // Re-check inventory after attempting to collect from window
