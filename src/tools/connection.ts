@@ -109,8 +109,8 @@ export async function handleConnectionTool(
             }
 
             if (validationResult.includes("❌ CRITICAL")) {
-              // Return warning but don't block connection
-              return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})\n\n${validationResult}`;
+              // Return warning with clear instruction to NOT play in survival mode
+              return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})\n\n${validationResult}\n\n🚨 RECOMMENDED ACTION: DO NOT attempt survival gameplay. Either:\n1. Request server admin to enable mob spawning\n2. Use /gamemode creative\n3. Use /give ${username} bread 64\n4. Disconnect and wait for environment fix`;
             }
           } catch (validationError) {
             // Validation failed, but don't block connection
