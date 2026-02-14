@@ -1,12 +1,23 @@
 {
   "hooks": {
-    "Stop": [
+    "Write": [
       {
-        "matcher": "",
+        "matcher": "^(?!src/|\\.claude/skills/).*",
         "hooks": [
           {
             "type": "command",
-            "command": "sleep 2 && tmux send-keys -t $(tmux display-message -p '#{pane_id}') 'agent_board_read で掲示板を確認して、次にやるべきことを考えて実行して。' Enter"
+            "command": "echo '❌ File creation only allowed in src/ and .claude/skills/' && exit 1"
+          }
+        ]
+      }
+    ],
+    "Edit": [
+      {
+        "matcher": "^(?!src/|\\.claude/skills/).*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '❌ File editing only allowed in src/ and .claude/skills/' && exit 1"
           }
         ]
       }
