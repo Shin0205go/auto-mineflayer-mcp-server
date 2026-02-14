@@ -82,7 +82,26 @@ export async function handleConnectionTool(
 
       try {
         await botManager.connect({ host, port, username, version });
-        return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})`;
+
+        // Wait 2 seconds for bot to fully spawn and stabilize
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Get initial state information
+        try {
+          const position = botManager.getPosition(username);
+          const status = botManager.getStatus(username);
+          const inventory = botManager.getInventory(username);
+
+          let stateInfo = `\n\nInitial state:`;
+          stateInfo += `\nPosition: (${Math.round(position.x)}, ${Math.round(position.y)}, ${Math.round(position.z)})`;
+          stateInfo += `\n${status}`;
+          stateInfo += `\nInventory: ${inventory.length > 0 ? inventory.map(i => `${i.name}:${i.count}`).join(', ') : 'Empty'}`;
+
+          return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})${stateInfo}`;
+        } catch (stateError) {
+          // If state retrieval fails, just return basic connection info
+          return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})`;
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         throw new Error(`Failed to connect to ${host}:${port}: ${errorMessage}`);
