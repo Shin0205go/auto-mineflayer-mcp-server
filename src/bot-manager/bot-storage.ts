@@ -170,9 +170,18 @@ export async function listChest(managed: ManagedBot): Promise<string> {
   // Move close to chest if needed
   const distance = bot.entity.position.distanceTo(pos);
   if (distance > 4) {
-    const pathfinder = bot.pathfinder;
-    const { GoalNear } = goals;
-    await pathfinder.goto(new GoalNear(pos.x, pos.y, pos.z, 2));
+    try {
+      const pathfinder = bot.pathfinder;
+      const { GoalNear } = goals;
+      await pathfinder.goto(new GoalNear(pos.x, pos.y, pos.z, 2));
+    } catch (error) {
+      // If pathfinding fails, return chest location for manual navigation
+      const currentPos = bot.entity.position;
+      const dx = pos.x - currentPos.x;
+      const dy = pos.y - currentPos.y;
+      const dz = pos.z - currentPos.z;
+      return `Found chest at (${pos.x}, ${pos.y}, ${pos.z}), ${distance.toFixed(1)} blocks away. Cannot reach automatically (path blocked). Direction: ${dx > 0 ? 'east' : 'west'} ${dz > 0 ? 'south' : 'north'}, ${dy > 0 ? 'up' : 'down'}. Try using minecraft_move_to or minecraft_open_chest with coordinates.`;
+    }
   }
 
   // Look at chest before opening
