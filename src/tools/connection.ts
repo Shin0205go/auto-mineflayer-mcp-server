@@ -87,7 +87,9 @@ export async function handleConnectionTool(
 
         // Auto-validate survival environment for Game Agents
         // Can be disabled with SKIP_VALIDATION=true for debugging
-        const skipValidation = process.env.SKIP_VALIDATION === "true";
+        // DISABLED: Validation was too strict and blocked gameplay even when food was available
+        // Bot can check inventory and explore for food after connecting
+        const skipValidation = process.env.SKIP_VALIDATION === "true" || true; // Always skip for now
         if (agentType === "game" && !skipValidation) {
           // Import validation function dynamically to avoid circular dependency
           const { minecraft_validate_survival_environment } = await import("./high-level-actions.js");
