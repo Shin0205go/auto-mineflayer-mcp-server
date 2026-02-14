@@ -352,7 +352,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   // Re-enabled for crafting_table because general path fails with pale_oak_planks recipe mismatch
   // The general crafting path does NOT handle material substitution correctly for crafting_table
   // when Minecraft data returns a pale_oak_planks recipe but we have other plank types
-  const simpleWoodenRecipes: string[] = ["stick", "crafting_table"];
+  // NOTE: Disabled for "stick" due to persistent "missing ingredient" errors - general path works better
+  const simpleWoodenRecipes: string[] = ["crafting_table"];
   if (simpleWoodenRecipes.includes(itemName)) {
     // Find any planks in inventory
     const anyPlanks = inventoryItems.find(i => i.name.endsWith("_planks"));
@@ -461,11 +462,19 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     }
 
     console.error(`[Craft] Attempting to craft ${itemName} using ${anyPlanks.name} (have ${totalPlanks} planks)`);
+    console.error(`[Craft] Compatible recipe found: ${JSON.stringify({
+      requiresTable: compatibleRecipe.requiresTable,
+      delta: compatibleRecipe.delta,
+      craftingTableBlock: craftingTableBlock ? 'present' : 'null'
+    })}`);
 
     try {
       for (let i = 0; i < count; i++) {
         // Pass crafting table if recipe requires it
-        await bot.craft(compatibleRecipe, 1, craftingTableBlock || undefined);
+        // IMPORTANT: For stick/crafting_table, always pass undefined (never use table)
+        const tableToUse = (itemName === "stick" || itemName === "crafting_table") ? undefined : (craftingTableBlock || undefined);
+        console.error(`[Craft] Calling bot.craft() with table: ${tableToUse ? 'YES' : 'NO'}`);
+        await bot.craft(compatibleRecipe, 1, tableToUse);
 
         // Wait for crafting to complete (match timing from general crafting path)
         await new Promise(resolve => setTimeout(resolve, 1500));
