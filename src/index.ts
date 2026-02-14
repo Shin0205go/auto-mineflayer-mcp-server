@@ -20,6 +20,7 @@ import { highLevelActionTools, handleHighLevelActionTool } from "./tools/high-le
 import { GAME_AGENT_TOOLS } from "./tool-filters.js";
 import { getAgentType } from "./agent-state.js";
 import { searchTools, TOOL_METADATA } from "./tool-metadata.js";
+import { botManager } from "./bot-manager/index.js";
 
 // Combine all tools
 const allTools = {
@@ -192,6 +193,31 @@ async function main() {
   await server.connect(transport);
   console.error("Mineflayer MCP Server running on stdio");
 }
+
+// Cleanup: disconnect all bots when process exits
+function cleanup() {
+  console.error('[MCP-Stdio] Cleaning up - disconnecting all bots...');
+  try {
+    botManager.disconnectAll();
+    console.error('[MCP-Stdio] All bots disconnected');
+  } catch (e) {
+    console.error('[MCP-Stdio] Cleanup error:', e);
+  }
+}
+
+process.on('SIGTERM', () => {
+  cleanup();
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  cleanup();
+  process.exit(0);
+});
+
+process.on('exit', () => {
+  cleanup();
+});
 
 // Add global error handlers to prevent crashes
 process.on('uncaughtException', (error) => {
