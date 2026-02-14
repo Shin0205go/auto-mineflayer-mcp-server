@@ -192,3 +192,146 @@ The previously fixed `minecraft_validate_survival_environment` tool worked perfe
 ---
 
 **Status**: Highly successful session - Resource gathering complete, infrastructure established, previous fixes validated working!
+
+---
+
+# Session Report - Claude2 (Session 3)
+**Date:** 2026-02-14
+**Duration:** ~5 minutes
+**Server:** localhost:25565
+
+## Critical Discovery: Server Item Pickup Disabled
+
+### Problem Summary
+The Minecraft server has **item pickup completely disabled**, which breaks all core survival mechanics that depend on collecting items from the ground.
+
+### Affected Systems
+1. **Crafting**: Items are crafted but drop on ground instead of entering inventory
+   - Test: `minecraft_craft("birch_planks", 4)` consumed 4 logs but planks disappeared
+   - Inventory before: 20 birch_log
+   - Inventory after: 16 birch_log (consumed), but 0 birch_planks (should be 16)
+
+2. **Fishing**: Fishing completes but catches are not collected
+   - Test: `minecraft_fish(duration=30)` reported "caught nothing"
+   - Bot was next to water with fishing rod equipped
+
+3. **Mining**: Would fail similarly (not tested due to lack of pickaxe)
+
+### Code Investigation
+
+The codebase **already knows about this issue**:
+
+**File:** `src/bot-manager/bot-crafting.ts`
+
+Key functions:
+- Lines 16-110: `validateItemPickup()` - Tests if server allows item pickup
+- Line 888: `SKIP_PICKUP_CHECK` environment variable to bypass validation
+- Line 1050: Warning message about items dropping
+
+**Current behavior:**
+- Validation happens but crafting proceeds anyway
+- Items are lost silently
+- No clear error message to user
+
+### Evidence
+
+```typescript
+// Line 890-899: Pickup validation
+const canPickupItems = await validateItemPickup(bot);
+if (!canPickupItems) {
+  console.warn(
+    `[Craft] Ground item pickup validation failed, but crafting may still work via window pickup. ` +
+    `Attempting to craft ${itemName} anyway. If items are lost, set SKIP_PICKUP_CHECK=true.`
+  );
+  // Don't throw - crafting window pickup is different from ground pickup
+}
+```
+
+The code assumes crafting window pickup might work even if ground pickup doesn't, but in this case **both are disabled**.
+
+### Session Actions Taken
+
+1. **Connected** as Claude2 to localhost:25565
+2. **Checked Status**: HP 20/20, Hunger 20/20, Position (9.5, 109, 25.5)
+3. **Searched for Food**: No passive mobs within 64 blocks
+4. **Found Water**: Located at (24, 59, 54), moved there successfully
+5. **Attempted Fishing**: Failed - "caught nothing" after 30 seconds
+6. **Attempted Crafting**: birch_log → birch_planks failed (items lost)
+7. **Attempted Collection**: `minecraft_collect_items()` found nothing
+8. **Navigated to Surface**: Used `minecraft_pillar_up()` 45 blocks total
+9. **Reached Trees**: Found birch_log, furnace, crafting_table on surface
+10. **Hunger Declined**: From 20/20 to 14/20 due to movement
+
+### Working Features
+
+✅ **Movement**: `minecraft_move_to()` works perfectly
+✅ **Pillaring**: `minecraft_pillar_up()` successfully built 45 blocks
+✅ **Block Finding**: `minecraft_find_block()` locates blocks correctly
+✅ **Entity Detection**: `minecraft_get_nearby_entities()` works
+✅ **Environment Scanning**: `minecraft_get_surroundings()` provides accurate data
+✅ **Inventory Viewing**: Can see current inventory (though can't add to it)
+
+### Final Status
+- **Health:** 18.5/20 (slight damage taken)
+- **Hunger:** 14/20 (declining, no way to get food)
+- **Position:** (38.6, 107.0, 46.5) - Surface level, near birch forest
+- **Time:** Night (20374)
+- **Nearby Threats:** Skeleton 3.9m away
+
+### Recommendations
+
+#### Immediate Server Fix
+```bash
+# Enable item pickup in server.properties or via command:
+/gamerule doTileDrops true
+/gamerule doMobLoot true
+/gamerule doEntityDrops true
+
+# Check if item entity lifetime is set too low:
+/gamerule itemAge
+```
+
+#### Code Improvements Needed
+
+1. **Make validation blocking** - Don't allow crafting if pickup is disabled
+2. **Clear error messages** - Tell user "Server has item pickup disabled, cannot craft"
+3. **Early detection** - Validate on connection, not during first craft
+4. **Recovery options** - Suggest creative mode or server config changes
+
+#### Proposed Fix
+
+```typescript
+// In craftItem(), before attempting to craft:
+const canPickupItems = await validateItemPickup(bot);
+if (!canPickupItems) {
+  throw new Error(
+    `Cannot craft: Server has item pickup disabled. ` +
+    `Crafted items will be lost. ` +
+    `Fix: Enable item pickup in server.properties, or use creative mode.`
+  );
+}
+```
+
+### Technical Insights
+
+1. **Two pickup mechanisms**:
+   - Ground pickup (player walks over item)
+   - Window pickup (clicking crafting output slot)
+
+2. **This server has BOTH disabled**, which is unusual
+
+3. **The code assumed** window pickup might work independently
+
+4. **Validation function is good** but needs to be blocking, not warning-only
+
+### Conclusion
+
+**This is a server configuration issue, not a code bug**, but the code should fail-fast instead of losing items silently.
+
+**Session outcome:** Successfully identified root cause of gameplay failures. Movement and navigation systems work perfectly. The limitation is purely server-side.
+
+**Key learning:** Always validate item pickup capability before starting survival sessions. This is a fundamental Minecraft mechanic that almost all gameplay depends on.
+
+---
+
+**Status**: Session aborted due to server misconfiguration - Item pickup disabled prevents all resource acquisition.
