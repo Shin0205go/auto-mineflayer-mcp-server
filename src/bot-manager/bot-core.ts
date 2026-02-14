@@ -29,13 +29,6 @@ export class BotCore extends EventEmitter {
    * Start prismarine-viewer for a bot
    */
   startViewer(username: string): number | null {
-    // Disable viewer in stdio MCP mode to prevent process crashes
-    // Set ENABLE_VIEWER=true to enable viewer
-    if (process.env.ENABLE_VIEWER !== 'true') {
-      console.error(`[BotManager] Viewer disabled (set ENABLE_VIEWER=true to enable)`);
-      return null;
-    }
-
     const managed = this.bots.get(username);
     if (!managed) {
       console.error(`[BotManager] Cannot start viewer: bot '${username}' not found`);
@@ -52,16 +45,7 @@ export class BotCore extends EventEmitter {
     const viewerPort = this.nextViewerPort++;
     try {
       console.error(`[BotManager] Starting viewer for ${username} on port ${viewerPort}...`);
-      const viewer = mineflayerViewer(managed.bot, { port: viewerPort, firstPerson: true, viewDistance: 6 });
-
-      // Handle viewer server errors to prevent process crash
-      if (viewer && viewer.on) {
-        viewer.on('error', (err: Error) => {
-          console.error(`[BotManager] Viewer error on port ${viewerPort}:`, err.message);
-          // Don't crash - just log and continue
-        });
-      }
-
+      mineflayerViewer(managed.bot, { port: viewerPort, firstPerson: true, viewDistance: 6 });
       this.viewerPorts.set(username, viewerPort);
       console.error(`[BotManager] Viewer started at http://localhost:${viewerPort}`);
       return viewerPort;
@@ -310,6 +294,10 @@ export class BotCore extends EventEmitter {
           gameEvents: [],
           thinkingState: "idle",
           particleInterval: null,
+          // CRITICAL: Reset item pickup flag on connection
+          // Disconnecting and reconnecting clears server-side state
+          serverHasItemPickupDisabled: false,
+          serverHasItemPickupDisabledTimestamp: undefined,
         };
 
         // Helper to add event with max 50 events kept
@@ -338,21 +326,6 @@ export class BotCore extends EventEmitter {
             timestamp: Date.now(),
           });
           addEvent("chat", `${username}: ${message}`, { username, message });
-        });
-
-        // Listen to all messages including system messages (for gamerule responses, etc.)
-        bot.on("message", (jsonMsg) => {
-          const textMsg = jsonMsg.toString();
-          // Skip if it's a regular chat message (already handled above)
-          if (textMsg.match(/^<.*?>/) || textMsg.startsWith('[')) {
-            return;
-          }
-          // Capture system messages (gamerule responses, server messages, etc.)
-          managedBot.chatMessages.push({
-            username: textMsg,  // Use message text as username for system messages
-            message: textMsg,   // Full message
-            timestamp: Date.now(),
-          });
         });
 
         // Item collected
@@ -484,7 +457,8 @@ export class BotCore extends EventEmitter {
             clearInterval(managedBot.particleInterval);
           }
           this.bots.delete(config.username);
-          console.error(`[BotManager] ${config.username} disconnected. Reason:`, reason || "Unknown");
+          const reasonStr = typeof reason === 'string' ? reason : JSON.stringify(reason);
+          console.error(`[BotManager] ${config.username} disconnected. Reason: ${reasonStr}`);
 
           // Auto-reconnect after 5 seconds
           const savedConfig = this.connectionConfigs.get(config.username);
@@ -497,6 +471,8 @@ export class BotCore extends EventEmitter {
                 console.error(`[BotManager] Auto-reconnect failed:`, error);
               });
             }, 5000);
+          } else {
+            console.error(`[BotManager] No saved config for ${config.username}, skipping auto-reconnect`);
           }
         });
 
@@ -595,10 +571,13 @@ export class BotCore extends EventEmitter {
         this.bots.set(config.username, managedBot);
         console.error(`[BotManager] ${config.username} connected`);
 
-        // Start prismarine-viewer for first-person view in browser
-        const viewerPort = this.startViewer(config.username);
-        if (viewerPort) {
-          console.error(`[BotManager] Open http://localhost:${viewerPort} to see the first-person view`);
+        // Start prismarine-viewer for first-person view in browser (unless disabled)
+        let viewerPort: number | null = null;
+        if (!config.disableViewer) {
+          viewerPort = this.startViewer(config.username);
+          if (viewerPort) {
+            console.error(`[BotManager] Open http://localhost:${viewerPort} to see the first-person view`);
+          }
         }
 
         // Return connection info with game mode warning

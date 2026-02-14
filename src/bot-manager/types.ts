@@ -5,6 +5,7 @@ export interface BotConfig {
   port: number;
   username: string;
   version?: string;
+  disableViewer?: boolean;  // If true, don't start prismarine-viewer (for stdio MCP)
 }
 
 export interface BlockInfo {
@@ -40,4 +41,6 @@ export interface ManagedBot {
   gameEvents: GameEvent[];
   thinkingState: ThinkingState;
   particleInterval: NodeJS.Timeout | null;
+  serverHasItemPickupDisabled?: boolean;  // Track if server blocks item pickup
+  serverHasItemPickupDisabledTimestamp?: number;  // Timestamp when flag was set (ms since epoch)
 }

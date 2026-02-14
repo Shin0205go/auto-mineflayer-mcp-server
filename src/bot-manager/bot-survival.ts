@@ -271,34 +271,39 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         return `Killed ${target.name} after ${attacks} attacks`;
       }
 
-      // Check if target is too far
+      // Check if target is too far - if so, chase it instead of giving up
       const currentDist = currentTarget.position.distanceTo(bot.entity.position);
-      if (currentDist > 16) {
-        return `Target ${target.name} escaped after ${attacks} attacks (distance: ${currentDist.toFixed(1)} blocks)`;
-      }
+      if (currentDist > 6) {
+        // Animals run away when attacked - chase them!
+        if (currentDist > 32) {
+          // Too far to chase
+          return `Target ${target.name} escaped after ${attacks} attacks (distance: ${currentDist.toFixed(1)} blocks)`;
+        }
 
-      // If target moved away, chase it
-      if (currentDist > 3.5) {
-        const chaseGoal = new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2);
-        bot.pathfinder.setGoal(chaseGoal);
+        console.error(`[Attack] Target ${target.name} moved to ${currentDist.toFixed(1)} blocks, chasing...`);
+        const goal = new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2);
+        bot.pathfinder.setGoal(goal);
 
-        // Wait briefly for movement
+        // Brief chase (don't wait too long)
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {
             bot.pathfinder.setGoal(null);
             resolve();
-          }, 1500);
+          }, 2000);
 
-          const checkChase = setInterval(() => {
-            const dist = currentTarget.position.distanceTo(bot.entity.position);
-            if (dist < 3.5 || !bot.pathfinder.isMoving()) {
-              clearInterval(checkChase);
+          const check = setInterval(() => {
+            const checkDist = currentTarget.position.distanceTo(bot.entity.position);
+            if (checkDist < 3.5 || !bot.pathfinder.isMoving()) {
+              clearInterval(check);
               clearTimeout(timeout);
               bot.pathfinder.setGoal(null);
               resolve();
             }
           }, 100);
         });
+
+        // Continue to attack after chasing
+        continue;
       }
 
       // Attack

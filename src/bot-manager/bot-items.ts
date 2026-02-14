@@ -1,6 +1,7 @@
 import type { Bot } from "mineflayer";
 import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
+import type { ManagedBot } from "./types.js";
 
 /**
  * Item-related bot operations
@@ -17,7 +18,8 @@ function delay(ms: number): Promise<void> {
 /**
  * Collect dropped items near the bot
  */
-export async function collectNearbyItems(bot: Bot): Promise<string> {
+export async function collectNearbyItems(managed: ManagedBot): Promise<string> {
+  const bot = managed.bot;
   console.error(`[CollectItems] Starting collection, bot at ${bot.entity.position.toString()}`);
   const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
 
@@ -98,114 +100,102 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
     console.error(`[CollectItems] Attempt ${attempt + 1}/${maxAttempts}: Item at distance ${distance.toFixed(2)}, pos: ${itemPos.toString()}`);
 
     try {
-      // CRITICAL FIX: Some servers disable automatic item pickup
-      // Use lookAt + short wait to trigger pickup, then verify with movement if needed
-
       if (distance < 2) {
         console.error(`[CollectItems] Using close-range collection strategy`);
 
-        // FIRST: Try looking at the item to trigger auto-pickup
-        // Some servers require the player to look at items to collect them
-        await bot.lookAt(itemPos);
-        await delay(500);
+        // Very close - move directly THROUGH the item position to force collision pickup
+        // Auto-pickup sometimes fails, so we need to move through the item multiple times
 
-        // Check if auto-pickup worked
-        if (!bot.entities[item.id]) {
-          console.error(`[CollectItems] Item collected via lookAt`);
-          collectedCount++;
-          continue;
-        }
+        // DON'T back away if too close - instead move through it aggressively
+        // First approach: Look at item and move forward while jumping (repeat multiple times)
+        for (let pass = 0; pass < 3; pass++) {
+          if (!bot.entities[item.id]) break; // Item collected
 
-        // SECOND: Try moving directly to the item position (not backing away!)
-        // Moving through the item's exact position should trigger pickup
-        console.error(`[CollectItems] Auto-pickup failed, moving to item position`);
-
-        // Move directly to item using pathfinder (no backing away)
-        try {
-          const goal = new goals.GoalNear(
-            itemPos.x,
-            itemPos.y,
-            itemPos.z,
-            0 // Get as close as possible
-          );
-          bot.pathfinder.setGoal(goal);
-
-          // Wait for pathfinding with timeout
-          const startTime = Date.now();
-          while (Date.now() - startTime < 2000) {
-            await delay(100);
-
-            // Check if item was collected
-            if (!bot.entities[item.id]) {
-              bot.pathfinder.setGoal(null);
-              console.error(`[CollectItems] Item collected via pathfinding`);
-              collectedCount++;
-              break;
-            }
-
-            const currentDist = bot.entity.position.distanceTo(itemPos);
-            if (currentDist < 0.2) {
-              // Very close, should be collected by now
-              break;
-            }
-
-            if (!bot.pathfinder.isMoving()) {
-              break;
-            }
-          }
-
-          bot.pathfinder.setGoal(null);
-        } catch (pathErr) {
-          console.error(`[CollectItems] Pathfinding failed: ${pathErr}`);
+          await bot.lookAt(itemPos);
+          bot.setControlState("forward", true);
+          bot.setControlState("jump", true);
+          await delay(400);
+          bot.setControlState("forward", false);
+          bot.setControlState("jump", false);
+          await delay(100);
         }
 
         // Check if item still exists
         if (!bot.entities[item.id]) {
-          // Item was collected
+          // Item was collected, continue to next item
           continue;
         }
 
-        // THIRD: Manual movement - walk through the item while looking at it
-        console.error(`[CollectItems] Pathfinding didn't work, trying manual movement`);
-        await bot.lookAt(itemPos);
-        bot.setControlState("forward", true);
-        bot.setControlState("jump", true);
-        await delay(600);
-        bot.setControlState("forward", false);
-        bot.setControlState("jump", false);
-        await delay(300);
+        // Second approach: Move to exact item position using pathfinder
+        const remainingDist = bot.entity.position.distanceTo(itemPos);
+        if (remainingDist > 0.3) {
+          try {
+            // Use GoalNear with range 0 to get as close as possible to the EXACT item position
+            // GoalBlock floors coordinates which loses precision - use GoalNear instead
+            const goal = new goals.GoalNear(
+              itemPos.x,
+              itemPos.y,
+              itemPos.z,
+              0
+            );
+            bot.pathfinder.setGoal(goal);
 
-        // Check if item still exists after all attempts
-        if (!bot.entities[item.id]) {
-          // Item was collected
-          collectedCount++;
-          continue;
+            // Wait for pathfinding with timeout, checking if item disappears
+            const startTime = Date.now();
+            while (Date.now() - startTime < 3000) {
+              await delay(100);
+
+              // Check if item was collected
+              if (!bot.entities[item.id]) {
+                bot.pathfinder.setGoal(null);
+                break;
+              }
+
+              // Check if we're very close
+              const currentDist = bot.entity.position.distanceTo(itemPos);
+              if (currentDist < 0.3) {
+                break;
+              }
+
+              if (!bot.pathfinder.isMoving()) {
+                break;
+              }
+            }
+
+            bot.pathfinder.setGoal(null);
+
+            // After getting close, aggressively move THROUGH the item position while jumping
+            if (bot.entities[item.id]) {
+              await bot.lookAt(itemPos);
+              bot.setControlState("forward", true);
+              bot.setControlState("jump", true);
+              await delay(500);
+              bot.setControlState("forward", false);
+              bot.setControlState("jump", false);
+              await delay(300);
+            }
+          } catch (_) { /* ignore pathfinder errors */ }
         }
 
-        // FOURTH: Try moving in a circle around the item
-        // This helps if the item is slightly offset or stuck
-        console.error(`[CollectItems] Still not collected, trying circle movement`);
-        const directions = [
-          itemPos.offset(0.5, 0, 0),
-          itemPos.offset(-0.5, 0, 0),
-          itemPos.offset(0, 0, 0.5),
-          itemPos.offset(0, 0, -0.5)
-        ];
+        // Third approach: If item still exists, try moving in a small circle around it
+        if (bot.entities[item.id]) {
+          const directions = [
+            itemPos.offset(0.5, 0, 0),
+            itemPos.offset(-0.5, 0, 0),
+            itemPos.offset(0, 0, 0.5),
+            itemPos.offset(0, 0, -0.5)
+          ];
 
-        for (const dir of directions) {
-          if (!bot.entities[item.id]) break;
+          for (const dir of directions) {
+            if (!bot.entities[item.id]) break;
 
-          await bot.lookAt(dir);
-          bot.setControlState("forward", true);
-          bot.setControlState("jump", true);
-          await delay(300);
-          bot.setControlState("forward", false);
-          bot.setControlState("jump", false);
-          await delay(100);
-
-          if (!bot.entities[item.id]) {
-            collectedCount++;
-            break;
+            await bot.lookAt(dir);
+            bot.setControlState("forward", true);
+            bot.setControlState("jump", true);
+            await delay(300);
+            bot.setControlState("forward", false);
+            bot.setControlState("jump", false);
+            await delay(100);
           }
         }
 
@@ -271,6 +261,32 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
 
       if (!bot.entities[item.id]) {
         collectedCount++;
+      } else {
+        // Item still exists - try manual pickup by right-clicking on it
+        // Some servers have auto-pickup disabled and require manual collection
+        console.error(`[CollectItems] Item still exists after movement - trying manual pickup`);
+        try {
+          const itemEntity = bot.entities[item.id];
+          if (itemEntity && itemEntity.position) {
+            // Look at the item and try to activate/use it (right-click)
+            await bot.lookAt(itemEntity.position);
+            await delay(100);
+
+            // Try activating entity (some servers support right-click pickup)
+            if (bot.entity.position.distanceTo(itemEntity.position) < 4) {
+              bot.activateEntity(itemEntity);
+              await delay(300);
+
+              // Check if it worked
+              if (!bot.entities[item.id]) {
+                console.error(`[CollectItems] Manual pickup successful!`);
+                collectedCount++;
+              }
+            }
+          }
+        } catch (manualErr) {
+          console.error(`[CollectItems] Manual pickup failed: ${manualErr}`);
+        }
       }
 
     } catch (error) {
@@ -281,6 +297,25 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
 
   const inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
   const actuallyCollected = inventoryAfter - inventoryBefore;
+
+  // CRITICAL: Detect if server has item pickup disabled
+  // Only flag if items exist AND we got very close to them but still couldn't collect
+  // This prevents false positives from unreachable/stuck items
+  if (items.length > 0 && actuallyCollected === 0 && collectedCount >= 2) {
+    // Check if we actually got close to items (< 2 blocks)
+    const closestItemDist = items.length > 0 ?
+      Math.min(...items.map(item => item.position.distanceTo(bot.entity.position))) : 999;
+
+    if (closestItemDist < 2) {
+      // We got very close to items but couldn't collect them - likely pickup is disabled
+      console.error(`[CollectItems] CRITICAL: ${items.length} items exist, got within ${closestItemDist.toFixed(2)} blocks, but 0 collected - server likely has item pickup disabled!`);
+      managed.serverHasItemPickupDisabled = true;
+      managed.serverHasItemPickupDisabledTimestamp = Date.now();
+      return `CRITICAL: Server has item pickup disabled! Found ${items.length} items but cannot collect them. Survival impossible without admin intervention. Use /give command or fix server config.`;
+    } else {
+      console.error(`[CollectItems] Items exist but too far away (${closestItemDist.toFixed(2)} blocks) - not flagging as pickup disabled`);
+    }
+  }
 
   if (actuallyCollected > 0) {
     return `Collected ${actuallyCollected} items (inventory: ${inventoryAfter} total)`;
@@ -402,8 +437,9 @@ export async function dropItem(bot: Bot, itemName: string, count?: number): Prom
       totalDropped += dropFromThis;
       remaining -= dropFromThis;
 
-      // Small delay to let inventory update
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Increased delay to let server inventory update propagate
+      // Server needs time to sync inventory changes, especially when dropping multiple stacks
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
 
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";

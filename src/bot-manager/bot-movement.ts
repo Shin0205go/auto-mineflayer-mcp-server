@@ -325,13 +325,34 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
 
   // SAFETY CHECK: If target is significantly lower, prevent fall damage
   // by refusing to path there if it would require falling more than 3 blocks
+  // EXCEPTION: Allow if target is water (no fall damage in water)
   const currentY = bot.entity.position.y;
   const targetY = y;
   const fallDistance = currentY - targetY;
 
   if (fallDistance > 3) {
-    console.error(`[Move] Safety check: target is ${fallDistance.toFixed(0)} blocks lower - would cause fall damage!`);
-    return `Cannot move to (${x}, ${y}, ${z}) - target is ${fallDistance.toFixed(0)} blocks lower than current position. This would cause fall damage. Use minecraft_dig_block or minecraft_pillar_up to descend safely, or choose a closer target at similar height.` + getBriefStatus(managed);
+    // Check if target or nearby blocks are water
+    const isWaterNearby = () => {
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dz = -1; dz <= 1; dz++) {
+            const checkPos = targetPos.offset(dx, dy, dz);
+            const block = bot.blockAt(checkPos);
+            if (block && block.name === "water") {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    };
+
+    if (!isWaterNearby()) {
+      console.error(`[Move] Safety check: target is ${fallDistance.toFixed(0)} blocks lower - would cause fall damage!`);
+      return `Cannot move to (${x}, ${y}, ${z}) - target is ${fallDistance.toFixed(0)} blocks lower than current position. This would cause fall damage. Use minecraft_dig_block or minecraft_pillar_up to descend safely, or choose a closer target at similar height.` + getBriefStatus(managed);
+    } else {
+      console.error(`[Move] Safety check: target is ${fallDistance.toFixed(0)} blocks lower but water detected - allowing movement`);
+    }
   }
 
   // Use pathfinder directly - it handles digging and tower building automatically
@@ -487,7 +508,7 @@ export async function emergencyDigUp(managed: ManagedBot, maxBlocks: number = 30
 /**
  * Pillar up by jump-placing blocks
  */
-export async function pillarUp(managed: ManagedBot, height: number = 1): Promise<string> {
+export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky: boolean = false): Promise<string> {
   const bot = managed.bot;
   const startY = bot.entity.position.y;
 
@@ -520,14 +541,17 @@ export async function pillarUp(managed: ManagedBot, height: number = 1): Promise
     throw new Error(`Cannot pillar up - no scaffold blocks! Need: cobblestone, dirt, stone. Have: ${inv}`);
   }
 
-  const targetHeight = Math.min(height, 15); // Safety limit
+  // If untilSky is true, use scaffoldCount as max (will stop when sky is reached)
+  // Otherwise use the specified height
+  const targetHeight = untilSky ? Math.min(scaffoldCount, 50) : Math.min(height, 15); // Safety limit
 
   // Warn if insufficient blocks for target height
-  if (scaffoldCount < targetHeight) {
+  if (!untilSky && scaffoldCount < targetHeight) {
     console.error(`[Pillar] WARNING: Only ${scaffoldCount} blocks available, but need ${targetHeight}. Will place what we have.`);
   }
 
-  console.error(`[Pillar] Starting: ${targetHeight} blocks from Y=${startY.toFixed(1)}, scaffold count: ${scaffoldCount}`);
+  const modeStr = untilSky ? "until sky" : `${targetHeight} blocks`;
+  console.error(`[Pillar] Starting: ${modeStr} from Y=${startY.toFixed(1)}, scaffold count: ${scaffoldCount}`);
 
   // Stop all movement and digging first
   bot.pathfinder.setGoal(null);
@@ -584,6 +608,23 @@ export async function pillarUp(managed: ManagedBot, height: number = 1): Promise
     const curX = Math.floor(bot.entity.position.x);
     const currentY = Math.floor(bot.entity.position.y);
     const curZ = Math.floor(bot.entity.position.z);
+
+    // Check if we've reached open sky (when untilSky mode is enabled)
+    if (untilSky) {
+      const blockAbove2 = bot.blockAt(new Vec3(curX, currentY + 2, curZ));
+      const blockAbove3 = bot.blockAt(new Vec3(curX, currentY + 3, curZ));
+      const isOpenAbove = (!blockAbove2 || blockAbove2.name === "air" || blockAbove2.name === "cave_air") &&
+                          (!blockAbove3 || blockAbove3.name === "air" || blockAbove3.name === "cave_air");
+
+      if (isOpenAbove) {
+        // Check light level to confirm we're at the surface
+        const lightLevel = (blockAbove2 as any)?.skyLight ?? (blockAbove3 as any)?.skyLight ?? 0;
+        if (lightLevel >= 13 || currentY >= startY + 10) {
+          console.error(`[Pillar] Reached open sky at Y=${currentY} (light: ${lightLevel}), placed ${blocksPlaced} blocks`);
+          return `Reached sky at Y=${currentY.toFixed(1)} after placing ${blocksPlaced} blocks${getBriefStatus(managed)}`;
+        }
+      }
+    }
 
     // 1. Dig blocks above if needed (Y+2 and Y+3 for jump clearance)
     for (const yOffset of [2, 3]) {

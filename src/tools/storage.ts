@@ -1,31 +1,22 @@
 import { botManager } from "../bot-manager/index.js";
 
 export const storageTools = {
-  minecraft_list_chest: {
-    description: "List contents of nearest chest (within 32 blocks)",
-    inputSchema: {
-      type: "object" as const,
-      properties: {},
-      required: [],
-    },
-  },
-
   minecraft_open_chest: {
-    description: "Open a chest at specific coordinates and list its contents",
+    description: "Open a chest and list its contents",
     inputSchema: {
       type: "object" as const,
       properties: {
         x: {
           type: "number",
-          description: "X coordinate",
+          description: "X coordinate of chest",
         },
         y: {
           type: "number",
-          description: "Y coordinate",
+          description: "Y coordinate of chest",
         },
         z: {
           type: "number",
-          description: "Z coordinate",
+          description: "Z coordinate of chest",
         },
       },
       required: ["x", "y", "z"],
@@ -39,11 +30,11 @@ export const storageTools = {
       properties: {
         item_name: {
           type: "string",
-          description: "Item name to take from chest",
+          description: "Item name to take (e.g., 'bread', 'cooked_beef')",
         },
         count: {
           type: "number",
-          description: "Number to take (default: all)",
+          description: "Number of items to take (default: all)",
         },
       },
       required: ["item_name"],
@@ -61,15 +52,23 @@ export const storageTools = {
         },
         count: {
           type: "number",
-          description: "Number to store (default: all)",
+          description: "Number of items to store (default: all)",
         },
       },
       required: ["item_name"],
     },
   },
+
+  minecraft_list_chest: {
+    description: "List contents of nearest chest (within 32 blocks)",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
 };
 
-// Tool handlers
 export async function handleStorageTool(
   name: string,
   args: Record<string, unknown>
@@ -77,22 +76,27 @@ export async function handleStorageTool(
   const username = botManager.requireSingleBot();
 
   switch (name) {
-    case "minecraft_list_chest":
-      return await botManager.listChest(username);
-
     case "minecraft_open_chest": {
-      const { x, y, z } = args as { x: number; y: number; z: number };
+      const x = args.x as number;
+      const y = args.y as number;
+      const z = args.z as number;
       return await botManager.openChest(username, x, y, z);
     }
 
     case "minecraft_take_from_chest": {
-      const { item_name, count } = args as { item_name: string; count?: number };
-      return await botManager.takeFromChest(username, item_name, count);
+      const itemName = args.item_name as string;
+      const count = args.count as number | undefined;
+      return await botManager.takeFromChest(username, itemName, count);
     }
 
     case "minecraft_store_in_chest": {
-      const { item_name, count } = args as { item_name: string; count?: number };
-      return await botManager.storeInChest(username, item_name, count);
+      const itemName = args.item_name as string;
+      const count = args.count as number | undefined;
+      return await botManager.storeInChest(username, itemName, count);
+    }
+
+    case "minecraft_list_chest": {
+      return await botManager.listChest(username);
     }
 
     default:
