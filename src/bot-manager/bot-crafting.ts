@@ -603,6 +603,41 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     });
   });
 
+  // CRITICAL FIX: Sort recipes to prioritize those using EXACT ingredients we have
+  // Mineflayer's bot.craft() does strict ID matching and won't substitute materials
+  // So recipes requiring items we don't have (like pale_oak_planks) will fail even if we have substitutes
+  craftableRecipes.sort((a, b) => {
+    const deltaA = a.delta as Array<{ id: number; count: number }>;
+    const deltaB = b.delta as Array<{ id: number; count: number }>;
+
+    // Count how many ingredients are EXACT matches vs substitutes
+    let exactMatchesA = 0;
+    let exactMatchesB = 0;
+
+    for (const d of deltaA) {
+      if (d.count >= 0) continue;
+      const ingredientItem = mcData.items[d.id];
+      const ingredientName = ingredientItem?.name;
+      if (!ingredientName) continue;
+
+      const exactMatches = inventoryItems.filter(i => i.name === ingredientName);
+      if (exactMatches.length > 0) exactMatchesA++;
+    }
+
+    for (const d of deltaB) {
+      if (d.count >= 0) continue;
+      const ingredientItem = mcData.items[d.id];
+      const ingredientName = ingredientItem?.name;
+      if (!ingredientName) continue;
+
+      const exactMatches = inventoryItems.filter(i => i.name === ingredientName);
+      if (exactMatches.length > 0) exactMatchesB++;
+    }
+
+    // Prefer recipes with more exact matches (fewer substitutes needed)
+    return exactMatchesB - exactMatchesA;
+  });
+
   if (craftableRecipes.length === 0) {
     // Try to get all recipes for this item (even if we can't craft them)
     let allRecipes = bot.recipesAll(item.id, null, null);
