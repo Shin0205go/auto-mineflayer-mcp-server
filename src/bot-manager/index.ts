@@ -336,7 +336,7 @@ export class BotManager extends BotCore {
   async collectNearbyItems(username: string): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
-    return await collectNearbyItemsBasic(managed.bot);
+    return await collectNearbyItemsBasic(managed);
   }
 
   listDroppedItems(username: string, range: number = 10): string {

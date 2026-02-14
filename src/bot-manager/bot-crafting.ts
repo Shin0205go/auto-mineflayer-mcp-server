@@ -902,7 +902,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
               // Use the dedicated collection function from bot-items
               const { collectNearbyItems } = await import("./bot-items.js");
               try {
-                await collectNearbyItems(bot);
+                await collectNearbyItems(managed);
               } catch (collectErr) {
                 console.error(`[Craft] collectNearbyItems failed: ${collectErr}`);
               }

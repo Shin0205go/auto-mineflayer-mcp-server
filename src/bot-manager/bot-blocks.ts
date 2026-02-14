@@ -844,7 +844,7 @@ export async function digBlock(
       }
       await delay(500);
 
-      const collectResult = await collectNearbyItems(bot);
+      const collectResult = await collectNearbyItems(managed);
       console.error(`[Dig] collectNearbyItems result: ${collectResult}`);
 
       // Wait for collection to complete
