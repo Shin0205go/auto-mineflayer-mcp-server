@@ -294,6 +294,10 @@ export class BotCore extends EventEmitter {
           gameEvents: [],
           thinkingState: "idle",
           particleInterval: null,
+          // CRITICAL: Reset item pickup flag on connection
+          // Disconnecting and reconnecting clears server-side state
+          serverHasItemPickupDisabled: false,
+          serverHasItemPickupDisabledTimestamp: undefined,
         };
 
         // Helper to add event with max 50 events kept
