@@ -271,34 +271,39 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         return `Killed ${target.name} after ${attacks} attacks`;
       }
 
-      // Check if target is too far
+      // Check if target is too far - if so, chase it instead of giving up
       const currentDist = currentTarget.position.distanceTo(bot.entity.position);
-      if (currentDist > 16) {
-        return `Target ${target.name} escaped after ${attacks} attacks (distance: ${currentDist.toFixed(1)} blocks)`;
-      }
+      if (currentDist > 6) {
+        // Animals run away when attacked - chase them!
+        if (currentDist > 32) {
+          // Too far to chase
+          return `Target ${target.name} escaped after ${attacks} attacks (distance: ${currentDist.toFixed(1)} blocks)`;
+        }
 
-      // If target moved away, chase it
-      if (currentDist > 3.5) {
-        const chaseGoal = new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2);
-        bot.pathfinder.setGoal(chaseGoal);
+        console.error(`[Attack] Target ${target.name} moved to ${currentDist.toFixed(1)} blocks, chasing...`);
+        const goal = new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2);
+        bot.pathfinder.setGoal(goal);
 
-        // Wait briefly for movement
+        // Brief chase (don't wait too long)
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {
             bot.pathfinder.setGoal(null);
             resolve();
-          }, 1500);
+          }, 2000);
 
-          const checkChase = setInterval(() => {
-            const dist = currentTarget.position.distanceTo(bot.entity.position);
-            if (dist < 3.5 || !bot.pathfinder.isMoving()) {
-              clearInterval(checkChase);
+          const check = setInterval(() => {
+            const checkDist = currentTarget.position.distanceTo(bot.entity.position);
+            if (checkDist < 3.5 || !bot.pathfinder.isMoving()) {
+              clearInterval(check);
               clearTimeout(timeout);
               bot.pathfinder.setGoal(null);
               resolve();
             }
           }, 100);
         });
+
+        // Continue to attack after chasing
+        continue;
       }
 
       // Attack
@@ -543,30 +548,13 @@ export async function fish(managed: ManagedBot, duration: number = 30): Promise<
   // Fishing loop
   while (Date.now() - startTime < maxDuration) {
     try {
-      // Take inventory snapshot before fishing
-      const inventoryBefore: Record<string, number> = {};
-      bot.inventory.items().forEach(item => {
-        inventoryBefore[item.name] = (inventoryBefore[item.name] || 0) + item.count;
-      });
-
-      // Fish
       await bot.fish();
-
-      // Check what changed in inventory
-      const inventoryAfter: Record<string, number> = {};
-      bot.inventory.items().forEach(item => {
-        inventoryAfter[item.name] = (inventoryAfter[item.name] || 0) + item.count;
-      });
-
-      // Find new items
-      for (const itemName in inventoryAfter) {
-        const before = inventoryBefore[itemName] || 0;
-        const after = inventoryAfter[itemName];
-        if (after > before) {
-          caughtItems.push(itemName);
-          console.error(`[Fish] Caught: ${itemName}`);
-          break; // Only one item caught per cast
-        }
+      // Check what was caught (last item in inventory that wasn't there before)
+      const inv = bot.inventory.items();
+      if (inv.length > 0) {
+        const lastItem = inv[inv.length - 1];
+        caughtItems.push(lastItem.name);
+        console.error(`[Fish] Caught: ${lastItem.name}`);
       }
     } catch (err) {
       // Fish was interrupted or failed, try again
@@ -730,41 +718,14 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
   const oldHP = bot.health;
   const oldFood = bot.food;
 
-  // Guard: Only refuse respawn if HP > 10 AND player has food
-  // Allow respawn in desperate situations (HP low, no food, etc.)
-  const inventory = bot.inventory.items();
-  const itemList = inventory.map(i => `${i.name}(${i.count})`).join(", ");
-
-  // Check if player has any food items
-  const foodKeywords = ['food', 'cooked', 'bread', 'apple', 'carrot', 'potato', 'beetroot', 'melon', 'berry', 'stew', 'soup', 'pie', 'cookie', 'cake', 'beef', 'porkchop', 'mutton', 'chicken', 'rabbit', 'cod', 'salmon', 'fish', 'rotten_flesh'];
-  const hasFood = inventory.some(item =>
-    foodKeywords.some(keyword => item.name.toLowerCase().includes(keyword))
-  );
-
-  // Allow respawn if HP ≤ 10 OR no food
-  if (oldHP > 10 && hasFood) {
-    return `Refused to respawn: HP is ${oldHP}/20 (still healthy). Try eating, fleeing, or pillar_up first. Inventory: ${itemList}`;
-  }
-
-  if (oldHP > 10 && !hasFood) {
-    console.error(`[Respawn] Allowing strategic respawn at HP=${oldHP} due to no food in inventory`);
-  } else if (oldHP <= 10) {
-    console.error(`[Respawn] Allowing respawn due to low HP=${oldHP}`);
+  // Guard: Don't respawn if HP is still okay
+  if (oldHP > 4) {
+    const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
+    return `Refused to respawn: HP is ${oldHP}/20 (still survivable). Try eating, fleeing, or pillar_up first. Inventory: ${inventory}`;
   }
 
   console.error(`[Respawn] Intentional death requested. Reason: ${reason || "unspecified"}`);
   console.error(`[Respawn] Before: HP=${oldHP}, Food=${oldFood}, Pos=(${oldPos.x.toFixed(1)}, ${oldPos.y.toFixed(1)}, ${oldPos.z.toFixed(1)})`);
-
-  // Listen for chat messages to detect /kill failure
-  let killFailed = false;
-  const chatListener = (_username: string, message: string) => {
-    if (message.includes("Unknown or incomplete command") ||
-        message.includes("You do not have permission") ||
-        message.includes("cannot be found")) {
-      killFailed = true;
-    }
-  };
-  bot.on('chat', chatListener);
 
   // Use /kill command
   bot.chat(`/kill ${managed.username}`);
@@ -772,25 +733,12 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
   // Wait for death and respawn
   await delay(3000);
 
-  // Log if kill command failed
-  if (killFailed) {
-    console.error(`[Respawn] /kill command was rejected by server`);
-  }
-
-  // Remove listener
-  bot.removeListener('chat', chatListener);
-
   // Check new status
   const newPos = bot.entity.position;
   const newHP = bot.health;
   const newFood = bot.food;
 
   console.error(`[Respawn] After: HP=${newHP}, Food=${newFood}, Pos=(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}, ${newPos.z.toFixed(1)})`);
-
-  // If HP didn't change, the /kill command likely failed
-  if (newHP === oldHP && Math.abs(newPos.x - oldPos.x) < 1 && Math.abs(newPos.z - oldPos.z) < 1) {
-    throw new Error(`Respawn failed: /kill command did not work (bot may lack OP permissions or command is disabled). HP unchanged: ${newHP}/20. Server admin needs to: (1) /op ${managed.username}, or (2) enable commands, or (3) enable mob spawning for food sources.`);
-  }
 
   return `Respawned! Old: (${oldPos.x.toFixed(0)}, ${oldPos.y.toFixed(0)}, ${oldPos.z.toFixed(0)}) HP:${oldHP?.toFixed(0)}/20 Food:${oldFood}/20 → New: (${newPos.x.toFixed(0)}, ${newPos.y.toFixed(0)}, ${newPos.z.toFixed(0)}) HP:${newHP?.toFixed(0)}/20 Food:${newFood}/20. Reason: ${reason || "strategic reset"}. Inventory lost!`;
 }

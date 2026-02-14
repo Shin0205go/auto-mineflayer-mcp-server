@@ -1,6 +1,7 @@
 import type { Bot } from "mineflayer";
 import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
+import type { ManagedBot } from "./types.js";
 
 /**
  * Item-related bot operations
@@ -17,7 +18,8 @@ function delay(ms: number): Promise<void> {
 /**
  * Collect dropped items near the bot
  */
-export async function collectNearbyItems(bot: Bot): Promise<string> {
+export async function collectNearbyItems(managed: ManagedBot): Promise<string> {
+  const bot = managed.bot;
   console.error(`[CollectItems] Starting collection, bot at ${bot.entity.position.toString()}`);
   const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
 
@@ -295,6 +297,25 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
 
   const inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
   const actuallyCollected = inventoryAfter - inventoryBefore;
+
+  // CRITICAL: Detect if server has item pickup disabled
+  // Only flag if items exist AND we got very close to them but still couldn't collect
+  // This prevents false positives from unreachable/stuck items
+  if (items.length > 0 && actuallyCollected === 0 && collectedCount >= 2) {
+    // Check if we actually got close to items (< 2 blocks)
+    const closestItemDist = items.length > 0 ?
+      Math.min(...items.map(item => item.position.distanceTo(bot.entity.position))) : 999;
+
+    if (closestItemDist < 2) {
+      // We got very close to items but couldn't collect them - likely pickup is disabled
+      console.error(`[CollectItems] CRITICAL: ${items.length} items exist, got within ${closestItemDist.toFixed(2)} blocks, but 0 collected - server likely has item pickup disabled!`);
+      managed.serverHasItemPickupDisabled = true;
+      managed.serverHasItemPickupDisabledTimestamp = Date.now();
+      return `CRITICAL: Server has item pickup disabled! Found ${items.length} items but cannot collect them. Survival impossible without admin intervention. Use /give command or fix server config.`;
+    } else {
+      console.error(`[CollectItems] Items exist but too far away (${closestItemDist.toFixed(2)} blocks) - not flagging as pickup disabled`);
+    }
+  }
 
   if (actuallyCollected > 0) {
     return `Collected ${actuallyCollected} items (inventory: ${inventoryAfter} total)`;

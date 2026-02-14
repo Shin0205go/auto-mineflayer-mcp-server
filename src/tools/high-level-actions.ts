@@ -480,33 +480,66 @@ export async function minecraft_survival_routine(
         results.push(`Food gathering failed: ${err}`);
       }
     } else {
-      // No animals found - try fishing as emergency fallback
-      console.error("[SurvivalRoutine] No animals found, attempting fishing");
+      // No animals found - try alternative food sources
+      console.error("[SurvivalRoutine] No food animals found (checked: cow, pig, chicken, sheep within 128 blocks), trying alternatives");
 
-      try {
-        // Check if we have a fishing rod
-        const hasFishingRod = inventory.some(item => item.name === "fishing_rod");
+      // EMERGENCY FALLBACK 1: Hunt zombies for rotten_flesh (better than starving)
+      if (nearbyEntities.includes("zombie")) {
+        console.error("[SurvivalRoutine] Found zombie - hunting for rotten_flesh (emergency food)");
+        try {
+          const fightResult = await botManager.fight(username, "zombie", 6); // flee at 6 HP
+          results.push(`Emergency zombie hunt: ${fightResult}`);
+          await botManager.collectNearbyItems(username);
 
-        if (hasFishingRod) {
-          const fishResult = await botManager.fish(username, 30);
-          results.push(`Emergency fishing: ${fishResult}`);
-        } else {
-          // Try to craft a fishing rod (requires 3 sticks + 2 string)
-          const hasSticks = inventory.some(item => item.name === "stick" && item.count >= 3);
-          const hasString = inventory.some(item => item.name === "string" && item.count >= 2);
+          // Check if we got rotten flesh and eat it immediately if hunger is critical
+          const currentStatus = botManager.getStatus(username);
+          const statusObj = JSON.parse(currentStatus);
+          const hungerMatch = statusObj.hunger?.match(/([\d.]+)\//);
+          const currentHunger = hungerMatch ? parseFloat(hungerMatch[1]) : 20;
 
-          if (hasSticks && hasString) {
-            const craftResult = await botManager.craftItem(username, "fishing_rod", 1);
-            results.push(`Crafted fishing rod: ${craftResult}`);
+          if (currentHunger < 6) {
+            const updatedInventory = botManager.getInventory(username);
+            if (updatedInventory.some(item => item.name === "rotten_flesh")) {
+              console.error("[SurvivalRoutine] Critical hunger - eating rotten_flesh immediately");
+              try {
+                const eatResult = await botManager.eat(username, "rotten_flesh");
+                results.push(`Ate rotten_flesh: ${eatResult}`);
+              } catch (eatErr) {
+                console.error(`[SurvivalRoutine] Failed to eat rotten_flesh: ${eatErr}`);
+              }
+            }
+          }
+        } catch (err) {
+          results.push(`Emergency zombie hunt failed: ${err}`);
+        }
+      } else {
+        // EMERGENCY FALLBACK 2: Try fishing
+        console.error("[SurvivalRoutine] No zombies nearby, attempting fishing");
+        try {
+          // Check if we have a fishing rod
+          const hasFishingRod = inventory.some(item => item.name === "fishing_rod");
 
+          if (hasFishingRod) {
             const fishResult = await botManager.fish(username, 30);
             results.push(`Emergency fishing: ${fishResult}`);
           } else {
-            results.push("No food sources found. Need: animals nearby OR fishing rod OR (3 sticks + 2 string to craft rod)");
+            // Try to craft a fishing rod (requires 3 sticks + 2 string)
+            const hasSticks = inventory.some(item => item.name === "stick" && item.count >= 3);
+            const hasString = inventory.some(item => item.name === "string" && item.count >= 2);
+
+            if (hasSticks && hasString) {
+              const craftResult = await botManager.craftItem(username, "fishing_rod", 1);
+              results.push(`Crafted fishing rod: ${craftResult}`);
+
+              const fishResult = await botManager.fish(username, 30);
+              results.push(`Emergency fishing: ${fishResult}`);
+            } else {
+              results.push("No food sources found. Need: animals nearby OR zombies for rotten_flesh OR fishing rod OR (3 sticks + 2 string to craft rod)");
+            }
           }
+        } catch (err) {
+          results.push(`Emergency fishing failed: ${err}`);
         }
-      } catch (err) {
-        results.push(`Emergency fishing failed: ${err}`);
       }
     }
   }
@@ -829,27 +862,6 @@ export async function minecraft_validate_survival_environment(
   const findings: string[] = [];
   let foodSourcesFound = 0;
 
-  // Check for chests with food (CRITICAL on servers with disabled mob spawning)
-  try {
-    const chestResult = await botManager.listChest(username);
-    if (!chestResult.includes("No chest found")) {
-      // Parse chest contents to check for food items
-      const foodItems = ["bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton",
-                        "cooked_rabbit", "baked_potato", "apple", "golden_apple", "cooked_salmon",
-                        "cooked_cod", "pumpkin_pie", "cookie", "melon_slice", "sweet_berries"];
-
-      const hasFood = foodItems.some(food => chestResult.includes(food));
-      if (hasFood) {
-        findings.push(`✅ Found chest with food items`);
-        foodSourcesFound++;
-      } else {
-        findings.push(`⚠️ Found chest but NO food inside: ${chestResult}`);
-      }
-    }
-  } catch (e) {
-    console.error(`[ValidateEnvironment] Error checking chests:`, e);
-  }
-
   // Check for passive mobs (primary food source)
   // Use smaller search radius initially to avoid timeout
   const quickSearchRadius = Math.min(searchRadius, 50);
@@ -923,18 +935,28 @@ export async function minecraft_validate_survival_environment(
   const header = `\n=== SURVIVAL ENVIRONMENT VALIDATION ===\nCurrent Hunger: ${currentHunger}/20\nSearch Radius: ${quickSearchRadius} blocks (optimized for performance)\n`;
 
   if (foodSourcesFound === 0) {
-    const detailedFindings = findings.length > 0 ? `\nFindings:\n${findings.join("\n")}\n` : `\nFindings:\n- No chests with food found\n- No passive mobs found\n- No edible plants found\n- No fishing viability\n`;
+    // If hunger is not critically low, treat as warning instead of CRITICAL
+    // Bot might have food in inventory or can explore to find food
+    if (currentHunger > 10) {
+      return header +
+        `\n⚠️ WARNING: NO IMMEDIATE FOOD SOURCES DETECTED\n` +
+        `\nFindings:\n- No passive mobs found in ${quickSearchRadius} block radius\n- No edible plants found\n- No fishing viability\n` +
+        `\nCurrent Status: Hunger at ${currentHunger}/20 - not critical yet\n` +
+        `\nRecommendations:\n` +
+        `1. Check inventory for existing food\n` +
+        `2. Explore beyond ${quickSearchRadius} blocks to find food sources\n` +
+        `3. If persistent, check server configuration (mob spawning may be disabled)`;
+    }
+
     return header +
       `\n❌ CRITICAL: NO FOOD SOURCES DETECTED\n` +
-      detailedFindings +
-      `\n⚠️ WARNING: Survival is IMPOSSIBLE in this environment!\n` +
+      `\nFindings:\n- No passive mobs found\n- No edible plants found\n- No fishing viability\n` +
+      `\n⚠️ WARNING: Survival may be impossible in this environment!\n` +
       `\nRecommendations:\n` +
-      `1. Check for chests with food items using minecraft_list_chest\n` +
-      `2. Check server configuration (mob spawning/item drops may be disabled)\n` +
-      `3. Move to a different area with /tp command\n` +
-      `4. Use creative mode or /give commands to obtain food\n` +
-      `5. Enable required gamerules: /gamerule doMobSpawning true, doTileDrops true\n` +
-      `\n🛑 RECOMMENDATION: Exit and notify admin. This world is unplayable in survival mode.`;
+      `1. Check server configuration (mob spawning may be disabled)\n` +
+      `2. Move to a different area with /tp command\n` +
+      `3. Use creative mode or /give commands to obtain food\n` +
+      `4. Enable mob spawning in server.properties (spawn-monsters=true, spawn-animals=true)`;
   } else if (foodSourcesFound < 2) {
     return header +
       `\n⚠️ LIMITED FOOD SOURCES (${foodSourcesFound} type found)\n` +
