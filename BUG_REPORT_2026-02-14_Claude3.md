@@ -4,9 +4,81 @@
 - **Bot**: Claude3
 - **Date**: 2026-02-14
 - **Duration**: ~5 minutes
-- **Status at report**: HP 19/20, Hunger 11/20
+- **Session 1 Status**: HP 19/20, Hunger 11/20
+- **Session 2 Status**: HP 20/20, Hunger 10/20 (CRITICAL - near starvation)
 
 ## Bugs Found
+
+### Bug #0: CRITICAL - Crafting Wastes Materials When Server Has Item Pickup Disabled
+
+**Priority**: CRITICAL - Causes permanent loss of resources
+
+**Error Message:**
+```
+Cannot craft iron_pickaxe: Server has item pickup disabled.
+Crafted item dropped on ground but cannot be collected.
+Ingredients consumed: recipe materials lost permanently.
+```
+
+**What Happened (Session 2):**
+1. Bot had iron_pickaxe equipped at session start
+2. Iron_pickaxe disappeared during mining (durability or server bug)
+3. Bot attempted to craft new iron_pickaxe
+4. Crafting consumed 3 iron_ingot + 2 stick
+5. Crafted item dropped on ground
+6. Server has item pickup disabled - item cannot be collected
+7. Materials permanently lost
+
+**Result:**
+- Lost: 3 iron_ingot + 2 stick
+- Gained: Nothing
+- Inventory After: iron_ingot(2), stick(4), NO iron_pickaxe
+
+**Root Cause:**
+File: `src/bot-manager/bot-crafting.ts` Lines 256-271
+
+The code has a check for `serverHasItemPickupDisabled` flag, BUT:
+1. Flag has 60-second expiry (line 260-269) - allows retry after timeout
+2. Check happens AFTER materials are consumed (bot.craft() already executed)
+3. Error is thrown too late - materials already gone
+
+```typescript
+// CURRENT CODE (BROKEN):
+if (managed.serverHasItemPickupDisabled === true && managed.serverHasItemPickupDisabledTimestamp) {
+  const timeSinceSet = Date.now() - managed.serverHasItemPickupDisabledTimestamp;
+
+  if (timeSinceSet < 60000) {
+    throw new Error(`Cannot craft...`);  // Good - prevents crafting
+  } else {
+    // BAD: Clears flag after 60s, allows retry that wastes materials
+    managed.serverHasItemPickupDisabled = false;
+    managed.serverHasItemPickupDisabledTimestamp = undefined;
+  }
+}
+
+// ... later ...
+await bot.craft(recipe, 1, craftingTable);  // Materials consumed HERE
+// ... much later ...
+// Line 907-914: Detects item not in inventory and throws error
+```
+
+**Proposed Fix:**
+Move the check to BEFORE `bot.craft()` is called, and don't auto-clear the flag:
+
+```typescript
+// At line 823, BEFORE the crafting loop:
+if (managed.serverHasItemPickupDisabled === true) {
+  throw new Error(
+    `Cannot craft ${itemName}: Server has item pickup disabled. ` +
+    `Crafted items will drop and be lost. Disconnect/reconnect to retry, ` +
+    `or use creative mode.`
+  );
+}
+```
+
+**Impact**: HIGH - Wastes critical resources in survival mode
+
+---
 
 ### Bug #1: Torch Crafting - Coal/Charcoal Substitution Not Working
 
