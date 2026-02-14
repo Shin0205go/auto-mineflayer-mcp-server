@@ -505,6 +505,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   // Check if any recipes can be done without crafting table
   const canCraftInInventory = recipes.length > 0;
 
+  console.error(`[Craft] ${itemName}: found ${recipes.length} 2x2 recipes, craftingTable=${!!craftingTable}`);
+
   // If we can craft in inventory, prefer that to avoid crafting table bugs
   if (canCraftInInventory) {
     craftingTable = null;
@@ -512,7 +514,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   } else if (craftingTable) {
     // Only use crafting table if we must (no 2x2 recipes available)
     recipes = bot.recipesAll(item.id, null, craftingTable);
-    console.error(`[Craft] Using crafting table (3x3) for ${itemName}`);
+    console.error(`[Craft] Using crafting table (3x3) for ${itemName}, found ${recipes.length} recipes`);
+  } else {
+    console.error(`[Craft] No 2x2 recipes and no crafting table found for ${itemName}`);
   }
 
   // Helper function to check if we have a compatible item
