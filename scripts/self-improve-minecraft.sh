@@ -188,8 +188,8 @@ PROMPT
   fi
 
   echo ""
-  echo "⏳ Waiting 10 seconds before next loop..."
-  sleep 10
+  echo "⏳ Waiting 30 seconds before next loop..."
+  sleep 30
 done
 
 echo ""
