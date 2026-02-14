@@ -809,19 +809,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           // Increased timeout to 1500ms to handle slower servers
           await new Promise(resolve => setTimeout(resolve, 1500));
 
-          // Only close window if we used a crafting table (not player inventory)
-          // Closing the inventory window can cause items to drop!
-          if (craftingTable && bot.currentWindow) {
-            bot.closeWindow(bot.currentWindow);
-            await new Promise(resolve => setTimeout(resolve, 300));
-          }
-
-          // Additional wait for inventory synchronization
-          await new Promise(resolve => setTimeout(resolve, 700));
-
-          // CRITICAL: Check if item appears in inventory
-          // If not, try to manually take it from the crafting window
-          const craftedItemInInventory = bot.inventory.items().find(item => item.name === itemName);
+          // CRITICAL: Collect from crafting window BEFORE closing it
+          // Check if item appears in inventory, if not try to collect from window
+          let craftedItemInInventory = bot.inventory.items().find(item => item.name === itemName);
 
           if (!craftedItemInInventory && bot.currentWindow) {
             console.error(`[Craft] ${itemName} not in inventory after crafting, checking crafting window...`);
@@ -842,8 +832,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             }
 
             // Re-check inventory after attempting to collect from window
-            const afterClickCheck = bot.inventory.items().find(item => item.name === itemName);
-            if (!afterClickCheck) {
+            craftedItemInInventory = bot.inventory.items().find(item => item.name === itemName);
+            if (!craftedItemInInventory) {
               // Still not in inventory - might have dropped as entity
               console.error(`[Craft] ${itemName} still not in inventory after window click, searching for dropped items...`);
 
@@ -894,6 +884,12 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 console.error(`[Craft] No dropped items found - crafting may have failed silently`);
               }
             }
+          }
+
+          // Close crafting table window AFTER collecting the item
+          if (craftingTable && bot.currentWindow) {
+            bot.closeWindow(bot.currentWindow);
+            await new Promise(resolve => setTimeout(resolve, 300));
           }
 
           crafted = true;
