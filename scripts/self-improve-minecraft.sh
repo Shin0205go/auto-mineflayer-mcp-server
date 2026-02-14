@@ -109,9 +109,6 @@ while true; do
 ## 絶対禁止
 
 - ❌ **ファイル作成・編集禁止**（src/, .claude/skills/, bug-issues/ 以外）
-- ❌ git操作禁止
-- ❌ MCP設定変更禁止
-- ❌ Read/Grepでのソースコード読み込み禁止
 
 **ゲームプレイとチャット連携に集中！今すぐ minecraft_get_chat_messages() を実行！**
 
