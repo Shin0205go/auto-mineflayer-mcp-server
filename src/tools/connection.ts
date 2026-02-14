@@ -97,7 +97,7 @@ export async function handleConnectionTool(
             // Check if bot is still connected before validation
             if (!botManager.isConnected(username)) {
               console.error(`[Connection] Bot ${username} disconnected before validation could start`);
-              return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})\n\n⚠️ WARNING: Bot disconnected shortly after connection. Validation skipped.`;
+              throw new Error(`Bot ${username} disconnected shortly after connection. Validation skipped.\n\nPossible causes:\n1. Server kicked the bot\n2. Network connection lost\n3. Server is not accepting connections\n\nCheck server logs for details.`);
             }
 
             const validationResult = await minecraft_validate_survival_environment(username, 100);
@@ -105,7 +105,7 @@ export async function handleConnectionTool(
             // Check if bot is still connected after validation
             if (!botManager.isConnected(username)) {
               console.error(`[Connection] Bot ${username} disconnected during validation`);
-              return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})\n\n⚠️ WARNING: Bot disconnected during validation. Results may be incomplete:\n${validationResult}`;
+              throw new Error(`Bot ${username} disconnected during environment validation.\n\nValidation results:\n${validationResult}\n\nThe bot was kicked or disconnected by the server during the validation check.`);
             }
 
             if (validationResult.includes("❌ CRITICAL")) {
