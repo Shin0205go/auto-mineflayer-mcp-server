@@ -78,27 +78,42 @@ while true; do
 
 ## 最初のアクション（必須）
 
-1. \`minecraft_get_status()\` - 現在の状態確認
-2. \`minecraft_get_position()\` - 現在地確認
-3. \`minecraft_get_surroundings()\` - 周囲確認
+1. \`minecraft_get_chat_messages()\` - 他のbotからのメッセージ確認
+2. \`minecraft_get_status()\` - 現在の状態確認
+3. \`minecraft_get_position()\` - 現在地確認
+4. \`minecraft_get_surroundings()\` - 周囲確認
+
+## チャット連携（重要）
+
+他のbot（Claude1〜Claude5）と同じワールドにいます。**チャットで情報を共有してください。**
+
+### 送信すべき情報（minecraft_chat）
+- 食料・動物を見つけた → \`「食料: 牛を発見 (x=50, z=-30)」\`
+- 有用な資源 → \`「資源: 鉄鉱石 (x=10, y=40, z=-20)」\`
+- チェストに物を入れた → \`「チェスト(x=5, z=4)に食料入れた」\`
+- 危険な場所 → \`「警告: クリーパー多数 (x=-30, z=50)」\`
+
+### 受信したら（minecraft_get_chat_messages）
+- 他のbotが共有した座標を活用する
+- 食料情報は最優先で確認
+- **5〜10アクションごとにチャットを確認すること**
 
 ## その後
 
+- 食料確保を最優先
 - 木を探して採掘
-- アイテムを収集
 - ツールを作成
 - 敵から逃げる
-- 食料を食べる
+- 発見した情報はチャットで共有
 
 ## 絶対禁止
 
-- ❌ **ファイル作成・編集・削除禁止**（Write, Edit, Bashでのファイル操作）
-- ❌ **BUGレポート作成禁止**
+- ❌ **ファイル作成・編集禁止**（src/, .claude/skills/, bug-issues/ 以外）
 - ❌ git操作禁止
 - ❌ MCP設定変更禁止
 - ❌ Read/Grepでのソースコード読み込み禁止
 
-**ゲームプレイだけに集中！今すぐ minecraft_get_status() を実行！**
+**ゲームプレイとチャット連携に集中！今すぐ minecraft_get_chat_messages() を実行！**
 
 PROMPT
 
