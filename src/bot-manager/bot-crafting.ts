@@ -342,11 +342,10 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   }
 
   // Special handling for planks -> stick/crafting_table/wooden_tools to avoid wood type issues
-  // Re-enabled for crafting_table because general path fails with pale_oak_planks recipe mismatch
-  // The general crafting path does NOT handle material substitution correctly for crafting_table
-  // when Minecraft data returns a pale_oak_planks recipe but we have other plank types
-  // NOTE: Disabled for "stick" due to persistent "missing ingredient" errors - general path works better
-  const simpleWoodenRecipes: string[] = ["crafting_table"];
+  // NOTE: Disabled for both "stick" and "crafting_table" due to persistent "missing ingredient" errors
+  // General crafting path with material substitution (lines 511-574) works better for both
+  // The findCompatibleItem function properly handles all plank types as substitutes
+  const simpleWoodenRecipes: string[] = [];
   if (simpleWoodenRecipes.includes(itemName)) {
     // Find any planks in inventory
     const anyPlanks = inventoryItems.find(i => i.name.endsWith("_planks"));
