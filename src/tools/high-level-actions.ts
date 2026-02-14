@@ -902,6 +902,19 @@ export async function minecraft_validate_survival_environment(
   const header = `\n=== SURVIVAL ENVIRONMENT VALIDATION ===\nCurrent Hunger: ${currentHunger}/20\nSearch Radius: ${quickSearchRadius} blocks (optimized for performance)\n`;
 
   if (foodSourcesFound === 0) {
+    // If hunger is not critically low, treat as warning instead of CRITICAL
+    // Bot might have food in inventory or can explore to find food
+    if (currentHunger > 10) {
+      return header +
+        `\n⚠️ WARNING: NO IMMEDIATE FOOD SOURCES DETECTED\n` +
+        `\nFindings:\n- No passive mobs found in ${quickSearchRadius} block radius\n- No edible plants found\n- No fishing viability\n` +
+        `\nCurrent Status: Hunger at ${currentHunger}/20 - not critical yet\n` +
+        `\nRecommendations:\n` +
+        `1. Check inventory for existing food\n` +
+        `2. Explore beyond ${quickSearchRadius} blocks to find food sources\n` +
+        `3. If persistent, check server configuration (mob spawning may be disabled)`;
+    }
+
     return header +
       `\n❌ CRITICAL: NO FOOD SOURCES DETECTED\n` +
       `\nFindings:\n- No passive mobs found\n- No edible plants found\n- No fishing viability\n` +
