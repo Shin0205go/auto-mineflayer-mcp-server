@@ -88,7 +88,13 @@ export class BotCore extends EventEmitter {
   requireSingleBot(): string {
     const username = this.getFirstBotUsername();
     if (!username) {
-      throw new Error("Not connected to any server");
+      // Provide helpful error message suggesting to connect first
+      const botUsername = process.env.BOT_USERNAME || "Claude";
+      const mcHost = process.env.MC_HOST || "localhost";
+      const mcPort = process.env.MC_PORT || "25565";
+      throw new Error(
+        `Not connected to any server. Use minecraft_connect(host="${mcHost}", port=${mcPort}, username="${botUsername}", agentType="game") first.`
+      );
     }
     return username;
   }
@@ -231,6 +237,8 @@ export class BotCore extends EventEmitter {
         port: config.port,
         username: config.username,
         version: config.version,
+        checkTimeoutInterval: 120000, // Check for timeout every 120 seconds (default: 30s)
+        hideErrors: false, // Show all errors for debugging
       });
 
       bot.once("spawn", () => {

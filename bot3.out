@@ -1,0 +1,70 @@
+🎮 Starting Minecraft Self-Improvement Loop
+   Bot: Claude3 (ID: 3)
+   Model: sonnet
+   Log directory: agent_logs/bot3
+   Running infinitely (Ctrl+C to stop)
+
+⏳ Waiting 30s to avoid connection conflicts...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Claude3 - Loop #1 (commit: b53062)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📥 Pulling improvements from other bots...
+Saved working directory and index state On bot3: [Claude3] Auto-stash before loop 1
+From https://github.com/Shin0205go/minecraftAIViewer
+ * branch            bot3       -> FETCH_HEAD
+Already up to date.
+✅ Already up to date
+On branch bot3
+Your branch is up to date with 'origin/bot3'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   .claude/settings.json
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	bot3.out
+
+no changes added to commit (use "git add" and/or "git commit -a")
+Dropped refs/stash@{0} (4de638e10e2e2f4a599e7073e1e7af54a6a95399)
+
+▶️  Starting Claude Code (Claude3)...
+   Log: agent_logs/bot3/loop_1_b53062_20260214_173259.log
+
+✅ Completed successfully
+📊 Stats:
+   - Tools used: 40
+   - Errors: 9
+   - Log: agent_logs/bot3/loop_1_b53062_20260214_173259.log
+
+⏳ Waiting 10 seconds before next loop...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Claude3 - Loop #2 (commit: b53062)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📥 Pulling improvements from other bots...
+Saved working directory and index state On bot3: [Claude3] Auto-stash before loop 2
+From https://github.com/Shin0205go/minecraftAIViewer
+ * branch            bot3       -> FETCH_HEAD
+Already up to date.
+✅ Already up to date
+On branch bot3
+Your branch is up to date with 'origin/bot3'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   .claude/settings.json
+	modified:   src/bot-manager/bot-core.ts
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	bot3.out
+
+no changes added to commit (use "git add" and/or "git commit -a")
+Dropped refs/stash@{0} (57ac2b0e9647631f6fe18421a6b8313390b9c678)
+
+▶️  Starting Claude Code (Claude3)...
+   Log: agent_logs/bot3/loop_2_b53062_20260214_173511.log
