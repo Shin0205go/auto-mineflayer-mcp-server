@@ -3,13 +3,12 @@
 # Minecraft自己改善ループ（並行稼働対応）
 # Claude Codeが自分でプレイ → 失敗分析 → コード修正 → 再プレイ
 #
-# 使い方: ./scripts/self-improve-minecraft.sh [bot-id]
+# 使い方: ./scripts/self-improve-minecraft.sh [bot-id] [model]
 # 例:
-#   Terminal 1: ./scripts/self-improve-minecraft.sh 1
-#   Terminal 2: ./scripts/self-improve-minecraft.sh 2
-#   Terminal 3: ./scripts/self-improve-minecraft.sh 3
+#   Terminal 1: ./scripts/self-improve-minecraft.sh 1 opus
+#   Terminal 2: ./scripts/self-improve-minecraft.sh 2 opus
 
-set -e
+# エラーでスクリプトが死なないようにする（set -eを使わない）
 
 # ボットID（引数で指定、デフォルト: 1）
 BOT_ID=${1:-1}
@@ -23,6 +22,27 @@ mkdir -p "$LOG_DIR"
 
 # ループカウンター
 LOOP=0
+
+# Claude子プロセスPID（クリーンアップ用）
+CLAUDE_PID=""
+
+# クリーンアップ関数
+cleanup() {
+  echo ""
+  echo "🛑 [$BOT_NAME] Shutting down..."
+  if [ ! -z "$CLAUDE_PID" ] && kill -0 $CLAUDE_PID 2>/dev/null; then
+    # プロセスグループごと殺す
+    kill -- -$CLAUDE_PID 2>/dev/null || kill $CLAUDE_PID 2>/dev/null || true
+    wait $CLAUDE_PID 2>/dev/null || true
+  fi
+  echo "🏁 [$BOT_NAME] Self-improvement loop stopped"
+  echo "📊 Completed $LOOP loops"
+  echo "📁 Logs saved in: $LOG_DIR/"
+  exit 0
+}
+
+# Ctrl+C / SIGTERM でクリーンアップ
+trap cleanup SIGINT SIGTERM
 
 echo "🎮 Starting Minecraft Self-Improvement Loop"
 echo "   Bot: $BOT_NAME (ID: $BOT_ID)"
@@ -40,7 +60,7 @@ fi
 
 while true; do
   LOOP=$((LOOP + 1))
-  COMMIT=$(git rev-parse --short=6 HEAD)
+  COMMIT=$(git rev-parse --short=6 HEAD 2>/dev/null || echo "unknown")
   TIMESTAMP=$(date +%Y%m%d_%H%M%S)
   LOGFILE="$LOG_DIR/loop_${LOOP}_${COMMIT}_${TIMESTAMP}.log"
 
@@ -54,7 +74,7 @@ while true; do
   git stash push -m "[$BOT_NAME] Auto-stash before loop $LOOP" 2>/dev/null || true
 
   if git merge main --no-edit 2>&1 | tee -a "$LOGFILE"; then
-    NEW_COMMIT=$(git rev-parse --short=6 HEAD)
+    NEW_COMMIT=$(git rev-parse --short=6 HEAD 2>/dev/null || echo "unknown")
     if [ "$NEW_COMMIT" != "$COMMIT" ]; then
       echo "✅ Got new improvements from main ($COMMIT → $NEW_COMMIT), rebuilding..."
       npm run build > /dev/null 2>&1 && echo "✅ Rebuild complete"
@@ -126,35 +146,39 @@ PROMPT
   echo "   Log: $LOGFILE"
 
   # Run Claude with timeout (20 minutes)
-  # stream-json でリアルタイム出力
-  (cat /tmp/minecraft_prompt_bot${BOT_ID}.md | claude --dangerously-skip-permissions \
+  # setsid で新しいプロセスグループを作成（確実にkillできるように）
+  setsid bash -c "cat /tmp/minecraft_prompt_bot${BOT_ID}.md | claude --dangerously-skip-permissions \
     --print \
     --verbose \
     --output-format stream-json \
-    --model $MODEL) > "$LOGFILE" 2>&1 &
+    --model $MODEL" > "$LOGFILE" 2>&1 &
   CLAUDE_PID=$!
 
   # Wait up to 1200 seconds (20 minutes)
   EXIT_CODE=0
-  for i in {1..1200}; do
+  WAITED=0
+  while [ $WAITED -lt 1200 ]; do
     if ! kill -0 $CLAUDE_PID 2>/dev/null; then
-      wait $CLAUDE_PID
+      wait $CLAUDE_PID 2>/dev/null
       EXIT_CODE=$?
       break
     fi
     sleep 1
+    WAITED=$((WAITED + 1))
   done
 
-  # Kill if still running
+  # Kill if still running (プロセスグループごと)
   if kill -0 $CLAUDE_PID 2>/dev/null; then
     echo "" | tee -a "$LOGFILE"
     echo "⏱️  Timeout reached (20 minutes), stopping..." | tee -a "$LOGFILE"
-    # Kill the subshell and all its children
-    pkill -P $CLAUDE_PID 2>/dev/null || true
-    kill $CLAUDE_PID 2>/dev/null || true
+    kill -- -$CLAUDE_PID 2>/dev/null || kill $CLAUDE_PID 2>/dev/null || true
+    sleep 2
+    # まだ残ってたら強制kill
+    kill -9 -- -$CLAUDE_PID 2>/dev/null || kill -9 $CLAUDE_PID 2>/dev/null || true
     wait $CLAUDE_PID 2>/dev/null || true
     EXIT_CODE=124
   fi
+  CLAUDE_PID=""
 
   echo ""
   if [ ${EXIT_CODE:-0} -eq 0 ]; then
@@ -166,8 +190,8 @@ PROMPT
   fi
 
   # エラー数カウント
-  ERROR_COUNT=$(grep -c "Error\|Failed\|Exception" "$LOGFILE" 2>/dev/null || true)
-  TOOL_COUNT=$(grep -c "mcp__mineflayer" "$LOGFILE" 2>/dev/null || true)
+  ERROR_COUNT=$(grep -c "Error\|Failed\|Exception" "$LOGFILE" 2>/dev/null || echo "0")
+  TOOL_COUNT=$(grep -c "mcp__mineflayer" "$LOGFILE" 2>/dev/null || echo "0")
 
   echo "📊 Stats:"
   echo "   - Tools used: $TOOL_COUNT"
@@ -175,69 +199,73 @@ PROMPT
   echo "   - Log: $LOGFILE"
 
   # Git変更チェック（新しいコミットがあるか）
-  NEW_COMMIT=$(git rev-parse --short=6 HEAD)
+  NEW_COMMIT=$(git rev-parse --short=6 HEAD 2>/dev/null || echo "unknown")
   if [ "$NEW_COMMIT" != "$COMMIT" ]; then
     echo "🔧 [$BOT_NAME] Code improvements detected (new commit: $NEW_COMMIT)"
 
     # PR作成 → ビルドチェック → 自動マージ
-    BRANCH=$(git branch --show-current)
-    echo "📤 Pushing $BRANCH to remote..."
+    BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+    if [ -z "$BRANCH" ]; then
+      echo "⚠️  Not on a branch, skipping PR"
+    else
+      echo "📤 Pushing $BRANCH to remote..."
 
-    if git push origin "$BRANCH" 2>&1 | tee -a "$LOGFILE"; then
-      echo "✅ Pushed $BRANCH"
+      if git push origin "$BRANCH" 2>&1 | tee -a "$LOGFILE"; then
+        echo "✅ Pushed $BRANCH"
 
-      # ビルドチェック
-      echo "🔨 Running build check..."
-      if npm run build > /dev/null 2>&1; then
-        echo "✅ Build passed"
+        # ビルドチェック
+        echo "🔨 Running build check..."
+        if npm run build > /dev/null 2>&1; then
+          echo "✅ Build passed"
 
-        # PR作成（既存PRがなければ）
-        EXISTING_PR=$(gh pr list --head "$BRANCH" --base main --state open --json number -q '.[0].number' 2>/dev/null || true)
-        if [ -z "$EXISTING_PR" ]; then
-          PR_TITLE="[$BOT_NAME] Auto-fix loop #$LOOP ($NEW_COMMIT)"
-          PR_URL=$(gh pr create --base main --head "$BRANCH" \
-            --title "$PR_TITLE" \
-            --body "$(cat <<EOF
+          # PR作成（既存PRがなければ）
+          EXISTING_PR=$(gh pr list --head "$BRANCH" --base main --state open --json number -q '.[0].number' 2>/dev/null || echo "")
+          if [ -z "$EXISTING_PR" ]; then
+            PR_TITLE="[$BOT_NAME] Auto-fix loop #$LOOP ($NEW_COMMIT)"
+            PR_URL=$(gh pr create --base main --head "$BRANCH" \
+              --title "$PR_TITLE" \
+              --body "$(cat <<EOF
 ## Auto-improvement by $BOT_NAME
 
 - Loop: #$LOOP
 - Commit: $NEW_COMMIT
 - Model: $MODEL
 
-Build check: ✅ Passed
+Build check: passed
 
-🤖 Generated by self-improve-minecraft.sh
+Generated by self-improve-minecraft.sh
 EOF
-)" 2>&1 | tee -a "$LOGFILE") || true
+)" 2>&1) || true
 
-          if echo "$PR_URL" | grep -q "github.com"; then
-            echo "✅ PR created: $PR_URL"
+            if echo "$PR_URL" | grep -q "github.com"; then
+              echo "✅ PR created: $PR_URL"
 
-            # PR番号を取得してマージ
-            PR_NUM=$(gh pr list --head "$BRANCH" --base main --state open --json number -q '.[0].number' 2>/dev/null || true)
-            if [ ! -z "$PR_NUM" ]; then
-              if gh pr merge "$PR_NUM" --merge --delete-branch=false 2>&1 | tee -a "$LOGFILE"; then
-                echo "✅ PR #$PR_NUM merged to main"
-              else
-                echo "⚠️  PR merge failed (may need manual review)"
+              # PR番号を取得してマージ
+              PR_NUM=$(gh pr list --head "$BRANCH" --base main --state open --json number -q '.[0].number' 2>/dev/null || echo "")
+              if [ ! -z "$PR_NUM" ]; then
+                if gh pr merge "$PR_NUM" --merge --delete-branch=false 2>&1 | tee -a "$LOGFILE"; then
+                  echo "✅ PR #$PR_NUM merged to main"
+                else
+                  echo "⚠️  PR merge failed (may need manual review)"
+                fi
               fi
+            else
+              echo "⚠️  PR creation failed: $PR_URL"
             fi
           else
-            echo "⚠️  PR creation failed"
+            echo "📋 PR #$EXISTING_PR already exists, merging..."
+            if gh pr merge "$EXISTING_PR" --merge --delete-branch=false 2>&1 | tee -a "$LOGFILE"; then
+              echo "✅ PR #$EXISTING_PR merged to main"
+            else
+              echo "⚠️  PR merge failed (may need manual review)"
+            fi
           fi
         else
-          echo "📋 PR #$EXISTING_PR already exists, merging..."
-          if gh pr merge "$EXISTING_PR" --merge --delete-branch=false 2>&1 | tee -a "$LOGFILE"; then
-            echo "✅ PR #$EXISTING_PR merged to main"
-          else
-            echo "⚠️  PR merge failed (may need manual review)"
-          fi
+          echo "❌ Build failed, skipping PR (will fix in next loop)"
         fi
       else
-        echo "❌ Build failed, skipping PR (will fix in next loop)"
+        echo "⚠️  Push failed (will retry next loop)"
       fi
-    else
-      echo "⚠️  Push failed (will retry next loop)"
     fi
   fi
 
@@ -245,8 +273,3 @@ EOF
   echo "⏳ Waiting 30 seconds before next loop..."
   sleep 30
 done
-
-echo ""
-echo "🏁 [$BOT_NAME] Self-improvement loop stopped"
-echo "📊 Completed $LOOP loops"
-echo "📁 Logs saved in: $LOG_DIR/"
