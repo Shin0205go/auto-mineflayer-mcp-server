@@ -480,33 +480,66 @@ export async function minecraft_survival_routine(
         results.push(`Food gathering failed: ${err}`);
       }
     } else {
-      // No animals found - try fishing as emergency fallback
-      console.error("[SurvivalRoutine] No food animals found (checked: cow, pig, chicken, sheep within 128 blocks), attempting fishing");
+      // No animals found - try alternative food sources
+      console.error("[SurvivalRoutine] No food animals found (checked: cow, pig, chicken, sheep within 128 blocks), trying alternatives");
 
-      try {
-        // Check if we have a fishing rod
-        const hasFishingRod = inventory.some(item => item.name === "fishing_rod");
+      // EMERGENCY FALLBACK 1: Hunt zombies for rotten_flesh (better than starving)
+      if (nearbyEntities.includes("zombie")) {
+        console.error("[SurvivalRoutine] Found zombie - hunting for rotten_flesh (emergency food)");
+        try {
+          const fightResult = await botManager.fight(username, "zombie", 6); // flee at 6 HP
+          results.push(`Emergency zombie hunt: ${fightResult}`);
+          await botManager.collectNearbyItems(username);
 
-        if (hasFishingRod) {
-          const fishResult = await botManager.fish(username, 30);
-          results.push(`Emergency fishing: ${fishResult}`);
-        } else {
-          // Try to craft a fishing rod (requires 3 sticks + 2 string)
-          const hasSticks = inventory.some(item => item.name === "stick" && item.count >= 3);
-          const hasString = inventory.some(item => item.name === "string" && item.count >= 2);
+          // Check if we got rotten flesh and eat it immediately if hunger is critical
+          const currentStatus = botManager.getStatus(username);
+          const statusObj = JSON.parse(currentStatus);
+          const hungerMatch = statusObj.hunger?.match(/([\d.]+)\//);
+          const currentHunger = hungerMatch ? parseFloat(hungerMatch[1]) : 20;
 
-          if (hasSticks && hasString) {
-            const craftResult = await botManager.craftItem(username, "fishing_rod", 1);
-            results.push(`Crafted fishing rod: ${craftResult}`);
+          if (currentHunger < 6) {
+            const updatedInventory = botManager.getInventory(username);
+            if (updatedInventory.some(item => item.name === "rotten_flesh")) {
+              console.error("[SurvivalRoutine] Critical hunger - eating rotten_flesh immediately");
+              try {
+                const eatResult = await botManager.eat(username, "rotten_flesh");
+                results.push(`Ate rotten_flesh: ${eatResult}`);
+              } catch (eatErr) {
+                console.error(`[SurvivalRoutine] Failed to eat rotten_flesh: ${eatErr}`);
+              }
+            }
+          }
+        } catch (err) {
+          results.push(`Emergency zombie hunt failed: ${err}`);
+        }
+      } else {
+        // EMERGENCY FALLBACK 2: Try fishing
+        console.error("[SurvivalRoutine] No zombies nearby, attempting fishing");
+        try {
+          // Check if we have a fishing rod
+          const hasFishingRod = inventory.some(item => item.name === "fishing_rod");
 
+          if (hasFishingRod) {
             const fishResult = await botManager.fish(username, 30);
             results.push(`Emergency fishing: ${fishResult}`);
           } else {
-            results.push("No food sources found. Need: animals nearby OR fishing rod OR (3 sticks + 2 string to craft rod)");
+            // Try to craft a fishing rod (requires 3 sticks + 2 string)
+            const hasSticks = inventory.some(item => item.name === "stick" && item.count >= 3);
+            const hasString = inventory.some(item => item.name === "string" && item.count >= 2);
+
+            if (hasSticks && hasString) {
+              const craftResult = await botManager.craftItem(username, "fishing_rod", 1);
+              results.push(`Crafted fishing rod: ${craftResult}`);
+
+              const fishResult = await botManager.fish(username, 30);
+              results.push(`Emergency fishing: ${fishResult}`);
+            } else {
+              results.push("No food sources found. Need: animals nearby OR zombies for rotten_flesh OR fishing rod OR (3 sticks + 2 string to craft rod)");
+            }
           }
+        } catch (err) {
+          results.push(`Emergency fishing failed: ${err}`);
         }
-      } catch (err) {
-        results.push(`Emergency fishing failed: ${err}`);
       }
     }
   }
