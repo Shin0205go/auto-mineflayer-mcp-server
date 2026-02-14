@@ -1,23 +1,21 @@
 {
   "hooks": {
-    "Write": [
+    "PreToolUse": [
       {
-        "matcher": "^(?!src/|\\.claude/skills/).*",
+        "matcher": "Write",
         "hooks": [
           {
             "type": "command",
-            "command": "echo '❌ File creation only allowed in src/ and .claude/skills/' && exit 1"
+            "command": "if echo \"$FILE_PATH\" | grep -qE '^bug-issues/'; then if echo \"$FILE_PATH\" | grep -qE '^bug-issues/(bot3\\.md|README\\.md)$'; then exit 0; else echo '❌ Bot3 can only edit bug-issues/bot3.md' && exit 1; fi; fi; if echo \"$FILE_PATH\" | grep -qE '^(src/|\\.claude/skills/)'; then exit 0; else echo '❌ File creation only allowed in src/, .claude/skills/, and bug-issues/bot3.md' && exit 1; fi"
           }
         ]
-      }
-    ],
-    "Edit": [
+      },
       {
-        "matcher": "^(?!src/|\\.claude/skills/).*",
+        "matcher": "Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "echo '❌ File editing only allowed in src/ and .claude/skills/' && exit 1"
+            "command": "if echo \"$FILE_PATH\" | grep -qE '^bug-issues/'; then if echo \"$FILE_PATH\" | grep -qE '^bug-issues/(bot3\\.md|README\\.md)$'; then exit 0; else echo '❌ Bot3 can only edit bug-issues/bot3.md' && exit 1; fi; fi; if echo \"$FILE_PATH\" | grep -qE '^(src/|\\.claude/skills/)'; then exit 0; else echo '❌ File editing only allowed in src/, .claude/skills/, and bug-issues/bot3.md' && exit 1; fi"
           }
         ]
       }
