@@ -106,10 +106,6 @@ while true; do
 - 敵から逃げる
 - 発見した情報はチャットで共有
 
-## 絶対禁止
-
-- ❌ **ファイル作成・編集禁止**（src/, .claude/skills/, bug-issues/ 以外）
-
 **ゲームプレイとチャット連携に集中！今すぐ minecraft_get_chat_messages() を実行！**
 
 PROMPT
