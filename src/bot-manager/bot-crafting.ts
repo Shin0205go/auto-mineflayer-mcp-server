@@ -254,8 +254,19 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   // CRITICAL: Check if server has item pickup disabled
   // This prevents wasting materials on crafting when items can't be collected
-  if (managed.serverHasItemPickupDisabled === true) {
-    throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafting is impossible on this server as crafted items cannot be collected. Server configuration must be changed to allow item pickup.`);
+  // IMPORTANT: This flag can be stale from previous sessions, so we only block if it was set recently
+  // We assume the flag is valid for 5 minutes (300000ms) before allowing retry
+  const FLAG_VALIDITY_DURATION = 5 * 60 * 1000; // 5 minutes
+  if (managed.serverHasItemPickupDisabled === true && managed.serverHasItemPickupDisabledTimestamp) {
+    const timeSinceSet = Date.now() - managed.serverHasItemPickupDisabledTimestamp;
+    if (timeSinceSet < FLAG_VALIDITY_DURATION) {
+      throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled (detected ${Math.floor(timeSinceSet / 1000)}s ago). Crafting is impossible on this server as crafted items cannot be collected. Server configuration must be changed to allow item pickup.`);
+    } else {
+      // Flag is stale, reset it and allow crafting attempt
+      console.error(`[Craft] serverHasItemPickupDisabled flag is stale (${Math.floor(timeSinceSet / 1000)}s old), resetting and retrying crafting`);
+      managed.serverHasItemPickupDisabled = false;
+      managed.serverHasItemPickupDisabledTimestamp = undefined;
+    }
   }
 
   // Dynamic import of minecraft-data
@@ -848,8 +859,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 console.error(`[Craft] Expected ${itemName}, but inventory has: ${inventoryNames}`);
                 console.error(`[Craft] CRITICAL: Item pickup disabled on server - crafted item lost permanently`);
 
-                // Set flag to prevent future crafting attempts
+                // Set flag to prevent future crafting attempts (with timestamp for expiry)
                 managed.serverHasItemPickupDisabled = true;
+                managed.serverHasItemPickupDisabledTimestamp = Date.now();
 
                 // CRITICAL BUG FIX: Throw error to prevent resource waste
                 // Ingredients were consumed but output is lost - this is a failure, not success
@@ -881,8 +893,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       // Item not in inventory - might have been dropped due to server config
       console.error(`[Craft] ERROR: ${itemName} not found in inventory after crafting - server has item pickup disabled`);
 
-      // Set flag to prevent future crafting attempts
+      // Set flag to prevent future crafting attempts (with timestamp for expiry)
       managed.serverHasItemPickupDisabled = true;
+      managed.serverHasItemPickupDisabledTimestamp = Date.now();
 
       // THROW ERROR instead of returning success - this prevents wasting materials
       throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);

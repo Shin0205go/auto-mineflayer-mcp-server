@@ -42,4 +42,5 @@ export interface ManagedBot {
   thinkingState: ThinkingState;
   particleInterval: NodeJS.Timeout | null;
   serverHasItemPickupDisabled?: boolean;  // Track if server blocks item pickup
+  serverHasItemPickupDisabledTimestamp?: number;  // Timestamp when flag was set (ms since epoch)
 }
