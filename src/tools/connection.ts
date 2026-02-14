@@ -86,7 +86,9 @@ export async function handleConnectionTool(
         await botManager.connect({ host, port, username, version, disableViewer: true });
 
         // Auto-validate survival environment for Game Agents
-        if (agentType === "game") {
+        // Can be disabled with SKIP_VALIDATION=true for debugging
+        const skipValidation = process.env.SKIP_VALIDATION === "true";
+        if (agentType === "game" && !skipValidation) {
           // Import validation function dynamically to avoid circular dependency
           const { minecraft_validate_survival_environment } = await import("./high-level-actions.js");
 
