@@ -237,7 +237,7 @@ export class BotCore extends EventEmitter {
         port: config.port,
         username: config.username,
         version: config.version,
-        checkTimeoutInterval: 60000, // Check for timeout every 60 seconds (default: 30s)
+        checkTimeoutInterval: 120000, // Check for timeout every 120 seconds (default: 30s)
         hideErrors: false, // Show all errors for debugging
       });
 
