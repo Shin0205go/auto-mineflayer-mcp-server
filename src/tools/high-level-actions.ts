@@ -469,7 +469,9 @@ export async function minecraft_survival_routine(
     if (availableAnimal) {
       try {
         // Fight the available food animal
-        const fightResult = await botManager.fight(username, availableAnimal);
+        // CRITICAL: When hunting for food in survival mode, allow fighting even at low HP
+        // because we NEED food to restore health. Set flee threshold to 0 for food animals.
+        const fightResult = await botManager.fight(username, availableAnimal, 0);
         results.push(`Food: ${fightResult}`);
 
         // Collect drops
