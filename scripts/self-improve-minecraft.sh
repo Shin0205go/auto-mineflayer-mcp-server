@@ -31,8 +31,8 @@ cleanup() {
   echo ""
   echo "🛑 [$BOT_NAME] Shutting down..."
   if [ ! -z "$CLAUDE_PID" ] && kill -0 $CLAUDE_PID 2>/dev/null; then
-    # プロセスグループごと殺す
-    kill -- -$CLAUDE_PID 2>/dev/null || kill $CLAUDE_PID 2>/dev/null || true
+    pkill -P $CLAUDE_PID 2>/dev/null || true
+    kill $CLAUDE_PID 2>/dev/null || true
     wait $CLAUDE_PID 2>/dev/null || true
   fi
   echo "🏁 [$BOT_NAME] Self-improvement loop stopped"
@@ -146,12 +146,11 @@ PROMPT
   echo "   Log: $LOGFILE"
 
   # Run Claude with timeout (20 minutes)
-  # setsid で新しいプロセスグループを作成（確実にkillできるように）
-  setsid bash -c "cat /tmp/minecraft_prompt_bot${BOT_ID}.md | claude --dangerously-skip-permissions \
+  cat /tmp/minecraft_prompt_bot${BOT_ID}.md | claude --dangerously-skip-permissions \
     --print \
     --verbose \
     --output-format stream-json \
-    --model $MODEL" > "$LOGFILE" 2>&1 &
+    --model $MODEL > "$LOGFILE" 2>&1 &
   CLAUDE_PID=$!
 
   # Wait up to 1200 seconds (20 minutes)
@@ -171,10 +170,12 @@ PROMPT
   if kill -0 $CLAUDE_PID 2>/dev/null; then
     echo "" | tee -a "$LOGFILE"
     echo "⏱️  Timeout reached (20 minutes), stopping..." | tee -a "$LOGFILE"
-    kill -- -$CLAUDE_PID 2>/dev/null || kill $CLAUDE_PID 2>/dev/null || true
+    pkill -P $CLAUDE_PID 2>/dev/null || true
+    kill $CLAUDE_PID 2>/dev/null || true
     sleep 2
     # まだ残ってたら強制kill
-    kill -9 -- -$CLAUDE_PID 2>/dev/null || kill -9 $CLAUDE_PID 2>/dev/null || true
+    pkill -9 -P $CLAUDE_PID 2>/dev/null || true
+    kill -9 $CLAUDE_PID 2>/dev/null || true
     wait $CLAUDE_PID 2>/dev/null || true
     EXIT_CODE=124
   fi
