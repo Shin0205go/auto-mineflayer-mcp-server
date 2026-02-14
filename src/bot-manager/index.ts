@@ -161,10 +161,10 @@ export class BotManager extends BotCore {
     return await moveToBasic(managed, x, y, z);
   }
 
-  async pillarUp(username: string, height: number = 1): Promise<string> {
+  async pillarUp(username: string, height: number = 1, untilSky: boolean = false): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
-    return await pillarUp(managed, height);
+    return await pillarUp(managed, height, untilSky);
   }
 
   async flee(username: string, distance: number = 20): Promise<string> {

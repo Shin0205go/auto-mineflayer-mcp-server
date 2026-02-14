@@ -27,11 +27,14 @@ minecraft_survival_routine {
 - その他 → **shelter**
 
 ### food（食料確保）
-1. 近くの動物を探索（牛、豚、鶏、羊）
-2. 動物を狩猟（武器があれば装備）
-3. ドロップアイテムを回収
-4. かまどがあれば肉を調理
-5. 動物がいなければ植物性食料を収集
+1. **チェストから食料を取得**（優先）
+   - `minecraft_list_chest` で最寄りのチェスト内容を確認
+   - 食料アイテム（bread, cooked_beef, cooked_porkchop等）があれば `minecraft_take_from_chest` で取得
+2. チェストに食料がない場合のみ、近くの動物を探索（牛、豚、鶏、羊）
+3. 動物を狩猟（武器があれば装備）
+4. ドロップアイテムを回収
+5. かまどがあれば肉を調理
+6. 動物もいなければ植物性食料を収集
 
 ### shelter（シェルター建築）
 1. ベッドの有無を確認
@@ -48,7 +51,8 @@ minecraft_survival_routine {
 ## 自動実行される処理
 
 ### Food ルーチン
-- 近くの動物を自動検索
+- **チェストから食料を自動取得**（最優先）
+- チェストに食料がない場合のみ、近くの動物を自動検索
 - 武器を装備して狩猟
 - ドロップアイテムを回収
 - かまどがあれば肉を調理
@@ -93,6 +97,17 @@ minecraft_survival_routine { priority: "auto" }
 
 ## エラー対応
 
-- `No food sources found`: 探索範囲を広げる、または釣りを検討
+- `No food sources found`: まずチェストを確認（`minecraft_list_chest`）。チェストにも動物もいない場合は釣りを検討
 - `No suitable building materials`: resource-gatheringで木材や石を収集
 - `Crafting failed`: 素材不足 → 収集してから再実行
+
+## サーバー制限への対応
+
+一部のサーバーでは特殊な設定がされている場合があります：
+- **動物がスポーンしない**: チェストから食料を取得するのが唯一の方法
+- **アイテムドロップ無効**: ブロックを壊しても何も落ちない場合、チェストの既存アイテムのみ使用可能
+
+このような環境では、**チェストアクセスツール**が生存の鍵となります：
+1. `minecraft_list_chest` - 最寄りチェストの内容確認
+2. `minecraft_take_from_chest` - 食料・道具の取得
+3. `minecraft_store_in_chest` - 不要品の保管

@@ -13,10 +13,12 @@ import { environmentTools, handleEnvironmentTool } from "./tools/environment.js"
 import { buildingTools, handleBuildingTool } from "./tools/building.js";
 import { coordinationTools, handleCoordinationTool } from "./tools/coordination.js";
 import { craftingTools, handleCraftingTool } from "./tools/crafting.js";
+import { storageTools, handleStorageTool } from "./tools/storage.js";
 import { combatTools, handleCombatTool } from "./tools/combat.js";
 import { learningTools, handleLearningTool } from "./tools/learning.js";
 import { storageTools, handleStorageTool } from "./tools/storage.js";
 import { highLevelActionTools, handleHighLevelActionTool } from "./tools/high-level-actions-mcp.js";
+import { storageTools, handleStorageTool } from "./tools/storage.js";
 import { GAME_AGENT_TOOLS } from "./tool-filters.js";
 import { getAgentType } from "./agent-state.js";
 import { searchTools, TOOL_METADATA } from "./tool-metadata.js";
@@ -29,10 +31,12 @@ const allTools = {
   ...buildingTools,
   ...coordinationTools,
   ...craftingTools,
+  ...storageTools,
   ...combatTools,
   ...learningTools,
   ...storageTools,
   ...highLevelActionTools,
+  ...storageTools,
   // Tool Search
   search_tools: {
     description: "Search for available tools by keyword or category. Use this to discover relevant tools without loading all tool definitions. Categories: connection, info, communication, actions, crafting, learning, coordination, tasks",
@@ -109,6 +113,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       result = await handleCoordinationTool(name, toolArgs);
     } else if (name in craftingTools) {
       result = await handleCraftingTool(name, toolArgs);
+    } else if (name in storageTools) {
+      result = await handleStorageTool(name, toolArgs);
     } else if (name in combatTools) {
       result = await handleCombatTool(name, toolArgs);
     } else if (name in learningTools) {
@@ -117,6 +123,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       result = await handleStorageTool(name, toolArgs);
     } else if (name in highLevelActionTools) {
       result = await handleHighLevelActionTool(name, toolArgs);
+    } else if (name in storageTools) {
+      result = await handleStorageTool(name, toolArgs);
     } else if (name === "search_tools") {
       const query = (toolArgs.query as string) || "";
       const detail = (toolArgs.detail as "brief" | "full") || "brief";
@@ -186,6 +194,17 @@ async function main() {
   await server.connect(transport);
   console.error("Mineflayer MCP Server running on stdio");
 }
+
+// Add global error handlers to prevent crashes
+process.on('uncaughtException', (error) => {
+  console.error('[MCP-Stdio] Uncaught exception:', error);
+  // Don't exit - try to continue running
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[MCP-Stdio] Unhandled rejection at:', promise, 'reason:', reason);
+  // Don't exit - try to continue running
+});
 
 main().catch((error) => {
   console.error("Fatal error:", error);

@@ -106,27 +106,19 @@ export async function collectNearbyItems(managed: ManagedBot): Promise<string> {
         // Very close - move directly THROUGH the item position to force collision pickup
         // Auto-pickup sometimes fails, so we need to move through the item multiple times
 
-        // If TOO close (< 1 block), back away first to ensure proper approach distance
-        if (distance < 1) {
-          console.error(`[CollectItems] Item very close (${distance.toFixed(2)}), backing away to ~2 blocks`);
-          await bot.lookAt(itemPos);
-          bot.setControlState("back", true);
-          await delay(800); // Back away for longer
-          bot.setControlState("back", false);
-          await delay(300);
-          // Update distance after backing away
-          const newDist = bot.entity.position.distanceTo(itemPos);
-          console.error(`[CollectItems] New distance after backing away: ${newDist.toFixed(2)}`);
-        }
+        // DON'T back away if too close - instead move through it aggressively
+        // First approach: Look at item and move forward while jumping (repeat multiple times)
+        for (let pass = 0; pass < 3; pass++) {
+          if (!bot.entities[item.id]) break; // Item collected
 
-        // First approach: Look at item and move forward while jumping
-        await bot.lookAt(itemPos);
-        bot.setControlState("forward", true);
-        bot.setControlState("jump", true);
-        await delay(600);
-        bot.setControlState("forward", false);
-        bot.setControlState("jump", false);
-        await delay(200);
+          await bot.lookAt(itemPos);
+          bot.setControlState("forward", true);
+          bot.setControlState("jump", true);
+          await delay(400);
+          bot.setControlState("forward", false);
+          bot.setControlState("jump", false);
+          await delay(100);
+        }
 
         // Check if item still exists
         if (!bot.entities[item.id]) {
