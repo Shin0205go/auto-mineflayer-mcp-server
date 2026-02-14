@@ -14,6 +14,8 @@ set -e
 # ボットID（引数で指定、デフォルト: 1）
 BOT_ID=${1:-1}
 BOT_NAME="Claude${BOT_ID}"
+# モデル（引数2で指定、デフォルト: sonnet）
+MODEL=${2:-sonnet}
 
 # ログディレクトリ（ボットごとに分離）
 LOG_DIR="agent_logs/bot${BOT_ID}"
@@ -24,6 +26,7 @@ LOOP=0
 
 echo "🎮 Starting Minecraft Self-Improvement Loop"
 echo "   Bot: $BOT_NAME (ID: $BOT_ID)"
+echo "   Model: $MODEL"
 echo "   Log directory: $LOG_DIR"
 echo "   Running infinitely (Ctrl+C to stop)"
 echo ""
@@ -89,11 +92,13 @@ while true; do
 
 ## 絶対禁止
 
-- ファイル読み書き禁止
-- git操作禁止
-- MCP設定変更禁止
+- ❌ **ファイル作成・編集・削除禁止**（Write, Edit, Bashでのファイル操作）
+- ❌ **BUGレポート作成禁止**
+- ❌ git操作禁止
+- ❌ MCP設定変更禁止
+- ❌ Read/Grepでのソースコード読み込み禁止
 
-**今すぐ minecraft_get_status() を実行！**
+**ゲームプレイだけに集中！今すぐ minecraft_get_status() を実行！**
 
 PROMPT
 
@@ -118,7 +123,7 @@ PROMPT
     --print \
     --verbose \
     --output-format stream-json \
-    --model sonnet) > "$LOGFILE" 2>&1 &
+    --model $MODEL) > "$LOGFILE" 2>&1 &
   CLAUDE_PID=$!
 
   # Wait up to 1200 seconds (20 minutes)
