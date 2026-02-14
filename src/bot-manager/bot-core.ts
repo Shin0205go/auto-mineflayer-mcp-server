@@ -460,20 +460,26 @@ export class BotCore extends EventEmitter {
           const reasonStr = typeof reason === 'string' ? reason : JSON.stringify(reason);
           console.error(`[BotManager] ${config.username} disconnected. Reason: ${reasonStr}`);
 
-          // Auto-reconnect after 5 seconds
+          // Auto-reconnect after 30 seconds (prevent rapid reconnect loops)
           const savedConfig = this.connectionConfigs.get(config.username);
           if (savedConfig) {
-            console.error(`[BotManager] Auto-reconnecting ${config.username} in 5 seconds...`);
+            console.error(`[BotManager] Auto-reconnecting ${config.username} in 30 seconds...`);
             setTimeout(() => {
               this.connect(savedConfig).then((result) => {
                 console.error(`[BotManager] Auto-reconnect successful: ${result}`);
               }).catch((error) => {
                 console.error(`[BotManager] Auto-reconnect failed:`, error);
               });
-            }, 5000);
+            }, 30000);
           } else {
             console.error(`[BotManager] No saved config for ${config.username}, skipping auto-reconnect`);
           }
+        });
+
+        bot.on("kicked", (reason, loggedIn) => {
+          const reasonStr = typeof reason === 'string' ? reason : JSON.stringify(reason);
+          console.error(`[BotManager] ${config.username} was KICKED. Reason: ${reasonStr}, LoggedIn: ${loggedIn}`);
+          addEvent("kicked", `Kicked: ${reasonStr}`, { reason: reasonStr, loggedIn });
         });
 
         bot.on("error", (err) => {
