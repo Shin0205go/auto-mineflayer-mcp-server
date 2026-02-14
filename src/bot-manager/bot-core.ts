@@ -29,6 +29,13 @@ export class BotCore extends EventEmitter {
    * Start prismarine-viewer for a bot
    */
   startViewer(username: string): number | null {
+    // Disable viewer in stdio MCP mode to prevent process crashes
+    // Set ENABLE_VIEWER=true to enable viewer
+    if (process.env.ENABLE_VIEWER !== 'true') {
+      console.error(`[BotManager] Viewer disabled (set ENABLE_VIEWER=true to enable)`);
+      return null;
+    }
+
     const managed = this.bots.get(username);
     if (!managed) {
       console.error(`[BotManager] Cannot start viewer: bot '${username}' not found`);
@@ -45,7 +52,16 @@ export class BotCore extends EventEmitter {
     const viewerPort = this.nextViewerPort++;
     try {
       console.error(`[BotManager] Starting viewer for ${username} on port ${viewerPort}...`);
-      mineflayerViewer(managed.bot, { port: viewerPort, firstPerson: true, viewDistance: 6 });
+      const viewer = mineflayerViewer(managed.bot, { port: viewerPort, firstPerson: true, viewDistance: 6 });
+
+      // Handle viewer server errors to prevent process crash
+      if (viewer && viewer.on) {
+        viewer.on('error', (err: Error) => {
+          console.error(`[BotManager] Viewer error on port ${viewerPort}:`, err.message);
+          // Don't crash - just log and continue
+        });
+      }
+
       this.viewerPorts.set(username, viewerPort);
       console.error(`[BotManager] Viewer started at http://localhost:${viewerPort}`);
       return viewerPort;
@@ -324,6 +340,21 @@ export class BotCore extends EventEmitter {
           addEvent("chat", `${username}: ${message}`, { username, message });
         });
 
+        // Listen to all messages including system messages (for gamerule responses, etc.)
+        bot.on("message", (jsonMsg) => {
+          const textMsg = jsonMsg.toString();
+          // Skip if it's a regular chat message (already handled above)
+          if (textMsg.match(/^<.*?>/) || textMsg.startsWith('[')) {
+            return;
+          }
+          // Capture system messages (gamerule responses, server messages, etc.)
+          managedBot.chatMessages.push({
+            username: textMsg,  // Use message text as username for system messages
+            message: textMsg,   // Full message
+            timestamp: Date.now(),
+          });
+        });
+
         // Item collected
         bot.on("playerCollect", (collector, collected) => {
           if (collector.username === config.username) {
@@ -448,12 +479,12 @@ export class BotCore extends EventEmitter {
         });
 
         // Handle disconnection with auto-reconnect
-        bot.on("end", () => {
+        bot.on("end", (reason) => {
           if (managedBot.particleInterval) {
             clearInterval(managedBot.particleInterval);
           }
           this.bots.delete(config.username);
-          console.error(`[BotManager] ${config.username} disconnected`);
+          console.error(`[BotManager] ${config.username} disconnected. Reason:`, reason || "Unknown");
 
           // Auto-reconnect immediately
           const savedConfig = this.connectionConfigs.get(config.username);

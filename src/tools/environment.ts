@@ -185,7 +185,7 @@ export async function handleEnvironmentTool(
 
       diagnostics.push("🔍 Server Configuration Diagnosis\n");
 
-      // 1. Check entity spawning
+      // 1. Check entity spawning - use specific food animals like validation does
       try {
         const entityInfo = botManager.getNearbyEntities(username, 64, "all");
         const entities = JSON.parse(entityInfo);
@@ -193,12 +193,24 @@ export async function handleEnvironmentTool(
         const hostiles = entities.filter((e: any) => e.type === "hostile");
         const passives = entities.filter((e: any) => e.type === "passive");
 
+        // Check for actual food animals (same logic as validation)
+        const foodAnimals = ["cow", "pig", "chicken", "sheep", "rabbit"];
+        let foodAnimalCount = 0;
+        for (const animal of foodAnimals) {
+          const found = entities.filter((e: any) =>
+            e.name && e.name.toLowerCase().includes(animal)
+          );
+          foodAnimalCount += found.length;
+        }
+
         diagnostics.push(`📊 Entity Spawn Status:`);
         diagnostics.push(`  - Hostile mobs: ${hostiles.length}`);
-        diagnostics.push(`  - Passive mobs (animals): ${passives.length}`);
+        diagnostics.push(`  - Passive mobs (all): ${passives.length}`);
+        diagnostics.push(`  - Food animals (cow/pig/chicken/sheep/rabbit): ${foodAnimalCount}`);
 
-        if (hostiles.length > 0 && passives.length === 0) {
-          diagnostics.push(`  ⚠️ WARNING: Animals not spawning! Hostile mobs exist but no passive mobs.`);
+        if (hostiles.length > 0 && foodAnimalCount === 0) {
+          diagnostics.push(`  ⚠️ WARNING: Food animals not spawning! Hostile mobs exist but no food sources.`);
+          diagnostics.push(`  Note: ${passives.length} passive mobs detected (may be bats, squid, etc.)`);
           diagnostics.push(`  Possible cause: /gamerule doMobSpawning issue or passive mob spawning disabled`);
           diagnostics.push(`  Impact: Cannot obtain food from animals, wool for beds unavailable`);
 
@@ -206,8 +218,10 @@ export async function handleEnvironmentTool(
             botManager.chat(username, "/gamerule doMobSpawning true");
             diagnostics.push(`  🔧 Attempted fix: /gamerule doMobSpawning true`);
           }
+        } else if (foodAnimalCount > 0) {
+          diagnostics.push(`  ✅ Food animal spawning appears normal`);
         } else if (passives.length > 0) {
-          diagnostics.push(`  ✅ Passive mob spawning appears normal`);
+          diagnostics.push(`  ⚠️ Passive mobs exist but no food animals found (may be bats, squid, etc.)`);
         }
       } catch (error) {
         diagnostics.push(`  ❌ Failed to check entity spawning: ${error}`);
@@ -262,6 +276,15 @@ export async function handleEnvironmentTool(
               } else {
                 diagnostics.push(`  ⚠️ WARNING: Block broke but no item spawned`);
                 diagnostics.push(`  Possible cause: /gamerule doTileDrops false`);
+
+                if (auto_fix) {
+                  botManager.chat(username, "/gamerule doTileDrops true");
+                  botManager.chat(username, "/gamerule doMobLoot true");
+                  botManager.chat(username, "/gamerule doEntityDrops true");
+                  diagnostics.push(`  🔧 Attempted fix: /gamerule doTileDrops true`);
+                  diagnostics.push(`  🔧 Attempted fix: /gamerule doMobLoot true`);
+                  diagnostics.push(`  🔧 Attempted fix: /gamerule doEntityDrops true`);
+                }
               }
             }
           } else {

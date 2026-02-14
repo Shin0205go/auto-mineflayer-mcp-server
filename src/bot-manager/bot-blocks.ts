@@ -89,19 +89,46 @@ export async function placeBlock(
     };
   }
 
-  // Equip the block
+  // Equip the block (skip if already equipped)
   try {
-    await bot.equip(blockItem, "hand");
+    const currentHand = bot.heldItem;
+    if (!currentHand || currentHand.type !== blockItem.type) {
+      await bot.equip(blockItem, "hand");
+    }
   } catch (err) {
     return { success: false, message: `Failed to equip ${blockType}: ${err}` };
+  }
+
+  // Check if target position is already occupied
+  const targetBlock = bot.blockAt(targetPos);
+  if (targetBlock && targetBlock.name !== "air") {
+    return {
+      success: false,
+      message: `Target position (${x}, ${y}, ${z}) is already occupied by ${targetBlock.name}. Choose an empty (air) position.`
+    };
   }
 
   // Find a reference block to place against
   const referenceBlock = findReferenceBlock(bot, targetPos);
   if (!referenceBlock) {
+    // Provide detailed debugging info about surrounding blocks
+    const surroundingBlocks = [];
+    const offsets = [
+      { pos: new Vec3(0, -1, 0), dir: "below" },
+      { pos: new Vec3(0, 1, 0), dir: "above" },
+      { pos: new Vec3(-1, 0, 0), dir: "west" },
+      { pos: new Vec3(1, 0, 0), dir: "east" },
+      { pos: new Vec3(0, 0, -1), dir: "north" },
+      { pos: new Vec3(0, 0, 1), dir: "south" }
+    ];
+    for (const { pos, dir } of offsets) {
+      const checkPos = targetPos.plus(pos);
+      const block = bot.blockAt(checkPos);
+      surroundingBlocks.push(`${dir}:${block?.name || "null"}`);
+    }
     return {
       success: false,
-      message: `No adjacent block to place against at (${x}, ${y}, ${z})`
+      message: `No adjacent solid block to place against at (${x}, ${y}, ${z}). Surrounding blocks: ${surroundingBlocks.join(", ")}. Need at least one solid block adjacent to target position.`
     };
   }
 
@@ -719,8 +746,20 @@ export async function digBlock(
       return `Dig seemed to complete but block is still there (${blockAfter.name}). May be protected area.`;
     }
 
-    // Wait for item to spawn (items can take up to 1500ms to spawn on some servers)
-    await delay(1500);
+    // Wait for item to spawn (items can take up to 2000ms to spawn on some servers)
+    // Increased from 1500ms to 2000ms to ensure items have spawned before collection attempts
+    await delay(2000);
+
+    // Check if bot died during dig (e.g., fall damage, lava, mob attack)
+    // After respawn, bot position will have changed dramatically
+    const posAfterDig = bot.entity.position;
+    const posChanged = posAfterDig.distanceTo(new Vec3(x, y, z)) > 50;
+    if (posChanged) {
+      return `⚠️ CRITICAL: Bot position changed dramatically during dig operation! ` +
+        `Expected to be near (${x}, ${y}, ${z}) but now at (${posAfterDig.x.toFixed(1)}, ${posAfterDig.y.toFixed(1)}, ${posAfterDig.z.toFixed(1)}). ` +
+        `This usually indicates bot died and respawned. Check for: fall damage, lava, mob attacks, or other hazards. ` +
+        `Mining operation aborted.` + getBriefStatus(username);
+    }
 
     // Check for nearby item entities on the ground
     // Also scan all entities to diagnose server configuration issues
@@ -776,7 +815,8 @@ export async function digBlock(
           bot.pathfinder.setGoal(goal);
 
           const moveStart = Date.now();
-          while (Date.now() - moveStart < 2000) {
+          // Increased timeout from 2000ms to 5000ms to ensure bot reaches the mined block position
+          while (Date.now() - moveStart < 5000) {
             await delay(100);
             if (bot.entity.position.distanceTo(blockPos) < 1.5) break;
             if (!bot.pathfinder.isMoving()) break;
@@ -855,28 +895,26 @@ export async function digBlock(
       // Check if item entities spawned on the ground
       if (nearbyItems) {
         const itemPos = nearbyItems.position ? nearbyItems.position.toString() : 'unknown';
-        const itemDist = nearbyItems.position ? nearbyItems.position.distanceTo(bot.entity.position).toFixed(2) : '?';
-        return `⚠️ CRITICAL: Dug ${blockName} with ${heldItem} but items dropped on ground and CANNOT BE COLLECTED!\n\n` +
-          `**SERVER CONFIGURATION ISSUE DETECTED**\n` +
-          `Items are spawning but automatic pickup is disabled.\n\n` +
-          `**Diagnosis:**\n` +
-          `- Block broke successfully: ✅\n` +
-          `- Items spawned on ground: ✅ (at ${itemPos}, ${itemDist}m away)\n` +
-          `- Automatic item pickup: ❌ DISABLED\n` +
-          `- Manual collection attempts: Failed (item entity exists but not collectible)\n\n` +
-          `**Likely causes:**\n` +
-          `1. Server plugin (e.g., EssentialsX, WorldGuard, GriefPrevention) blocking item pickup\n` +
-          `2. \`/gamerule doImmediateRespawn true\` preventing item pickup in some server configs\n` +
-          `3. Player gamemode issue (adventure mode can break blocks but not pick items)\n` +
-          `4. Server-side anti-cheat preventing item collection\n` +
-          `5. Custom server modification disabling auto-pickup\n\n` +
-          `**Recommended fixes:**\n` +
-          `- Check server plugins: Disable WorldGuard, EssentialsX, or similar plugins temporarily\n` +
-          `- Verify gamemode: Run \`/gamemode survival\` to ensure proper mode\n` +
-          `- Check player permissions: Ensure bot has item pickup permissions\n` +
-          `- Test with vanilla Minecraft server to isolate the issue\n` +
-          `- Check server logs for item pickup denial messages\n\n` +
-          `**This makes survival gameplay IMPOSSIBLE** - the bot cannot collect any resources.\n\n` +
+        const itemDistNum = nearbyItems.position ? nearbyItems.position.distanceTo(bot.entity.position) : 0;
+        const itemDist = itemDistNum.toFixed(2);
+
+        // Check if items are simply far away due to normal mining distance
+        // Items spawn at block position, which can be up to 4.5 blocks away in survival mode
+        // Auto-pickup radius is only 1 block, so items 2+ blocks away won't auto-collect
+        // This is NORMAL BEHAVIOR, not a server config issue
+        if (itemDistNum > 2.5) {
+          return `⚠️ INFO: Dug ${blockName} but items spawned ${itemDist}m away (outside auto-pickup range). ` +
+            `This is normal when mining from distance. Items are at ${itemPos}. ` +
+            `The collectNearbyItems() function should have collected them - if it didn't, try again or move closer before mining.` +
+            getBriefStatus(username);
+        }
+
+        // Items are close (within 2.5 blocks) but still not collected
+        // This could be a timing issue or server configuration issue
+        // Don't panic - just report the situation calmly
+        return `⚠️ WARNING: Dug ${blockName} with ${heldItem} but items dropped on ground (at ${itemPos}, ${itemDist}m away) were not immediately collected. ` +
+          `The items may still be collectible - try minecraft_collect_items or move closer to the items. ` +
+          `If this happens frequently, it could indicate a server configuration issue (item pickup disabled, plugin blocking collection, or gamemode restrictions). ` +
           getBriefStatus(username);
       }
 
@@ -887,25 +925,10 @@ export async function digBlock(
         ? allNearbyEntities.map(e => `${e.name}(${e.distance}m)`).join(', ')
         : 'none';
 
-      return `⚠️ CRITICAL: Dug ${blockName} with ${heldItem} but NO ITEM DROPPED!\n\n` +
-        `**SERVER CONFIGURATION ISSUE DETECTED**\n` +
-        `Block was successfully broken, but no item entity spawned.\n\n` +
-        `**Diagnosis:**\n` +
-        `- Total entities tracked: ${entityCount}\n` +
-        `- Nearby entities (5 blocks): ${nearbyEntityList}\n` +
-        `- Expected: item entity at mined location\n` +
-        `- Result: NO ITEM ENTITY FOUND\n\n` +
-        `**Likely causes:**\n` +
-        `1. \`/gamerule doTileDrops false\` - blocks don't drop items\n` +
-        `2. \`/gamerule doMobLoot false\` - mobs don't drop loot\n` +
-        `3. Server plugin (e.g., WorldGuard, GriefPrevention) blocking drops\n` +
-        `4. Item despawn rate set to 0 (instant despawn)\n` +
-        `5. Server in creative mode (no drops in creative)\n\n` +
-        `**Recommended fixes:**\n` +
-        `- Check server: \`/gamerule doTileDrops\` and \`/gamerule doMobLoot\` (both should be true)\n` +
-        `- Verify game mode: \`/gamemode survival\`\n` +
-        `- Check server plugins for drop protection\n` +
-        `- Test in different location (may be protected area)\n\n` +
+      return `⚠️ WARNING: Dug ${blockName} with ${heldItem} but no item entity found (expected ${expectedDrop || blockName}). ` +
+        `This could be normal (wrong tool, silk touch needed, etc.) or indicate server configuration issues. ` +
+        `Total entities: ${entityCount}, nearby: ${nearbyEntityList}. ` +
+        `If this happens frequently with the correct tool, check server gamerules (doTileDrops) or plugins. ` +
         getBriefStatus(username);
     }
 

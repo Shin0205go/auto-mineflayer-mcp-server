@@ -709,6 +709,57 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   }
 
   try {
+    // CRITICAL SAFETY CHECK: For valuable items, test item pickup capability BEFORE crafting
+    // Having items in inventory is NOT proof that pickup works NOW - items could be from before config change
+    const valuableItems = ["diamond_pickaxe", "diamond_axe", "diamond_sword", "diamond_shovel", "diamond_hoe",
+                           "diamond_helmet", "diamond_chestplate", "diamond_leggings", "diamond_boots",
+                           "netherite_pickaxe", "netherite_axe", "netherite_sword", "netherite_shovel",
+                           "iron_pickaxe", "iron_axe", "iron_sword", "iron_shovel"];
+
+    if (valuableItems.includes(itemName)) {
+      // Test item pickup by checking if there are any item entities on the ground nearby
+      // If items exist on ground but can't be collected, pickup is disabled
+      const nearbyItems = bot.nearestEntity(entity => {
+        if (entity.name === 'item' && entity.position) {
+          const dist = entity.position.distanceTo(bot.entity.position);
+          return dist < 10;
+        }
+        return false;
+      });
+
+      if (nearbyItems) {
+        // There are items on the ground - this is a red flag
+        // Try to approach them and see if they get auto-collected
+        const itemPos = nearbyItems.position;
+        if (itemPos) {
+          const distToItem = bot.entity.position.distanceTo(itemPos);
+          console.error(`[Craft] SAFETY CHECK: Found items on ground ${distToItem.toFixed(1)}m away. Testing pickup capability...`);
+
+          // If items are very close but still not collected, pickup is clearly disabled
+          if (distToItem < 1.5) {
+            console.error(`[Craft] CRITICAL: Items on ground within pickup range but not collected. Server has item pickup DISABLED.`);
+            throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled (items on ground cannot be collected). Crafting valuable items would permanently waste materials. Use existing tools or change server settings.`);
+          }
+
+          // Warn but allow if items are further away (might just be old drops)
+          console.error(`[Craft] WARNING: Items on ground nearby. If these cannot be collected, crafting will fail and waste materials.`);
+        }
+      }
+
+      console.error(`[Craft] No nearby ground items detected. Proceeding with ${itemName} craft (will verify after).`);
+    }
+
+    if (craftingTable) {
+      console.error(`[Craft] WARNING: Crafting ${itemName} using crafting table. If server has item pickup disabled, ingredients will be lost.`);
+      // For all items, prefer to craft in player inventory if possible to avoid this bug
+      // Try to find 2x2 recipes first
+      const recipes2x2 = bot.recipesAll(item.id, null, null);
+      if (recipes2x2.length > 0) {
+        craftingTable = null;
+        console.error(`[Craft] Using player inventory (2x2) instead to avoid potential item loss`);
+      }
+    }
+
     // Before crafting, ensure we have the exact items needed
     // Sometimes the bot needs specific item types even if we have compatible ones
     // This is a workaround for mineflayer's strict recipe matching
@@ -742,8 +793,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           if (!craftedItemInInventory) {
             console.error(`[Craft] ${itemName} not in inventory after crafting, searching for dropped items...`);
 
-            // Wait longer for item to spawn as entity (800ms to match dig_block timing)
-            await new Promise(resolve => setTimeout(resolve, 800));
+            // Wait longer for item to spawn as entity (increased to 1500ms for slower servers)
+            await new Promise(resolve => setTimeout(resolve, 1500));
 
             // Try to collect any dropped items within 10 blocks
             // Support multiple entity types for items (varies by server/version)
@@ -780,8 +831,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 console.error(`[Craft] collectNearbyItems failed: ${collectErr}`);
               }
 
-              // Additional wait after collection attempt for inventory sync (increased to 2000ms)
-              await new Promise(resolve => setTimeout(resolve, 2000));
+              // Additional wait after collection attempt for inventory sync (increased to 3000ms for slower servers)
+              await new Promise(resolve => setTimeout(resolve, 3000));
 
               // Verify item was actually collected
               const verifyCollected = bot.inventory.items().find(item => item.name === itemName);
@@ -789,11 +840,44 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 // Debug: Show all inventory items to see what we actually have
                 const inventoryNames = bot.inventory.items().map(i => i.name).join(", ");
                 console.error(`[Craft] Expected ${itemName}, but inventory has: ${inventoryNames}`);
-                console.error(`[Craft] CRITICAL: Item pickup disabled on server - crafted item lost permanently`);
 
-                // CRITICAL BUG FIX: Throw error to prevent resource waste
-                // Ingredients were consumed but output is lost - this is a failure, not success
-                throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
+                // Check if items were dropped but collection failed
+                // Re-scan for dropped items to confirm they're still there
+                const stillOnGround = Object.values(bot.entities).filter(
+                  entity => entity.name === "item" && entity.position &&
+                    entity.position.distanceTo(bot.entity.position) < 5
+                );
+
+                if (stillOnGround.length > 0) {
+                  console.error(`[Craft] Items still on ground after collection attempt. Trying manual pickup...`);
+
+                  // Try one more time with explicit movement to item location
+                  for (const itemEntity of stillOnGround.slice(0, 3)) {
+                    if (itemEntity.position) {
+                      try {
+                        await bot.pathfinder.goto(new goals.GoalNear(
+                          itemEntity.position.x,
+                          itemEntity.position.y,
+                          itemEntity.position.z,
+                          0.5
+                        ));
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                      } catch (e) {
+                        console.error(`[Craft] Manual pickup failed: ${e}`);
+                      }
+                    }
+                  }
+
+                  // Final check
+                  const finalCheck = bot.inventory.items().find(item => item.name === itemName);
+                  if (!finalCheck) {
+                    throw new Error(`Cannot craft ${itemName}: Crafted item dropped on ground but could not be collected after multiple attempts. Items may be stuck or inaccessible. Ingredients consumed.`);
+                  }
+                } else {
+                  // No items on ground - they vanished completely
+                  console.error(`[Craft] CRITICAL: Items not on ground and not in inventory - server configuration issue`);
+                  throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
+                }
               }
             } else {
               throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting and no dropped items found nearby. This indicates a server configuration issue or the crafting operation did not complete successfully.`);
@@ -860,6 +944,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
  */
 export async function smeltItem(managed: ManagedBot, itemName: string, count: number = 1): Promise<string> {
   const bot = managed.bot;
+
+  console.error(`[SMELT-DEBUG-2026] Starting smelt: ${itemName} x${count}`);
 
   // Check if bot is still connected
   if (!bot || !bot.entity) {
@@ -965,6 +1051,12 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
   const expectedOutputName = smeltingOutputMap[itemName];
 
   try {
+    // Track initial inventory count for accurate verification (sum ALL stacks)
+    let initialOutputCount = 0;
+    if (expectedOutputName) {
+      const allStacks = bot.inventory.items().filter(i => i.name === expectedOutputName);
+      initialOutputCount = allStacks.reduce((sum, item) => sum + item.count, 0);
+    }
     const furnace = await bot.openFurnace(furnaceBlock);
 
     // Track initial output count for accurate reporting
@@ -972,7 +1064,37 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     const existingOutput = furnace.outputItem();
     if (existingOutput) {
       existingOutputCount = existingOutput.count;
-      await furnace.takeOutput();
+
+      // Check if inventory has space before taking output
+      const inventorySlots = bot.inventory.slots;
+      const emptySlots = inventorySlots.filter((slot, idx) =>
+        idx >= bot.inventory.inventoryStart &&
+        idx < bot.inventory.inventoryEnd &&
+        !slot
+      ).length;
+
+      if (emptySlots === 0) {
+        // Check if we can stack with existing items
+        const canStack = bot.inventory.items().some(item =>
+          item.name === expectedOutputName &&
+          item.count < item.stackSize
+        );
+
+        if (!canStack) {
+          furnace.close();
+          throw new Error(`Inventory full (0 empty slots). Cannot take output from furnace. Drop items first.`);
+        }
+      }
+
+      try {
+        await furnace.takeOutput();
+        // Wait for item to transfer to inventory
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (takeErr) {
+        furnace.close();
+        const takeErrMsg = takeErr instanceof Error ? takeErr.message : String(takeErr);
+        throw new Error(`Cannot take existing output from furnace (inventory may be full): ${takeErrMsg}. Clear inventory space first.`);
+      }
     }
 
     // Put fuel if needed
@@ -980,41 +1102,95 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
       await furnace.putFuel(fuel.type, null, Math.min(fuel.count, 8));
     }
 
+    // Check if furnace input slot is already occupied
+    const existingInput = furnace.inputItem();
+    if (existingInput) {
+      // Try to take existing input first to clear the slot
+      try {
+        await furnace.takeInput();
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (inputErr) {
+        furnace.close();
+        throw new Error(`Furnace input slot occupied with ${existingInput.name} x${existingInput.count}. Cannot add new items. Clear furnace first.`);
+      }
+    }
+
     // Put item to smelt
     const smeltCount = Math.min(count, itemToSmelt.count);
-    await furnace.putInput(itemToSmelt.type, null, smeltCount);
+    try {
+      await furnace.putInput(itemToSmelt.type, null, smeltCount);
+    } catch (putErr) {
+      furnace.close();
+      const putErrMsg = putErr instanceof Error ? putErr.message : String(putErr);
+      throw new Error(`Cannot put ${itemName} into furnace (${putErrMsg}). Inventory may be full or furnace state is invalid. Try dropping some items first.`);
+    }
 
     // Wait for smelting (roughly 10 seconds per item)
-    const waitTime = Math.min(smeltCount * 10000, 60000);
-    await new Promise(resolve => setTimeout(resolve, waitTime));
+    // For multiple items, wait and periodically take output to prevent output slot from filling
+    let totalOutputTaken = 0;
+    const targetCount = smeltCount;
+    const maxWaitTime = targetCount * 12000; // 12 seconds per item (10s smelt + 2s buffer)
+    const startTime = Date.now();
 
-    // Take output and track count
-    const output = furnace.outputItem();
-    let newOutputCount = 0;
-    if (output) {
-      newOutputCount = output.count;
+    // Poll for output items and take them as they become available
+    console.error(`[Smelt] Starting polling loop: targetCount=${targetCount}, maxWaitTime=${maxWaitTime}ms`);
+    while (totalOutputTaken < targetCount && (Date.now() - startTime) < maxWaitTime) {
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Check every 2 seconds
+
+      const output = furnace.outputItem();
+      console.error(`[Smelt] Poll check: output=${output ? `${output.count}x ${output.name}` : 'null'}, totalTaken=${totalOutputTaken}/${targetCount}, elapsed=${Date.now() - startTime}ms`);
+      if (output && output.count > 0) {
+        totalOutputTaken += output.count;
+        await furnace.takeOutput();
+        await new Promise(resolve => setTimeout(resolve, 500)); // Wait for transfer
+        console.error(`[Smelt] Took ${output.count}x output (total: ${totalOutputTaken}/${targetCount})`);
+      }
+    }
+    console.error(`[Smelt] Polling loop finished: totalTaken=${totalOutputTaken}/${targetCount}`);
+
+    // Final check for any remaining output
+    const finalOutput = furnace.outputItem();
+    if (finalOutput && finalOutput.count > 0) {
+      totalOutputTaken += finalOutput.count;
       await furnace.takeOutput();
+      await new Promise(resolve => setTimeout(resolve, 500)); // Wait for transfer
+      console.error(`[Smelt] Final take: ${finalOutput.count}x output (total: ${totalOutputTaken}/${targetCount})`);
     }
 
     furnace.close();
+
+    const newOutputCount = totalOutputTaken;
 
     const totalGained = existingOutputCount + newOutputCount;
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
 
     // Verify that the smelted output actually entered inventory (handle server with item pickup disabled)
     // Check for the item that SHOULD have been produced from smelting
-    if (expectedOutputName && (newOutputCount > 0 || existingOutputCount > 0)) {
-      const outputInInventory = bot.inventory.items().find(i => i.name === expectedOutputName);
-      const inventoryHasOutput = !!outputInInventory;
-      const outputCount = outputInInventory?.count || 0;
+    if (expectedOutputName) {
+      const outputInInventory = bot.inventory.items().filter(i => i.name === expectedOutputName);
+      const finalOutputCount = outputInInventory.reduce((sum, item) => sum + item.count, 0);
+      const actualGained = finalOutputCount - initialOutputCount;
 
       // Always include debug info in message
-      const debugInfo = ` [Expected: ${expectedOutputName}, InInventory: ${inventoryHasOutput}${inventoryHasOutput ? ` (${outputCount}x)` : ''}]`;
+      const debugInfo = ` [Expected: ${expectedOutputName}, Initial: ${initialOutputCount}, Final: ${finalOutputCount}, Gained: ${actualGained}, SmeltCount: ${smeltCount}, TakenFromFurnace: ${totalGained}]`;
 
-      if (!outputInInventory) {
-        // Items were smelted but expected output not in inventory - they must have dropped
-        console.error(`[Smelt] WARNING: ${expectedOutputName} not found in inventory after smelting - may have dropped due to server settings`);
-        return `Smelted ${smeltCount}x ${itemName} (WARNING: ${totalGained}x ${expectedOutputName} may have dropped - server has item pickup disabled). Inventory: ${newInventory}${debugInfo}`;
+      if (outputInInventory.length === 0 && totalGained > 0) {
+        // Items were taken from furnace but expected output not in inventory - they must have dropped
+        console.error(`[Smelt] CRITICAL: ${expectedOutputName} not found in inventory after smelting - output lost permanently`);
+        throw new Error(`Cannot smelt ${itemName}: Server has item pickup disabled or inventory sync failed. ${totalGained}x ${expectedOutputName} was taken from furnace but lost. Raw materials consumed but output disappeared. This indicates a critical server configuration issue.${debugInfo}`);
+      }
+
+      // CRITICAL CHECK: Verify that the expected number of items were actually gained
+      // We should gain exactly what we took from the furnace (newOutputCount, not totalGained)
+      // totalGained includes existingOutputCount which was already in inventory before smelting started
+      if (actualGained < newOutputCount) {
+        console.error(`[Smelt] WARNING: Expected to gain ${newOutputCount}x ${expectedOutputName} but only gained ${actualGained}x`);
+        throw new Error(`Smelting ${itemName} lost items! Expected to gain ${newOutputCount}x ${expectedOutputName} from furnace but only gained ${actualGained}x in inventory. Missing ${newOutputCount - actualGained} items. This indicates a critical bug in the smelting system.${debugInfo}`);
+      }
+
+      // Also warn if we didn't smelt the expected amount
+      if (totalGained < smeltCount) {
+        console.error(`[Smelt] WARNING: Only smelted ${totalGained}x out of ${smeltCount}x items. Smelting may have been incomplete.`);
       }
     }
 
