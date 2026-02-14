@@ -1,5 +1,6 @@
 import { Vec3 } from "vec3";
-import { goals } from "mineflayer-pathfinder";
+import pathfinderPkg from "mineflayer-pathfinder";
+const { goals } = pathfinderPkg;
 import type { ManagedBot } from "./types.js";
 
 /**
