@@ -20,8 +20,8 @@ export async function openChest(
 
   // Move to chest first
   const { goals } = require("mineflayer-pathfinder");
-  const GoalBlock = goals.GoalBlock;
-  await bot.pathfinder.goto(new GoalBlock(chestPos.x, chestPos.y, chestPos.z));
+  const GoalNear = goals.GoalNear;
+  await bot.pathfinder.goto(new GoalNear(chestPos.x, chestPos.y, chestPos.z, 1));
 
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();
@@ -134,8 +134,8 @@ export async function listChest(managed: ManagedBot): Promise<string> {
 
   // Move to chest first
   const { goals } = require("mineflayer-pathfinder");
-  const GoalBlock = goals.GoalBlock;
-  await bot.pathfinder.goto(new GoalBlock(pos.x, pos.y, pos.z));
+  const GoalNear = goals.GoalNear;
+  await bot.pathfinder.goto(new GoalNear(pos.x, pos.y, pos.z, 1));
 
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();
