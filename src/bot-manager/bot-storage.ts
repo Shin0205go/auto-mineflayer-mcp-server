@@ -12,16 +12,18 @@ export async function openChest(
 ): Promise<string> {
   const bot = managed.bot;
   const chestPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
-  const chestBlock = bot.blockAt(chestPos);
-
-  if (!chestBlock || !chestBlock.name.includes("chest")) {
-    throw new Error(`No chest at (${x}, ${y}, ${z}). Found: ${chestBlock?.name || "nothing"}`);
-  }
 
   // Move to chest first
   const { goals } = require("mineflayer-pathfinder");
   const GoalNear = goals.GoalNear;
   await bot.pathfinder.goto(new GoalNear(chestPos.x, chestPos.y, chestPos.z, 1));
+
+  // Re-fetch block after moving (chunk may not have been loaded before)
+  const chestBlock = bot.blockAt(chestPos);
+
+  if (!chestBlock || !chestBlock.name.includes("chest")) {
+    throw new Error(`No chest at (${x}, ${y}, ${z}). Found: ${chestBlock?.name || "nothing"}`);
+  }
 
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();
