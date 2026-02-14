@@ -14,9 +14,10 @@ const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
  * @returns true if item pickup works, false otherwise
  */
 async function validateItemPickup(bot: any): Promise<boolean> {
-  // Check if we've already validated this session
-  if ((bot as any)._itemPickupValidated !== undefined) {
-    return (bot as any)._itemPickupValidated;
+  // Check if we've already validated this session successfully
+  // Only cache successful validations - retry failed validations to avoid permanent blocking
+  if ((bot as any)._itemPickupValidated === true) {
+    return true;
   }
 
   try {
@@ -39,17 +40,21 @@ async function validateItemPickup(bot: any): Promise<boolean> {
       .filter((i: any) => i.name === testItemName)
       .reduce((sum: number, i: any) => sum + i.count, 0);
 
+    console.log(`[Craft] Testing pickup: ${testItemName} count before=${beforeCount}`);
+
     // Drop 1 item
     await bot.toss(testItem.type, null, 1);
 
-    // Wait shorter time to prevent Minecraft auto-pickup from interfering
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // Wait for item to spawn in world
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     // Count items immediately after drop to establish baseline
     // If auto-pickup is disabled, item should NOT be in inventory yet
     const afterDropCount = bot.inventory.items()
       .filter((i: any) => i.name === testItemName)
       .reduce((sum: number, i: any) => sum + i.count, 0);
+
+    console.log(`[Craft] After drop: ${testItemName} count=${afterDropCount}`);
 
     // If item already returned to inventory, auto-pickup is working (good!)
     if (afterDropCount >= beforeCount) {
@@ -59,21 +64,38 @@ async function validateItemPickup(bot: any): Promise<boolean> {
     }
 
     // Item is not in inventory - try manual collection
+    console.log(`[Craft] Attempting manual collection...`);
     const { collectNearbyItems } = await import("./bot-items.js");
-    await collectNearbyItems(bot);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    const collectResult = await collectNearbyItems(bot);
+    console.log(`[Craft] Collection result: ${collectResult}`);
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Count items after attempting manual pickup
     const afterCount = bot.inventory.items()
       .filter((i: any) => i.name === testItemName)
       .reduce((sum: number, i: any) => sum + i.count, 0);
 
+    console.log(`[Craft] After collection: ${testItemName} count=${afterCount}`);
+
     // If we recovered the item through manual collection, pickup works
     const pickupWorks = (afterCount >= beforeCount);
     (bot as any)._itemPickupValidated = pickupWorks;
 
     if (!pickupWorks) {
-      console.error(`[Craft] Item pickup validation FAILED: dropped ${testItemName} but could not collect it`);
+      console.error(`[Craft] Item pickup validation FAILED: dropped ${testItemName} (before=${beforeCount}, after=${afterCount})`);
+      console.error(`[Craft] This may be a timing issue. Trying one more time with longer wait...`);
+
+      // One more attempt with longer wait
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const finalCount = bot.inventory.items()
+        .filter((i: any) => i.name === testItemName)
+        .reduce((sum: number, i: any) => sum + i.count, 0);
+
+      if (finalCount >= beforeCount) {
+        console.log(`[Craft] Item pickup validation PASSED on retry (finalCount=${finalCount})`);
+        (bot as any)._itemPickupValidated = true;
+        return true;
+      }
     } else {
       console.log(`[Craft] Item pickup validation PASSED`);
     }
@@ -861,13 +883,23 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   // PRE-FLIGHT CHECK: Verify item pickup is enabled on server
   // This prevents resource waste by testing pickup capability before crafting
-  const canPickupItems = await validateItemPickup(bot);
-  if (!canPickupItems) {
-    throw new Error(
-      `Cannot craft ${itemName}: Server has item pickup disabled. ` +
-      `Crafting would consume materials permanently without receiving the item. ` +
-      `Contact server admin to enable item pickup for this bot.`
-    );
+  // Can be disabled with SKIP_PICKUP_CHECK environment variable for testing
+  const skipPickupCheck = process.env.SKIP_PICKUP_CHECK === 'true';
+  if (!skipPickupCheck) {
+    const canPickupItems = await validateItemPickup(bot);
+    if (!canPickupItems) {
+      console.warn(
+        `[Craft] Item pickup validation failed for ${itemName}. ` +
+        `Set SKIP_PICKUP_CHECK=true to bypass this check (RISKY - items may be lost).`
+      );
+      throw new Error(
+        `Cannot craft ${itemName}: Server has item pickup disabled. ` +
+        `Crafting would consume materials permanently without receiving the item. ` +
+        `Contact server admin to enable item pickup for this bot.`
+      );
+    }
+  } else {
+    console.warn(`[Craft] SKIP_PICKUP_CHECK enabled - bypassing pickup validation (items may be lost)`);
   }
 
   try {
