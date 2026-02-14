@@ -267,6 +267,32 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
 
       if (!bot.entities[item.id]) {
         collectedCount++;
+      } else {
+        // Item still exists - try manual pickup by right-clicking on it
+        // Some servers have auto-pickup disabled and require manual collection
+        console.error(`[CollectItems] Item still exists after movement - trying manual pickup`);
+        try {
+          const itemEntity = bot.entities[item.id];
+          if (itemEntity && itemEntity.position) {
+            // Look at the item and try to activate/use it (right-click)
+            await bot.lookAt(itemEntity.position);
+            await delay(100);
+
+            // Try activating entity (some servers support right-click pickup)
+            if (bot.entity.position.distanceTo(itemEntity.position) < 4) {
+              bot.activateEntity(itemEntity);
+              await delay(300);
+
+              // Check if it worked
+              if (!bot.entities[item.id]) {
+                console.error(`[CollectItems] Manual pickup successful!`);
+                collectedCount++;
+              }
+            }
+          }
+        } catch (manualErr) {
+          console.error(`[CollectItems] Manual pickup failed: ${manualErr}`);
+        }
       }
 
     } catch (error) {
