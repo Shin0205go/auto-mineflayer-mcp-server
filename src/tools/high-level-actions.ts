@@ -829,6 +829,27 @@ export async function minecraft_validate_survival_environment(
   const findings: string[] = [];
   let foodSourcesFound = 0;
 
+  // Check for chests with food (CRITICAL on servers with disabled mob spawning)
+  try {
+    const chestResult = await botManager.listChest(username);
+    if (!chestResult.includes("No chest found")) {
+      // Parse chest contents to check for food items
+      const foodItems = ["bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton",
+                        "cooked_rabbit", "baked_potato", "apple", "golden_apple", "cooked_salmon",
+                        "cooked_cod", "pumpkin_pie", "cookie", "melon_slice", "sweet_berries"];
+
+      const hasFood = foodItems.some(food => chestResult.includes(food));
+      if (hasFood) {
+        findings.push(`✅ Found chest with food items`);
+        foodSourcesFound++;
+      } else {
+        findings.push(`⚠️ Found chest but NO food inside: ${chestResult}`);
+      }
+    }
+  } catch (e) {
+    console.error(`[ValidateEnvironment] Error checking chests:`, e);
+  }
+
   // Check for passive mobs (primary food source)
   // Use smaller search radius initially to avoid timeout
   const quickSearchRadius = Math.min(searchRadius, 50);
@@ -902,15 +923,18 @@ export async function minecraft_validate_survival_environment(
   const header = `\n=== SURVIVAL ENVIRONMENT VALIDATION ===\nCurrent Hunger: ${currentHunger}/20\nSearch Radius: ${quickSearchRadius} blocks (optimized for performance)\n`;
 
   if (foodSourcesFound === 0) {
+    const detailedFindings = findings.length > 0 ? `\nFindings:\n${findings.join("\n")}\n` : `\nFindings:\n- No chests with food found\n- No passive mobs found\n- No edible plants found\n- No fishing viability\n`;
     return header +
       `\n❌ CRITICAL: NO FOOD SOURCES DETECTED\n` +
-      `\nFindings:\n- No passive mobs found\n- No edible plants found\n- No fishing viability\n` +
-      `\n⚠️ WARNING: Survival may be impossible in this environment!\n` +
+      detailedFindings +
+      `\n⚠️ WARNING: Survival is IMPOSSIBLE in this environment!\n` +
       `\nRecommendations:\n` +
-      `1. Check server configuration (mob spawning may be disabled)\n` +
-      `2. Move to a different area with /tp command\n` +
-      `3. Use creative mode or /give commands to obtain food\n` +
-      `4. Enable mob spawning in server.properties (spawn-monsters=true, spawn-animals=true)`;
+      `1. Check for chests with food items using minecraft_list_chest\n` +
+      `2. Check server configuration (mob spawning/item drops may be disabled)\n` +
+      `3. Move to a different area with /tp command\n` +
+      `4. Use creative mode or /give commands to obtain food\n` +
+      `5. Enable required gamerules: /gamerule doMobSpawning true, doTileDrops true\n` +
+      `\n🛑 RECOMMENDATION: Exit and notify admin. This world is unplayable in survival mode.`;
   } else if (foodSourcesFound < 2) {
     return header +
       `\n⚠️ LIMITED FOOD SOURCES (${foodSourcesFound} type found)\n` +

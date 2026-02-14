@@ -273,8 +273,32 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
 
       // Check if target is too far
       const currentDist = currentTarget.position.distanceTo(bot.entity.position);
-      if (currentDist > 6) {
+      if (currentDist > 16) {
         return `Target ${target.name} escaped after ${attacks} attacks (distance: ${currentDist.toFixed(1)} blocks)`;
+      }
+
+      // If target moved away, chase it
+      if (currentDist > 3.5) {
+        const chaseGoal = new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2);
+        bot.pathfinder.setGoal(chaseGoal);
+
+        // Wait briefly for movement
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => {
+            bot.pathfinder.setGoal(null);
+            resolve();
+          }, 1500);
+
+          const checkChase = setInterval(() => {
+            const dist = currentTarget.position.distanceTo(bot.entity.position);
+            if (dist < 3.5 || !bot.pathfinder.isMoving()) {
+              clearInterval(checkChase);
+              clearTimeout(timeout);
+              bot.pathfinder.setGoal(null);
+              resolve();
+            }
+          }, 100);
+        });
       }
 
       // Attack
