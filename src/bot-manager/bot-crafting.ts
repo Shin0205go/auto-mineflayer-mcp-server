@@ -254,20 +254,10 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   // CRITICAL: Check if server has item pickup disabled
   // This prevents wasting materials on crafting when items can't be collected
-  // IMPORTANT: This flag can be a false positive, so we allow retry after 60s or after reconnection
-  // Testing shows that disconnecting and reconnecting clears this flag successfully
+  // IMPORTANT: Do NOT auto-clear this flag - server config issues are permanent until reconnect
   if (managed.serverHasItemPickupDisabled === true && managed.serverHasItemPickupDisabledTimestamp) {
     const timeSinceSet = Date.now() - managed.serverHasItemPickupDisabledTimestamp;
-
-    // Allow retry after 60 seconds (flag may have been false positive)
-    if (timeSinceSet < 60000) {
-      throw new Error(`Cannot craft ${itemName}: Server item pickup recently failed (${Math.floor(timeSinceSet / 1000)}s ago). Wait ${Math.ceil((60000 - timeSinceSet) / 1000)}s or disconnect/reconnect to retry. This prevents wasting materials if pickup is truly broken.`);
-    } else {
-      // Clear flag after 60s to allow retry (may have been temporary issue)
-      console.error(`[Craft] Clearing serverHasItemPickupDisabled flag after ${Math.floor(timeSinceSet / 1000)}s - allowing retry`);
-      managed.serverHasItemPickupDisabled = false;
-      managed.serverHasItemPickupDisabledTimestamp = undefined;
-    }
+    throw new Error(`Cannot craft ${itemName}: Server item pickup recently failed (${Math.floor(timeSinceSet / 1000)}s ago). Disconnect and reconnect to reset this flag. This prevents wasting materials if pickup is truly broken.`);
   }
 
   // Dynamic import of minecraft-data
@@ -826,25 +816,16 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   // CRITICAL FIX: Check for server item pickup disabled BEFORE consuming materials
   // This prevents permanent resource loss when crafted items drop but can't be collected
-  // IMPORTANT: This flag can be a false positive, so we allow retry after timeout
+  // CRITICAL: Do NOT allow retry until disconnect/reconnect - server config is permanent!
   if (managed.serverHasItemPickupDisabled === true && managed.serverHasItemPickupDisabledTimestamp) {
     const timeSinceSet = Date.now() - managed.serverHasItemPickupDisabledTimestamp;
-
-    // Allow retry after 60 seconds (flag may have been false positive)
-    if (timeSinceSet < 60000) {
-      const timeSince = Math.floor(timeSinceSet / 1000);
-      throw new Error(
-        `Cannot craft ${itemName}: Server has item pickup disabled (detected ${timeSince}s ago). ` +
-        `Crafted items will drop on ground and be permanently lost. ` +
-        `Wait ${Math.ceil((60000 - timeSinceSet) / 1000)}s or disconnect/reconnect to retry. ` +
-        `Inventory: ${inventory}`
-      );
-    } else {
-      // Clear flag after 60s to allow retry (may have been temporary issue)
-      console.error(`[Craft] Clearing serverHasItemPickupDisabled flag after ${Math.floor(timeSinceSet / 1000)}s - allowing retry`);
-      managed.serverHasItemPickupDisabled = false;
-      managed.serverHasItemPickupDisabledTimestamp = undefined;
-    }
+    const timeSince = Math.floor(timeSinceSet / 1000);
+    throw new Error(
+      `Cannot craft ${itemName}: Server has item pickup disabled (detected ${timeSince}s ago). ` +
+      `Crafted items will drop on ground and be permanently lost. ` +
+      `Disconnect and reconnect to reset this flag. ` +
+      `Inventory: ${inventory}`
+    );
   }
 
   try {
