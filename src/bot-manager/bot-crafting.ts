@@ -911,6 +911,16 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
       for (const tryRecipe of craftableRecipes) {
         try {
+          // Debug logging
+          console.error(`[Craft] Attempting to craft ${itemName} (iteration ${i+1}/${count})`);
+          console.error(`[Craft] craftingTable=${craftingTable ? `at ${craftingTable.position}` : 'null'}`);
+          console.error(`[Craft] recipe.requiresTable=${tryRecipe.requiresTable}`);
+          console.error(`[Craft] bot position=${bot.entity.position}`);
+          if (craftingTable) {
+            const distance = bot.entity.position.distanceTo(craftingTable.position);
+            console.error(`[Craft] distance to crafting table=${distance.toFixed(2)} blocks`);
+          }
+
           await bot.craft(tryRecipe, 1, craftingTable || undefined);
 
           // Wait for crafting to complete and item transfer
@@ -1054,6 +1064,14 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     return `Crafted ${count}x ${itemName}. Inventory: ${newInventory}` + getBriefStatus(managed);
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
+
+    // If error is windowOpen timeout, suggest placing a new crafting table
+    if (errMsg.includes('windowOpen') && errMsg.includes('timeout')) {
+      const suggestedFix = `The existing crafting table appears to be bugged (windowOpen timeout). ` +
+                          `WORKAROUND: Craft a new crafting_table and place it nearby, then retry. ` +
+                          `This is a known issue with pre-existing crafting tables in some Minecraft worlds.`;
+      throw new Error(`Failed to craft ${itemName}: ${errMsg}. ${suggestedFix}. Inventory: ${inventory}`);
+    }
 
     // If error is about missing ingredients, add more context
     if (errMsg.includes("missing ingredient")) {
