@@ -49,6 +49,70 @@ function getBriefStatus(managed: ManagedBot): string {
 }
 
 /**
+ * Pre-flight check: Verify item pickup is enabled on server
+ * Prevents resource waste by testing pickup capability before crafting
+ * Result is cached per bot session to avoid repeated tests
+ */
+async function validateItemPickup(bot: any): Promise<boolean> {
+  // Check if we've already validated this session
+  if (bot._itemPickupValidated !== undefined) {
+    return bot._itemPickupValidated;
+  }
+
+  try {
+    // Find an expendable item to test with (dirt, cobblestone, or gravel)
+    const testItem = bot.inventory.items().find((i: any) =>
+      i.name === "dirt" || i.name === "cobblestone" || i.name === "gravel"
+    );
+
+    if (!testItem) {
+      // No expendable items to test with - assume pickup works
+      console.log("[ItemPickupValidation] No expendable items found for testing, assuming pickup works");
+      bot._itemPickupValidated = true;
+      return true;
+    }
+
+    console.log(`[ItemPickupValidation] Testing item pickup with ${testItem.name}...`);
+
+    // Count items before dropping
+    const beforeCount = bot.inventory.items()
+      .filter((i: any) => i.name === testItem.name)
+      .reduce((sum: number, i: any) => sum + i.count, 0);
+
+    // Drop 1 item
+    await bot.toss(testItem.type, null, 1);
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Try to pick it back up
+    const { collectNearbyItems } = await import("./bot-items.js");
+    await collectNearbyItems(bot);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Count items after pickup attempt
+    const afterCount = bot.inventory.items()
+      .filter((i: any) => i.name === testItem.name)
+      .reduce((sum: number, i: any) => sum + i.count, 0);
+
+    // If we recovered the item, pickup works
+    const pickupWorks = (afterCount >= beforeCount);
+    bot._itemPickupValidated = pickupWorks;
+
+    if (pickupWorks) {
+      console.log("[ItemPickupValidation] ✅ Item pickup is enabled");
+    } else {
+      console.error("[ItemPickupValidation] ❌ Item pickup is DISABLED - crafting will fail");
+    }
+
+    return pickupWorks;
+
+  } catch (err) {
+    console.error(`[ItemPickupValidation] Test failed: ${err}`);
+    bot._itemPickupValidated = false;
+    return false;
+  }
+}
+
+/**
  * List all craftable items by category
  */
 export async function listAllRecipes(_managed: ManagedBot, category?: string): Promise<string> {
@@ -777,6 +841,17 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   if (recipe.requiresTable && !craftingTable) {
     throw new Error(`${itemName} requires a crafting table nearby (within 4 blocks). Inventory: ${inventory}`);
+  }
+
+  // PRE-FLIGHT CHECK: Verify item pickup is enabled on server
+  // This prevents resource waste by testing pickup capability before crafting
+  const canPickupItems = await validateItemPickup(bot);
+  if (!canPickupItems) {
+    throw new Error(
+      `Cannot craft ${itemName}: Server has item pickup disabled. ` +
+      `Crafting would consume materials permanently without receiving the item. ` +
+      `Contact server admin to enable item pickup for this bot.`
+    );
   }
 
   try {
