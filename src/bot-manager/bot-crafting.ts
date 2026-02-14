@@ -8,6 +8,71 @@ import { isFuelItem } from "./minecraft-utils.js";
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
 
 /**
+ * Validates if the server allows item pickup by dropping and collecting a test item.
+ * Caches result per bot session to avoid repeated testing.
+ * @param bot The mineflayer bot instance
+ * @returns true if item pickup works, false otherwise
+ */
+async function validateItemPickup(bot: any): Promise<boolean> {
+  // Check if we've already validated this session
+  if ((bot as any)._itemPickupValidated !== undefined) {
+    return (bot as any)._itemPickupValidated;
+  }
+
+  try {
+    // Find an expendable item to test with
+    const testItem = bot.inventory.items().find((i: any) =>
+      i.name === "dirt" || i.name === "cobblestone" || i.name === "gravel"
+    );
+
+    if (!testItem) {
+      // No expendable items to test with - assume pickup works
+      console.warn("[Craft] No expendable items to test pickup, assuming it works");
+      (bot as any)._itemPickupValidated = true;
+      return true;
+    }
+
+    const testItemName = testItem.name;
+
+    // Count items before dropping
+    const beforeCount = bot.inventory.items()
+      .filter((i: any) => i.name === testItemName)
+      .reduce((sum: number, i: any) => sum + i.count, 0);
+
+    // Drop 1 item
+    await bot.toss(testItem.type, null, 1);
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Try to pick it back up
+    const { collectNearbyItems } = await import("./bot-items.js");
+    await collectNearbyItems(bot);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Count items after attempting pickup
+    const afterCount = bot.inventory.items()
+      .filter((i: any) => i.name === testItemName)
+      .reduce((sum: number, i: any) => sum + i.count, 0);
+
+    // If we recovered the item, pickup works
+    const pickupWorks = (afterCount >= beforeCount);
+    (bot as any)._itemPickupValidated = pickupWorks;
+
+    if (!pickupWorks) {
+      console.error(`[Craft] Item pickup validation FAILED: dropped ${testItemName} but could not collect it`);
+    } else {
+      console.log(`[Craft] Item pickup validation PASSED`);
+    }
+
+    return pickupWorks;
+
+  } catch (err) {
+    console.error(`[Craft] Item pickup test failed: ${err}`);
+    (bot as any)._itemPickupValidated = false;
+    return false;
+  }
+}
+
+/**
  * Get brief status for appending to responses (Mamba mode only)
  */
 function getBriefStatus(managed: ManagedBot): string {
@@ -781,16 +846,14 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   // PRE-FLIGHT CHECK: Verify item pickup is enabled on server
   // This prevents resource waste by testing pickup capability before crafting
-  // SKIP THIS CHECK - it's unreliable and causes false negatives
-  // Instead, we'll handle pickup failure gracefully in the crafting loop
-  // const canPickupItems = await validateItemPickup(bot);
-  // if (!canPickupItems) {
-  //   throw new Error(
-  //     `Cannot craft ${itemName}: Server has item pickup disabled. ` +
-  //     `Crafting would consume materials permanently without receiving the item. ` +
-  //     `Contact server admin to enable item pickup for this bot.`
-  //   );
-  // }
+  const canPickupItems = await validateItemPickup(bot);
+  if (!canPickupItems) {
+    throw new Error(
+      `Cannot craft ${itemName}: Server has item pickup disabled. ` +
+      `Crafting would consume materials permanently without receiving the item. ` +
+      `Contact server admin to enable item pickup for this bot.`
+    );
+  }
 
   try {
     // Before crafting, ensure we have the exact items needed
