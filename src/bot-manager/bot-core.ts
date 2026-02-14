@@ -455,17 +455,17 @@ export class BotCore extends EventEmitter {
           this.bots.delete(config.username);
           console.error(`[BotManager] ${config.username} disconnected`);
 
-          // Auto-reconnect after 5 seconds
+          // Auto-reconnect immediately
           const savedConfig = this.connectionConfigs.get(config.username);
           if (savedConfig) {
-            console.error(`[BotManager] Auto-reconnecting ${config.username} in 5 seconds...`);
+            console.error(`[BotManager] Auto-reconnecting ${config.username}...`);
             setTimeout(() => {
               this.connect(savedConfig).then((result) => {
                 console.error(`[BotManager] Auto-reconnect successful: ${result}`);
               }).catch((error) => {
                 console.error(`[BotManager] Auto-reconnect failed:`, error);
               });
-            }, 5000);
+            }, 1000); // 5秒 → 1秒に短縮
           }
         });
 

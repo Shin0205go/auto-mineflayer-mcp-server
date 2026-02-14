@@ -1125,11 +1125,24 @@ async function handleRequest(ws: WebSocket, request: JSONRPCRequest): Promise<JS
           };
         }
 
-        // Auto-connect disabled for debugging
-        // const skipAutoConnect = ["minecraft_connect", "minecraft_disconnect", "dev_subscribe", "subscribe_events"].includes(toolName);
-        // if (!skipAutoConnect) {
-        //   // ... auto-connect logic
-        // }
+        // Auto-connect: 未接続の場合、自動的に接続
+        const skipAutoConnect = ["minecraft_connect", "minecraft_disconnect", "dev_subscribe", "subscribe_events", "agent_board_read", "agent_board_write", "agent_board_wait", "agent_board_clear"].includes(toolName);
+        if (!skipAutoConnect && toolName.startsWith("minecraft_")) {
+          const botUsername = connectionBots.get(ws);
+          if (botUsername && !botManager.isConnected(botUsername)) {
+            console.log(`[MCP-WS-Server] Auto-connecting to Minecraft as ${botUsername}...`);
+            try {
+              await handleTool(ws, "minecraft_connect", {
+                host: process.env.MC_HOST || "localhost",
+                port: parseInt(process.env.MC_PORT || "25565"),
+                username: botUsername,
+                agentType: "game"
+              });
+            } catch (err) {
+              console.error(`[MCP-WS-Server] Auto-connect failed:`, err);
+            }
+          }
+        }
 
         const startTime = Date.now();
         const agentName = connectionBots.get(ws) || "unknown";
