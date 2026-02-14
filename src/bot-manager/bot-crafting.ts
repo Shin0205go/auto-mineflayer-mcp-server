@@ -399,16 +399,16 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     }
 
     // Try to get recipes in multiple ways:
-    // 1. Without crafting table (2x2 grid)
-    // 2. With crafting table if available (3x3 grid)
-    // 3. Using different plank types
+    // 1. Without crafting table (2x2 grid) - preferred for stick and crafting_table
+    // 2. With crafting table if available (3x3 grid) - but NEVER for stick or crafting_table
 
     let allRecipes = bot.recipesAll(item.id, null, null);
     let craftingTableBlock = null;
     console.error(`[Craft] recipesAll(${item.id}, null, null) returned ${allRecipes.length} recipes`);
 
-    // If no recipes found, try with crafting table
-    if (allRecipes.length === 0) {
+    // IMPORTANT: stick and crafting_table should NEVER use a crafting table (they're 2x2 recipes)
+    // If no recipes found and it's NOT stick/crafting_table, try with crafting table
+    if (allRecipes.length === 0 && itemName !== "stick" && itemName !== "crafting_table") {
       const craftingTableId = mcData.blocksByName.crafting_table?.id;
       craftingTableBlock = bot.findBlock({
         matching: craftingTableId,
