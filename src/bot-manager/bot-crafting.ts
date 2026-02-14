@@ -254,20 +254,12 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   // CRITICAL: Check if server has item pickup disabled
   // This prevents wasting materials on crafting when items can't be collected
-  // IMPORTANT: This flag should persist for the entire session to prevent repeated material loss
-  // We use a 3-minute validity period to allow for transient issues while still protecting against permanent problems
-  // Reduced from 30min to 3min because false positives (network lag, timing issues) were blocking crafting too long
-  const FLAG_VALIDITY_DURATION = 3 * 60 * 1000; // 3 minutes
+  // IMPORTANT: This flag persists for the ENTIRE SESSION once set - no expiry
+  // If server truly has pickup disabled, retrying just wastes more materials
+  // The only way to reset this is to reconnect to the server
   if (managed.serverHasItemPickupDisabled === true && managed.serverHasItemPickupDisabledTimestamp) {
     const timeSinceSet = Date.now() - managed.serverHasItemPickupDisabledTimestamp;
-    if (timeSinceSet < FLAG_VALIDITY_DURATION) {
-      throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled (detected ${Math.floor(timeSinceSet / 1000)}s ago). Crafting is impossible on this server as crafted items cannot be collected. Server configuration must be changed to allow item pickup.`);
-    } else {
-      // Flag is stale (30+ minutes old), reset it and allow one retry attempt
-      console.error(`[Craft] serverHasItemPickupDisabled flag is stale (${Math.floor(timeSinceSet / 1000)}s old), resetting and retrying crafting`);
-      managed.serverHasItemPickupDisabled = false;
-      managed.serverHasItemPickupDisabledTimestamp = undefined;
-    }
+    throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled (detected ${Math.floor(timeSinceSet / 1000)}s ago). Crafting is impossible on this server as crafted items cannot be collected. Server configuration must be changed to allow item pickup. Disconnect and reconnect if you believe this is a false positive.`);
   }
 
   // Dynamic import of minecraft-data
