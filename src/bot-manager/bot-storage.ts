@@ -18,6 +18,11 @@ export async function openChest(
     throw new Error(`No chest at (${x}, ${y}, ${z}). Found: ${chestBlock?.name || "nothing"}`);
   }
 
+  // Move to chest first
+  const { goals } = require("mineflayer-pathfinder");
+  const GoalBlock = goals.GoalBlock;
+  await bot.pathfinder.goto(new GoalBlock(chestPos.x, chestPos.y, chestPos.z));
+
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();
 
@@ -126,6 +131,12 @@ export async function listChest(managed: ManagedBot): Promise<string> {
   }
 
   const pos = chestBlock.position;
+
+  // Move to chest first
+  const { goals } = require("mineflayer-pathfinder");
+  const GoalBlock = goals.GoalBlock;
+  await bot.pathfinder.goto(new GoalBlock(pos.x, pos.y, pos.z));
+
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();
 
