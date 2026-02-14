@@ -1,12 +1,21 @@
 {
   "hooks": {
-    "Stop": [
+    "PreToolUse": [
       {
-        "matcher": "",
+        "matcher": "Write",
         "hooks": [
           {
             "type": "command",
-            "command": "sleep 2 && tmux send-keys -t $(tmux display-message -p '#{pane_id}') 'agent_board_read で掲示板を確認して、次にやるべきことを考えて実行して。' Enter"
+            "command": "if echo \"$FILE_PATH\" | grep -qE '^bug-issues/'; then if echo \"$FILE_PATH\" | grep -qE '^bug-issues/(bot1\\.md|README\\.md)$'; then exit 0; else echo '❌ Bot1 can only edit bug-issues/bot1.md' && exit 1; fi; fi; if echo \"$FILE_PATH\" | grep -qE '^(src/|\\.claude/skills/)'; then exit 0; else echo '❌ File creation only allowed in src/, .claude/skills/, and bug-issues/bot1.md' && exit 1; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$FILE_PATH\" | grep -qE '^bug-issues/'; then if echo \"$FILE_PATH\" | grep -qE '^bug-issues/(bot1\\.md|README\\.md)$'; then exit 0; else echo '❌ Bot1 can only edit bug-issues/bot1.md' && exit 1; fi; fi; if echo \"$FILE_PATH\" | grep -qE '^(src/|\\.claude/skills/)'; then exit 0; else echo '❌ File editing only allowed in src/, .claude/skills/, and bug-issues/bot1.md' && exit 1; fi"
           }
         ]
       }
