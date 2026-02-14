@@ -468,20 +468,10 @@ export class BotCore extends EventEmitter {
           const reasonStr = typeof reason === 'string' ? reason : JSON.stringify(reason);
           console.error(`[BotManager] ${config.username} disconnected. Reason: ${reasonStr}`);
 
-          // Auto-reconnect after 30 seconds (prevent rapid reconnect loops)
-          const savedConfig = this.connectionConfigs.get(config.username);
-          if (savedConfig) {
-            console.error(`[BotManager] Auto-reconnecting ${config.username} in 30 seconds...`);
-            setTimeout(() => {
-              this.connect(savedConfig).then((result) => {
-                console.error(`[BotManager] Auto-reconnect successful: ${result}`);
-              }).catch((error) => {
-                console.error(`[BotManager] Auto-reconnect failed:`, error);
-              });
-            }, 30000);
-          } else {
-            console.error(`[BotManager] No saved config for ${config.username}, skipping auto-reconnect`);
-          }
+          // Auto-reconnect is disabled - let the caller (Claude Code loop) handle reconnection
+          // This prevents zombie connections when MCP processes are replaced
+          this.connectionConfigs.delete(config.username);
+          console.error(`[BotManager] ${config.username} will not auto-reconnect (managed by caller)`);
         });
 
         bot.on("kicked", (reason, loggedIn) => {
@@ -645,5 +635,6 @@ export class BotCore extends EventEmitter {
       managed.bot.quit();
     }
     this.bots.clear();
+    this.connectionConfigs.clear();
   }
 }
