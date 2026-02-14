@@ -846,6 +846,17 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
       for (const tryRecipe of craftableRecipes) {
         try {
+          // Debug: Log recipe details before attempting craft
+          const recipeDelta = tryRecipe.delta as Array<{ id: number; count: number }>;
+          const recipeIngredients = recipeDelta
+            .filter(d => d.count < 0)
+            .map(d => {
+              const ing = mcData.items[d.id];
+              return `${ing?.name || d.id}x${Math.abs(d.count)}`;
+            })
+            .join(", ");
+          console.error(`[Craft] Attempting recipe: ${recipeIngredients}`);
+
           await bot.craft(tryRecipe, 1, craftingTable || undefined);
 
           // Wait for crafting to complete and item transfer
