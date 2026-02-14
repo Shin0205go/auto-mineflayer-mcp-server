@@ -1,0 +1,34 @@
+🎮 Starting Minecraft Self-Improvement Loop
+   Bot: Claude2 (ID: 2)
+   Model: sonnet
+   Log directory: agent_logs/bot2
+   Running infinitely (Ctrl+C to stop)
+
+⏳ Waiting 20s to avoid connection conflicts...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔄 Claude2 - Loop #1 (commit: 5d746a)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📥 Pulling improvements from other bots...
+Saved working directory and index state On bot2: [Claude2] Auto-stash before loop 1
+From https://github.com/Shin0205go/minecraftAIViewer
+ * branch            bot2       -> FETCH_HEAD
+Already up to date.
+✅ Already up to date
+On branch bot2
+Your branch is up to date with 'origin/bot2'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   .claude/settings.json
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	bot2.out
+
+no changes added to commit (use "git add" and/or "git commit -a")
+Dropped refs/stash@{0} (2771246fd4d34c6cd509e68addc7c011d462dac5)
+
+▶️  Starting Claude Code (Claude2)...
+   Log: agent_logs/bot2/loop_1_5d746a_20260214_173249.log
