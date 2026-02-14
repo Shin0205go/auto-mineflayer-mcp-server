@@ -746,8 +746,9 @@ export async function digBlock(
       return `Dig seemed to complete but block is still there (${blockAfter.name}). May be protected area.`;
     }
 
-    // Wait for item to spawn (items can take up to 1500ms to spawn on some servers)
-    await delay(1500);
+    // Wait for item to spawn (items can take up to 2000ms to spawn on some servers)
+    // Increased from 1500ms to 2000ms to ensure items have spawned before collection attempts
+    await delay(2000);
 
     // Check if bot died during dig (e.g., fall damage, lava, mob attack)
     // After respawn, bot position will have changed dramatically
@@ -814,7 +815,8 @@ export async function digBlock(
           bot.pathfinder.setGoal(goal);
 
           const moveStart = Date.now();
-          while (Date.now() - moveStart < 2000) {
+          // Increased timeout from 2000ms to 5000ms to ensure bot reaches the mined block position
+          while (Date.now() - moveStart < 5000) {
             await delay(100);
             if (bot.entity.position.distanceTo(blockPos) < 1.5) break;
             if (!bot.pathfinder.isMoving()) break;
