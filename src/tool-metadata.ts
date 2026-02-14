@@ -82,6 +82,12 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
   minecraft_equip: { tags: ["items", "equip", "hold", "hand"], category: "items", priority: 6 },
   minecraft_drop_item: { tags: ["items", "drop", "discard"], category: "items", priority: 5 },
 
+  // Storage (Chest)
+  minecraft_list_chest: { tags: ["storage", "chest", "list", "contents", "check"], category: "storage", priority: 7 },
+  minecraft_open_chest: { tags: ["storage", "chest", "open", "view"], category: "storage", priority: 7 },
+  minecraft_take_from_chest: { tags: ["storage", "chest", "take", "withdraw", "get"], category: "storage", priority: 7 },
+  minecraft_store_in_chest: { tags: ["storage", "chest", "store", "deposit", "put"], category: "storage", priority: 7 },
+
   // Building
   minecraft_place_block: { tags: ["building", "place", "build", "construct"], category: "building", priority: 6 },
   minecraft_dig_block: { tags: ["mining", "dig", "break", "mine"], category: "mining", priority: 7 },
