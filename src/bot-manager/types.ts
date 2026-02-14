@@ -41,4 +41,5 @@ export interface ManagedBot {
   gameEvents: GameEvent[];
   thinkingState: ThinkingState;
   particleInterval: NodeJS.Timeout | null;
+  serverHasItemPickupDisabled?: boolean;  // Track if server blocks item pickup
 }

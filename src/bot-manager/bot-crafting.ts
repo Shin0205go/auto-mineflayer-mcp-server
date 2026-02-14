@@ -252,6 +252,12 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     throw new Error("Bot is not connected to the server. Please reconnect.");
   }
 
+  // CRITICAL: Check if server has item pickup disabled
+  // This prevents wasting materials on crafting when items can't be collected
+  if (managed.serverHasItemPickupDisabled === true) {
+    throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafting is impossible on this server as crafted items cannot be collected. Server configuration must be changed to allow item pickup.`);
+  }
+
   // Dynamic import of minecraft-data
   const minecraftData = await import("minecraft-data");
   const mcData = minecraftData.default(bot.version);
@@ -842,6 +848,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 console.error(`[Craft] Expected ${itemName}, but inventory has: ${inventoryNames}`);
                 console.error(`[Craft] CRITICAL: Item pickup disabled on server - crafted item lost permanently`);
 
+                // Set flag to prevent future crafting attempts
+                managed.serverHasItemPickupDisabled = true;
+
                 // CRITICAL BUG FIX: Throw error to prevent resource waste
                 // Ingredients were consumed but output is lost - this is a failure, not success
                 throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
@@ -871,6 +880,10 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     if (!craftedItem) {
       // Item not in inventory - might have been dropped due to server config
       console.error(`[Craft] ERROR: ${itemName} not found in inventory after crafting - server has item pickup disabled`);
+
+      // Set flag to prevent future crafting attempts
+      managed.serverHasItemPickupDisabled = true;
+
       // THROW ERROR instead of returning success - this prevents wasting materials
       throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
     }
