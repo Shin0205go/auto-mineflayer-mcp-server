@@ -254,15 +254,15 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   // CRITICAL: Check if server has item pickup disabled
   // This prevents wasting materials on crafting when items can't be collected
-  // IMPORTANT: This flag can be stale from previous sessions, so we only block if it was set recently
-  // We assume the flag is valid for 5 minutes (300000ms) before allowing retry
-  const FLAG_VALIDITY_DURATION = 5 * 60 * 1000; // 5 minutes
+  // IMPORTANT: This flag should persist for the entire session to prevent repeated material loss
+  // We use a 30-minute validity period to allow for potential server configuration changes
+  const FLAG_VALIDITY_DURATION = 30 * 60 * 1000; // 30 minutes
   if (managed.serverHasItemPickupDisabled === true && managed.serverHasItemPickupDisabledTimestamp) {
     const timeSinceSet = Date.now() - managed.serverHasItemPickupDisabledTimestamp;
     if (timeSinceSet < FLAG_VALIDITY_DURATION) {
       throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled (detected ${Math.floor(timeSinceSet / 1000)}s ago). Crafting is impossible on this server as crafted items cannot be collected. Server configuration must be changed to allow item pickup.`);
     } else {
-      // Flag is stale, reset it and allow crafting attempt
+      // Flag is stale (30+ minutes old), reset it and allow one retry attempt
       console.error(`[Craft] serverHasItemPickupDisabled flag is stale (${Math.floor(timeSinceSet / 1000)}s old), resetting and retrying crafting`);
       managed.serverHasItemPickupDisabled = false;
       managed.serverHasItemPickupDisabledTimestamp = undefined;
