@@ -111,11 +111,12 @@ export async function handleConnectionTool(
             }
 
             if (validationResult.includes("❌ CRITICAL")) {
-              // CRITICAL: Disconnect and throw error to prevent survival gameplay in unplayable environment
-              console.error(`[Connection] CRITICAL validation failure - disconnecting bot`);
-              await botManager.disconnect(username);
-
-              throw new Error(`CRITICAL: Survival environment validation failed!\n\n${validationResult}\n\n🚨 SERVER CONFIGURATION ISSUE DETECTED:\nThe Minecraft server has NO FOOD SOURCES (no passive mob spawning, no edible plants).\nSurvival gameplay is IMPOSSIBLE and will result in starvation death.\n\nREQUIRED ACTIONS:\n1. Request server admin to enable mob spawning (spawn-animals=true in server.properties)\n2. OR use /gamemode creative\n3. OR use /give ${username} bread 64\n4. OR wait for server admin to fix the environment\n\nConnection has been automatically closed to prevent unplayable gameplay.`);
+              // CRITICAL: Log warning but allow connection - bot might have food in inventory
+              // or food might be available further away
+              console.warn(`[Connection] CRITICAL validation warning:\n${validationResult}`);
+              console.warn(`[Connection] Proceeding with connection - bot may need to find food sources`);
+              // Return validation result as part of success message instead of blocking
+              return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})\n\n⚠️ ENVIRONMENT WARNING:\n${validationResult}\n\nConnection allowed - check inventory for food or explore to find food sources.`;
             }
           } catch (validationError) {
             // Validation failed critically - re-throw to block connection
