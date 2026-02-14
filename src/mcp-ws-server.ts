@@ -12,6 +12,7 @@ import { botManager } from "./bot-manager.js";
 import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
 import { learningTools, handleLearningTool } from "./tools/learning.js";
 import { highLevelActionTools, handleHighLevelActionTool } from "./tools/high-level-actions-mcp.js";
+import { GAME_AGENT_TOOLS, AgentType } from "./tool-filters.js";
 
 interface JSONRPCRequest {
   jsonrpc: '2.0';
@@ -33,6 +34,9 @@ interface JSONRPCResponse {
 
 // Track which bot each connection is using (for tool calls)
 const connectionBots = new WeakMap<WebSocket, string>();
+
+// Track agent type for each connection (for tool filtering)
+const connectionAgentTypes = new WeakMap<WebSocket, AgentType>();
 
 // Track which bots each connection is subscribed to (for event notifications)
 const connectionSubscriptions = new WeakMap<WebSocket, Set<string>>();
@@ -82,6 +86,7 @@ const tools = {
         port: { type: "number", default: 25565 },
         username: { type: "string", description: "Bot username (required)" },
         version: { type: "string" },
+        agentType: { type: "string", enum: ["game", "dev"], default: "dev", description: "Agent type: 'game' for Game Agent (basic tools only), 'dev' for Dev Agent (all tools). Default: 'dev' for Claude Code CLI." },
       },
       required: ["username"],
     },
@@ -400,21 +405,25 @@ async function handleTool(
       // Fixed username from env var (set by agent on startup)
       const botUsername = process.env.BOT_USERNAME || (args.username as string);
       const version = args.version as string | undefined;
+      const agentType = (args.agentType as AgentType) || "dev"; // Default to dev for backward compatibility
 
       if (!botUsername) {
         throw new Error("username is required (or set BOT_USERNAME env var)");
       }
 
+      // Store agent type for tool filtering
+      connectionAgentTypes.set(ws, agentType);
+
       // Check if bot already exists (reconnection case)
       if (botManager.isConnected(botUsername)) {
         connectionBots.set(ws, botUsername);
-        console.error(`[MCP-WS-Server] Reconnected WebSocket to existing bot: ${botUsername}`);
+        console.error(`[MCP-WS-Server] Reconnected WebSocket to existing bot: ${botUsername} (agentType: ${agentType})`);
         return `Reconnected to existing bot ${botUsername}`;
       }
 
       const result = await botManager.connect({ host, port, username: botUsername, version });
       connectionBots.set(ws, botUsername);
-      return result;
+      return `${result} (agentType: ${agentType})`;
     }
 
     case "minecraft_disconnect": {
@@ -677,11 +686,17 @@ async function handleRequest(ws: WebSocket, request: JSONRPCRequest): Promise<JS
   try {
     switch (method) {
       case 'tools/list': {
-        const toolList = Object.entries(tools).map(([name, tool]) => ({
-          name,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
-        }));
+        // Filter tools based on agent type
+        const agentType = connectionAgentTypes.get(ws) || "dev";
+        const allowedTools = agentType === "game" ? GAME_AGENT_TOOLS : null;
+
+        const toolList = Object.entries(tools)
+          .filter(([name]) => !allowedTools || allowedTools.has(name))
+          .map(([name, tool]) => ({
+            name,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+          }));
         return { jsonrpc: '2.0', id, result: { tools: toolList } };
       }
 
