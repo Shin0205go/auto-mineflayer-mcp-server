@@ -93,7 +93,10 @@ export class MCPWebSocketClientTransport extends EventEmitter {
           if (!this.connected) {
             reject(error);
           }
-          this.emit('error', error);
+          // Only emit error if there are listeners to prevent unhandled error crash
+          if (this.listenerCount('error') > 0) {
+            this.emit('error', error);
+          }
         });
       } catch (error) {
         reject(error);

@@ -1487,22 +1487,13 @@ export class BotManager extends EventEmitter {
       const waitTime = Math.min(smeltCount * 10000, 60000);
       await new Promise(resolve => setTimeout(resolve, waitTime));
 
-      // Take output - check if inventory has space first
+      // Take output
       const output = furnace.outputItem();
       if (output) {
-        const emptySlots = bot.inventory.emptySlotCount();
-        if (emptySlots === 0) {
-          // Check if we can stack with existing items
-          const existingItem = bot.inventory.items().find(i => i.name === output.name);
-          if (!existingItem || existingItem.count >= 64) {
-            await furnace.close();
-            throw new Error("Inventory full - cannot take smelted items. Drop some items first.");
-          }
-        }
         await furnace.takeOutput();
       }
 
-      await furnace.close();
+      furnace.close();
 
       const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
       return `Smelted ${smeltCount}x ${itemName}. Inventory: ${newInventory}`;
@@ -1623,8 +1614,6 @@ export class BotManager extends EventEmitter {
 
     try {
       await bot.toss(item.type, null, dropCount);
-      // Wait a bit for inventory to update
-      await new Promise(resolve => setTimeout(resolve, 100));
       const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
       return `Dropped ${dropCount}x ${itemName}. Inventory: ${newInventory}`;
     } catch (err) {

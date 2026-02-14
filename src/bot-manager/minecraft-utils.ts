@@ -3,10 +3,27 @@ import type { Bot } from "mineflayer";
 // ========== Dynamic Entity/Block Helpers ==========
 // These use bot.registry for version-correct data instead of hardcoded lists
 
-/** Check if entity is hostile using registry data */
+/** Check if entity is hostile using registry data with fallback list */
 export function isHostileMob(bot: Bot, entityName: string): boolean {
   if (!entityName) return false;
   const name = entityName.toLowerCase();
+
+  // Fallback list of known hostile mobs (for registry inconsistencies)
+  const knownHostileMobs = [
+    "zombie", "skeleton", "creeper", "spider", "cave_spider", "enderman",
+    "witch", "slime", "phantom", "drowned", "husk", "stray", "pillager",
+    "vindicator", "ravager", "vex", "evoker", "guardian", "elder_guardian",
+    "blaze", "ghast", "magma_cube", "wither_skeleton", "piglin_brute",
+    "hoglin", "zoglin", "wither", "ender_dragon", "shulker", "silverfish",
+    "endermite", "warden", "piglin"
+  ];
+
+  // Check fallback list first
+  if (knownHostileMobs.includes(name)) {
+    return true;
+  }
+
+  // Then check registry
   const entityInfo = bot.registry.entitiesByName[name];
   return entityInfo?.type === "hostile";
 }
@@ -34,9 +51,9 @@ export function isFoodItem(bot: Bot, itemName: string): boolean {
   // Check if item has food property in registry
   const item = bot.registry.itemsByName[itemName];
   if (!item) return false;
-  // Common food items end with these suffixes or are known foods
-  const foodPatterns = ["_beef", "_porkchop", "_mutton", "_chicken", "_rabbit",
-    "_cod", "_salmon", "bread", "apple", "carrot", "potato", "beetroot",
+  // Common food items - use patterns that match both with and without prefix
+  const foodPatterns = ["beef", "porkchop", "mutton", "chicken", "rabbit",
+    "cod", "salmon", "bread", "apple", "carrot", "potato", "beetroot",
     "melon_slice", "sweet_berries", "glow_berries", "cookie", "pie", "cake",
     "stew", "soup", "dried_kelp", "rotten_flesh", "spider_eye", "chorus_fruit"];
   return foodPatterns.some(p => itemName.includes(p)) ||

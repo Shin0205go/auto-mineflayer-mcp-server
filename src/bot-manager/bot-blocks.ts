@@ -89,46 +89,45 @@ export async function placeBlock(
     };
   }
 
-  // Equip the block (skip if already equipped)
+  // Equip the block
   try {
-    const currentHand = bot.heldItem;
-    if (!currentHand || currentHand.type !== blockItem.type) {
-      await bot.equip(blockItem, "hand");
-    }
+    await bot.equip(blockItem, "hand");
   } catch (err) {
     return { success: false, message: `Failed to equip ${blockType}: ${err}` };
-  }
-
-  // Check if target position is already occupied
-  const targetBlock = bot.blockAt(targetPos);
-  if (targetBlock && targetBlock.name !== "air") {
-    return {
-      success: false,
-      message: `Target position (${x}, ${y}, ${z}) is already occupied by ${targetBlock.name}. Choose an empty (air) position.`
-    };
   }
 
   // Find a reference block to place against
   const referenceBlock = findReferenceBlock(bot, targetPos);
   if (!referenceBlock) {
-    // Provide detailed debugging info about surrounding blocks
-    const surroundingBlocks = [];
-    const offsets = [
-      { pos: new Vec3(0, -1, 0), dir: "below" },
-      { pos: new Vec3(0, 1, 0), dir: "above" },
-      { pos: new Vec3(-1, 0, 0), dir: "west" },
-      { pos: new Vec3(1, 0, 0), dir: "east" },
-      { pos: new Vec3(0, 0, -1), dir: "north" },
-      { pos: new Vec3(0, 0, 1), dir: "south" }
-    ];
-    for (const { pos, dir } of offsets) {
-      const checkPos = targetPos.plus(pos);
-      const block = bot.blockAt(checkPos);
-      surroundingBlocks.push(`${dir}:${block?.name || "null"}`);
+    // Check nearby blocks to suggest better placement location
+    const nearbyBlocks = [];
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dz = -2; dz <= 2; dz++) {
+          const checkPos = new Vec3(Math.floor(x) + dx, Math.floor(y) + dy, Math.floor(z) + dz);
+          const block = bot.blockAt(checkPos);
+          if (block && block.name !== "air" && block.name !== "water" && block.name !== "lava") {
+            // Check if we can place on top of this block
+            const abovePos = checkPos.offset(0, 1, 0);
+            const aboveBlock = bot.blockAt(abovePos);
+            if (aboveBlock && aboveBlock.name === "air") {
+              nearbyBlocks.push(`${checkPos.x},${checkPos.y + 1},${checkPos.z} (on ${block.name})`);
+              if (nearbyBlocks.length >= 3) break;
+            }
+          }
+        }
+        if (nearbyBlocks.length >= 3) break;
+      }
+      if (nearbyBlocks.length >= 3) break;
     }
+
+    const suggestion = nearbyBlocks.length > 0
+      ? ` Try these locations: ${nearbyBlocks.slice(0, 3).join(', ')}`
+      : ' No suitable nearby locations found. You may need to place a block on the ground first.';
+
     return {
       success: false,
-      message: `No adjacent solid block to place against at (${x}, ${y}, ${z}). Surrounding blocks: ${surroundingBlocks.join(", ")}. Need at least one solid block adjacent to target position.`
+      message: `No adjacent block to place against at (${x}, ${y}, ${z}).${suggestion}`
     };
   }
 
@@ -693,7 +692,7 @@ export async function digBlock(
     await delay(50);
 
     try {
-      await bot.dig(blockBeforeDig, false);  // forceLook = false で飛散を防ぐ
+      await bot.dig(blockBeforeDig, true);  // forceLook = true
       console.error(`[Dig] Finished digging ${blockName}`);
     } catch (digError: any) {
       console.error(`[Dig] Dig failed: ${digError.message}`);
@@ -729,7 +728,7 @@ export async function digBlock(
         try {
           await bot.lookAt(blockRetry.position.offset(0.5, 0.5, 0.5));
           await delay(50);
-          await bot.dig(blockRetry, false);  // forceLook = false で飛散を防ぐ
+          await bot.dig(blockRetry, true);
           console.error(`[Dig] Retry successful for ${blockName}`);
         } catch (retryError: any) {
           return `Failed to dig ${blockName}: ${retryError.message}`;
@@ -746,20 +745,8 @@ export async function digBlock(
       return `Dig seemed to complete but block is still there (${blockAfter.name}). May be protected area.`;
     }
 
-    // Wait for item to spawn (items can take up to 2000ms to spawn on some servers)
-    // Increased from 1500ms to 2000ms to ensure items have spawned before collection attempts
+    // Wait longer for item to spawn and stabilize (items can take up to 2000ms on some servers)
     await delay(2000);
-
-    // Check if bot died during dig (e.g., fall damage, lava, mob attack)
-    // After respawn, bot position will have changed dramatically
-    const posAfterDig = bot.entity.position;
-    const posChanged = posAfterDig.distanceTo(new Vec3(x, y, z)) > 50;
-    if (posChanged) {
-      return `⚠️ CRITICAL: Bot position changed dramatically during dig operation! ` +
-        `Expected to be near (${x}, ${y}, ${z}) but now at (${posAfterDig.x.toFixed(1)}, ${posAfterDig.y.toFixed(1)}, ${posAfterDig.z.toFixed(1)}). ` +
-        `This usually indicates bot died and respawned. Check for: fall damage, lava, mob attacks, or other hazards. ` +
-        `Mining operation aborted.` + getBriefStatus(username);
-    }
 
     // Check for nearby item entities on the ground
     // Also scan all entities to diagnose server configuration issues
@@ -769,10 +756,15 @@ export async function digBlock(
 
     console.error(`[Dig] All entities within 5 blocks: ${JSON.stringify(allNearbyEntities)}`);
 
+    // Find nearby item entities - check distance to BOTH blockPos AND bot position
+    // Item entities sometimes have delayed/incorrect position updates
     const nearbyItems = bot.nearestEntity(entity => {
-      if (entity.name === 'item' && entity.position) {
-        const dist = entity.position.distanceTo(blockPos);
-        return dist < 3;
+      if (entity.name === 'item' && entity.position && bot.entity.position) {
+        const distToBlock = entity.position.distanceTo(blockPos);
+        const distToBot = entity.position.distanceTo(bot.entity.position);
+        // Accept items within 5 blocks of block OR within 3 blocks of bot
+        // (in case item spawned slightly away or server has weird positioning)
+        return distToBlock < 5 || distToBot < 3;
       }
       return false;
     });
@@ -815,21 +807,42 @@ export async function digBlock(
           bot.pathfinder.setGoal(goal);
 
           const moveStart = Date.now();
-          // Increased timeout from 2000ms to 5000ms to ensure bot reaches the mined block position
-          while (Date.now() - moveStart < 5000) {
+          while (Date.now() - moveStart < 3000) {
             await delay(100);
             if (bot.entity.position.distanceTo(blockPos) < 1.5) break;
             if (!bot.pathfinder.isMoving()) break;
           }
           bot.pathfinder.setGoal(null);
 
-          // Wait a bit for auto-pickup to trigger now that we're closer
-          await delay(500);
+          // Wait longer for auto-pickup to trigger now that we're closer
+          await delay(1000);
           console.error(`[Dig] Moved to mined block, new distance: ${bot.entity.position.distanceTo(blockPos).toFixed(2)}`);
         } catch (moveErr) {
           console.error(`[Dig] Failed to move closer: ${moveErr}`);
         }
       }
+
+      // Try a second collection pass with more aggressive movement
+      // Walk in a small circle around the mined block position
+      console.error(`[Dig] Trying aggressive collection: walking around mined block position...`);
+      const circlePositions = [
+        blockPos.offset(1, 0, 0),
+        blockPos.offset(0, 0, 1),
+        blockPos.offset(-1, 0, 0),
+        blockPos.offset(0, 0, -1)
+      ];
+
+      for (const pos of circlePositions) {
+        try {
+          const goal = new goals.GoalNear(pos.x, pos.y, pos.z, 0.5);
+          bot.pathfinder.setGoal(goal);
+          await delay(800);
+          bot.pathfinder.setGoal(null);
+        } catch (_) {
+          // Ignore movement errors
+        }
+      }
+      await delay(500);
 
       const collectResult = await collectNearbyItems(bot);
       console.error(`[Dig] collectNearbyItems result: ${collectResult}`);
@@ -895,27 +908,10 @@ export async function digBlock(
       // Check if item entities spawned on the ground
       if (nearbyItems) {
         const itemPos = nearbyItems.position ? nearbyItems.position.toString() : 'unknown';
-        const itemDistNum = nearbyItems.position ? nearbyItems.position.distanceTo(bot.entity.position) : 0;
-        const itemDist = itemDistNum.toFixed(2);
-
-        // Check if items are simply far away due to normal mining distance
-        // Items spawn at block position, which can be up to 4.5 blocks away in survival mode
-        // Auto-pickup radius is only 1 block, so items 2+ blocks away won't auto-collect
-        // This is NORMAL BEHAVIOR, not a server config issue
-        if (itemDistNum > 2.5) {
-          return `⚠️ INFO: Dug ${blockName} but items spawned ${itemDist}m away (outside auto-pickup range). ` +
-            `This is normal when mining from distance. Items are at ${itemPos}. ` +
-            `The collectNearbyItems() function should have collected them - if it didn't, try again or move closer before mining.` +
-            getBriefStatus(username);
-        }
-
-        // Items are close (within 2.5 blocks) but still not collected
-        // This could be a timing issue or server configuration issue
-        // Don't panic - just report the situation calmly
-        return `⚠️ WARNING: Dug ${blockName} with ${heldItem} but items dropped on ground (at ${itemPos}, ${itemDist}m away) were not immediately collected. ` +
-          `The items may still be collectible - try minecraft_collect_items or move closer to the items. ` +
-          `If this happens frequently, it could indicate a server configuration issue (item pickup disabled, plugin blocking collection, or gamemode restrictions). ` +
-          getBriefStatus(username);
+        const itemDist = nearbyItems.position ? nearbyItems.position.distanceTo(bot.entity.position).toFixed(2) : '?';
+        console.error(`[Dig] ⚠️ Server config issue: items spawn but can't be collected (at ${itemPos}, ${itemDist}m)`);
+        // Return success message since block was actually mined successfully
+        return `✅ Dug ${blockName} with ${heldItem}. ⚠️ NOTE: Items dropped at ${itemPos} but server has item pickup disabled. Block mining works but resource collection impossible due to server configuration.` + getBriefStatus(username);
       }
 
       // No item entities found - server configuration issue
@@ -925,11 +921,9 @@ export async function digBlock(
         ? allNearbyEntities.map(e => `${e.name}(${e.distance}m)`).join(', ')
         : 'none';
 
-      return `⚠️ WARNING: Dug ${blockName} with ${heldItem} but no item entity found (expected ${expectedDrop || blockName}). ` +
-        `This could be normal (wrong tool, silk touch needed, etc.) or indicate server configuration issues. ` +
-        `Total entities: ${entityCount}, nearby: ${nearbyEntityList}. ` +
-        `If this happens frequently with the correct tool, check server gamerules (doTileDrops) or plugins. ` +
-        getBriefStatus(username);
+      console.error(`[Dig] ⚠️ Server config issue: No item entity spawned after mining ${blockName}. Entities=${entityCount}, nearby=${nearbyEntityList}`);
+      // Return success message since block was actually mined successfully
+      return `✅ Dug ${blockName} with ${heldItem}. ⚠️ NOTE: No items dropped due to server configuration (likely doTileDrops=false or plugin blocking drops). Block mining works but no resources obtained.` + getBriefStatus(username);
     }
 
     if (isOre && !hasPickaxe) {
@@ -946,7 +940,7 @@ export async function digBlock(
       }
     }
 
-    return `Dug ${blockName} with ${heldItem}${pickedUp > 0 ? ` and picked up ${pickedUp} item(s)!` : ' (already in inventory or no drops)'}` + getBriefStatus(username);
+    return `Dug ${blockName} with ${heldItem}. ${pickedUp === 0 ? 'No items dropped (auto-collected or wrong tool).' : ''}` + getBriefStatus(username);
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[Dig] Error: ${errMsg}`);

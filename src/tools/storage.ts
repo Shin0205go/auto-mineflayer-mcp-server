@@ -1,23 +1,23 @@
 import { botManager } from "../bot-manager/index.js";
 
 export const storageTools = {
-  minecraft_list_chest: {
-    description: "List contents of the nearest chest within 32 blocks",
-    inputSchema: {
-      type: "object" as const,
-      properties: {},
-      required: [],
-    },
-  },
-
   minecraft_open_chest: {
-    description: "Open a chest at specific coordinates and list its contents",
+    description: "Open a chest and list its contents",
     inputSchema: {
       type: "object" as const,
       properties: {
-        x: { type: "number", description: "X coordinate" },
-        y: { type: "number", description: "Y coordinate" },
-        z: { type: "number", description: "Z coordinate" },
+        x: {
+          type: "number",
+          description: "X coordinate of chest",
+        },
+        y: {
+          type: "number",
+          description: "Y coordinate of chest",
+        },
+        z: {
+          type: "number",
+          description: "Z coordinate of chest",
+        },
       },
       required: ["x", "y", "z"],
     },
@@ -30,11 +30,11 @@ export const storageTools = {
       properties: {
         item_name: {
           type: "string",
-          description: "Item name to take from chest",
+          description: "Item name to take (e.g., 'bread', 'cooked_beef')",
         },
         count: {
           type: "number",
-          description: "Number of items to take (optional, defaults to all)",
+          description: "Number of items to take (default: all)",
         },
       },
       required: ["item_name"],
@@ -48,14 +48,23 @@ export const storageTools = {
       properties: {
         item_name: {
           type: "string",
-          description: "Item name to store in chest",
+          description: "Item name to store",
         },
         count: {
           type: "number",
-          description: "Number of items to store (optional, defaults to all)",
+          description: "Number of items to store (default: all)",
         },
       },
       required: ["item_name"],
+    },
+  },
+
+  minecraft_list_chest: {
+    description: "List contents of nearest chest (within 32 blocks)",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
     },
   },
 };
@@ -65,46 +74,29 @@ export async function handleStorageTool(
   args: Record<string, unknown>
 ): Promise<string> {
   const username = botManager.requireSingleBot();
-  const managed = botManager.getBotByUsername(username);
-  if (!managed) {
-    throw new Error(`Bot ${username} not found`);
-  }
 
   switch (name) {
-    case "minecraft_list_chest": {
-      const { listChest } = await import("../bot-manager/bot-storage.js");
-      return await listChest(managed);
-    }
-
     case "minecraft_open_chest": {
       const x = args.x as number;
       const y = args.y as number;
       const z = args.z as number;
-      if (x === undefined || y === undefined || z === undefined) {
-        throw new Error("x, y, z coordinates are required");
-      }
-      const { openChest } = await import("../bot-manager/bot-storage.js");
-      return await openChest(managed, x, y, z);
+      return await botManager.openChest(username, x, y, z);
     }
 
     case "minecraft_take_from_chest": {
       const itemName = args.item_name as string;
       const count = args.count as number | undefined;
-      if (!itemName) {
-        throw new Error("item_name is required");
-      }
-      const { takeFromChest } = await import("../bot-manager/bot-storage.js");
-      return await takeFromChest(managed, itemName, count);
+      return await botManager.takeFromChest(username, itemName, count);
     }
 
     case "minecraft_store_in_chest": {
       const itemName = args.item_name as string;
       const count = args.count as number | undefined;
-      if (!itemName) {
-        throw new Error("item_name is required");
-      }
-      const { storeInChest } = await import("../bot-manager/bot-storage.js");
-      return await storeInChest(managed, itemName, count);
+      return await botManager.storeInChest(username, itemName, count);
+    }
+
+    case "minecraft_list_chest": {
+      return await botManager.listChest(username);
     }
 
     default:

@@ -16,6 +16,7 @@ import { craftingTools, handleCraftingTool } from "./tools/crafting.js";
 import { storageTools, handleStorageTool } from "./tools/storage.js";
 import { combatTools, handleCombatTool } from "./tools/combat.js";
 import { learningTools, handleLearningTool } from "./tools/learning.js";
+import { storageTools, handleStorageTool } from "./tools/storage.js";
 import { highLevelActionTools, handleHighLevelActionTool } from "./tools/high-level-actions-mcp.js";
 import { storageTools, handleStorageTool } from "./tools/storage.js";
 import { GAME_AGENT_TOOLS } from "./tool-filters.js";
@@ -33,6 +34,7 @@ const allTools = {
   ...storageTools,
   ...combatTools,
   ...learningTools,
+  ...storageTools,
   ...highLevelActionTools,
   ...storageTools,
   // Tool Search
@@ -117,6 +119,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       result = await handleCombatTool(name, toolArgs);
     } else if (name in learningTools) {
       result = await handleLearningTool(name, toolArgs);
+    } else if (name in storageTools) {
+      result = await handleStorageTool(name, toolArgs);
     } else if (name in highLevelActionTools) {
       result = await handleHighLevelActionTool(name, toolArgs);
     } else if (name in storageTools) {

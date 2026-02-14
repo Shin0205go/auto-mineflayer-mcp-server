@@ -1,12 +1,7 @@
 {
   "mcpServers": {
     "mineflayer": {
-      "command": "node",
-      "args": ["dist/index.js"],
-      "env": {
-        "MC_HOST": "localhost",
-        "MC_PORT": "25565"
-      }
+      "url": "ws://localhost:8765"
     }
   }
 }

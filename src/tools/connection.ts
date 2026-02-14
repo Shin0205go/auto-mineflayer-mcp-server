@@ -81,7 +81,43 @@ export async function handleConnectionTool(
       setAgentType(agentType);
 
       try {
-        await botManager.connect({ host, port, username, version });
+        // Disable viewer for stdio MCP connections to avoid port conflicts
+        // Viewer is only useful for WebSocket connections where agents run persistently
+        await botManager.connect({ host, port, username, version, disableViewer: true });
+
+        // Auto-validate survival environment for Game Agents
+        if (agentType === "game") {
+          // Import validation function dynamically to avoid circular dependency
+          const { minecraft_validate_survival_environment } = await import("./high-level-actions.js");
+
+          // Wait 2 seconds for the world to load
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          try {
+            // Check if bot is still connected before validation
+            if (!botManager.isConnected(username)) {
+              console.error(`[Connection] Bot ${username} disconnected before validation could start`);
+              return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})\n\n⚠️ WARNING: Bot disconnected shortly after connection. Validation skipped.`;
+            }
+
+            const validationResult = await minecraft_validate_survival_environment(username, 100);
+
+            // Check if bot is still connected after validation
+            if (!botManager.isConnected(username)) {
+              console.error(`[Connection] Bot ${username} disconnected during validation`);
+              return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})\n\n⚠️ WARNING: Bot disconnected during validation. Results may be incomplete:\n${validationResult}`;
+            }
+
+            if (validationResult.includes("❌ CRITICAL")) {
+              // Return warning with clear instruction to NOT play in survival mode
+              return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})\n\n${validationResult}\n\n🚨 RECOMMENDED ACTION: DO NOT attempt survival gameplay. Either:\n1. Request server admin to enable mob spawning\n2. Use /gamemode creative\n3. Use /give ${username} bread 64\n4. Disconnect and wait for environment fix`;
+            }
+          } catch (validationError) {
+            // Validation failed, but don't block connection
+            console.error(`[Connection] Survival validation failed: ${validationError}`);
+          }
+        }
+
         return `Successfully connected to ${host}:${port} as ${username} (agentType: ${agentType})`;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

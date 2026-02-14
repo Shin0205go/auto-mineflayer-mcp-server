@@ -1,4 +1,6 @@
 import { Vec3 } from "vec3";
+import pkg from "mineflayer-pathfinder";
+const { goals } = pkg;
 import type { ManagedBot } from "./types.js";
 
 /**
@@ -12,31 +14,35 @@ export async function openChest(
 ): Promise<string> {
   const bot = managed.bot;
   const chestPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
-
-  // Check if chest exists first
   const chestBlock = bot.blockAt(chestPos);
+
   if (!chestBlock || !chestBlock.name.includes("chest")) {
     throw new Error(`No chest at (${x}, ${y}, ${z}). Found: ${chestBlock?.name || "nothing"}`);
   }
 
-  // Check current distance
-  const initialDistance = bot.entity.position.distanceTo(chestPos);
+  // Check distance and move closer if needed
+  const distance = bot.entity.position.distanceTo(chestPos);
+  if (distance > 4) {
+    console.error(`[OpenChest] Chest is ${distance.toFixed(1)} blocks away, moving closer...`);
+    const goal = new goals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 3);
+    bot.pathfinder.setGoal(goal);
 
-  // If too far, try to move closer
-  if (initialDistance > 4) {
-    const { goals } = require("mineflayer-pathfinder");
-    const GoalGetToBlock = goals.GoalGetToBlock;
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        bot.pathfinder.setGoal(null);
+        resolve();
+      }, 8000);
 
-    try {
-      await bot.pathfinder.goto(new GoalGetToBlock(chestPos.x, chestPos.y, chestPos.z));
-    } catch (err) {
-      throw new Error(`Chest at (${x}, ${y}, ${z}) is ${initialDistance.toFixed(1)} blocks away and unreachable. Move closer manually first.`);
-    }
+      bot.once("goal_reached", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
 
     // Verify we're close enough now
-    const finalDistance = bot.entity.position.distanceTo(chestPos);
-    if (finalDistance > 4) {
-      throw new Error(`Still too far from chest (${finalDistance.toFixed(1)} blocks). Move closer manually.`);
+    const newDistance = bot.entity.position.distanceTo(chestPos);
+    if (newDistance > 4) {
+      throw new Error(`Could not reach chest. Still ${newDistance.toFixed(1)} blocks away.`);
     }
   }
 
@@ -137,14 +143,14 @@ export async function takeFromChest(
 export async function listChest(managed: ManagedBot): Promise<string> {
   const bot = managed.bot;
 
-  // Find nearby chest (within interaction range)
+  // Find nearby chest
   const chestBlock = bot.findBlock({
     matching: (block) => block.name.includes("chest"),
-    maxDistance: 4,
+    maxDistance: 32,
   });
 
   if (!chestBlock) {
-    return "No chest found within 4 blocks. Move closer to a chest first.";
+    return "No chest found within 32 blocks.";
   }
 
   const pos = chestBlock.position;

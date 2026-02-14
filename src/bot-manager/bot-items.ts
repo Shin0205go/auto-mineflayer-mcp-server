@@ -259,6 +259,32 @@ export async function collectNearbyItems(bot: Bot): Promise<string> {
 
       if (!bot.entities[item.id]) {
         collectedCount++;
+      } else {
+        // Item still exists - try manual pickup by right-clicking on it
+        // Some servers have auto-pickup disabled and require manual collection
+        console.error(`[CollectItems] Item still exists after movement - trying manual pickup`);
+        try {
+          const itemEntity = bot.entities[item.id];
+          if (itemEntity && itemEntity.position) {
+            // Look at the item and try to activate/use it (right-click)
+            await bot.lookAt(itemEntity.position);
+            await delay(100);
+
+            // Try activating entity (some servers support right-click pickup)
+            if (bot.entity.position.distanceTo(itemEntity.position) < 4) {
+              bot.activateEntity(itemEntity);
+              await delay(300);
+
+              // Check if it worked
+              if (!bot.entities[item.id]) {
+                console.error(`[CollectItems] Manual pickup successful!`);
+                collectedCount++;
+              }
+            }
+          }
+        } catch (manualErr) {
+          console.error(`[CollectItems] Manual pickup failed: ${manualErr}`);
+        }
       }
 
     } catch (error) {
@@ -390,8 +416,9 @@ export async function dropItem(bot: Bot, itemName: string, count?: number): Prom
       totalDropped += dropFromThis;
       remaining -= dropFromThis;
 
-      // Small delay to let inventory update
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Increased delay to let server inventory update propagate
+      // Server needs time to sync inventory changes, especially when dropping multiple stacks
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
 
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";

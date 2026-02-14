@@ -1,43 +1,33 @@
-#!/usr/bin/env node
+import mineflayer from 'mineflayer';
 
-/**
- * Simple test to verify Minecraft connection works
- */
+const bot = mineflayer.createBot({
+  host: 'localhost',
+  port: 25565,
+  username: 'TestBot',
+});
 
-import { botManager } from "./dist/bot-manager/index.js";
+bot.once('spawn', () => {
+  console.log('✓ Successfully connected and spawned!');
+  bot.quit();
+  process.exit(0);
+});
 
-async function test() {
-  console.log("Testing Minecraft connection...");
+bot.once('error', (err) => {
+  console.error('✗ Connection error:', err.message);
+  process.exit(1);
+});
 
-  try {
-    const result = await botManager.connect({
-      host: "localhost",
-      port: 25565,
-      username: "TestBot",
-    });
+bot.once('kicked', (reason) => {
+  console.error('✗ Kicked from server:', reason);
+  process.exit(1);
+});
 
-    console.log("✓ Connection successful:", result);
+bot.once('end', (reason) => {
+  console.error('✗ Connection ended:', reason);
+  process.exit(1);
+});
 
-    // Get position
-    const pos = botManager.getPosition("TestBot");
-    console.log("✓ Position:", pos);
-
-    // Get status
-    const status = botManager.getStatus("TestBot");
-    console.log("✓ Status:", status);
-
-    // Wait a bit
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    // Disconnect
-    await botManager.disconnect("TestBot");
-    console.log("✓ Disconnected");
-
-    process.exit(0);
-  } catch (error) {
-    console.error("✗ Error:", error.message);
-    process.exit(1);
-  }
-}
-
-test();
+setTimeout(() => {
+  console.error('✗ Connection timeout after 10 seconds');
+  process.exit(1);
+}, 10000);
