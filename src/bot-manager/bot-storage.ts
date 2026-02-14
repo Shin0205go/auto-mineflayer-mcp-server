@@ -18,6 +18,18 @@ export async function openChest(
     throw new Error(`No chest at (${x}, ${y}, ${z}). Found: ${chestBlock?.name || "nothing"}`);
   }
 
+  // Move close to chest if needed
+  const distance = bot.entity.position.distanceTo(chestPos);
+  if (distance > 4) {
+    const pathfinder = bot.pathfinder;
+    const { GoalNear } = require("mineflayer-pathfinder").goals;
+    await pathfinder.goto(new GoalNear(chestPos.x, chestPos.y, chestPos.z, 2));
+  }
+
+  // Look at chest before opening
+  await bot.lookAt(chestPos.offset(0.5, 0.5, 0.5));
+  await new Promise(resolve => setTimeout(resolve, 500));
+
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();
 
@@ -44,11 +56,11 @@ export async function storeInChest(
   // Find nearby chest
   const chestBlock = bot.findBlock({
     matching: (block) => block.name.includes("chest"),
-    maxDistance: 4,
+    maxDistance: 32,
   });
 
   if (!chestBlock) {
-    throw new Error("No chest within 4 blocks. Place a chest first.");
+    throw new Error("No chest within 32 blocks. Place a chest first.");
   }
 
   // Find item in inventory
@@ -57,6 +69,19 @@ export async function storeInChest(
     const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
     throw new Error(`No ${itemName} in inventory. Have: ${inventory}`);
   }
+
+  // Move close to chest if needed
+  const pos = chestBlock.position;
+  const distance = bot.entity.position.distanceTo(pos);
+  if (distance > 4) {
+    const pathfinder = bot.pathfinder;
+    const { GoalNear } = require("mineflayer-pathfinder").goals;
+    await pathfinder.goto(new GoalNear(pos.x, pos.y, pos.z, 2));
+  }
+
+  // Look at chest before opening
+  await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+  await new Promise(resolve => setTimeout(resolve, 500));
 
   const chest = await bot.openContainer(chestBlock);
   const storeCount = count || item.count;
@@ -82,12 +107,25 @@ export async function takeFromChest(
   // Find nearby chest
   const chestBlock = bot.findBlock({
     matching: (block) => block.name.includes("chest"),
-    maxDistance: 4,
+    maxDistance: 32,
   });
 
   if (!chestBlock) {
-    throw new Error("No chest within 4 blocks.");
+    throw new Error("No chest within 32 blocks.");
   }
+
+  // Move close to chest if needed
+  const pos = chestBlock.position;
+  const distance = bot.entity.position.distanceTo(pos);
+  if (distance > 4) {
+    const pathfinder = bot.pathfinder;
+    const { GoalNear } = require("mineflayer-pathfinder").goals;
+    await pathfinder.goto(new GoalNear(pos.x, pos.y, pos.z, 2));
+  }
+
+  // Look at chest before opening
+  await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+  await new Promise(resolve => setTimeout(resolve, 500));
 
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();
@@ -126,6 +164,19 @@ export async function listChest(managed: ManagedBot): Promise<string> {
   }
 
   const pos = chestBlock.position;
+
+  // Move close to chest if needed
+  const distance = bot.entity.position.distanceTo(pos);
+  if (distance > 4) {
+    const pathfinder = bot.pathfinder;
+    const { GoalNear } = require("mineflayer-pathfinder").goals;
+    await pathfinder.goto(new GoalNear(pos.x, pos.y, pos.z, 2));
+  }
+
+  // Look at chest before opening
+  await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+  await new Promise(resolve => setTimeout(resolve, 500));
+
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();
 
