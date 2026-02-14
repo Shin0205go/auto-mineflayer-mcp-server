@@ -235,18 +235,28 @@ class ClaudeAgent {
       // Rules file doesn't exist yet - that's fine
     }
 
-    // Initial prompt (connection is automatic)
-    const initialPrompt = `Minecraftサーバーに自動接続済み（${MC_HOST}:${MC_PORT} as ${BOT_USERNAME}）
+    // Initial prompt (connection must be done by agent)
+    const initialPrompt = `Connect to Minecraft server and validate survival environment.
 
-## サブエージェント活用
-複雑な作業はTask toolでサブエージェントに委譲可能:
-- iron-mining: 鉄採掘
-- diamond-mining: ダイヤ採掘
-- bed-crafting: ベッド作成
-- nether-gate: ネザーポータル
+## Step 1: Connect
+\`minecraft_connect(host="${MC_HOST}", port=${MC_PORT}, username="${BOT_USERNAME}", agentType="game")\`
 
-${learnedRules ? `## 学習ルール:\n${learnedRules}\n` : ""}
-状況を確認して行動を開始してください。`;
+## Step 2: Validate Environment (CRITICAL)
+\`minecraft_validate_survival_environment(username="${BOT_USERNAME}", searchRadius=100)\`
+
+⚠️ **If validation shows "NO FOOD SOURCES DETECTED":**
+- This server has critical limitations (doTileDrops false, no food animals)
+- **IMMEDIATELY disconnect and stop the agent** using \`minecraft_disconnect()\`
+- **DO NOT attempt to survive** - starvation is inevitable
+- Send chat message first: \`minecraft_chat(message="Environment unplayable: no food sources. Exiting gracefully.")\`
+- Then disconnect to prevent slow starvation death
+
+## Step 3: Only if environment is viable
+- Check status and begin survival activities
+- Use skills for complex tasks: iron-mining, diamond-mining, bed-crafting, nether-gate
+
+${learnedRules ? `## Learned Rules:\n${learnedRules}\n` : ""}`;
+
 
     console.log(`${PREFIX} Starting autonomous loop...`);
     await this.runLoop(initialPrompt);
