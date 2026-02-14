@@ -49,6 +49,70 @@ function getBriefStatus(managed: ManagedBot): string {
 }
 
 /**
+ * Pre-flight check: Verify item pickup is enabled on server
+ * Prevents resource waste by testing pickup capability before crafting
+ * Result is cached per bot session to avoid repeated tests
+ */
+async function validateItemPickup(bot: any): Promise<boolean> {
+  // Check if we've already validated this session
+  if (bot._itemPickupValidated !== undefined) {
+    return bot._itemPickupValidated;
+  }
+
+  try {
+    // Find an expendable item to test with (dirt, cobblestone, or gravel)
+    const testItem = bot.inventory.items().find((i: any) =>
+      i.name === "dirt" || i.name === "cobblestone" || i.name === "gravel"
+    );
+
+    if (!testItem) {
+      // No expendable items to test with - assume pickup works
+      console.log("[ItemPickupValidation] No expendable items found for testing, assuming pickup works");
+      bot._itemPickupValidated = true;
+      return true;
+    }
+
+    console.log(`[ItemPickupValidation] Testing item pickup with ${testItem.name}...`);
+
+    // Count items before dropping
+    const beforeCount = bot.inventory.items()
+      .filter((i: any) => i.name === testItem.name)
+      .reduce((sum: number, i: any) => sum + i.count, 0);
+
+    // Drop 1 item
+    await bot.toss(testItem.type, null, 1);
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Try to pick it back up
+    const { collectNearbyItems } = await import("./bot-items.js");
+    await collectNearbyItems(bot);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Count items after pickup attempt
+    const afterCount = bot.inventory.items()
+      .filter((i: any) => i.name === testItem.name)
+      .reduce((sum: number, i: any) => sum + i.count, 0);
+
+    // If we recovered the item, pickup works
+    const pickupWorks = (afterCount >= beforeCount);
+    bot._itemPickupValidated = pickupWorks;
+
+    if (pickupWorks) {
+      console.log("[ItemPickupValidation] ✅ Item pickup is enabled");
+    } else {
+      console.error("[ItemPickupValidation] ❌ Item pickup is DISABLED - crafting will fail");
+    }
+
+    return pickupWorks;
+
+  } catch (err) {
+    console.error(`[ItemPickupValidation] Test failed: ${err}`);
+    bot._itemPickupValidated = false;
+    return false;
+  }
+}
+
+/**
  * List all craftable items by category
  */
 export async function listAllRecipes(_managed: ManagedBot, category?: string): Promise<string> {
@@ -420,6 +484,77 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     }
   }
 
+  // Special handling for torch to handle coal/charcoal substitution
+  // Torches can be crafted with either coal OR charcoal, but recipes may specify one or the other
+  if (itemName === "torch") {
+    // Find either coal or charcoal in inventory
+    const fuel = inventoryItems.find(i => i.name === "coal" || i.name === "charcoal");
+    const stick = inventoryItems.find(i => i.name === "stick");
+
+    if (!fuel) {
+      throw new Error(`Cannot craft torch: Need coal or charcoal. Craft charcoal by smelting logs, or mine coal ore. Inventory: ${inventory}`);
+    }
+    if (!stick) {
+      throw new Error(`Cannot craft torch: Need stick. Craft sticks from planks first. Inventory: ${inventory}`);
+    }
+
+    // Check counts
+    const fuelCount = inventoryItems.filter(i => i.name === fuel.name).reduce((sum, item) => sum + item.count, 0);
+    const stickCount = inventoryItems.filter(i => i.name === "stick").reduce((sum, item) => sum + item.count, 0);
+
+    if (fuelCount < count || stickCount < count) {
+      throw new Error(`Cannot craft ${count}x torch: Need ${count} ${fuel.name} (have ${fuelCount}) and ${count} stick (have ${stickCount}). Inventory: ${inventory}`);
+    }
+
+    // Get the specific item ID for the fuel we have
+    const fuelItemId = mcData.itemsByName[fuel.name]?.id;
+    if (!fuelItemId) {
+      throw new Error(`Cannot find item ID for ${fuel.name}`);
+    }
+
+    // Get all torch recipes and find one that uses our fuel type (coal or charcoal)
+    const allRecipes = bot.recipesAll(item.id, null, null);
+
+    // Try to find a recipe that uses our specific fuel type
+    let compatibleRecipe = allRecipes.find(recipe => {
+      const delta = recipe.delta as Array<{ id: number; count: number }>;
+      return delta.some(d => {
+        if (d.count >= 0) return false; // Skip output items
+        return d.id === fuelItemId;
+      });
+    });
+
+    if (!compatibleRecipe) {
+      throw new Error(`Cannot craft torch: No compatible recipe found for ${fuel.name}. Have: ${fuelCount}x ${fuel.name}, ${stickCount}x stick. This may be a Minecraft version compatibility issue. Inventory: ${inventory}`);
+    }
+
+    console.error(`[Craft] Attempting to craft ${count}x torch using ${fuel.name} (have ${fuelCount} fuel, ${stickCount} sticks)`);
+
+    try {
+      for (let i = 0; i < count; i++) {
+        await bot.craft(compatibleRecipe, 1, undefined);
+
+        // Wait for crafting to complete (match timing from general crafting path)
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // Additional wait for inventory synchronization
+        await new Promise(resolve => setTimeout(resolve, 700));
+      }
+
+      const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
+      return `Crafted ${count}x torch using ${fuel.name}. Inventory: ${newInventory}` + getBriefStatus(managed);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+
+      // If crafting failed due to ingredient mismatch, provide helpful error
+      if (errMsg.includes("missing ingredient")) {
+        throw new Error(`Failed to craft torch from ${fuel.name}: ${errMsg}. This may be a Minecraft version compatibility issue. Inventory: ${inventory}`);
+      }
+
+      throw new Error(`Failed to craft torch: ${errMsg}. Inventory: ${inventory}`);
+    }
+  }
+
   // Always use recipesAll to get all possible recipes for this item
   // recipesFor sometimes misses valid recipes due to ingredient matching issues
   // First try without crafting table (player inventory 2x2 grid)
@@ -708,6 +843,17 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     throw new Error(`${itemName} requires a crafting table nearby (within 4 blocks). Inventory: ${inventory}`);
   }
 
+  // PRE-FLIGHT CHECK: Verify item pickup is enabled on server
+  // This prevents resource waste by testing pickup capability before crafting
+  const canPickupItems = await validateItemPickup(bot);
+  if (!canPickupItems) {
+    throw new Error(
+      `Cannot craft ${itemName}: Server has item pickup disabled. ` +
+      `Crafting would consume materials permanently without receiving the item. ` +
+      `Contact server admin to enable item pickup for this bot.`
+    );
+  }
+
   try {
     // CRITICAL SAFETY CHECK: For valuable items, test item pickup capability BEFORE crafting
     // Having items in inventory is NOT proof that pickup works NOW - items could be from before config change
@@ -958,7 +1104,7 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
   // Find a furnace nearby
   let furnaceBlock = bot.findBlock({
     matching: mcData.blocksByName.furnace?.id,
-    maxDistance: 4,
+    maxDistance: 8,
   });
 
   // If not nearby, search wider and move to it
@@ -994,7 +1140,7 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
       // Re-check nearby
       furnaceBlock = bot.findBlock({
         matching: mcData.blocksByName.furnace?.id,
-        maxDistance: 4,
+        maxDistance: 8,
       });
     }
   }
@@ -1058,6 +1204,18 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
       initialOutputCount = allStacks.reduce((sum, item) => sum + item.count, 0);
     }
     const furnace = await bot.openFurnace(furnaceBlock);
+
+    // Check if inventory has space for output
+    const emptySlots = bot.inventory.emptySlotCount();
+
+    // Also check if we have existing output items that can stack
+    const existingOutputItem = expectedOutputName ? bot.inventory.items().find(i => i.name === expectedOutputName) : null;
+    const canStackOutput = existingOutputItem && existingOutputItem.count < 64;
+
+    if (emptySlots === 0 && !canStackOutput) {
+      furnace.close();
+      throw new Error("Inventory full - no space for smelted items. Drop or store some items first.");
+    }
 
     // Track initial output count for accurate reporting
     let existingOutputCount = 0;

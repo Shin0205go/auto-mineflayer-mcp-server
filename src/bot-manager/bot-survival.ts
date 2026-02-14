@@ -519,13 +519,30 @@ export async function fish(managed: ManagedBot, duration: number = 30): Promise<
   // Fishing loop
   while (Date.now() - startTime < maxDuration) {
     try {
+      // Take inventory snapshot before fishing
+      const inventoryBefore: Record<string, number> = {};
+      bot.inventory.items().forEach(item => {
+        inventoryBefore[item.name] = (inventoryBefore[item.name] || 0) + item.count;
+      });
+
+      // Fish
       await bot.fish();
-      // Check what was caught (last item in inventory that wasn't there before)
-      const inv = bot.inventory.items();
-      if (inv.length > 0) {
-        const lastItem = inv[inv.length - 1];
-        caughtItems.push(lastItem.name);
-        console.error(`[Fish] Caught: ${lastItem.name}`);
+
+      // Check what changed in inventory
+      const inventoryAfter: Record<string, number> = {};
+      bot.inventory.items().forEach(item => {
+        inventoryAfter[item.name] = (inventoryAfter[item.name] || 0) + item.count;
+      });
+
+      // Find new items
+      for (const itemName in inventoryAfter) {
+        const before = inventoryBefore[itemName] || 0;
+        const after = inventoryAfter[itemName];
+        if (after > before) {
+          caughtItems.push(itemName);
+          console.error(`[Fish] Caught: ${itemName}`);
+          break; // Only one item caught per cast
+        }
       }
     } catch (err) {
       // Fish was interrupted or failed, try again
@@ -689,10 +706,26 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
   const oldHP = bot.health;
   const oldFood = bot.food;
 
-  // Guard: Don't respawn if HP is still okay
-  if (oldHP > 4) {
-    const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
-    return `Refused to respawn: HP is ${oldHP}/20 (still survivable). Try eating, fleeing, or pillar_up first. Inventory: ${inventory}`;
+  // Guard: Only refuse respawn if HP > 10 AND player has food
+  // Allow respawn in desperate situations (HP low, no food, etc.)
+  const inventory = bot.inventory.items();
+  const itemList = inventory.map(i => `${i.name}(${i.count})`).join(", ");
+
+  // Check if player has any food items
+  const foodKeywords = ['food', 'cooked', 'bread', 'apple', 'carrot', 'potato', 'beetroot', 'melon', 'berry', 'stew', 'soup', 'pie', 'cookie', 'cake', 'beef', 'porkchop', 'mutton', 'chicken', 'rabbit', 'cod', 'salmon', 'fish', 'rotten_flesh'];
+  const hasFood = inventory.some(item =>
+    foodKeywords.some(keyword => item.name.toLowerCase().includes(keyword))
+  );
+
+  // Allow respawn if HP ≤ 10 OR no food
+  if (oldHP > 10 && hasFood) {
+    return `Refused to respawn: HP is ${oldHP}/20 (still healthy). Try eating, fleeing, or pillar_up first. Inventory: ${itemList}`;
+  }
+
+  if (oldHP > 10 && !hasFood) {
+    console.error(`[Respawn] Allowing strategic respawn at HP=${oldHP} due to no food in inventory`);
+  } else if (oldHP <= 10) {
+    console.error(`[Respawn] Allowing respawn due to low HP=${oldHP}`);
   }
 
   console.error(`[Respawn] Intentional death requested. Reason: ${reason || "unspecified"}`);

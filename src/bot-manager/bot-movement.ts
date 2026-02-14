@@ -487,7 +487,7 @@ export async function emergencyDigUp(managed: ManagedBot, maxBlocks: number = 30
 /**
  * Pillar up by jump-placing blocks
  */
-export async function pillarUp(managed: ManagedBot, height: number = 1): Promise<string> {
+export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky: boolean = false): Promise<string> {
   const bot = managed.bot;
   const startY = bot.entity.position.y;
 
@@ -520,14 +520,17 @@ export async function pillarUp(managed: ManagedBot, height: number = 1): Promise
     throw new Error(`Cannot pillar up - no scaffold blocks! Need: cobblestone, dirt, stone. Have: ${inv}`);
   }
 
-  const targetHeight = Math.min(height, 15); // Safety limit
+  // If untilSky is true, use scaffoldCount as max (will stop when sky is reached)
+  // Otherwise use the specified height
+  const targetHeight = untilSky ? Math.min(scaffoldCount, 50) : Math.min(height, 15); // Safety limit
 
   // Warn if insufficient blocks for target height
-  if (scaffoldCount < targetHeight) {
+  if (!untilSky && scaffoldCount < targetHeight) {
     console.error(`[Pillar] WARNING: Only ${scaffoldCount} blocks available, but need ${targetHeight}. Will place what we have.`);
   }
 
-  console.error(`[Pillar] Starting: ${targetHeight} blocks from Y=${startY.toFixed(1)}, scaffold count: ${scaffoldCount}`);
+  const modeStr = untilSky ? "until sky" : `${targetHeight} blocks`;
+  console.error(`[Pillar] Starting: ${modeStr} from Y=${startY.toFixed(1)}, scaffold count: ${scaffoldCount}`);
 
   // Stop all movement and digging first
   bot.pathfinder.setGoal(null);
@@ -584,6 +587,23 @@ export async function pillarUp(managed: ManagedBot, height: number = 1): Promise
     const curX = Math.floor(bot.entity.position.x);
     const currentY = Math.floor(bot.entity.position.y);
     const curZ = Math.floor(bot.entity.position.z);
+
+    // Check if we've reached open sky (when untilSky mode is enabled)
+    if (untilSky) {
+      const blockAbove2 = bot.blockAt(new Vec3(curX, currentY + 2, curZ));
+      const blockAbove3 = bot.blockAt(new Vec3(curX, currentY + 3, curZ));
+      const isOpenAbove = (!blockAbove2 || blockAbove2.name === "air" || blockAbove2.name === "cave_air") &&
+                          (!blockAbove3 || blockAbove3.name === "air" || blockAbove3.name === "cave_air");
+
+      if (isOpenAbove) {
+        // Check light level to confirm we're at the surface
+        const lightLevel = (blockAbove2 as any)?.skyLight ?? (blockAbove3 as any)?.skyLight ?? 0;
+        if (lightLevel >= 13 || currentY >= startY + 10) {
+          console.error(`[Pillar] Reached open sky at Y=${currentY} (light: ${lightLevel}), placed ${blocksPlaced} blocks`);
+          return `Reached sky at Y=${currentY.toFixed(1)} after placing ${blocksPlaced} blocks${getBriefStatus(managed)}`;
+        }
+      }
+    }
 
     // 1. Dig blocks above if needed (Y+2 and Y+3 for jump clearance)
     for (const yOffset of [2, 3]) {

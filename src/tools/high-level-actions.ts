@@ -603,9 +603,9 @@ export async function minecraft_explore_area(
 
   const findings: string[] = [];
   let visitedPoints = 0;
-  const maxVisitedPoints = Math.min(50, Math.floor(radius / 5)); // Limit exploration points
+  const maxVisitedPoints = Math.min(10, Math.floor(radius / 10)); // Reduced from 50 to prevent timeout
   const startTime = Date.now();
-  const maxDuration = 120000; // 2 minutes max
+  const maxDuration = 30000; // Reduced from 120s to 30s to prevent connection timeout
 
   // Spiral pattern exploration
   let x = startX;
@@ -621,6 +621,11 @@ export async function minecraft_explore_area(
     visitedPoints++;
 
     try {
+      // Safety check: verify bot is still connected
+      if (!botManager.getBot(username)) {
+        return `Exploration aborted at ${visitedPoints} points - bot disconnected. Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
+      }
+
       // Safety check: abort if hunger is critical (unless searching for food)
       const status = botManager.getStatus(username);
 
@@ -673,8 +678,8 @@ export async function minecraft_explore_area(
         continue;
       }
 
-      // Small delay to prevent overwhelming the connection
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Delay to prevent overwhelming the connection (increased from 100ms to 500ms)
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Categorize target type to avoid false matches
       const knownBiomes = ["plains", "forest", "taiga", "desert", "savanna", "jungle", "swamp", "mountains", "ocean", "river", "beach", "snowy", "ice", "mushroom", "nether", "end"];
@@ -828,7 +833,13 @@ export async function minecraft_validate_survival_environment(
   const passiveMobs = ["cow", "pig", "chicken", "sheep", "rabbit"];
   for (const mobType of passiveMobs) {
     const entityResult = botManager.findEntities(username, mobType, searchRadius);
-    if (!entityResult.startsWith("No") && entityResult.includes(mobType)) {
+    // More strict check: Must not start with "No" AND must contain distance/position info
+    // This prevents false positives from stale cached entity data
+    const hasValidEntity = !entityResult.startsWith("No") &&
+                          entityResult.includes(mobType) &&
+                          (entityResult.includes("blocks") || entityResult.includes("distance"));
+
+    if (hasValidEntity) {
       findings.push(`✅ Found ${mobType} (huntable food)`);
       foodSourcesFound++;
     }

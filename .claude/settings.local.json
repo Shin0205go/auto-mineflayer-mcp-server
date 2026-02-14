@@ -1,0 +1,158 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(source ~/.nvm/nvm.sh)",
+      "Bash(nvm install:*)",
+      "Bash(nvm use:*)",
+      "Bash(node:*)",
+      "mcp__mineflayer__minecraft_connect",
+      "mcp__mineflayer__minecraft_disconnect",
+      "mcp__mineflayer__minecraft_get_position",
+      "mcp__mineflayer__minecraft_chat",
+      "mcp__mineflayer__minecraft_look_around",
+      "mcp__mineflayer__minecraft_move_to",
+      "WebSearch",
+      "mcp__mineflayer__minecraft_place_block",
+      "mcp__mineflayer__minecraft_visualize_thinking",
+      "Bash(curl:*)",
+      "mcp__mineflayer__minecraft_get_chat_messages",
+      "mcp__mineflayer__minecraft_spawn_worker",
+      "mcp__mineflayer__minecraft_assign_task",
+      "mcp__mineflayer__agent_board_write",
+      "mcp__mineflayer__agent_board_read",
+      "Bash(git add:*)",
+      "Bash(git stash:*)",
+      "Bash(npm run start:agent:*)",
+      "mcp__mineflayer__minecraft_build_structure",
+      "mcp__mineflayer__minecraft_build_road",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(git commit:*)",
+      "WebFetch(domain:support.claude.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(git push)",
+      "Bash(git reset:*)",
+      "Bash(git pull:*)",
+      "Bash(du:*)",
+      "Bash(sudo du:*)",
+      "Bash(git checkout:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs ls:*)",
+      "Bash(sort:*)",
+      "Bash(jq:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(uv pip install:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(arch -arm64 /Users/shingo/Develop/mamba-agent/.venv/bin/python:*)",
+      "Bash(arch -arm64 python -c \"import cartesia_mlx as cmx; print\\(''cartesia_mlx OK!''\\)\")",
+      "Bash(arch -arm64 python -c \"\nimport mlx.core as mx\nimport cartesia_mlx as cmx\n\nprint\\(''Loading model...''\\)\nmodel = cmx.from_pretrained\\(''cartesia-ai/mamba2-130m-mlx''\\)\nmodel.set_dtype\\(mx.float32\\)\nprint\\(''Model loaded!''\\)\n\nprompt = ''The player saw a zombie and''\nprint\\(f''Prompt: {prompt}''\\)\nprint\\(''Generating...''\\)\nfor text in model.generate\\(prompt, max_tokens=30, temperature=0.8\\):\n    print\\(text, end='''', flush=True\\)\nprint\\(\\)\n\")",
+      "Bash(arch -arm64 python -c \"\nimport mlx.core as mx\nimport cartesia_mlx as cmx\nimport time\n\nprint\\(''Loading mamba2-2.7b-4bit model...''\\)\nstart = time.time\\(\\)\nmodel = cmx.from_pretrained\\(''cartesia-ai/mamba2-2.7b-4bit-mlx''\\)\nmodel.set_dtype\\(mx.float32\\)\nprint\\(f''Model loaded in {time.time\\(\\)-start:.1f}s''\\)\n\nprompt = ''Event: zombie spotted 5 blocks away. Health: 18/20. Inventory: stone_sword, bread\\(5\\). Action:''\nprint\\(f''Prompt: {prompt}''\\)\nprint\\(''Generating...''\\)\nstart = time.time\\(\\)\noutput = ''''\nfor text in model.generate\\(prompt, max_tokens=50, temperature=0.7\\):\n    output += text\n    print\\(text, end='''', flush=True\\)\nelapsed = time.time\\(\\) - start\nprint\\(f''\\\\n\\\\nGenerated in {elapsed:.2f}s \\({len\\(output.split\\(\\)\\)/elapsed:.1f} words/sec\\)''\\)\n\")",
+      "Bash(chmod:*)",
+      "Bash(MC_PORT=52568 arch -arm64 python:*)",
+      "Bash(arch -arm64 python -c \"\nimport asyncio\nimport json\nimport websockets\n\nasync def test\\(\\):\n    ws = await websockets.connect\\(''ws://localhost:8765''\\)\n    \n    # Connect request\n    request = {\n        ''jsonrpc'': ''2.0'',\n        ''id'': 1,\n        ''method'': ''tools/call'',\n        ''params'': {\n            ''name'': ''minecraft_connect'',\n            ''arguments'': {\n                ''username'': ''TestBot'',\n                ''host'': ''localhost'',\n                ''port'': 52568,\n            },\n        },\n    }\n    \n    await ws.send\\(json.dumps\\(request\\)\\)\n    response = await ws.recv\\(\\)\n    print\\(''Raw response:''\\)\n    print\\(response\\)\n    print\\(\\)\n    print\\(''Parsed:''\\)\n    print\\(json.dumps\\(json.loads\\(response\\), indent=2\\)\\)\n\nasyncio.run\\(test\\(\\)\\)\n\")",
+      "Bash(wc:*)",
+      "Bash(git rm:*)",
+      "Bash(gh auth status:*)",
+      "Bash(npm run start:game-agent:*)",
+      "WebFetch(domain:docs.claude.com)",
+      "WebFetch(domain:www.anthropic.com)",
+      "WebFetch(domain:nader.substack.com)",
+      "WebFetch(domain:claude.com)",
+      "WebFetch(domain:dev.to)",
+      "Bash(npm run board:view:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(kill:*)",
+      "Bash(if [ -f /Users/shingo/Develop/minecraftAIViewer/logs/stability-responses.jsonl ])",
+      "Bash(then wc -l /Users/shingo/Develop/minecraftAIViewer/logs/stability-responses.jsonl)",
+      "Bash(else echo \"No stability responses yet\")",
+      "Bash(fi)",
+      "Bash(/Users/shingo/Develop/minecraftAIViewer/shared-board.txt << 'EOF'\n=== CAMPAIGN PROGRESS ===\nGoal: Ender Dragon Defeat\nPhase: 1/8 - Basic Survival\n\n[OBJECTIVES]\n☐ Food x8        - Priority:1 Status:TODO \\(0/8\\)\n☐ Wood tools     - Priority:2 Status:TODO\n☐ Shelter + bed  - Priority:3 Status:TODO\n☐ Stone tools    - Priority:4 Status:TODO\n\n[CURRENT ACTION]\nNone - awaiting next loop\n\n[NEXT MILESTONE]\nComplete Phase 1 → Unlock Phase 2: Iron Age\n\n[LAST UPDATE]\n2026-02-10 12:00:00 - System initialization\n\n=== END PROGRESS ===\n\n--- Activity Log ---\n[12:00:00] System initialized for campaign mode\nEOF)",
+      "Bash(/Users/shingo/Develop/minecraftAIViewer/shared-board.txt << 'EOF'\n=== CAMPAIGN GOAL ===\nDefeat the Ender Dragon\n\n=== YOUR MISSION ===\nPlan and execute the steps needed to achieve this goal.\nUse TaskCreate to define your own objectives.\nUse TaskUpdate to track progress.\nAdapt your plan based on what works.\n\n=== CURRENT STATUS ===\nPhase: Planning\nNext action: Analyze current state and create initial task list\n\n=== NOTES ===\n- You have TaskCreate, TaskUpdate, TaskList, TaskGet tools available\n- Break down the goal into manageable steps\n- Start with immediate survival needs\n- Progress toward long-term objectives\n- Adjust strategy based on results\n\n--- Activity Log ---\n[12:15:00] Campaign initialized - agent will self-manage tasks\nEOF)",
+      "Bash(while read line)",
+      "Bash(do echo \"$line\")",
+      "Bash(done)",
+      "Bash(ls:*)",
+      "Bash(/tmp/list_methods.sh)",
+      "Bash(npx tsc:*)",
+      "mcp__mineflayer__minecraft_smelt",
+      "Bash(timeout:*)",
+      "mcp__mineflayer__minecraft_get_inventory",
+      "mcp__mineflayer__minecraft_get_surroundings",
+      "mcp__mineflayer__minecraft_find_block",
+      "mcp__mineflayer__minecraft_dig_block",
+      "Bash(pm2 status:*)",
+      "Bash(npx pm2 status)",
+      "Bash(npx pm2 list)",
+      "Bash(npx pm2:*)",
+      "Bash(pstree:*)",
+      "Bash(ps:*)",
+      "mcp__mineflayer__search_tools"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s 'http://localhost:3847/thinking?state=processing&message=考え中...' > /dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s 'http://localhost:3847/thinking?state=executing&message=実行中...' > /dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s 'http://localhost:3847/thinking?state=searching&message=調査中...' > /dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s 'http://localhost:3847/thinking?state=error&message=エラー発生' > /dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s 'http://localhost:3847/thinking?state=idle&message=待機中' > /dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "mineflayer"
+  ],
+  "enableAllProjectMcpServers": true
+}

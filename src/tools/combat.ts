@@ -109,6 +109,21 @@ export const combatTools = {
       required: [],
     },
   },
+
+  minecraft_fish: {
+    description: "Fish using a fishing rod to catch food. Requires a fishing rod in inventory and nearby water (within 16 blocks).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        duration: {
+          type: "number",
+          description: "Fishing duration in seconds (default: 30)",
+          default: 30,
+        },
+      },
+      required: [],
+    },
+  },
 };
 
 export async function handleCombatTool(
@@ -162,6 +177,11 @@ export async function handleCombatTool(
     case "minecraft_respawn": {
       const reason = args.reason as string | undefined;
       return await botManager.respawn(username, reason);
+    }
+
+    case "minecraft_fish": {
+      const duration = (args.duration as number) || 30;
+      return await botManager.fish(username, duration);
     }
 
     default:

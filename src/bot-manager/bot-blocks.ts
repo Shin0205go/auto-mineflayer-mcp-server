@@ -693,7 +693,7 @@ export async function digBlock(
     await delay(50);
 
     try {
-      await bot.dig(blockBeforeDig, true);  // forceLook = true
+      await bot.dig(blockBeforeDig, false);  // forceLook = false で飛散を防ぐ
       console.error(`[Dig] Finished digging ${blockName}`);
     } catch (digError: any) {
       console.error(`[Dig] Dig failed: ${digError.message}`);
@@ -729,7 +729,7 @@ export async function digBlock(
         try {
           await bot.lookAt(blockRetry.position.offset(0.5, 0.5, 0.5));
           await delay(50);
-          await bot.dig(blockRetry, true);
+          await bot.dig(blockRetry, false);  // forceLook = false で飛散を防ぐ
           console.error(`[Dig] Retry successful for ${blockName}`);
         } catch (retryError: any) {
           return `Failed to dig ${blockName}: ${retryError.message}`;
@@ -946,7 +946,7 @@ export async function digBlock(
       }
     }
 
-    return `Dug ${blockName} with ${heldItem}. ${pickedUp === 0 ? 'No items dropped (auto-collected or wrong tool).' : ''}` + getBriefStatus(username);
+    return `Dug ${blockName} with ${heldItem}${pickedUp > 0 ? ` and picked up ${pickedUp} item(s)!` : ' (already in inventory or no drops)'}` + getBriefStatus(username);
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[Dig] Error: ${errMsg}`);

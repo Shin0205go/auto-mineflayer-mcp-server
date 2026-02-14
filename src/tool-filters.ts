@@ -17,11 +17,10 @@ export const GAME_AGENT_TOOLS = new Set([
   "minecraft_move_to",
   "minecraft_chat",
 
-  // Environment (4 tools)
+  // Environment (3 tools)
   "minecraft_check_infrastructure",
   "minecraft_get_surroundings",
   "minecraft_find_block",
-  "minecraft_diagnose_server",
 
   // Building (5 tools)
   "minecraft_place_block",
@@ -49,7 +48,7 @@ export const GAME_AGENT_TOOLS = new Set([
   "minecraft_take_from_chest",
   "minecraft_store_in_chest",
 
-  // Combat (8 tools)
+  // Combat (9 tools)
   "minecraft_get_status",
   "minecraft_get_nearby_entities",
   "minecraft_attack",
@@ -58,6 +57,7 @@ export const GAME_AGENT_TOOLS = new Set([
   "minecraft_equip_weapon",
   "minecraft_flee",
   "minecraft_respawn",
+  "minecraft_fish",
 
   // Learning (7 tools)
   "log_experience",
