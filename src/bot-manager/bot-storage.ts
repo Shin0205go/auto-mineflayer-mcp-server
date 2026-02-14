@@ -1,6 +1,7 @@
 import { Vec3 } from "vec3";
 import type { ManagedBot } from "./types.js";
-import { goals } from "mineflayer-pathfinder";
+import pathfinder from "mineflayer-pathfinder";
+const { goals } = pathfinder;
 
 /**
  * Open a chest and list its contents
