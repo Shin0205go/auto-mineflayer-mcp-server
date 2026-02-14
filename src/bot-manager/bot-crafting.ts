@@ -41,19 +41,34 @@ async function validateItemPickup(bot: any): Promise<boolean> {
 
     // Drop 1 item
     await bot.toss(testItem.type, null, 1);
-    await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Try to pick it back up
+    // Wait shorter time to prevent Minecraft auto-pickup from interfering
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Count items immediately after drop to establish baseline
+    // If auto-pickup is disabled, item should NOT be in inventory yet
+    const afterDropCount = bot.inventory.items()
+      .filter((i: any) => i.name === testItemName)
+      .reduce((sum: number, i: any) => sum + i.count, 0);
+
+    // If item already returned to inventory, auto-pickup is working (good!)
+    if (afterDropCount >= beforeCount) {
+      console.log(`[Craft] Auto-pickup is ENABLED - crafted items will be collected automatically`);
+      (bot as any)._itemPickupValidated = true;
+      return true;
+    }
+
+    // Item is not in inventory - try manual collection
     const { collectNearbyItems } = await import("./bot-items.js");
     await collectNearbyItems(bot);
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Count items after attempting pickup
+    // Count items after attempting manual pickup
     const afterCount = bot.inventory.items()
       .filter((i: any) => i.name === testItemName)
       .reduce((sum: number, i: any) => sum + i.count, 0);
 
-    // If we recovered the item, pickup works
+    // If we recovered the item through manual collection, pickup works
     const pickupWorks = (afterCount >= beforeCount);
     (bot as any)._itemPickupValidated = pickupWorks;
 
