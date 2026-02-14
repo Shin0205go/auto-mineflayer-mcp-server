@@ -1,5 +1,6 @@
 import { Vec3 } from "vec3";
 import type { ManagedBot } from "./types.js";
+import { goals } from "mineflayer-pathfinder";
 
 /**
  * Open a chest and list its contents
@@ -24,7 +25,6 @@ export async function openChest(
 
   // If too far, try to move closer
   if (initialDistance > 4) {
-    const { goals } = require("mineflayer-pathfinder");
     const GoalGetToBlock = goals.GoalGetToBlock;
 
     try {
