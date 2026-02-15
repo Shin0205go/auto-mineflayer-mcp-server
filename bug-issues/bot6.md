@@ -45,7 +45,35 @@
 ### 調査が必要なファイル
 - `src/tools/building.ts` (use_item_on_block)
 
-### 修正内容 (2026-02-15)
-- `src/bot-manager/bot-blocks.ts:1225` の待機時間を500ms→1000msに延長
-- サーバー同期を待つ時間が不足していたため、バケツ→water_bucketの変換が反映されなかった
-- 修正後は`npm run build`でビルドして再接続が必要
+## 2026-02-16: forceパラメータが機能しない
+
+### 現象
+- `minecraft_dig_block(force=true)`でも溶岩隣接ブロックが採掘できない
+- 黒曜石採掘でPhase 5進行がブロックされる
+
+### 原因
+1. `src/tools/building.ts:205` - `args.force`を読み取らずに`digBlock()`を呼んでいる
+2. `src/bot-manager/bot-blocks.ts:231` - `digBlock`関数が`force`パラメータを受け取っていない
+3. `src/bot-manager/bot-blocks.ts:260-271` - 溶岩チェックが無条件で実行され、`force`フラグを無視
+
+### 修正方針
+1. `building.ts` - `args.force`を読み取り
+2. `bot-manager/index.ts` - `digBlock`に`force`パラメータ追加
+3. `bot-blocks.ts` - `digBlock`関数に`force: boolean = false`パラメータ追加、溶岩チェックを`if (!force)`で囲む
+
+### 修正完了 (2026-02-16)
+✅ `src/bot-manager/bot-blocks.ts:231` - `force: boolean = false`パラメータ追加
+✅ `src/bot-manager/bot-blocks.ts:260` - 溶岩チェックを`if (!force)`で囲む
+✅ `src/bot-manager/index.ts:234` - `digBlock`メソッドに`force`パラメータ追加
+✅ `src/tools/building.ts:178` - `args.force`を読み取って`botManager.digBlock()`に渡す
+✅ ビルド成功
+
+**注意**: MCPサーバー再起動が必要（全ボット再接続）
+
+### 実装確認 (2026-02-16)
+❌ `git checkout HEAD --` で重複修正を元に戻したが、コミット46bf72c以前の状態に戻ってしまった
+✅ `git checkout 46bf72c -- <files>` で正しい実装を復元
+✅ `npm run build` で再ビルド成功
+✅ MCPサーバー再起動（pkill + nohup node dist/mcp-ws-server.js）
+
+**学習**: `git checkout HEAD --` は現在のHEADの状態に戻す。特定のコミットに戻すには `git checkout <commit> --` を使う
