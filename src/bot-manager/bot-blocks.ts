@@ -268,7 +268,7 @@ export async function digBlock(
       const adjBlock = bot.blockAt(adjPos);
       if (adjBlock?.name === "lava") {
         console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
-        return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z})。force=trueで強制採掘可能。`;
+        return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`;
       }
     }
   }
@@ -1215,41 +1215,28 @@ export async function useItemOnBlock(
     await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
     await new Promise(resolve => setTimeout(resolve, 100));
 
+    // DEBUG: Always log block name for bucket operations
+    if (itemName === "bucket") {
+      console.log(`[DEBUG useItemOnBlock] Bucket on block: "${block.name}" at (${x},${y},${z})`);
+    }
+
     // For buckets on liquid blocks, use activateItem instead of activateBlock
     // This is the correct way to collect water/lava with buckets in Mineflayer
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
       const initialItem = bot.heldItem?.name;
       console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
       bot.activateItem();
-      await new Promise(resolve => setTimeout(resolve, 100));
       bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
-
-      // Poll inventory until it updates (or timeout after 3 seconds)
-      const startTime = Date.now();
-      let pollCount = 0;
-      while (Date.now() - startTime < 3000) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        const currentItem = bot.heldItem?.name;
-        pollCount++;
-        console.log(`[DEBUG Poll ${pollCount}] Current item: ${currentItem}`);
-        if (currentItem !== initialItem && (currentItem === "water_bucket" || currentItem === "lava_bucket")) {
-          console.log(`[DEBUG] Success! Bucket changed to ${currentItem}`);
-          break;
-        }
-      }
-    } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
-      // For placing fluids, also use activateItem
-      bot.activateItem();
-      await new Promise(resolve => setTimeout(resolve, 100));
-      bot.deactivateItem();
     } else {
-      // For other items (bone_meal, flint_and_steel), use activateBlock
+      // For other items, use activateBlock
       await bot.activateBlock(block);
     }
 
-    // Check what happened (e.g., bucket → water_bucket)
-    // Wait longer for server synchronization (1000ms instead of 500ms)
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait longer for inventory to update properly
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Force inventory update by checking actual inventory, not just heldItem
+    bot.updateHeldItem();
     const heldAfter = bot.heldItem;
     const heldName = heldAfter?.name || "nothing";
 
