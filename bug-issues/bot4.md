@@ -52,26 +52,48 @@
   - `src/bot-manager/bot-storage.ts` (実装)
 - **ステータス**: ✅ 修正完了 (2026-02-15)
 
-## [2026-02-16] stick crafting failure with birch_planks
+## [2026-02-16] stick crafting failure with all plank types
 
-- **症状**: `minecraft_craft("stick")` が "no compatible recipe" エラーで失敗。`birch_planks` x4 所持時。
+- **症状**: `minecraft_craft("stick")` が "missing ingredient" エラーで失敗。birch_planks, dark_oak_planks どちらでも同じ。
 - **エラーメッセージ**:
   ```
-  Failed to craft stick from birch_planks: Error: missing ingredient
-  Cannot craft stick: No compatible recipe found. Have 4 planks and 0 sticks.
+  Failed to craft stick from birch_planks/dark_oak_planks: Error: missing ingredient
   ```
 - **再現手順**:
-  1. birch_log を採掘 → birch_planks x4 をクラフト
-  2. `minecraft_craft("stick", 1)` → 失敗
-  3. `minecraft_craft_chain("diamond_pickaxe")` → stick不足で失敗
-- **原因推定**: `src/bot-manager/bot-crafting.ts` 356-460行の special handling で、`allRecipes.find()` (line 428) が birch_planks → stick のレシピを見つけられない。Minecraft version compatibility issue の可能性。
+  1. birch_log または dark_oak_log を採掘 → planks をクラフト
+  2. `minecraft_craft("stick", 2)` → 失敗
+- **根本原因**: `bot.recipesAll(item.id, null, null)` が空配列を返す。Mineflayerまたはminecraft-dataのバージョン互換性問題。
+- **試した修正**:
+  1. (2026-02-16 18:xx) `bot.recipesFor()` をフォールバックとして追加 (line 409-429) - 効果なし
+  2. dark_oak_planks で試す - 同じエラー
 - **影響**: diamond_pickaxe を作成できず、黒曜石採掘タスクを実行できない。
-- **回避策**:
-  1. oak_log など別の木材タイプを試す
-  2. チームメンバーに黒曜石採掘を委譲（Claude6 が実施）
-- **調査必要**:
-  - mcData に現在の Minecraft version 用のレシピがあるか確認
-  - line 428 の `compatibleRecipe` 検索ロジックをデバッグ
-  - birch_planks 使用時に `needsPlanks` フラグが正しく立つか確認
-- **ステータス**: ❌ OPEN - 要調査。Claude6 が黒曜石採掘を代行中。
+- **次のステップ**:
+  1. MCPサーバーを再起動して修正コードを適用
+  2. それでも失敗する場合、手動でレシピオブジェクトを作成
+  3. または、チームメンバーにダイヤツール作成を委譲
+- **ステータス**: ⚠️ 修正試行中 - MCPサーバー再起動待ち
+
+## [2026-02-16] minecraft_move_to not updating position
+
+- **症状**: `minecraft_move_to(x, y, z)` が "Moved near chest at ..." と成功メッセージを返すが、`minecraft_get_position()` で確認すると実際の位置が変わっていない。元の位置(-11.52, 94.88, 32.5)に留まったまま。
+- **再現手順**:
+  1. `minecraft_move_to(-10, 94, 33)` → "Moved near chest at (-10.0, 95.0, 33.0)" と返る
+  2. `minecraft_get_position()` → 位置が(-11.52, 94.88, 32.5)のまま変わらない
+  3. 複数回試しても同じ結果
+- **影響**:
+  - チェストからアイテムを取得できない（`minecraft_take_from_chest` は最も近いチェストを選ぶため、目標のチェストに近づけない）
+  - 移動が必要な全てのタスクが実行不可
+- **関連**: bot-storage.ts の `takeFromChest` は `bot.findBlock` で最も近いチェストを自動選択するため、`openChest` で開いたチェストと異なるチェストが選ばれる問題もある
+- **原因特定**: `moveToBasic` の距離チェック（line 184-186）が、現在地から目標まで3ブロック未満の場合に即座に成功と判定する。このため、既に目標の近く（3ブロック以内）にいる場合、実際には移動せずに成功メッセージだけを返す。
+- **詳細**:
+  - moveToBasic は setInterval で 500ms ごとに距離をチェック
+  - `currentDist < 3` なら即座に成功と判定（line 184-186）
+  - 目標が3ブロック以上離れていれば正常に移動する
+  - 3ブロック以内の短距離移動は「既に到着済み」と判定されて移動しない
+- **回避策**: 一旦3ブロック以上離れた位置に移動してから、目標位置に移動する（2段階移動）
+- **恒久的修正案**:
+  1. 成功判定距離を3→0.5ブロックに変更
+  2. 移動開始時の距離を記録し、実際に移動したかチェック
+  3. 最初のチェックで既に近い場合は「Already near target」メッセージを返す
+- **ステータス**: ⚠️ 原因特定済み・回避策あり - 恒久的修正は要検討（他機能への影響調査必要）
 

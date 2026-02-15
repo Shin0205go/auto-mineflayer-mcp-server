@@ -406,26 +406,25 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     let craftingTableBlock = null;
     console.error(`[Craft] recipesAll(${item.id}, null, null) returned ${allRecipes.length} recipes`);
 
-    // FIX: If no recipes found for stick/crafting_table, try with oak_planks specifically
-    // This handles Minecraft versions where recipesAll doesn't auto-substitute plank types
+    // FIX: If no recipes found for stick/crafting_table, try recipesFor as fallback
+    // This handles Minecraft versions where recipesAll doesn't work properly
     if (allRecipes.length === 0 && (itemName === "stick" || itemName === "crafting_table")) {
-      console.error(`[Craft] No recipes found for ${itemName}, trying with oak_planks...`);
-      const oakPlanksId = mcData.itemsByName["oak_planks"]?.id;
-      if (oakPlanksId) {
-        // Get all recipes that produce this item
-        const allRecipesForItem = bot.recipesAll(item.id, null, null);
-        console.error(`[Craft] bot.recipesAll(${item.id}, null, null) for filtering returned ${allRecipesForItem.length} total recipes`);
+      console.error(`[Craft] No recipes found with recipesAll, trying recipesFor...`);
 
-        // Filter for recipes that use any planks (Mineflayer will substitute our planks)
-        allRecipes = allRecipesForItem.filter(recipe => {
-          const delta = recipe.delta as Array<{ id: number; count: number }>;
-          return delta.some(d => {
-            if (d.count >= 0) return false;
-            const ingredient = mcData.items[d.id];
-            return ingredient && ingredient.name.endsWith("_planks");
-          });
-        });
-        console.error(`[Craft] Found ${allRecipes.length} recipes using planks after filtering`);
+      // Try recipesFor with our available planks
+      const availablePlanks = inventoryItems.filter(i => i.name.endsWith("_planks"));
+      for (const planksItem of availablePlanks) {
+        const planksItemData = mcData.itemsByName[planksItem.name];
+        if (!planksItemData) continue;
+
+        const recipesForPlanks = bot.recipesFor(item.id, null, 1, null);
+        console.error(`[Craft] recipesFor with ${planksItem.name} returned ${recipesForPlanks.length} recipes`);
+
+        if (recipesForPlanks.length > 0) {
+          allRecipes = recipesForPlanks;
+          console.error(`[Craft] Found ${allRecipes.length} recipes using recipesFor`);
+          break;
+        }
       }
     }
 
