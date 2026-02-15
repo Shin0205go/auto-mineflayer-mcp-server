@@ -82,7 +82,7 @@
   3. または、チームメンバーにダイヤツール作成を委譲
 - **ステータス**: ⚠️ 修正試行中 - MCPサーバー再起動待ち
 
-## [2026-02-16] minecraft_move_to not updating position
+## [2026-02-16] minecraft_move_to not updating position (✅ FIXED)
 
 - **症状**: `minecraft_move_to(x, y, z)` が "Moved near chest at ..." と成功メッセージを返すが、`minecraft_get_position()` で確認すると実際の位置が変わっていない。元の位置(-11.52, 94.88, 32.5)に留まったまま。
 - **再現手順**:
@@ -93,46 +93,38 @@
   - チェストからアイテムを取得できない（`minecraft_take_from_chest` は最も近いチェストを選ぶため、目標のチェストに近づけない）
   - 移動が必要な全てのタスクが実行不可
 - **関連**: bot-storage.ts の `takeFromChest` は `bot.findBlock` で最も近いチェストを自動選択するため、`openChest` で開いたチェストと異なるチェストが選ばれる問題もある
-- **原因特定**: `moveToBasic` の距離チェック（line 184-186）が、現在地から目標まで3ブロック未満の場合に即座に成功と判定する。このため、既に目標の近く（3ブロック以内）にいる場合、実際には移動せずに成功メッセージだけを返す。
+- **原因特定**: `moveToBasic` の距離チェック（line 94-99）が、現在地から目標まで2ブロック未満の場合に即座に成功と判定していた。このため、既に目標の近くにいる場合、実際には移動せずに成功メッセージだけを返していた。
 - **詳細**:
-  - moveToBasic は setInterval で 500ms ごとに距離をチェック
-  - `currentDist < 3` なら即座に成功と判定（line 184-186）
-  - 目標が3ブロック以上離れていれば正常に移動する
-  - 3ブロック以内の短距離移動は「既に到着済み」と判定されて移動しない
+  - moveToBasic の開始時に `distance < 2` をチェック
+  - 条件に合致すると pathfinder を起動せずに即座にリターン
+  - 目標が2ブロック以上離れていれば正常に移動する
+  - 2ブロック以内の短距離移動は「既に到着済み」と判定されて移動しない
 - **回避策**: 一旦3ブロック以上離れた位置に移動してから、目標位置に移動する（2段階移動）
-- **恒久的修正案**:
-  1. 成功判定距離を3→0.5ブロックに変更
+- **修正**: ✅ Claude1が修正完了 (2026-02-16)。94-99行の早期リターンを削除し、GoalNear(range=2)が距離チェックを行うようにpathfinderに任せる形に変更
   2. 移動開始時の距離を記録し、実際に移動したかチェック
   3. 最初のチェックで既に近い場合は「Already near target」メッセージを返す
 - **ステータス**: ⚠️ 原因特定済み・回避策あり - 恒久的修正は要検討（他機能への影響調査必要）
 
-## [2026-02-16] No tool to till soil / create farmland
+## [2026-02-16] No tool to till soil / create farmland ✅ **FIXED**
 
 - **症状**: 小麦農場を作るために種を植えたいが、grass_blockを耕してfarmlandにするツールがない。クワもクラフトできない（stickバグ）。
 - **現状**:
   - `minecraft_place_block("wheat_seeds", x, y, z)` は grass_block の上に置けない（farmland が必要）
   - クワをクラフトできない（stick クラフトバグのため）
-  - 素手で右クリックして耕す機能がMCPツールに存在しない
-- **必要な機能**: `minecraft_till_soil(x, y, z)` - grass_block/dirt を farmland に変換するツール
-- **実装案**:
-  ```typescript
-  async tillSoil(x: number, y: number, z: number): Promise<string> {
-    const block = bot.blockAt(new Vec3(x, y, z));
-    if (!block || (block.name !== 'grass_block' && block.name !== 'dirt')) {
-      return `Cannot till: block at (${x},${y},${z}) is ${block?.name || 'air'}`;
-    }
-    // Use any item to right-click the block (or equip a hoe if available)
-    await bot.activateBlock(block);
-    await new Promise(r => setTimeout(r, 300));
-    const newBlock = bot.blockAt(new Vec3(x, y, z));
-    if (newBlock?.name === 'farmland') {
-      return `Tilled soil at (${x},${y},${z})`;
-    }
-    return `Failed to till at (${x},${y},${z})`;
-  }
-  ```
-- **ファイル**: 新規ツール `src/tools/farming.ts` または `src/bot-manager/bot-farming.ts`
-- **ステータス**: ⚠️ 未実装 - 次セッションで追加必要
+  - 素手で右クリックして耕す機能がMCPツールに存在しなかった
+- **実装内容**:
+  1. `src/bot-manager/bot-blocks.ts` に `tillSoil` 関数を追加（line 1271-1337）
+  2. `src/tools/building.ts` に `minecraft_till_soil` ツールを追加
+  3. `src/bot-manager/index.ts` に `tillSoil` メソッドを追加
+- **機能**:
+  - grass_block または dirt を farmland に変換
+  - クワがあれば自動装備、なければ素手で耕す
+  - 移動が必要な場合は自動で近づく
+- **ファイル**:
+  - `src/bot-manager/bot-blocks.ts:1271-1337`
+  - `src/tools/building.ts`
+  - `src/bot-manager/index.ts`
+- **ステータス**: ✅ 実装完了・ビルド成功 (2026-02-16)
 
 ## [2026-02-16] Inventory full error despite dropping items
 
