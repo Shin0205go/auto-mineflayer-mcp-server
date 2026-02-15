@@ -1219,6 +1219,7 @@ export async function useItemOnBlock(
       console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
       bot.activateItem();
       bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
+<<<<<<< HEAD
 <<<<<<< Updated upstream
 =======
 
@@ -1238,6 +1239,10 @@ export async function useItemOnBlock(
 >>>>>>> Stashed changes
     } else {
       // Use activateBlock for other items
+=======
+    } else {
+      // For other items, use activateBlock
+>>>>>>> main
       await bot.activateBlock(block);
     }
 
