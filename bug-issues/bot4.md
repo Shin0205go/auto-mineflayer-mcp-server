@@ -126,6 +126,23 @@
   - `src/bot-manager/index.ts`
 - **ステータス**: ✅ 実装完了・ビルド成功 (2026-02-16)
 
+## [2026-02-16] minecraft_fish tool not available in MCP server
+
+- **症状**: `minecraft_fish` ツールが "No such tool available" エラーで呼び出せない。空腹3/20で食料が必要だが釣りができない。
+- **調査結果**:
+  - `src/tools/combat.ts` に `minecraft_fish` ツール定義が存在（line 113-126）
+  - `handleCombatTool` にケース実装済み（line 182-184）
+  - `src/bot-manager/bot-survival.ts` に `fish()` 関数実装済み（line 517〜）
+  - `src/bot-manager/index.ts` でエクスポート済み（line 77, 457-460）
+- **原因**: MCPサーバーが古いバージョンのコードを使っているため、新規追加ツールが認識されない
+- **解決策**: MCPサーバーを再起動して最新のビルド済みコードを読み込む
+- **回避策**: 夜にクモを倒して糸を入手→釣り竿を作成（ただしstickバグがあるため難しい）
+- **ファイル**:
+  - `src/tools/combat.ts:113-126, 182-184`
+  - `src/bot-manager/bot-survival.ts:517〜`
+  - `src/bot-manager/index.ts:77, 457-460`
+- **ステータス**: ⚠️ コード実装済み - MCPサーバー再起動待ち
+
 ## [2026-02-16] Inventory full error despite dropping items
 
 - **症状**: `minecraft_take_from_chest` が "Bot inventory is full" エラーを返すが、複数のアイテム（cobblestone x320, dirt x192, gold_ingot x27等）を捨てても、インベントリが満杯と判定され続ける。

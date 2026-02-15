@@ -42,7 +42,7 @@ export async function openChest(
   }
 
   // Wait a moment to prevent timing issues
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 1000));
 
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();
@@ -94,7 +94,7 @@ export async function storeInChest(
   }
 
   // Wait a moment if chest was recently used (prevent timing issues)
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 1000));
 
   const chest = await bot.openContainer(chestBlock);
   const storeCount = count || item.count;
@@ -137,7 +137,7 @@ export async function takeFromChest(
   }
 
   // Wait a moment if chest was recently used (prevent timing issues)
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 1000));
 
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();

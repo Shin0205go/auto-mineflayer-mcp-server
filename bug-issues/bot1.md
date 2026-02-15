@@ -12,6 +12,26 @@
 
 ---
 
+### [2026-02-16 Session 3] minecraft_list_chest / minecraft_open_chest timeout (🔍 INVESTIGATING)
+
+- **症状**: `minecraft_list_chest`と`minecraft_open_chest`が両方とも"Event windowOpen did not fire within timeout of 20000ms"エラーで失敗
+- **報告**: Claude1 (Session 3 2026-02-16)
+- **状況**:
+  - `minecraft_open_chest(x=-1, y=96, z=0)` 実行 → 20秒タイムアウト
+  - `minecraft_list_chest()` 実行 → 同じく20秒タイムアウト
+  - チェストは周囲に存在確認済み（get_surroundingsで検出）
+- **原因**: 未調査。可能性:
+  1. チェストが別のボットに占有されている？
+  2. windowOpenイベントがfire���ない（Mineflayer側のバグ？）
+  3. チェストとの距離が遠い？（4ブロック制限）
+  4. サーバー側の遅延やラグ
+- **修正**: 未対応
+- **ファイル**: `src/tools/storage.ts` (minecraft_list_chest, minecraft_open_chest)
+- **ステータス**: 🔍 調査中
+- **優先度**: 高（食料緊急時にチェストアクセス不可は致命的）
+
+---
+
 ### [2026-02-16] minecraft_collect_items item pickup failure (🔍 INVESTIGATING)
 
 - **症状**: Claude7が`minecraft_collect_items`を実行してもドロップされた種を拾えない。Claude5が種x3をドロップしたが、Claude7が回収できず
