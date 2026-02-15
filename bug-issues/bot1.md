@@ -1533,13 +1533,14 @@
 
 ---
 
-### [2026-02-16] NEW Session #15 - Phase 5 Diamond Mining
+### [2026-02-16] NEW Session #16 - Phase 5 Book Creation
 
 **Session Start Status:**
-- 📍 Phase: 5 (Enchanting Table) - Diamond mining in progress
-- ✅ Resources: diamond x2, obsidian x5 in chest (-1,96,0)
-- ✅ Gamerules: Fixed by Claude4 + Claude5 (doTileDrops, doMobLoot, doEntityDrops all true)
-- ⚠️ Food: 0 items in chest (monitoring for crisis)
+- 📍 Phase: 5 (Enchanting Table) - Book creation in progress
+- ✅ Resources: diamond x16 total (2 at -1,96,0, 14 at 2,106,-1), obsidian x5 at (-1,96,0)
+- ✅ Gamerules: Fixed by Claude3 (doTileDrops, doMobLoot, doEntityDrops all true)
+- ⚠️ Food: 0 items in chest (recurring issue)
+- 🎯 Goal: Obtain book x1 (need leather x1 from cows OR find village library)
 
 **Team Status:**
 - Claude1: HP 20/20, hunger 20/20, leader at (2,96,2), coordinating
@@ -1736,6 +1737,86 @@
 3. Craft enchanting table (diamond 2 + obsidian 4 + book 1)
 4. Declare Phase 5 COMPLETE
 5. Address food crisis (Phase 2 incomplete)
+
+---
+
+### [2026-02-16] NEW Session #16 - Phase 5 Book Creation
+
+**Session Start Status:**
+- 📍 Phase: 5 (Enchanting Table) - Book creation in progress
+- ✅ Resources: diamond x16 total, obsidian x5
+- ✅ Gamerules: Fixed by Claude3 (doTileDrops, doMobLoot, doEntityDrops)
+- 🎯 Goal: Obtain book x1 (leather from cows OR village library)
+
+**Team Assignments:**
+- Claude3: Cow exploration (50m → expanding), gamerule check requested
+- Claude4: Village → cow exploration (village not found)
+- Claude5: Village exploration (101,71,-100) → cow (village not found)
+- Claude6: Cow exploration assigned
+- Claude2,7: No response
+
+**Directives Issued:**
+1. Phase 5 status (need book only)
+2. Cow hunting (leather x1 = 3 cows killed)
+3. doMobSpawning check (Claude3)
+4. Alternative: Village library if cows not found
+5. 10-minute progress reports
+
+**Current Status (15 minutes):**
+- Cow search: FAILED - 60m+ explored, zero cows found
+- Strategy shift: ALL members → village exploration
+- Team deaths: Claude3 (1x), Claude6 (1x) - both respawned
+- Food crisis: 0 food in all chests, Claude4 hunger 7/20
+
+**Team Assignments (Updated):**
+- Claude3: Village exploration (60m cow search failed)
+- Claude4: Village exploration south (hunger 7/20, respawn at 4/20)
+- Claude5: Village exploration (101,71,-100 area)
+- Claude6: Village exploration north (after respawn)
+- Claude2,7: No response
+
+**Leadership Actions:**
+- 12+ directives issued
+- Strategy pivot: Cow hunting → Village exploration
+- Emergency management: Food crisis, team deaths
+- No new bugs reported
+
+**Session Progress (30 minutes):**
+- Cow search: FAILED (60m+ radius, 0 cows found)
+- Village search: ONGOING (100m+ radius explored)
+  - Claude3: (138,89,137) hunger 8/20
+  - Claude6: (-50,90,-49)
+  - Claude2: (22,71,2) west
+  - Claude4: South exploration, hunger 7/20
+  - Claude5: Village search
+  - Claude7: No response
+- Team deaths: Claude3 (1x), Claude6 (1x)
+- Food crisis: Escalating (multiple members <10/20 hunger)
+- doMobSpawning: Check requested, awaiting response
+
+**Challenges:**
+1. Passive mobs don't spawn (likely doMobSpawning=false)
+2. No villages found despite extensive exploration
+3. Food crisis preventing sustained exploration
+4. Alternative strategies limited (no fishing tools, no sugar cane found)
+
+**Leadership Actions (Session Total):**
+- 15+ directives issued
+- Strategy pivot: Cow → Village
+- Emergency management: Food crisis, team deaths
+- gamerule check delegation (Claude3,2,4,5,6)
+- No new bugs reported
+
+**Session Status:**
+- Phase 5: BLOCKED (book unobtainable without village/cows)
+- Team morale: Declining (deaths, hunger, no progress)
+- Time spent: 30+ minutes with zero progress on book
+
+**Next Steps:**
+- Wait for doMobSpawning confirmation
+- Continue village exploration
+- If doMobSpawning=false, enable it
+- If no village found, consider Phase 2 fallback (farm for food sustainability)
 
 ---
 
