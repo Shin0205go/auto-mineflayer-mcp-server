@@ -1,10 +1,11 @@
 import { Vec3 } from "vec3";
 import type { ManagedBot } from "./types.js";
-import pathfinder from "mineflayer-pathfinder";
-const { goals } = pathfinder;
+import pkg from "mineflayer-pathfinder";
+const { goals } = pkg;
 
 /**
  * Open a chest and list its contents
+ * Handles double chests by trying adjacent blocks if needed
  */
 export async function openChest(
   managed: ManagedBot,
@@ -44,7 +45,47 @@ export async function openChest(
   // Wait a moment to prevent timing issues
   await new Promise(resolve => setTimeout(resolve, 500));
 
-  const chest = await bot.openContainer(chestBlock);
+  // Try to open the chest - handle double chest case
+  let chest;
+  try {
+    chest = await Promise.race([
+      bot.openContainer(chestBlock),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), 5000)
+      )
+    ]) as any;
+  } catch (err) {
+    // If timeout, this might be a double chest - try adjacent blocks
+    const adjacentOffsets = [
+      new Vec3(1, 0, 0), new Vec3(-1, 0, 0),
+      new Vec3(0, 0, 1), new Vec3(0, 0, -1)
+    ];
+
+    for (const offset of adjacentOffsets) {
+      const adjPos = chestPos.plus(offset);
+      const adjBlock = bot.blockAt(adjPos);
+
+      if (adjBlock && adjBlock.name.includes("chest")) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          chest = await Promise.race([
+            bot.openContainer(adjBlock),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("timeout")), 5000)
+            )
+          ]) as any;
+          break; // Success!
+        } catch {
+          continue; // Try next adjacent block
+        }
+      }
+    }
+
+    if (!chest) {
+      throw new Error(`Cannot open chest at (${x}, ${y}, ${z}). It may be in use by another player. Try again later.`);
+    }
+  }
+
   const items = chest.containerItems();
 
   if (items.length === 0) {
@@ -52,7 +93,7 @@ export async function openChest(
     return `Chest at (${x}, ${y}, ${z}) is empty.`;
   }
 
-  const itemList = items.map(i => `${i.name}(${i.count})`).join(", ");
+  const itemList = items.map((i: any) => `${i.name}(${i.count})`).join(", ");
   chest.close();
   return `Chest at (${x}, ${y}, ${z}) contains: ${itemList}`;
 }
@@ -94,7 +135,7 @@ export async function storeInChest(
   }
 
   // Wait a moment if chest was recently used (prevent timing issues)
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 1000));
 
   const chest = await bot.openContainer(chestBlock);
   const storeCount = count || item.count;
@@ -137,7 +178,7 @@ export async function takeFromChest(
   }
 
   // Wait a moment if chest was recently used (prevent timing issues)
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 1000));
 
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();
@@ -175,19 +216,16 @@ export async function listChest(managed: ManagedBot): Promise<string> {
     return "No chest found within 4 blocks. Move closer to a chest first.";
   }
 
-  // Move closer to chest to ensure we're within interaction range
-  const chestPos = chestBlock.position;
-  const distance = bot.entity.position.distanceTo(chestPos);
-  if (distance > 3) {
-    const { goals: pathfinderGoals } = await import("mineflayer-pathfinder");
-    const goal = new pathfinderGoals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 2);
-    await bot.pathfinder.goto(goal);
+  const pos = chestBlock.position;
+  const distance = bot.entity.position.distanceTo(pos);
+
+  if (distance > 4) {
+    return `Chest found at (${pos.x}, ${pos.y}, ${pos.z}) but too far (${distance.toFixed(1)}m). Move closer first.`;
   }
 
   // Wait a moment to prevent timing issues
   await new Promise(resolve => setTimeout(resolve, 500));
 
-  const pos = chestBlock.position;
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();
 
