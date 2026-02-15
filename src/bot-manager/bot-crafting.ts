@@ -413,15 +413,11 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
       // Manual crafting for stick: 2 planks → 4 sticks
       if (itemName === "stick") {
-        // FIX: Choose planks with MOST quantity instead of first found
+        // Find planks with the HIGHEST count to avoid picking a plank type we don't have enough of
         const allPlanks = inventoryItems.filter(i => i.name.endsWith("_planks"));
-        if (allPlanks.length === 0) {
-          throw new Error(`Cannot craft stick: Need planks. Inventory: ${inventory}`);
-        }
-        // Sort by count descending and pick the most abundant
         const availablePlanks = allPlanks.sort((a, b) => b.count - a.count)[0];
-        if (availablePlanks.count < 2) {
-          throw new Error(`Cannot craft stick: Need 2 planks, have ${availablePlanks.count}. Inventory: ${inventory}`);
+        if (!availablePlanks || availablePlanks.count < 2) {
+          throw new Error(`Cannot craft stick: Need 2 planks, have ${availablePlanks?.count || 0}. Inventory: ${inventory}`);
         }
 
         // Get the specific planks item from mcData
@@ -449,15 +445,11 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
       // Manual crafting for crafting_table: 4 planks → 1 crafting_table
       if (itemName === "crafting_table") {
-        // FIX: Choose planks with MOST quantity instead of first found
+        // Find planks with the HIGHEST count to avoid picking a plank type we don't have enough of
         const allPlanks = inventoryItems.filter(i => i.name.endsWith("_planks"));
-        if (allPlanks.length === 0) {
-          throw new Error(`Cannot craft crafting_table: Need planks. Inventory: ${inventory}`);
-        }
-        // Sort by count descending and pick the most abundant
         const availablePlanks = allPlanks.sort((a, b) => b.count - a.count)[0];
-        if (availablePlanks.count < 4) {
-          throw new Error(`Cannot craft crafting_table: Need 4 planks, have ${availablePlanks.count}. Inventory: ${inventory}`);
+        if (!availablePlanks || availablePlanks.count < 4) {
+          throw new Error(`Cannot craft crafting_table: Need 4 planks, have ${availablePlanks?.count || 0}. Inventory: ${inventory}`);
         }
 
         const planksItem = mcData.itemsByName[availablePlanks.name];
