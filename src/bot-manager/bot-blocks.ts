@@ -1216,7 +1216,14 @@ export async function useItemOnBlock(
     // For buckets on liquid blocks, use activateBlock for proper targeting
     // Then poll inventory to ensure the bucket state has updated
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
+<<<<<<< Updated upstream
       await bot.activateBlock(block);
+=======
+      const initialItem = bot.heldItem?.name;
+      console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
+      bot.activateItem();
+      bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
+>>>>>>> Stashed changes
 
       // Poll inventory until it updates (or timeout after 3 seconds)
       const startTime = Date.now();
