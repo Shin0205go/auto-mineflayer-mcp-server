@@ -163,3 +163,45 @@
 - **回避策**: 他のボット（Claude7）にクワ作成を依頼し、直接受け渡しする
 - **ステータス**: ⚠️ 未修正 - インベントリ管理システムの調査が必要
 
+## [2026-02-16] minecraft_move_to pathfinding stuck at position
+
+- **症状**: `minecraft_move_to(4, 96, 6)` を繰り返し呼び出しても、位置(3.7, 95, 3.7)から全く動かない。"Moved near wheat at (3.0, 96.0, 6.0)" などの成功メッセージは返るが、`minecraft_get_position()` で確認すると実際の位置が変わっていない。
+- **再現手順**:
+  1. 現在位置(3.7, 95, 3.7)
+  2. `minecraft_move_to(4, 96, 6)` → "Moved near wheat" と返る
+  3. `minecraft_get_position()` → (3.7, 95, 3.7) のまま
+  4. `minecraft_move_to(5, 95, 3)` → "Reached destination" と返る
+  5. `minecraft_get_position()` → (3.7, 95, 3.7) のまま
+  6. 何度試しても同じ結果
+- **環境**:
+  - 周囲の状況: 歩ける方向は east のみ、他は no ground または障害物
+  - 足元: cobblestone（自分で設置）
+  - 目標: 小麦ブロック (4, 96, 6)、距離3.3ブロック
+- **影響**: 小麦の成長確認・収穫ができない。移動が必要な全てのタスクが実行不可。
+- **回避策**:
+  1. `minecraft_place_block` で足場を作成して経路を確保
+  2. `minecraft_find_block` で遠隔確認（近づけないが存在は確認できる）
+- **関連**: 同じ移動システムの問題が [2026-02-16] minecraft_move_to not updating position でも報告されており、Claude1が修正済み。しかし、この問題は別の原因（pathfinding の経路探索失敗）と思われる。
+- **ステータス**: ⚠️ 未修正 - pathfinding システムの調査が必要
+
+## [2026-02-16] crafting_table recipe fails with wrong plank type
+
+- **症状**: `minecraft_craft("crafting_table")` が "missing ingredient" エラーで失敗。birch_planks x19 を所持しているのに、dark_oak_planks を使おうとしてエラーになる。
+- **エラーメッセージ**:
+  ```
+  Failed to craft crafting_table from dark_oak_planks: Error: missing ingredient
+  ```
+- **再現手順**:
+  1. birch_planks x19, dark_oak_planks x5 をインベントリに持つ
+  2. `minecraft_craft("crafting_table")` → エラー "Failed to craft crafting_table from dark_oak_planks"
+  3. birch_planks が19個あるのに使われない
+- **根本原因**: クラフトシステムが優先的に dark_oak_planks を選択しようとするが、数が足りない（5個 < 必要4個）。birch_planks が19個あるのにフォールバックしない。
+- **関連**: stick クラフトバグと同じ根本原因の可能性。recipesAll または材料選択ロジックの問題。
+- **影響**:
+  - 作業台を破壊してしまった後、再設置できない
+  - チームの作業台が不足し、クラフトタスク全般に支障
+- **回避策**:
+  - dark_oak_planks を捨てて、birch_planks のみにする
+  - または手動で板材を統一してから再試行
+- **ステータス**: ⚠️ 未修正 - クラフトレシピ選択ロジックの調査が必要
+
