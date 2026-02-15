@@ -1212,6 +1212,7 @@ export async function useItemOnBlock(
     await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
     await new Promise(resolve => setTimeout(resolve, 100));
 
+<<<<<<< HEAD
     // For buckets collecting fluids, use activateItem instead of activateBlock
     // activateItem() simulates right-click in the direction bot is looking
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" ||
@@ -1227,6 +1228,19 @@ export async function useItemOnBlock(
       bot.deactivateItem();
 =======
       bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
+=======
+    // For buckets on liquid blocks, use activateItem instead of activateBlock
+    // This is the correct way to collect water/lava with buckets in Mineflayer
+    if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
+      const initialItem = bot.heldItem?.name;
+      console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
+      bot.activateItem();
+      bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
+    } else {
+      // For other items, use activateBlock
+      await bot.activateBlock(block);
+    }
+>>>>>>> main
 
 <<<<<<< Updated upstream
       // Poll inventory until it updates (or timeout after 3 seconds)

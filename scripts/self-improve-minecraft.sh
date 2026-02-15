@@ -148,36 +148,37 @@ CLAUDE.mdにフェーズ定義・チャットプロトコル・行動原則が�
 PROMPT
   fi
 
-  # 前回のログがあれば追加
+  # 前回のログがあれば追加（末尾80行）
   PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
   if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
-    echo "" >> /tmp/minecraft_prompt_bot${BOT_ID}.md
-    echo "## 前回のログ（参考）" >> /tmp/minecraft_prompt_bot${BOT_ID}.md
-    echo "" >> /tmp/minecraft_prompt_bot${BOT_ID}.md
-    echo '```' >> /tmp/minecraft_prompt_bot${BOT_ID}.md
-    tail -100 "$PREV_LOG" >> /tmp/minecraft_prompt_bot${BOT_ID}.md
-    echo '```' >> /tmp/minecraft_prompt_bot${BOT_ID}.md
+    EXTRACTED=$(tail -80 "$PREV_LOG" 2>/dev/null)
+    if [ -n "$EXTRACTED" ]; then
+      echo "" >> /tmp/minecraft_prompt_bot${BOT_ID}.md
+      echo "## 前回のログ（参考）" >> /tmp/minecraft_prompt_bot${BOT_ID}.md
+      echo "" >> /tmp/minecraft_prompt_bot${BOT_ID}.md
+      echo '```' >> /tmp/minecraft_prompt_bot${BOT_ID}.md
+      echo "$EXTRACTED" >> /tmp/minecraft_prompt_bot${BOT_ID}.md
+      echo '```' >> /tmp/minecraft_prompt_bot${BOT_ID}.md
+    fi
   fi
 
   # Claude Code実行
   echo "▶️  Starting Claude Code ($BOT_NAME)..."
   echo "   Log: $LOGFILE"
 
-  # Run Claude with timeout (15 minutes)
+  # Run Claude with timeout (30 minutes)
   # 環境変数でMCPサーバーに設定を渡す
   export BOT_USERNAME="$BOT_NAME"
   export ENABLE_VIEWER="${ENABLE_VIEWER:-false}"
   cat /tmp/minecraft_prompt_bot${BOT_ID}.md | claude --dangerously-skip-permissions \
     --print \
-    --verbose \
-    --output-format stream-json \
     --model $MODEL > "$LOGFILE" 2>&1 &
   CLAUDE_PID=$!
 
-  # Wait up to 900 seconds (15 minutes)
+  # Wait up to 1800 seconds (30 minutes)
   EXIT_CODE=0
   WAITED=0
-  while [ $WAITED -lt 900 ]; do
+  while [ $WAITED -lt 1800 ]; do
     if ! kill -0 $CLAUDE_PID 2>/dev/null; then
       wait $CLAUDE_PID 2>/dev/null
       EXIT_CODE=$?
