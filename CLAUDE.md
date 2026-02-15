@@ -37,14 +37,12 @@ src/
 ├── index.ts              # MCPサーバー (stdio)
 ├── mcp-ws-server.ts      # MCPサーバー (WebSocket)
 ├── bot-manager.ts        # Mineflayerボット管理
-├── realtime-board.ts     # 掲示板サーバー
 │
 ├── tools/                # MCPツール実装
 │   ├── connection.ts     # 接続・切断
 │   ├── movement.ts       # 移動
 │   ├── environment.ts    # 環境認識
 │   ├── building.ts       # 建築・ブロック操作
-│   ├── coordination.ts   # エージェント間連携（掲示板）
 │   ├── combat.ts         # 戦闘
 │   └── crafting.ts       # クラフト
 │
@@ -79,8 +77,6 @@ BOT_USERNAME=Claude2 MC_PORT=58896 npm run start:claude
 # WebSocket MCPサーバー（エージェント用）
 npm run start:mcp-ws
 
-# 掲示板サーバー
-npm run board
 ```
 
 ## MCPツール一覧
@@ -117,13 +113,6 @@ npm run board
 - `minecraft_build_structure` - 構造物（house, tower, marker）
 - `minecraft_build_road` - 道路
 - `minecraft_build_village` - 村
-
-### エージェント連携
-- `agent_board_read` - 掲示板を読む
-- `agent_board_write` - 掲示板に書く
-- `agent_board_wait` - 新着を待つ
-- `agent_board_clear` - クリア
-
 
 ## スキルの優先順位
 

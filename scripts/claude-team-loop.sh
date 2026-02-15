@@ -26,7 +26,7 @@ run_agent() {
 Connect to Minecraft server: minecraft_connect(host=localhost, port=60038, username=$BOT_USERNAME)
 
 Leader role:
-1. Use agent_board_write to give instructions
+1. Use minecraft_chat to give instructions
 2. Assign tasks (Member1: mining, Member2: building/food)
 3. Monitor progress
 
@@ -37,9 +37,9 @@ Connect first, then give instructions to team members."
 Connect to Minecraft server: minecraft_connect(host=localhost, port=60038, username=$BOT_USERNAME)
 
 Member role:
-1. Use agent_board_read to check leader instructions
+1. Check chat messages for leader instructions
 2. Execute assigned tasks ($AGENT_NAME: $ROLE)
-3. Report completion via agent_board_write
+3. Report completion via minecraft_chat
 
 Connect first, then wait for leader instructions."
     fi
