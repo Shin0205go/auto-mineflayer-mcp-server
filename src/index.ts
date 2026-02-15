@@ -151,11 +151,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       throw new Error(`Unknown tool: ${name}`);
     }
 
+    // Auto-inject unread chat messages into every tool result
+    // so bots don't need to poll minecraft_get_chat_messages separately
+    let chatSuffix = "";
+    if (name !== "minecraft_get_chat_messages" && name !== "minecraft_connect" && name !== "search_tools") {
+      try {
+        const username = botManager.requireSingleBot();
+        const messages = botManager.getChatMessages(username, true);
+        if (messages.length > 0) {
+          const chatLines = messages.map((m: { username: string; message: string }) =>
+            `<${m.username}> ${m.message}`
+          );
+          chatSuffix = `\n\n📨 新着チャット (${messages.length}件):\n${chatLines.join("\n")}`;
+        }
+      } catch {
+        // Not connected yet - skip
+      }
+    }
+
     return {
       content: [
         {
           type: "text",
-          text: result,
+          text: result + chatSuffix,
         },
       ],
     };
