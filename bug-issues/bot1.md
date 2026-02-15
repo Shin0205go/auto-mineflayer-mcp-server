@@ -455,3 +455,88 @@
 
 ---
 
+### [2026-02-16] NEW Session - Phase 2 Food Crisis + Item Pickup Bug
+
+**Current Status:**
+- 📍 Phase: 2 (Food Stabilization)
+- ⚠️ Food Crisis: 0 food in chest (-12,94,32)
+- ✅ Gamerules Fixed: doTileDrops, doMobLoot, doEntityDrops all true (Claude6)
+- 🐛 Item Pickup Bug: Individual bot issue (Claude6,7 cannot pickup, Claude2,5 can)
+
+**Item Pickup Bug Investigation:**
+- **Symptom**: Some bots can pickup items, others cannot
+- **Affected**: Claude6, Claude7 (cannot pickup)
+- **Working**: Claude2, Claude5 (can pickup)
+- **Test Results**: Claude2 mined coal ore → 5 items picked up successfully
+- **Hypothesis**: Bot connection state issue (not code bug)
+- **Solution**: ✅ RECONNECT FIXES THE ISSUE
+- **Verification**: Claude7 reconnected → successfully picked up dirt (1 block)
+- **Status**: ✅ RESOLVED - Mineflayer internal state issue, not code bug
+- **Action**: Affected bots should disconnect and reconnect
+- **Root Cause**: Unknown Mineflayer/server state desync, reconnect clears it
+
+**Team Assignments:**
+- Claude2: gamerule verification + food gathering
+- Claude3,4: Animal hunting (pig/cow/sheep)
+- Claude5: Seed gathering + farm creation
+- Claude6,7: Item pickup bug testing (reconnect)
+
+**Monitoring:**
+- Awaiting Claude5 report on seed gathering
+- Awaiting Claude6,7 reconnect test results
+- Claude7 died (respawned, returning to base)
+
+**Progress Update (10 minutes in):**
+
+**Item Pickup Bug - RESOLVED:**
+- ✅ Claude7: Reconnect successful, item pickup working
+- ⏳ Claude6: Reconnecting, test in progress
+- Root Cause: Mineflayer internal state desync, reconnect fixes it
+
+**Gamerule Fixes:**
+- ✅ doTileDrops = true (Claude6)
+- ✅ doMobLoot = true (Claude6)
+- ✅ doEntityDrops = true (Claude6)
+- ✅ doMobSpawning = true (Claude3)
+
+**Phase 2 Food Crisis:**
+- ⚠️ Claude5: Hunger 5/20 - CRITICAL
+- 🔄 Claude7: Has 4 food items, supposed to meet Claude5 at base but NO RESPONSE
+- 🔍 Claude2: Cave exploration for spider webs (fishing rod crafting)
+- 🌾 Claude2,5,7: Seed gathering (wheat x1 each so far)
+- 🐄 Claude3,4: Animal hunting (doMobSpawning now true, waiting for spawns)
+
+**Current Bottleneck:**
+- No animals spawned yet (doMobSpawning just enabled)
+- Fishing requires string (need spider hunting at night)
+- Wheat farming requires 4+ seeds (slow collection from short_grass)
+- Claude7 not responding to food transfer request (communication issue?)
+
+**CRITICAL UPDATE - Team-Wide Food Crisis (15 min in):**
+
+**Hunger Status:**
+- ⚠️ Claude5: Hunger 5/20 - CRITICAL
+- ⚠️ Claude3: HP 11/20, Hunger 6/20 - CRITICAL (worsening)
+- ⚠️ Claude7: Food 0 (previously claimed 4 items - disconnected/reconnected?)
+- ⚠️ Claude1: Food 0
+- Status unknown: Claude2, Claude4, Claude6
+
+**Root Cause Analysis:**
+1. **doMobSpawning was FALSE** - no passive mobs spawned since server start
+2. **Now TRUE** - but animals take time to spawn naturally
+3. **No chest with food** - team advanced to Phase 5 without completing Phase 2
+4. **Seed gathering too slow** - short_grass only 12.5% drop rate
+
+**Emergency Strategy:**
+1. Wait for night (~100 seconds, tick 10159→12000)
+2. Spider hunting → string → fishing rods
+3. Fishing for food (most reliable)
+4. Continue animal exploration (200+ block radius)
+
+**Team Assignments:**
+- Claude3,5: Base standby (conserve HP)
+- Claude2,4,7: Wide-range animal exploration
+- All: Switch to spider hunting when night arrives
+
+---
+
