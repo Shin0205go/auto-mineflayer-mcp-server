@@ -314,11 +314,6 @@ ${learnedRules ? `## Learned Rules:\n${learnedRules}\n` : ""}`;
         };
         await this.publishLoopResult(loopResult);
 
-        // Force board write at end of each loop with actual summary
-        await this.claude.forceBoardWrite(
-          loopSummary || `ループ${loopCount}完了`
-        );
-
         // Next turn prompt - simple continuation
         // Events are injected per tool call via MCP Bridge
         currentPrompt = `続行。状況確認→行動。`;
