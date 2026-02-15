@@ -158,17 +158,6 @@ class DevAgent {
     });
   }
 
-  private async writeToBoard(message: string): Promise<void> {
-    try {
-      await this.callTool("agent_board_write", {
-        agent_name: "DevAgent",
-        message,
-      });
-    } catch (e) {
-      console.error(`${PREFIX} Failed to write to board:`, e);
-    }
-  }
-
   private async subscribeToDev(): Promise<void> {
     await this.callTool("dev_subscribe", {});
   }
@@ -237,7 +226,7 @@ ${C.yellow}╔══════════════════════
       this.startGameAgent();
     }
 
-    await this.writeToBoard("🔧 DevAgent 起動 - ソースコード修正 + 行動チューニング");
+    console.log(`${PREFIX} DevAgent 起動 - ソースコード修正 + 行動チューニング`);
 
     // Main loop
     while (this.isRunning) {
@@ -380,7 +369,7 @@ ${C.yellow}╔══════════════════════
       buildSuccess = await this.rebuild();
 
       if (buildSuccess) {
-        await this.writeToBoard(`🔧 コード修正完了: ${toolName} - ${fixDescription.slice(0, 100)}`);
+        console.log(`${PREFIX} コード修正完了: ${toolName} - ${fixDescription.slice(0, 100)}`);
       }
 
       if (!buildSuccess) {
@@ -414,7 +403,7 @@ ${C.yellow}╔══════════════════════
       console.log(`${PREFIX} ${C.green}=== Improvement Cycle Complete (${attempts} attempts) ===${C.reset}`);
     } else {
       console.log(`${PREFIX} ${C.red}=== Gave up after ${MAX_ATTEMPTS} attempts. Please fix manually. ===${C.reset}`);
-      await this.writeToBoard(`⚠️ コード修正失敗: ${toolName} - ${attempts}回試行後に断念。手動修正が必要です。`);
+      console.log(`${PREFIX} コード修正失敗: ${toolName} - ${attempts}回試行後に断念。手動修正が必要です。`);
     }
 
     this.isImproving = false;
@@ -769,9 +758,7 @@ ${buildError}
       const changeSummary = analysisResult.changes
         .map(c => `${c.field}: ${c.reason}`)
         .join("; ");
-      await this.writeToBoard(
-        `🧬 設定更新 v${newConfig.version}: ${changeSummary.slice(0, 150)}`
-      );
+      console.log(`${PREFIX} 設定更新 v${newConfig.version}: ${changeSummary.slice(0, 150)}`);
     } catch (e) {
       console.error(`${PREFIX} Failed to save config:`, e);
     }
