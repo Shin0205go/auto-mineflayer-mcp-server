@@ -160,6 +160,7 @@ PROMPT
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 <<<<<<< HEAD
 =======
 <<<<<<< Updated upstream
@@ -319,6 +320,11 @@ PROMPT
   PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
   if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
 >>>>>>> Stashed changes
+=======
+  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
+  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
+  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
+>>>>>>> Stashed changes
     EXTRACTED=$(python3 -c "
 import json, sys
 for line in open(sys.argv[1]):
@@ -341,6 +347,7 @@ for line in open(sys.argv[1]):
                             print(f'[RESULT] {item["text"][:200]}')
     except: pass
 " "$PREV_LOG" 2>/dev/null | tail -80)
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
@@ -400,6 +407,8 @@ for line in open(sys.argv[1]):
 >>>>>>> Stashed changes
 =======
 >>>>>>> origin/main
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
