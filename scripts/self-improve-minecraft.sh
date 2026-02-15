@@ -90,89 +90,39 @@ while true; do
   git stash pop 2>/dev/null || true
   echo ""
 
+  # リーダー/フォロワー判定
+  if [ "$BOT_ID" -eq 1 ]; then
+    ROLE="リーダー"
+    ROLE_ACTION="接続したら真っ先にフェーズを宣言し、全メンバーにタスクを振れ。自分の作業は指示を出した後。
+
+接続後すぐに以下を実行:
+minecraft_chat(\"[フェーズ] Phase 1 開始。全員の目標: spawn付近に共有拠点を作る\")
+minecraft_chat(\"[指示] @Claude2 木を64個集めて拠点に持ってきて\")
+minecraft_chat(\"[指示] @Claude3 丸石を集めてかまどとツルハシを作って\")
+minecraft_chat(\"[指示] @Claude4 食料確保。動物を探して肉を集めて\")
+minecraft_chat(\"[指示] @Claude5 周辺探索して平地と資源の場所を報告して\")
+minecraft_chat(\"[指示] @Claude6 木を集めてチェスト4個と作業台を作って\")
+minecraft_chat(\"[指示] @Claude7 石炭と丸石を集めて松明を作って\")"
+  else
+    ROLE="フォロワー"
+    ROLE_ACTION="チャットでリーダー(Claude1)の[指示]を確認し、あれば[了解]と返答して実行。なければ現在フェーズの目標に沿って自律行動。"
+  fi
+
   # プロンプトファイル作成（前回のログを含む）
   cat > /tmp/minecraft_prompt_bot${BOT_ID}.md << PROMPT
-# Minecraft - $BOT_NAME
+# $BOT_NAME — ${ROLE}
 
-あなたは **$BOT_NAME** です。今すぐMinecraftをプレイしてください。
+あなたは **$BOT_NAME**（${ROLE}）です。CLAUDE.mdにフェーズ定義・チャットプロトコル・行動原則が書いてあるので必ず従うこと。
 
-## 最初のアクション（必須）
+## 最初のアクション
 
-0. \`git status\` でコンフリクトがないか確認 → あれば最優先で解決
-1. \`minecraft_get_chat_messages()\` - 他のbotからのメッセージ確認
-2. \`minecraft_get_status()\` - 現在の状態確認
-3. \`minecraft_get_position()\` - 現在地確認
-4. \`minecraft_get_surroundings()\` - 周囲確認
+0. \`git status\` でコンフリクト確認 → あれば解決
+1. サーバーに接続（\`minecraft_connect\`）
+2. \`minecraft_get_chat_messages()\` でチャット確認
+3. \`minecraft_get_status()\` + \`minecraft_get_position()\`
+4. **${ROLE_ACTION}**
 
-## チャット連携（最重要）
-
-他のbot（Claude1〜Claude7）と同じワールドにいます。**3〜5アクションごとにチャットを確認し、積極的に情報共有してください。**
-
-### チャットプロトコル（minecraft_chat）
-タグ付きで送信すると他のbotが理解しやすい：
-- \`[食料] 牛5頭 (x=50, z=-30)\` — 食料源の発見
-- \`[資源] 鉄鉱石 y=40 (x=10, z=-20)\` — 有用な資源
-- \`[チェスト] (x=5, y=64, z=4) 焼肉10, パン5\` — チェストの中身
-- \`[危険] クリーパー多数 (x=-30, z=50)\` — 危険エリア
-- \`[拠点] 拠点作った (x=0, y=65, z=0) 作業台あり\` — 拠点情報
-- \`[SOS] 食料ゼロ、瀕死 (x=20, z=-10)\` — 助けを求める
-- \`[依頼] 誰か鉄を掘ってきて\` — 作業の依頼
-- \`[報告] 鉄ピッケル完成、ダイヤ探しに行く\` — 進捗報告
-- \`[応答] @Claude3 鉄渡しに行く\` — 他botへの返答
-
-### 受信したら（minecraft_get_chat_messages）
-- **[SOS]** → 近くにいれば食料を持って助けに行く
-- **[食料]** → 自分も食料不足なら向かう
-- **[チェスト]** → 必要な物があれば取りに行く
-- **[拠点]** → 座標を覚えて活用する
-- **[依頼]** → 自分にできるなら引き受ける
-- **@$BOT_NAME** → 自分への呼びかけ、優先対応
-- **人間のチャット** → 最優先で従う（Claudeではない名前からのメッセージ）
-
-### 連携のコツ
-- 同じ場所に固まらない、散って探索する
-- 拠点にチェストを置いて物資を共有する
-- 余った食料はチェストに入れて報告する
-- 定期的に \`[報告]\` で自分の状況を共有する
-
-## ゲームプレイ
-
-- 食料確保を最優先
-- 木を探して採掘
-- ツールを作成
-- 敵から逃げる
-- 発見した情報はチャットで共有
-
-## コード改善（重要）
-
-プレイ中にツールの不具合や改善点を見つけたら、**自分でコードを修正してください。**
-
-### やること
-1. 問題を発見したら \`bug-issues/bot${BOT_ID}.md\` に記録
-2. 原因を調査（\`src/\` 以下のコードを読む）
-3. 修正できるなら \`src/\` のコードを直接修正
-4. 修正後は \`npm run build\` でビルド確認
-5. 動作確認してからgit commit
-
-### よくある改善ポイント
-- ツールのエラーメッセージがわかりにくい → メッセージ改善
-- 特定の操作が失敗しやすい → エラーハンドリング追加
-- 移動・採掘の効率が悪い → ロジック改善
-- 足りない機能がある → 新しいツールや機能を追加
-
-### gitコンフリクト解決
-他のbotと同じファイルを修正するとコンフリクトが起きます。
-1. \`git status\` でコンフリクトファイルを確認
-2. コンフリクトファイルを読んで \`<<<<<<<\` \`=======\` \`>>>>>>>\` を確認
-3. 両方の変更を活かすように手動で修正
-4. \`git add <file>\` → \`git commit\` で解決
-
-### 注意
-- \`src/\` と \`.claude/skills/\` と \`bug-issues/bot${BOT_ID}.md\` のみ編集可能
-- 他のbotのbug-issuesファイルは編集しないこと
-- ビルドが通らない修正はコミットしないこと
-
-**まずゲームをプレイし、問題を見つけたらコードを改善！今すぐ minecraft_get_chat_messages() を実行！**
+バグを見つけたら \`bug-issues/bot${BOT_ID}.md\` に記録して \`src/\` を修正。編集可能: \`src/\`, \`.claude/skills/\`, \`bug-issues/bot${BOT_ID}.md\` のみ。
 
 PROMPT
 
@@ -191,7 +141,7 @@ PROMPT
   echo "▶️  Starting Claude Code ($BOT_NAME)..."
   echo "   Log: $LOGFILE"
 
-  # Run Claude with timeout (20 minutes)
+  # Run Claude with timeout (10 minutes)
   # 環境変数でMCPサーバーに設定を渡す
   export BOT_USERNAME="$BOT_NAME"
   export ENABLE_VIEWER="${ENABLE_VIEWER:-false}"
@@ -202,10 +152,10 @@ PROMPT
     --model $MODEL > "$LOGFILE" 2>&1 &
   CLAUDE_PID=$!
 
-  # Wait up to 1200 seconds (20 minutes)
+  # Wait up to 600 seconds (10 minutes)
   EXIT_CODE=0
   WAITED=0
-  while [ $WAITED -lt 1200 ]; do
+  while [ $WAITED -lt 600 ]; do
     if ! kill -0 $CLAUDE_PID 2>/dev/null; then
       wait $CLAUDE_PID 2>/dev/null
       EXIT_CODE=$?
@@ -218,7 +168,7 @@ PROMPT
   # Kill if still running (プロセスグループごと)
   if kill -0 $CLAUDE_PID 2>/dev/null; then
     echo "" | tee -a "$LOGFILE"
-    echo "⏱️  Timeout reached (20 minutes), stopping..." | tee -a "$LOGFILE"
+    echo "⏱️  Timeout reached (10 minutes), stopping..." | tee -a "$LOGFILE"
     pkill -P $CLAUDE_PID 2>/dev/null || true
     kill $CLAUDE_PID 2>/dev/null || true
     sleep 2
@@ -234,7 +184,7 @@ PROMPT
   if [ ${EXIT_CODE:-0} -eq 0 ]; then
     echo "✅ Completed successfully"
   elif [ ${EXIT_CODE:-0} -eq 124 ]; then
-    echo "⏱️  Timeout (20 minutes) - moving to next loop"
+    echo "⏱️  Timeout (10 minutes) - moving to next loop"
   else
     echo "❌ Exited with code ${EXIT_CODE:-0}"
   fi
