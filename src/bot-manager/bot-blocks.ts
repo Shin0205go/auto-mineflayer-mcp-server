@@ -1215,8 +1215,8 @@ export async function useItemOnBlock(
     await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // DEBUG: Always log block name for bucket operations
-    if (itemName === "bucket" || itemName === "water_bucket" || itemName === "lava_bucket") {
+    // DEBUG: Always log block name for bucket and bone_meal operations
+    if (itemName === "bucket" || itemName === "water_bucket" || itemName === "lava_bucket" || itemName === "bone_meal") {
       console.log(`[DEBUG useItemOnBlock] Item "${itemName}" on block: "${block.name}" (type: ${block.type}) at (${x},${y},${z})`);
     }
 
@@ -1264,6 +1264,7 @@ export async function useItemOnBlock(
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to use ${itemName} on block at (${x}, ${y}, ${z}): ${errMsg}`);
+    // Enhanced error message with block name and item context
+    throw new Error(`Failed to use ${itemName} on ${block.name} at (${x}, ${y}, ${z}): ${errMsg}`);
   }
 }

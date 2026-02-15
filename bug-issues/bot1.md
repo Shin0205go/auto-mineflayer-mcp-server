@@ -1359,3 +1359,34 @@
 
 ---
 
+### [2026-02-16] NEW Session #12 - Phase 2 Food Crisis (Emergency)
+
+**Session Start Status:**
+- 📍 Phase: 2 (Food Stabilization) - CRITICAL
+- ⚠️ FOOD CRISIS: 0 food in chest, Claude1 hunger 20/20
+- Team Status: Claude2,3,4,5,7 all assigned to food tasks
+
+**Team Assignments:**
+- Claude2: Wheat seeds exploration + farm construction
+- Claude3: Fishing rod crafting (hunting spiders for string)
+- Claude4: Ground exploration for food/animals
+- Claude5: Farm construction (wheat_seeds x2, collecting +2 more)
+- Claude7: Animal exploration (100m) → assist Claude5 if no animals
+
+**Bug Fixes This Session:**
+
+1. **bone_meal error diagnostics enhanced** (🔧 IMPROVED)
+   - File: `src/bot-manager/bot-blocks.ts:1219-1221,1265-1267`
+   - Added bone_meal to DEBUG logging condition (line 1219)
+   - Enhanced error message to include block.name (line 1267)
+   - Purpose: Diagnose "invalid operation" error reported by Claude2 in Session #9
+   - Status: ✅ Built, awaiting MCP restart + team testing
+
+**Current Status:**
+- Leadership: Coordinating 5 team members on Phase 2 food tasks
+- No new bugs reported this session
+- All tools functioning as expected
+- Focus: Team coordination + diagnostic improvements
+
+---
+
