@@ -159,3 +159,22 @@
 - インベントリフル問題の別バリエーション？
 
 **対応**: 調査予定、必要ならreconnectを試す
+
+## 2026-02-16: egg (投擲アイテム) を投げるツールがない
+
+**症状**: eggを投げて鶏を孵化させる機能がない
+- `minecraft_use_item_on_block` はブロックに対してアイテムを使用する
+- eggは空中に向かって投げる必要がある（projectile）
+- 現在のツールセットには投擲（throw/shoot）用のツールがない
+
+**必要な機能**:
+- `bot.activateItem()` を空中に向かって使用
+- または `bot.toss()` / `bot.activateItem()` for throwing projectiles
+- snowball, ender_pearl なども同様に投げられない
+
+**対応**: ✅実装完了 (bot7)
+- `src/tools/building.ts` に `minecraft_throw_item` ツール追加
+- `src/bot-manager/bot-blocks.ts` に `throwItem` 関数追加
+- `src/bot-manager/index.ts` に `throwItem` メソッド追加
+- ビルド成功
+- **注意**: MCPサーバー再起動が必要（reconnectでは反映されない）
