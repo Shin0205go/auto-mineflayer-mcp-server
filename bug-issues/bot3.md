@@ -52,3 +52,30 @@
   2. `minecraft_use_item_on_block(item_name="bucket", x=-5, y=38, z=9)` を実行
   3. 結果: バケツのまま、water_bucketにならない
 
+### [2026-02-16] チェストが開けない (windowOpenタイムアウト)
+- **症状**: `minecraft_store_in_chest`と`minecraft_open_chest`で「Event windowOpen did not fire within timeout of 20000ms」エラーが発生。チェストの近くにいてもチェストが開けない。
+- **原因**:
+  - チェスト座標の近くにはいるが、正確な距離・位置の問題の可能性
+  - サーバー側のレスポンスが遅い、または応答がない
+  - `bot.openContainer()`のイベント待機がタイムアウト
+- **試した操作**:
+  - `minecraft_move_to(x=-1, y=96, z=0)` でチェスト近くに移動
+  - `minecraft_find_block("chest", 5)` で確認済み: chest at (-1, 96, 0) - 2 blocks
+  - `minecraft_store_in_chest("raw_iron", 10)` → タイムアウト
+  - `minecraft_store_in_chest("bucket", 4)` → タイムアウト
+- **ファイル**: `src/bot-manager/bot-crafting.ts` (チェスト操作関数)
+- **影響**: アイテムをチェストに保管できない、チーム共有ができない
+- **回避策**:
+  - アイテムを床にドロップして他のボットに拾わせる
+  - または直接アイテムを保持し続ける
+- **修正内容**:
+  - `src/bot-manager/bot-storage.ts`: `storeInChest`と`takeFromChest`に以下を追加:
+    1. チェストまでの距離チェック（distance > 3の場合、pathfinderで2ブロック以内に接近）
+    2. 待機時間を200ms→500msに延長
+  - Minecraftのチェスト操作は1.5ブロック以内の距離が必要
+  - `minecraft_move_to`で近くに移動しても、正確な距離が確保されていなかった
+- **ファイル**: `src/bot-manager/bot-storage.ts:60-105`, `110-130`
+- **ステータス**: ✅ 修正完了、ビルド成功
+- **注意**: MCPサーバー再起動が必要（接続済みセッションには反映されない）
+- **次回セッション**: チェスト操作が正常に動作するはず
+

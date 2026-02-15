@@ -91,14 +91,8 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
   const start = bot.entity.position;
   const distance = start.distanceTo(targetPos);
 
-  // If already at target (within 2 blocks), return success immediately
-  if (distance < 2) {
-    return {
-      success: true,
-      message: `Already at destination (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)})`
-    };
-  }
-
+  // GoalNear with range=2 already handles distance check - pathfinder will immediately
+  // complete if within 2 blocks. No need for early return that skips actual movement.
   const goal = new goals.GoalNear(x, y, z, 2);
 
   return new Promise((resolve) => {
