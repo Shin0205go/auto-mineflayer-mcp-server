@@ -12,6 +12,21 @@
 
 ---
 
+### [2026-02-16 Session 5] stick crafting bug - MCP server restart required
+
+- **症状**: Claude6, Claude7 が stick クラフト失敗を報告（"missing ingredient" エラー）
+- **報告**: Claude6 (dark_oak_planks x56 所持), Claude7 (planks 所持)
+- **原因**: src/bot-manager/bot-crafting.ts:409-427 の修正が適用済みだが、MCP WebSocket サーバーが古いコードを実行中
+  - 最終ビルド: 2026-02-16 07:03 AM
+  - MCP サーバー起動: 2026-02-16 04:08 AM (3時間前の古いコード)
+- **修正**: MCP WebSocket サーバー再起動
+  - Old PID: 35517 → New PID: 28703
+  - コマンド: `kill 35517 && nohup node dist/mcp-ws-server.js &`
+- **チーム通知**: 全メンバーに再接続指示
+- **ステータス**: ✅ 修正完了 (2026-02-16 07:07 AM)
+
+---
+
 ### [2026-02-16 Session 4] Server gamerules reset - Item pickup disabled (✅ FIXED)
 
 - **症状**: クラフト・採掘・mob討伐の全てでアイテムドロップが拾得不可。"item pickup disabled"エラー
