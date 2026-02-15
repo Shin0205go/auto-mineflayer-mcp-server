@@ -219,6 +219,14 @@ PROMPT
     echo "❌ Exited with code ${EXIT_CODE:-0}"
   fi
 
+  # 未コミットの変更を自動コミット（botがコミットし忘れた場合のセーフティネット）
+  CHANGED_FILES=$(git diff --name-only -- src/ bug-issues/ .claude/skills/ 2>/dev/null | head -20)
+  if [ ! -z "$CHANGED_FILES" ]; then
+    echo "📝 [$BOT_NAME] Auto-committing uncommitted changes..."
+    git add src/ bug-issues/ .claude/skills/ 2>/dev/null || true
+    git commit -m "[$BOT_NAME] Auto-commit: changes from loop #$LOOP" 2>/dev/null && echo "✅ Auto-committed" || true
+  fi
+
   # エラー数カウント
   ERROR_COUNT=$(grep -c "Error\|Failed\|Exception" "$LOGFILE" 2>/dev/null || echo "0")
   TOOL_COUNT=$(grep -c "mcp__mineflayer" "$LOGFILE" 2>/dev/null || echo "0")
