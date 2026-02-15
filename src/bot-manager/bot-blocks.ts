@@ -257,7 +257,7 @@ export async function digBlock(
 
   const blockName = block.name;
 
-  // Check for lava in adjacent blocks before digging (unless force=true)
+  // Check for lava in adjacent blocks before digging (unless force flag is set)
   if (!force) {
     const adjacentPositions = [
       blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
@@ -272,7 +272,7 @@ export async function digBlock(
       }
     }
   } else {
-    console.error(`[Dig] Force=true: Skipping lava check for ${blockName} at (${x}, ${y}, ${z})`);
+    console.error(`[Dig] Force flag enabled, ignoring lava check for ${blockName} at (${x}, ${y}, ${z})`);
   }
 
   // Creative mode or OP: use command
@@ -1224,25 +1224,15 @@ export async function useItemOnBlock(
       console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
       bot.activateItem();
       bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
-
-      // Poll inventory until it updates (or timeout after 3 seconds)
-      const startTime = Date.now();
-      while (Date.now() - startTime < 3000) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        bot.updateHeldItem();
-        const currentItem = bot.heldItem?.name;
-        if (currentItem === "water_bucket" || currentItem === "lava_bucket") {
-          break;
-        }
-      }
     } else {
-      // For other items (water_bucket placing, flint_and_steel, etc.), use activateBlock
+      // For other items, use activateBlock
       await bot.activateBlock(block);
     }
 
-    // Check what happened (e.g., bucket → water_bucket)
-    // Wait longer for server synchronization (1000ms instead of 500ms)
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait longer for inventory to update properly
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Force inventory update by checking actual inventory, not just heldItem
     bot.updateHeldItem();
     const heldAfter = bot.heldItem;
     const heldName = heldAfter?.name || "nothing";

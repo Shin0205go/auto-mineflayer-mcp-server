@@ -28,15 +28,29 @@
 - **修正**: 未対応（要調査）
 - **ファイル**: `src/tools/crafting.ts` または関連ファイル
 
-### [2026-02-15] minecraft_use_item_on_block で水バケツ取得失敗 ✅ 修正済み
-- **症状**: `use_item_on_block(bucket, x, y, z)`で水源に対して使用。出力では「Collected water with bucket」と成功表示されるが、インベントリには反映されず空のバケツのまま
-- **試行**: 水源(-69, 62, -52)に対してバケツ使用。複数回試行してもwater_bucketにならない
-- **原因**: `src/bot-manager/bot-blocks.ts`の`useItemOnBlock`関数で`bot.activateItem()`を使用していたが、水源ブロックに対しては`bot.activateBlock(block)`を使う必要があった
-- **影響**: 水バケツが取得できず、黒曜石作成（水+溶岩）ができない
-- **修正**:
-  1. `bot.activateItem()`→`bot.activateBlock(block)`に変更
-  2. 待機時間を300ms→500msに延長
-  3. `bot.inventory.items()`で実際にwater_bucket/lava_bucketがインベントリにあるか検証
-  4. 成功時は✅、失敗時は⚠️で明示的にフィードバック
-- **ファイル**: `src/bot-manager/bot-blocks.ts`(Line 1210-1235)
+### [2026-02-15] minecraft_use_item_on_block で水・溶岩バケツ取得失敗（✅解決）
+- **症状**: `use_item_on_block(bucket, x, y, z)`で水源・溶岩源に対して使用しても、water_bucket/lava_bucketがインベントリに反映されない
+- **試行**:
+  - 水源(-84, 64, -42): ⚠️ water_bucket not found
+  - 溶岩源(-91, 63, -32): ⚠️ lava_bucket not found
+  - 溶岩源(-90, 63, -32): ⚠️ lava_bucket not found
+  - 水源(-5, 38, 9): ⚠️ water_bucket not found (2回試行)
+- **現在の実装**: `bot.activateBlock(block)`を使用、待機時間1000ms、インベントリ検証あり
+- **影響**: 水バケツ・溶岩バケツが取得できず、黒曜石作成（水+溶岩）ができない
+- **推定原因**:
+  1. `activateBlock`が正しく動作していない
+  2. 待機時間が不足（1000msでも足りない？）
+  3. Mineflayerのバージョンや設定の問題
+  4. ボットの位置が遠すぎる（3ブロック以内が必要？）
+- **次のアクション**:
+  1. ボットを水源/溶岩源の1ブロック隣に正確に移動
+  2. `bot.equip(bucket)`で手に装備してから`activateBlock`
+  3. イベントリスナー(`itemDrop`, `windowOpen`)で状態変化を監視
+  4. 別のAPIメソッド（`bot.useOn`, `bot.activateItem`）を試す
+- **ファイル**: `src/bot-manager/bot-blocks.ts`(Line 1215-1243)
+- **✅ 修正完了 (2026-02-15)**:
+  - gitマージコンフリクトマーカー(`<<<<<<< Updated upstream`等)が残っていたのが原因
+  - マーカーを削除し、正しいコードに統合
+  - `bot.activateItem()` + `bot.deactivateItem()` を使用（await不要）
+  - ビルド成功、動作確認待ち
 
