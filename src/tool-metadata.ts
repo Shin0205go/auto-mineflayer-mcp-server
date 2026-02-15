@@ -39,13 +39,6 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
   minecraft_check_infrastructure: { tags: ["check", "crafting-table", "furnace", "info"], category: "info", priority: 6 },
 
 
-  // Coordination
-  agent_board_read: { tags: ["coordination", "board", "read", "communication"], category: "coordination", priority: 6 },
-  agent_board_write: { tags: ["coordination", "board", "write", "communication"], category: "coordination", priority: 6 },
-  agent_board_wait: { tags: ["coordination", "board", "wait", "sync"], category: "coordination", priority: 5 },
-  agent_board_clear: { tags: ["coordination", "board", "clear"], category: "coordination", priority: 4 },
-
-
   // Dev Agent integration
   dev_publish_loop_result: { tags: ["dev", "loop", "result"], category: "dev", priority: 3 },
   dev_get_loop_results: { tags: ["dev", "loop", "history"], category: "dev", priority: 3 },

@@ -9,7 +9,6 @@
 
 import { WebSocketServer, WebSocket } from 'ws';
 import { botManager } from "./bot-manager/index.js";
-import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
 import {
   minecraft_gather_resources,
   minecraft_build_structure,
@@ -92,19 +91,6 @@ const SAFE_TOOLS = new Set([
   "minecraft_get_chat_messages",
   "minecraft_chat",
   "subscribe_events",
-  "agent_board_read",
-  "agent_board_write",
-  "agent_board_wait",
-  "agent_board_clear",
-  // Learning/memory tools
-  "log_experience",
-  "get_recent_experiences",
-  "reflect_and_learn",
-  "save_memory",
-  "recall_memory",
-  "forget_memory",
-  "get_agent_skill",
-  "list_agent_skills",
   // Dev tools
   "dev_subscribe",
   "dev_get_tool_logs",
@@ -258,11 +244,6 @@ const FAILURE_PATTERNS = [
 const INFORMATIONAL_TOOLS = [
   "minecraft_get_state",
   "minecraft_get_chat_messages",
-  "agent_board_read",
-  "get_recent_experiences",
-  "recall_memory",
-  "list_agent_skills",
-  "get_agent_skill",
 ];
 
 /**
@@ -404,7 +385,7 @@ const tools = {
   },
   // Tool Search
   search_tools: {
-    description: "Search for available tools by keyword or category. Use this to discover relevant tools without loading all tool definitions. Categories: connection, info, communication, actions, crafting, learning, coordination, tasks, dev",
+    description: "Search for available tools by keyword or category. Use this to discover relevant tools without loading all tool definitions. Categories: connection, info, communication, actions, crafting, dev",
     inputSchema: {
       type: "object",
       properties: {
@@ -503,39 +484,6 @@ const tools = {
       },
       required: ["username"]
     }
-  },
-  // Coordination
-  agent_board_read: {
-    description: "Read the agent coordination board",
-    inputSchema: {
-      type: "object",
-      properties: { last_n_lines: { type: "number" } },
-    },
-  },
-  agent_board_write: {
-    description: "Write to the agent coordination board",
-    inputSchema: {
-      type: "object",
-      properties: {
-        agent_name: { type: "string" },
-        message: { type: "string" },
-      },
-      required: ["agent_name", "message"],
-    },
-  },
-  agent_board_wait: {
-    description: "Wait for new messages on the board",
-    inputSchema: {
-      type: "object",
-      properties: {
-        timeout_seconds: { type: "number", default: 30 },
-        filter: { type: "string" },
-      },
-    },
-  },
-  agent_board_clear: {
-    description: "Clear the agent board",
-    inputSchema: { type: "object", properties: {} },
   },
   // Dev Agent tools
   dev_subscribe: {
@@ -689,25 +637,6 @@ async function handleTool(
       return JSON.stringify(messages);
     }
 
-
-    case "agent_board_read": {
-      return readBoard(args.last_n_lines as number | undefined);
-    }
-
-    case "agent_board_write": {
-      return writeBoard(args.agent_name as string, args.message as string);
-    }
-
-    case "agent_board_wait": {
-      return await waitForNewMessage(
-        (args.timeout_seconds as number) || 30,
-        args.filter as string | undefined
-      );
-    }
-
-    case "agent_board_clear": {
-      return clearBoard();
-    }
 
     case "subscribe_events": {
       const subUsername = args.username as string;
@@ -1080,7 +1009,7 @@ async function handleRequest(ws: WebSocket, request: JSONRPCRequest): Promise<JS
         }
 
         // Auto-connect: 未接続の場合、自動的に接続
-        const skipAutoConnect = ["minecraft_connect", "minecraft_disconnect", "dev_subscribe", "subscribe_events", "agent_board_read", "agent_board_write", "agent_board_wait", "agent_board_clear"].includes(toolName);
+        const skipAutoConnect = ["minecraft_connect", "minecraft_disconnect", "dev_subscribe", "subscribe_events"].includes(toolName);
         if (!skipAutoConnect && toolName.startsWith("minecraft_")) {
           const botUsername = connectionBots.get(ws);
           if (botUsername && !botManager.isConnected(botUsername)) {
