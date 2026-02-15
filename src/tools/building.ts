@@ -140,6 +140,28 @@ export const buildingTools = {
       required: ["item_name", "x", "y", "z"],
     },
   },
+
+  minecraft_till_soil: {
+    description: "Till soil (grass_block or dirt) to create farmland for planting crops. Workaround for hoe crafting bug.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        x: {
+          type: "number",
+          description: "X coordinate of block to till",
+        },
+        y: {
+          type: "number",
+          description: "Y coordinate of block to till",
+        },
+        z: {
+          type: "number",
+          description: "Z coordinate of block to till",
+        },
+      },
+      required: ["x", "y", "z"],
+    },
+  },
 };
 
 export async function handleBuildingTool(
@@ -265,6 +287,15 @@ export async function handleBuildingTool(
       }
 
       const result = await botManager.useItemOnBlock(username, itemName, x, y, z);
+      return result;
+    }
+
+    case "minecraft_till_soil": {
+      const x = args.x as number;
+      const y = args.y as number;
+      const z = args.z as number;
+
+      const result = await botManager.tillSoil(username, x, y, z);
       return result;
     }
 

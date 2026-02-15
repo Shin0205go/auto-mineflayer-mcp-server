@@ -106,33 +106,26 @@
   3. 最初のチェックで既に近い場合は「Already near target」メッセージを返す
 - **ステータス**: ⚠️ 原因特定済み・回避策あり - 恒久的修正は要検討（他機能への影響調査必要）
 
-## [2026-02-16] No tool to till soil / create farmland
+## [2026-02-16] No tool to till soil / create farmland ✅ **FIXED**
 
 - **症状**: 小麦農場を作るために種を植えたいが、grass_blockを耕してfarmlandにするツールがない。クワもクラフトできない（stickバグ）。
 - **現状**:
   - `minecraft_place_block("wheat_seeds", x, y, z)` は grass_block の上に置けない（farmland が必要）
   - クワをクラフトできない（stick クラフトバグのため）
-  - 素手で右クリックして耕す機能がMCPツールに存在しない
-- **必要な機能**: `minecraft_till_soil(x, y, z)` - grass_block/dirt を farmland に変換するツール
-- **実装案**:
-  ```typescript
-  async tillSoil(x: number, y: number, z: number): Promise<string> {
-    const block = bot.blockAt(new Vec3(x, y, z));
-    if (!block || (block.name !== 'grass_block' && block.name !== 'dirt')) {
-      return `Cannot till: block at (${x},${y},${z}) is ${block?.name || 'air'}`;
-    }
-    // Use any item to right-click the block (or equip a hoe if available)
-    await bot.activateBlock(block);
-    await new Promise(r => setTimeout(r, 300));
-    const newBlock = bot.blockAt(new Vec3(x, y, z));
-    if (newBlock?.name === 'farmland') {
-      return `Tilled soil at (${x},${y},${z})`;
-    }
-    return `Failed to till at (${x},${y},${z})`;
-  }
-  ```
-- **ファイル**: 新規ツール `src/tools/farming.ts` または `src/bot-manager/bot-farming.ts`
-- **ステータス**: ⚠️ 未実装 - 次セッションで追加必要
+  - 素手で右クリックして耕す機能がMCPツールに存在しなかった
+- **実装内容**:
+  1. `src/bot-manager/bot-blocks.ts` に `tillSoil` 関数を追加（line 1271-1337）
+  2. `src/tools/building.ts` に `minecraft_till_soil` ツールを追加
+  3. `src/bot-manager/index.ts` に `tillSoil` メソッドを追加
+- **機能**:
+  - grass_block または dirt を farmland に変換
+  - クワがあれば自動装備、なければ素手で耕す
+  - 移動が必要な場合は自動で近づく
+- **ファイル**:
+  - `src/bot-manager/bot-blocks.ts:1271-1337`
+  - `src/tools/building.ts`
+  - `src/bot-manager/index.ts`
+- **ステータス**: ✅ 実装完了・ビルド成功 (2026-02-16)
 
 ## [2026-02-16] Inventory full error despite dropping items
 

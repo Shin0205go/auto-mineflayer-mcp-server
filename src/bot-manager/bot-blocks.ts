@@ -1268,3 +1268,69 @@ export async function useItemOnBlock(
     throw new Error(`Failed to use ${itemName} on ${block.name} at (${x}, ${y}, ${z}): ${errMsg}`);
   }
 }
+
+/**
+ * Till soil to create farmland (workaround for hoe crafting bug)
+ */
+export async function tillSoil(
+  managed: ManagedBot,
+  x: number,
+  y: number,
+  z: number
+): Promise<string> {
+  const bot = managed.bot;
+  const targetPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
+  const botPos = bot.entity.position;
+  const distance = botPos.distanceTo(targetPos);
+  const REACH_DISTANCE = 4.5;
+
+  // Move closer if needed
+  if (distance > REACH_DISTANCE) {
+    const goal = new goals.GoalNear(x, y, z, REACH_DISTANCE - 0.5);
+    bot.pathfinder.setGoal(goal);
+
+    const startTime = Date.now();
+    const timeout = 10000;
+
+    while (bot.entity.position.distanceTo(targetPos) > REACH_DISTANCE && Date.now() - startTime < timeout) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    bot.pathfinder.setGoal(null);
+
+    if (bot.entity.position.distanceTo(targetPos) > REACH_DISTANCE) {
+      return `Cannot reach position (${x}, ${y}, ${z}) to till soil`;
+    }
+  }
+
+  const block = bot.blockAt(targetPos);
+  if (!block) {
+    return `No block at (${x}, ${y}, ${z})`;
+  }
+
+  if (block.name !== 'grass_block' && block.name !== 'dirt') {
+    return `Cannot till: block at (${x}, ${y}, ${z}) is ${block.name}, need grass_block or dirt`;
+  }
+
+  try {
+    // Equip a hoe if available, otherwise use any item
+    const hoe = bot.inventory.items().find(i => i.name.endsWith('_hoe'));
+    if (hoe) {
+      await bot.equip(hoe, 'hand');
+    }
+
+    // Activate (right-click) the block to till it
+    await bot.activateBlock(block);
+    await new Promise(r => setTimeout(r, 300));
+
+    const newBlock = bot.blockAt(targetPos);
+    if (newBlock?.name === 'farmland') {
+      return `✅ Tilled soil at (${x}, ${y}, ${z}) → now farmland`;
+    }
+
+    return `⚠️ Activated block at (${x}, ${y}, ${z}) but it did not become farmland (now: ${newBlock?.name})`;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    return `Failed to till soil at (${x}, ${y}, ${z}): ${errMsg}`;
+  }
+}

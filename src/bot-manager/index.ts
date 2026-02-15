@@ -34,6 +34,7 @@ import {
   levelGround as levelGroundBasic,
   activateBlock as activateBlockBasic,
   useItemOnBlock as useItemOnBlockBasic,
+  tillSoil as tillSoilBasic,
 } from "./bot-blocks.js";
 
 // Import bot-crafting functions
@@ -357,6 +358,12 @@ export class BotManager extends BotCore {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
     return await useItemOnBlockBasic(managed, x, y, z, itemName, this.moveTo.bind(this));
+  }
+
+  async tillSoil(username: string, x: number, y: number, z: number): Promise<string> {
+    const managed = this.getBotByUsername(username);
+    if (!managed) throw new Error(`Bot ${username} not found`);
+    return await tillSoilBasic(managed, x, y, z);
   }
 
   async dropItem(username: string, itemName: string, count?: number): Promise<string> {
