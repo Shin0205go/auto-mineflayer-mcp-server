@@ -88,6 +88,10 @@ while true; do
   fi
 
   git stash pop 2>/dev/null || true
+
+  # 毎ループビルド（src/の修正をdist/に反映）
+  echo "🔨 Building..."
+  npm run build > /dev/null 2>&1 && echo "✅ Build OK" || echo "⚠️ Build failed"
   echo ""
 
   # プロンプトファイル作成（前回のログを含む）
