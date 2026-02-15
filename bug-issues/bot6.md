@@ -44,3 +44,8 @@
 
 ### 調査が必要なファイル
 - `src/tools/building.ts` (use_item_on_block)
+
+### 修正内容 (2026-02-15)
+- `src/bot-manager/bot-blocks.ts:1225` の待機時間を500ms→1000msに延長
+- サーバー同期を待つ時間が不足していたため、バケツ→water_bucketの変換が反映されなかった
+- 修正後は`npm run build`でビルドして再接続が必要
