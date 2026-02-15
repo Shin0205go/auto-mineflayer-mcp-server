@@ -5,13 +5,23 @@
 ## 2026-02-15: stick クラフト失敗
 
 **症状**: `minecraft_craft(item_name="stick")` が "missing ingredient" エラー
-- インベントリに birch_planks 8個、oak_planks 4個 あり
-- 作業台の近く（1ブロック以内）でも失敗
-- エラーメッセージ: "Failed to craft stick from birch_planks: Error: missing ingredient"
+- インベントリに birch_planks 12個、dark_oak_planks 4個 あり
+- エラーメッセージ: "Failed to craft stick from dark_oak_planks: Error: missing ingredient"
 
-**原因推測**: `src/tools/crafting.ts` の `simpleWoodenRecipes` ハンドラーが動作していない可能性
+**原因**: `src/bot-manager/bot-crafting.ts:405-429`
+- `bot.recipesAll(item.id, null, null)` が0レシピを返す（Minecraftバージョンの問題）
+- fallbackとして `bot.recipesFor(item.id, null, 1, null)` を試すが、これも0レシピを返す
+- パラメータが不適切で必要な材料（planks）を指定していない
 
-**対応**: コードを調査して修正予定
+**修正**: ✅完了 (bot7)
+- `src/bot-manager/bot-crafting.ts:409-460` で手動レシピ実装
+- stick: 2 planks → 4 sticks (vertical pattern in 2x2 grid)
+- crafting_table: 4 planks → 1 crafting_table (2x2 grid)
+- `recipesAll/recipesFor` が0を返す場合、手動でレシピオブジェクトを作成
+- delta配列を追加して材料消費を明示
+- ビルド成功
+
+**注意**: MCPサーバー再起動が必要（reconnectでは反映されない）
 
 ## 2026-02-15: minecraft_use_item_on_block で水を汲んでも water_bucket にならない
 
@@ -178,3 +188,22 @@
 - `src/bot-manager/index.ts` に `throwItem` メソッド追加
 - ビルド成功
 - **注意**: MCPサーバー再起動が必要（reconnectでは反映されない）
+
+
+## 2026-02-16 セッション: Claude7の成果
+
+### 主要成果
+1. **leather x7発見**: チェスト(-37,97,7)でleather x7を発見・回収。Phase 5エンチャント台用の本作成に必須
+2. **stickクラフトバグ修正実装**: 手動レシピ実装済み、ビルド成功。サーバー再起動で反映予定
+3. **探索実施**: 半径100m+でサトウキビ・動物・水源を探索（未発見）
+4. **mobドロップテスト**: skeleton_horse討伐でドロップ0個確認
+
+### 課題
+- stickクラフトバグが未解決（サーバー未再起動）のため鉄ピッケル作成不可
+- サトウキビ・羊が見つからず（Phase 5の本作成に紙が必要）
+- 動物がほとんど存在しない環境（skeleton_horse・batのみ）
+
+### 次セッション優先事項
+- サーバー再起動でstickクラフト修正を検証
+- サトウキビ探索継続（本作成に必須）
+- 羊毛3個収集（ベッド作成用）
