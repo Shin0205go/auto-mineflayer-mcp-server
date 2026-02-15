@@ -12,3 +12,12 @@
 
 ---
 
+### [2026-02-15] use_item_on_block - バケツで水/溶岩を回収できない
+- **症状**: bucketで水源/溶岩源を右クリックしても、water_bucket/lava_bucketにならない（Claude5報告）
+- **原因**: `src/bot-manager/bot-blocks.ts:1216` で`bot.activateBlock(block)`を使用しているが、Mineflayerでは液体回収に`bot.activateItem()`を使う必要がある
+- **修正**: `bot.activateBlock(block)` → `bot.activateItem()`に変更。ブロックを見る処理は維持
+- **ファイル**: `src/bot-manager/bot-blocks.ts` (useItemOnBlock関数)
+- **参考**: [Mineflayer Issue #1262](https://github.com/PrismarineJS/mineflayer/issues/1262)
+
+---
+
