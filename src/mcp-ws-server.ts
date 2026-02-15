@@ -1208,7 +1208,7 @@ function startServer(port: number = 8765) {
 
   console.log(`[MCP-WS-Server] Starting on port ${port}...`);
 
-  wss.on('connection', (ws: WebSocket, req) => {
+  wss.on('connection', (ws: WebSocket, req: any) => {
     const clientAddr = req.socket.remoteAddress;
     console.log(`[MCP-WS-Server] Client connected from ${clientAddr}`);
 
@@ -1257,7 +1257,7 @@ function startServer(port: number = 8765) {
       // Note: We don't disconnect the bot here - it persists for reconnection
     });
 
-    ws.on('error', (error) => {
+    ws.on('error', (error: any) => {
       console.error(`[MCP-WS-Server] WebSocket error:`, error);
     });
 
@@ -1279,7 +1279,7 @@ function startServer(port: number = 8765) {
     console.log(`[MCP-WS-Server] Available tools: ${Object.keys(tools).join(', ')}`);
   });
 
-  wss.on('error', (error) => {
+  wss.on('error', (error: any) => {
     console.error('[MCP-WS-Server] Server error:', error);
   });
 
