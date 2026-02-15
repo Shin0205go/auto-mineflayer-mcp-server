@@ -81,8 +81,17 @@ export async function storeInChest(
     throw new Error(`No ${itemName} in inventory. Have: ${inventory}`);
   }
 
+  // Move closer to chest to ensure we're within interaction range (1.5 blocks)
+  const chestPos = chestBlock.position;
+  const distance = bot.entity.position.distanceTo(chestPos);
+  if (distance > 3) {
+    const { goals: pathfinderGoals } = await import("mineflayer-pathfinder");
+    const goal = new pathfinderGoals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 2);
+    await bot.pathfinder.goto(goal);
+  }
+
   // Wait a moment if chest was recently used (prevent timing issues)
-  await new Promise(resolve => setTimeout(resolve, 200));
+  await new Promise(resolve => setTimeout(resolve, 500));
 
   const chest = await bot.openContainer(chestBlock);
   const storeCount = count || item.count;
@@ -115,8 +124,17 @@ export async function takeFromChest(
     throw new Error("No chest within 4 blocks.");
   }
 
+  // Move closer to chest to ensure we're within interaction range (1.5 blocks)
+  const chestPos = chestBlock.position;
+  const distance = bot.entity.position.distanceTo(chestPos);
+  if (distance > 3) {
+    const { goals: pathfinderGoals } = await import("mineflayer-pathfinder");
+    const goal = new pathfinderGoals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 2);
+    await bot.pathfinder.goto(goal);
+  }
+
   // Wait a moment if chest was recently used (prevent timing issues)
-  await new Promise(resolve => setTimeout(resolve, 200));
+  await new Promise(resolve => setTimeout(resolve, 500));
 
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();
