@@ -215,9 +215,9 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-process.on('exit', () => {
-  cleanup();
-});
+// Note: Don't cleanup on 'exit' - the MCP stdio process may be restarted
+// between tool calls, and we want to keep bot connections alive.
+// Only cleanup on explicit signals (SIGTERM, SIGINT).
 
 // Add global error handlers to prevent crashes
 process.on('uncaughtException', (error) => {
