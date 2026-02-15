@@ -92,6 +92,7 @@
       "Bash(pstree:*)",
       "Bash(ps:*)",
       "mcp__mineflayer__search_tools",
+<<<<<<< Updated upstream
       "Bash(git -C /Users/shingo/Develop/auto-mineflayer-bot1 show fa4e02a --stat)",
       "Bash(git -C /Users/shingo/Develop/auto-mineflayer-bot1 show 229441b --stat)",
       "Bash(git -C /Users/shingo/Develop/auto-mineflayer-bot2 show:*)",
@@ -113,6 +114,30 @@
       "Bash(git -C /Users/shingo/Develop/auto-mineflayer-bot2 diff -- src/)",
       "Bash(pkill:*)",
       "Bash(python3:*)"
+=======
+      "Bash(git push:*)",
+      "Bash(pkill:*)",
+      "Bash(python3:*)",
+      "Bash(git merge:*)",
+      "Bash(git rebase:*)",
+      "Bash(git worktree remove:*)",
+      "Bash(for:*)",
+      "Bash(do echo -n \"bot$i: \" cd \"/Users/shingo/Develop/auto-mineflayer-bot$i\")",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr close:*)",
+      "Bash(do echo -n 'bot$i: ' cd /Users/shingo/Develop/auto-mineflayer-bot$i git stash push -m 'auto-stash before merge')",
+      "Bash(then echo else echo ' \\(conflict\\)' fi git stash pop)",
+      "Bash(bash -n:*)",
+      "Bash(do echo -n \"bot$i: \" cd /Users/shingo/Develop/auto-mineflayer-bot$i git merge main --no-edit)",
+      "Bash(do echo -n 'bot$i: ' cd /Users/shingo/Develop/auto-mineflayer-bot$i git stash push -m auto)",
+      "Bash(do echo '=== bot$i ===' cd /Users/shingo/Develop/auto-mineflayer-bot$i git log --oneline --author-date-order --no-merges --all -- src/ bug-issues/ .claude/skills/)",
+      "Bash(do echo -n 'bot$i: ' cd /Users/shingo/Develop/auto-mineflayer-bot$i git checkout --theirs .claude/settings.json)",
+      "Bash(gh pr view:*)",
+      "Bash(/Users/shingo/Develop/auto-mineflayer-mcp-server/scripts/hook-stop-auto-pr.sh:*)",
+      "Bash(do)",
+      "Bash(echo:*)",
+      "Bash(bash:*)"
+>>>>>>> Stashed changes
     ]
   },
   "enableAllProjectMcpServers": true,
