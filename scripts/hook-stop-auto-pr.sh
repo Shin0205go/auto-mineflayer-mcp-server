@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Stop hook: auto-commit → mainマージ → push → PR作成 → 自動マージ
+# Stop hook: auto-commit → mainにマージ → push
 # .claude/settings.json の Stop hook から呼ばれる
 #
 
@@ -12,76 +12,63 @@ if [ -z "$BRANCH" ] || [ "$BRANCH" = "main" ]; then
   exit 0
 fi
 
-# --- Phase 1: 未コミットの変更があればcommit ---
-CHANGED=$(git diff --name-only -- src/ bug-issues/ .claude/skills/ 2>/dev/null)
+# --- Phase 1: 全変更をコミット（src/以外も含む） ---
+CHANGED=$(git status --porcelain -- src/ bug-issues/ .claude/skills/ scripts/ 2>/dev/null)
 if [ -n "$CHANGED" ]; then
   npm run build --silent 2>/dev/null
-  git add src/ bug-issues/ .claude/skills/ 2>/dev/null
+  git add src/ bug-issues/ .claude/skills/ scripts/ 2>/dev/null
   git commit -m "[Claude${BOT}] Auto-commit on stop" 2>/dev/null
-  echo "✅ Committed changes"
+  echo "✅ Committed changes on $BRANCH"
 fi
 
-# --- Phase 2: mainを取り込んでコンフリクト解消 ---
+# --- Phase 2: branchに新しいコミットがあるかチェック ---
 git fetch origin main 2>/dev/null
-if ! git merge origin/main --no-edit 2>/dev/null; then
-  echo "⚠️ Merge conflict with main, auto-resolving..."
-  # src/は自分の変更を優先（ours）、設定ファイル等はmainを優先（theirs）
-  git checkout --theirs .claude/settings.json 2>/dev/null
-  git checkout --theirs .mcp.json 2>/dev/null
-  git checkout --theirs scripts/ 2>/dev/null
-  # src/のコンフリクトはoursで解決
-  CONFLICTED=$(git diff --name-only --diff-filter=U 2>/dev/null)
-  if [ -n "$CONFLICTED" ]; then
-    echo "$CONFLICTED" | while read f; do
-      git checkout --ours "$f" 2>/dev/null
-    done
-  fi
-  git add -A 2>/dev/null
-  git commit -m "[Claude${BOT}] Auto-resolve merge conflicts" 2>/dev/null || true
-  echo "✅ Merge conflicts resolved"
-fi
-
-# --- Phase 3: branchがmainより先にいたらpush → PR → マージ ---
 AHEAD=$(git rev-list --count origin/main.."$BRANCH" 2>/dev/null || echo "0")
 if [ "$AHEAD" -eq 0 ] 2>/dev/null; then
   exit 0
 fi
 
 echo "📊 $BRANCH is $AHEAD commits ahead of main"
-git push origin "$BRANCH" 2>/dev/null || { echo "⚠️ Push failed"; exit 0; }
 
-# PR作成（既存PRがなければ）
-EXISTING_PR=$(gh pr list --head "$BRANCH" --base main --state open --json number -q '.[0].number' 2>/dev/null || echo "")
-if [ -z "$EXISTING_PR" ]; then
-  PR_OUTPUT=$(gh pr create --base main --head "$BRANCH" \
-    --title "[Claude${BOT}] Auto-fix" \
-    --body "Auto-improvement by Claude${BOT}" 2>&1) || true
-  if echo "$PR_OUTPUT" | grep -q "github.com"; then
-    echo "✅ PR created: $PR_OUTPUT"
+# --- Phase 3: mainにチェックアウトしてマージ ---
+# 未追跡ファイル等をstash
+git stash push -m "hook-temp" --include-untracked 2>/dev/null
+
+git checkout main 2>/dev/null || { echo "⚠️ Cannot checkout main"; git stash pop 2>/dev/null; git checkout "$BRANCH" 2>/dev/null; exit 0; }
+git pull origin main --no-edit 2>/dev/null || true
+
+# botブランチをmainにマージ
+if git merge "$BRANCH" --no-edit 2>/dev/null; then
+  echo "✅ Merged $BRANCH into main"
+
+  # ビルドチェック
+  if npm run build --silent 2>/dev/null; then
+    # mainをpush（失敗したらpull→retry）
+    if git push origin main 2>/dev/null; then
+      echo "✅ Pushed main to origin"
+    else
+      git pull origin main --no-edit 2>/dev/null
+      git push origin main 2>/dev/null && echo "✅ Pushed main (retry)" || echo "⚠️ Push main failed"
+    fi
   else
-    echo "⚠️ PR creation failed: $PR_OUTPUT"
-    exit 0
+    echo "❌ Build failed, reverting merge"
+    git reset --hard HEAD~1 2>/dev/null
   fi
-  # GitHub側のmergeability checkを待つ
-  sleep 8
+else
+  echo "⚠️ Merge conflict, aborting"
+  git merge --abort 2>/dev/null
 fi
 
-# マージ（リトライ3回）
-PR_NUM=$(gh pr list --head "$BRANCH" --base main --state open --json number -q '.[0].number' 2>/dev/null || echo "")
-if [ -z "$PR_NUM" ]; then
-  exit 0
-fi
-
-for ATTEMPT in 1 2 3; do
-  MERGE_OUTPUT=$(gh pr merge "$PR_NUM" --merge --delete-branch=false 2>&1)
-  if [ $? -eq 0 ]; then
-    echo "✅ PR #$PR_NUM merged to main"
-    exit 0
+# botブランチに戻ってmainを取り込む
+git checkout "$BRANCH" 2>/dev/null
+git stash pop 2>/dev/null || true
+git merge main --no-edit 2>/dev/null || {
+  git checkout --theirs .claude/settings.json .mcp.json scripts/ 2>/dev/null
+  CONFLICTED=$(git diff --name-only --diff-filter=U 2>/dev/null)
+  if [ -n "$CONFLICTED" ]; then
+    echo "$CONFLICTED" | while read f; do git checkout --ours "$f" 2>/dev/null; done
   fi
-  echo "⚠️ Merge attempt $ATTEMPT/3 failed: $MERGE_OUTPUT"
-  if [ $ATTEMPT -lt 3 ]; then
-    sleep 5
-  fi
-done
-
-echo "❌ PR #$PR_NUM merge failed after 3 attempts"
+  git add -A 2>/dev/null
+  git commit -m "[Claude${BOT}] Sync with main" 2>/dev/null
+}
+git push origin "$BRANCH" 2>/dev/null || true
