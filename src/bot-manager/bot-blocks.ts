@@ -1172,3 +1172,66 @@ export async function activateBlock(
     throw new Error(`Failed to activate ${block.name}: ${errMsg}`);
   }
 }
+
+/**
+ * Use an item on a block (bucket on water/lava, flint_and_steel, bone_meal, etc.)
+ */
+export async function useItemOnBlock(
+  managed: ManagedBot,
+  x: number,
+  y: number,
+  z: number,
+  itemName: string,
+  moveTo: (username: string, x: number, y: number, z: number) => Promise<string>
+): Promise<string> {
+  const bot = managed.bot;
+  const username = managed.username;
+  const pos = new Vec3(x, y, z);
+
+  // Find and equip the item
+  const item = bot.inventory.items().find(i => i.name === itemName);
+  if (!item) {
+    const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
+    throw new Error(`No ${itemName} in inventory. Have: ${inventory}`);
+  }
+  await bot.equip(item, "hand");
+
+  // Move closer if needed
+  const dist = bot.entity.position.distanceTo(pos);
+  if (dist > 5) {
+    await moveTo(username, x, y, z);
+  }
+
+  const block = bot.blockAt(pos);
+  if (!block) {
+    throw new Error(`No block at (${x}, ${y}, ${z})`);
+  }
+
+  try {
+    // Look at the block first
+    await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // activateBlock with the item in hand = right-click on block
+    await bot.activateBlock(block);
+
+    // Check what happened (e.g., bucket → water_bucket)
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const heldAfter = bot.heldItem;
+    const heldName = heldAfter?.name || "nothing";
+
+    // Detect what happened based on item type
+    if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water")) {
+      return `Collected water with bucket → now holding ${heldName}. Block at (${x}, ${y}, ${z}) cleared.`;
+    } else if (itemName === "bucket" && (block.name === "lava" || block.name === "flowing_lava")) {
+      return `Collected lava with bucket → now holding ${heldName}. Block at (${x}, ${y}, ${z}) cleared.`;
+    } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
+      return `Placed ${itemName.replace("_bucket", "")} at (${x}, ${y}, ${z}). Now holding ${heldName}.`;
+    } else {
+      return `Used ${itemName} on ${block.name} at (${x}, ${y}, ${z}). Now holding ${heldName}.`;
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to use ${itemName} on block at (${x}, ${y}, ${z}): ${errMsg}`);
+  }
+}
