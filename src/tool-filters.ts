@@ -28,6 +28,7 @@ export const GAME_AGENT_TOOLS = new Set([
   "minecraft_collect_items",
   "minecraft_level_ground",
   "minecraft_pillar_up",
+  "minecraft_use_item_on_block",
 
   // Crafting (5 tools)
   "minecraft_get_inventory",
