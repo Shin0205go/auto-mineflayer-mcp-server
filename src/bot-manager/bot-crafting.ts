@@ -406,25 +406,67 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     let craftingTableBlock = null;
     console.error(`[Craft] recipesAll(${item.id}, null, null) returned ${allRecipes.length} recipes`);
 
-    // FIX: If no recipes found for stick/crafting_table, try recipesFor as fallback
-    // This handles Minecraft versions where recipesAll doesn't work properly
+    // FIX: If no recipes found for stick/crafting_table, use manual recipe crafting
+    // This handles Minecraft versions where recipesAll/recipesFor don't work properly
     if (allRecipes.length === 0 && (itemName === "stick" || itemName === "crafting_table")) {
-      console.error(`[Craft] No recipes found with recipesAll, trying recipesFor...`);
+      console.error(`[Craft] No recipes found with recipesAll, using manual crafting...`);
 
-      // Try recipesFor with our available planks
-      const availablePlanks = inventoryItems.filter(i => i.name.endsWith("_planks"));
-      for (const planksItem of availablePlanks) {
-        const planksItemData = mcData.itemsByName[planksItem.name];
-        if (!planksItemData) continue;
-
-        const recipesForPlanks = bot.recipesFor(item.id, null, 1, null);
-        console.error(`[Craft] recipesFor with ${planksItem.name} returned ${recipesForPlanks.length} recipes`);
-
-        if (recipesForPlanks.length > 0) {
-          allRecipes = recipesForPlanks;
-          console.error(`[Craft] Found ${allRecipes.length} recipes using recipesFor`);
-          break;
+      // Manual crafting for stick: 2 planks → 4 sticks
+      if (itemName === "stick") {
+        const availablePlanks = inventoryItems.find(i => i.name.endsWith("_planks"));
+        if (!availablePlanks || availablePlanks.count < 2) {
+          throw new Error(`Cannot craft stick: Need 2 planks, have ${availablePlanks?.count || 0}. Inventory: ${inventory}`);
         }
+
+        // Get the specific planks item from mcData
+        const planksItem = mcData.itemsByName[availablePlanks.name];
+        if (!planksItem) {
+          throw new Error(`Cannot find item data for ${availablePlanks.name}`);
+        }
+
+        // Create manual recipe: 2 planks in vertical pattern → 4 sticks
+        // Pattern: planks at (0,0) and (0,1) in 2x2 grid
+        const manualRecipe = {
+          result: { id: item.id, count: 4 },
+          inShape: [[planksItem.id], [planksItem.id]],
+          ingredients: [planksItem.id, planksItem.id],
+          delta: [
+            { id: item.id, count: 4 },
+            { id: planksItem.id, count: -2 }
+          ],
+          requiresTable: false
+        };
+
+        console.error(`[Craft] Manual recipe created for stick using ${availablePlanks.name}`);
+        allRecipes = [manualRecipe as any];
+      }
+
+      // Manual crafting for crafting_table: 4 planks → 1 crafting_table
+      if (itemName === "crafting_table") {
+        const availablePlanks = inventoryItems.find(i => i.name.endsWith("_planks"));
+        if (!availablePlanks || availablePlanks.count < 4) {
+          throw new Error(`Cannot craft crafting_table: Need 4 planks, have ${availablePlanks?.count || 0}. Inventory: ${inventory}`);
+        }
+
+        const planksItem = mcData.itemsByName[availablePlanks.name];
+        if (!planksItem) {
+          throw new Error(`Cannot find item data for ${availablePlanks.name}`);
+        }
+
+        // Create manual recipe: 4 planks in 2x2 grid → 1 crafting_table
+        const manualRecipe = {
+          result: { id: item.id, count: 1 },
+          inShape: [[planksItem.id, planksItem.id], [planksItem.id, planksItem.id]],
+          ingredients: [planksItem.id, planksItem.id, planksItem.id, planksItem.id],
+          delta: [
+            { id: item.id, count: 1 },
+            { id: planksItem.id, count: -4 }
+          ],
+          requiresTable: false
+        };
+
+        console.error(`[Craft] Manual recipe created for crafting_table using ${availablePlanks.name}`);
+        allRecipes = [manualRecipe as any];
       }
     }
 

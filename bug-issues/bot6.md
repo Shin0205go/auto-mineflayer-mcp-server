@@ -239,3 +239,68 @@
 - `minecraft_collect_items()`のアイテム検出ロジック
 - アイテムエンティティのフィルタリング
 - なぜ意図しないアイテムを拾うのか
+
+## 2026-02-16: Mobドロップが機能しない
+
+### 現象
+- `minecraft_attack()`でspiderを討伐しても何もドロップしない
+- `doMobLoot=true`に設定済みでも効果なし
+- アイテムエンティティが生成されていない（`minecraft_collect_items()` → "No items nearby"）
+- 複数のボット（Claude1, Claude2, Claude3, Claude4）が`doMobLoot=true`を設定したが効果なし
+
+### 再現手順
+1. spider を発見（(-21.3, 97.1, -20.9)）
+2. `minecraft_attack(entity_name="spider")` を実行
+3. "Killed spider after 16 attacks" と表示
+4. `minecraft_collect_items()` を実行 → "No items nearby"
+5. インベントリ確認 → string なし
+
+### 影響
+- **致命的**: fishing_rod の作成に必要な string x2 が入手できない
+- fishing_rod なしでは釣りができず、食料危機が解決できない
+- Phase 2（食料安定化）が完全にブロックされる
+- 弓の作成にも string が必要（Phase 6以降）
+
+### 代替案
+- 村を探索してfishing_rodを入手
+- 廃坑(mineshaft)を探索してstringを入手
+- サーバー設定の問題か確認（`/gamerule doMobLoot` コマンド）
+
+### 調査が必要なファイル
+- `src/tools/combat.ts` (attack関数)
+- `src/bot-manager/bot-combat.ts` (戦闘処理)
+- Mineflayerのmob death/loot イベント処理
+- Minecraftサーバー設定（gamerule）
+
+## 2026-02-16: サーバー設定によるアイテムピックアップ完全無効化（致命的）
+
+### 現象
+- クラフト実行時に「Server has item pickup disabled. Crafted item dropped on ground but cannot be collected」エラー
+- クラフトした アイテムが地面にドロップするが拾得できない
+- 材料（dark_oak_log x1）が消失し、完成品も入手不可
+- **ゲーム進行が完全に不可能**
+
+### 再現手順
+1. `minecraft_craft("dark_oak_planks", count=2)` を実行
+2. "Server has item pickup disabled" エラー
+3. dark_oak_log x1 消失、dark_oak_planks x0（拾得不可）
+
+### 影響
+- **致命的**: 全てのクラフトが不可能
+- 道具作成、食料生産、建築、全フェーズが完全にブロック
+- プレイ継続不可能
+
+### 原因
+- Minecraftサーバー設定で item pickup が無効化されている
+- Mineflayer の crafting API はアイテムが地面にドロップする前提
+- 拾得できないため、クラフト結果が永久に失われる
+
+### 解決策
+- サーバー管理者に連絡してitem pickupを有効化
+- または、アイテムを直接インベントリに追加する別の方法を実装
+- または、ゲームモードをクリエイティブに変更
+
+### 関連バグ
+- Mobドロップ無効（同じitem pickup設定の影響）
+- ブロック採掘後のドロップ拾得失敗（同根）
+- プレイヤー間アイテム受け渡し失敗（同根）

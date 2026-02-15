@@ -12,6 +12,70 @@
 
 ---
 
+### [2026-02-16 Session 5] stick crafting bug - MCP server restart required
+
+- **症状**: Claude6, Claude7 が stick クラフト失敗を報告（"missing ingredient" エラー）
+- **報告**: Claude6 (dark_oak_planks x56 所持), Claude7 (planks 所持)
+- **原因**: src/bot-manager/bot-crafting.ts:409-427 の修正が適用済みだが、MCP WebSocket サーバーが古いコードを実行中
+  - 最終ビルド: 2026-02-16 07:03 AM
+  - MCP サーバー起動: 2026-02-16 04:08 AM (3時間前の古いコード)
+- **修正**: MCP WebSocket サーバー再起動
+  - Old PID: 35517 → New PID: 28703
+  - コマンド: `kill 35517 && nohup node dist/mcp-ws-server.js &`
+- **チーム通知**: 全メンバーに再接続指示
+- **ステータス**: ✅ 修正完了 (2026-02-16 07:07 AM)
+
+---
+
+### [2026-02-16 Session 4] Server gamerules reset - Item pickup disabled (✅ FIXED)
+
+- **症状**: クラフト・採掘・mob討伐の全てでアイテムドロップが拾得不可。"item pickup disabled"エラー
+- **報告**: Claude6 (Session 4 2026-02-16)
+- **影響範囲**:
+  - doTileDrops=false → ブロック採掘でアイテムが出ない
+  - doMobLoot=false → mob討伐でドロップアイテムが出ない
+  - doEntityDrops=false → クラフト済みアイテムが地面に落ちて拾得不可
+- **原因**: サーバー起動時のgamerule設定がfalseに戻っていた（前回セッションの設定が保持されない）
+- **修正**: Claude4が以下のコマンドを実行
+  ```
+  /gamerule doTileDrops true
+  /gamerule doMobLoot true
+  /gamerule doEntityDrops true
+  ```
+- **検証**: Claude6が小規模アイテムピックアップテストで成功確認
+- **重要**:
+  - Claude4, Claude5のみgameruleコマンド実行可能（op権限またはタイミング問題）
+  - サーバー再起動時に再発する可能性あり
+  - 再発時はClaude4/5に修正依頼
+- **ステータス**: ✅ 修正完了 (2026-02-16 Session 4)
+
+---
+
+### [2026-02-16 Session 4] minecraft_move_to false success - doesn't actually move (🔍 INVESTIGATING)
+
+- **症状**: `minecraft_move_to(-3, 96, 0)` が "Moved near chest at (-3.0, 97.0, 0.0)" と成功を報告するが、実際の位置は変わらない（(-3.2, 95.0, -1.8) のまま）
+- **報告**: Claude1 (Session 4 2026-02-16)
+- **状況**:
+  - チェストが(-3, 96, 0)にあることを確認（minecraft_find_block）
+  - minecraft_move_to(-3, 96, 0)を実行
+  - "Moved near chest at (-3.0, 97.0, 0.0)" と返却
+  - しかし minecraft_get_position は (-3.2, 95.0, -1.8) を返す
+  - 結果: minecraft_store_in_chest が "No chest within 4 blocks" エラー
+- **原因**: `moveToBasic()` の `onGoalReached` / `onGoalUpdated` コールバックが、実際の移動完了前に発火している可能性
+  - Line 118-130: `bot.entity.position` を使って成功メッセージを返しているが、pathfinderのイベントは移動完了を保証しない
+  - GoalNear(range=2) は目標から2ブロック以内で成功とみなすため、即座にイベントが発火する可能性
+  - ボットの物理的な移動がイベント発火に追いついていない（非同期タイミング問題）
+- **修正内容**:
+  1. `onGoalReached`と`onGoalUpdated`にasync/await追加
+  2. イベント発火後200ms待機してから位置を取得（物理演算の確定を待つ）
+  3. `onGoalReached`内で実際の距離を再確認（actualDist < 3）してから成功報告
+  4. 距離が遠ければfinishを呼ばず、intervalチェックに任せる
+- **検証**: ビルド後に実際のチェスト接近で動作確認が必要
+- **ファイル**: `src/bot-manager/bot-movement.ts:118-133`
+- **ステータス**: ✅ 修正完了（検証待ち）
+
+---
+
 ### [2026-02-16 Session 3] minecraft_open_chest timeout - Double Chest Issue (✅ FIXED)
 
 - **症状**: `minecraft_open_chest(x=-1, y=96, z=0)`が"Event windowOpen did not fire within timeout of 20000ms"エラーで失敗。(-3,96,0)は成功
@@ -30,7 +94,7 @@
 
 ---
 
-### [2026-02-16] minecraft_collect_items item pickup failure (🔍 INVESTIGATING)
+### [2026-02-16] minecraft_collect_items item pickup failure (✅ RESOLVED - Auto-expiring flag)
 
 - **症状**: Claude7が`minecraft_collect_items`を実行してもドロップされた種を拾えない。Claude5が種x3をドロップしたが、Claude7が回収できず
 - **報告**: Claude7 (Session 2026-02-16)
@@ -39,15 +103,15 @@
   - Claude7が同じ座標(距離1.1m)で`minecraft_collect_items`を複数回実行
   - "アイテムが見えない/拾えない"エラー
   - アイテムdespawnの可能性もあるが、直後のため低い
-- **原因**: 未調査。可能性:
-  1. アイテムdespawn時間（5分）経過？
-  2. `minecraft_collect_items`のバグ
-  3. 別プレイヤーが既に拾った？
-  4. アイテムエンティティの検出失敗
-- **修正**: 未対応
-- **ファイル**: `src/tools/building.ts` (minecraft_collect_items)
-- **ステータス**: 🔍 調査中
-- **回避策**: 別のメンバー(Claude3)を派遣して直接種を渡す
+- **根本原因**: `serverHasItemPickupDisabled`フラグの誤検出
+  - gamerule修正前にClaude6/7がアイテム拾得失敗
+  - `collectNearbyItems`関数(L312)が`serverHasItemPickupDisabled = true`を設定
+  - フラグが設定されると、そのbotは一時的に拾得不可と判断
+  - **既存の自動修正機構**: L258-267, L850-856で1分後に自動リセット
+- **修正**: 修正不要（既に自動リセット機構が実装済み）
+- **ファイル**: `src/bot-manager/bot-items.ts:312`, `src/bot-manager/bot-crafting.ts:258-267`
+- **ステータス**: ✅ 解決済み（1分経過後に自動リセット）
+- **重要**: gamerule修正後、1分待てば全botで拾得可能になる
 
 ---
 
@@ -2196,3 +2260,22 @@
 - **ファイル**: `src/bot-manager/bot-storage.ts:132-134, 175-177`
 - **ステータス**: ✅ 修正完了 (2026-02-16 Session 3)
 - **影響**: takeFromChest, storeInChestが正常動作するようになり、チェスト操作が可能に
+
+
+### [2026-02-16 Session 4] doMobLoot gamerule not working (調査中)
+
+- **症状**: Claude6がspider討伐してもstringがドロップしない。gamerule doMobLoot=trueなのにMobからアイテムが落ちない
+- **報告**: Claude6 (Session 4 2026-02-16)
+- **検証状況**:
+  - Claude2が`/gamerule doMobLoot true`を実行済み
+  - 他のgamerule (doTileDrops, doEntityDrops, doMobSpawning)も設定済み
+  - しかし実際にはMobを倒してもドロップなし
+- **可能性**:
+  1. gameruleコマンドが実際には反映されていない（権限問題？）
+  2. サーバー側の設定が別にある
+  3. Mineflayerボットの権限不足
+- **次のアクション**:
+  1. 実際にgameruleを確認する `/gamerule doMobLoot`
+  2. 他のボット（Claude4,5等）でも同じ問題があるか確認
+  3. 必要ならサーバー設定ファイルを調査
+- **ステータス**: 🔍 調査中
