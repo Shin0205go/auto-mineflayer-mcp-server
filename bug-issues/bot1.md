@@ -186,3 +186,86 @@
 
 ---
 
+### [2026-02-16] Session Start - Phase 5 Obsidian Mining
+
+**Current Status:**
+- Claude2: Obsidian 1/2 mined, working on 2nd
+- Claude5: Reports 3 obsidian mined but no drops (investigating)
+- Claude7: Obsidian 1/5 mined successfully, continuing
+- Gamerules: Confirmed true by Claude4 (doTileDrops, doMobLoot, doEntityDrops)
+
+**Issue - Claude5 Obsidian Not Dropping:**
+- **Symptom**: Claude5 mined 3 obsidian but got no drops
+- **Context**: Claude7 successfully mining obsidian at same time
+- **Gamerules**: Verified as correct (doTileDrops=true)
+- **Investigation**: Requested details (diamond pickaxe?, force=true?, inventory changes?)
+- **Action Taken**: Reassigned Claude5 to diamond mining (5 diamonds needed)
+- **Reason**: Claude2+Claude7 sufficient for 4 obsidian target
+
+**Team Progress:**
+- Target: 4 obsidian for enchanting table
+- Current: 2+ secured (Claude2:1-2, Claude7:1+4 in progress)
+- Status: On track for Phase 5 completion
+
+**NEW ISSUE - Obsidian→Cobblestone Bug (🔍 USER ERROR, NOT CODE BUG):**
+- **Symptom**: Claude6 reports mining obsidian but got cobblestone +2 instead
+- **Details**: Diamond pickaxe equipped, force=true used, proper tool chain
+- **Root Cause**: Minecraft game mechanic, NOT a code bug
+  - Water + Lava **SOURCE** block = Obsidian
+  - Water + **FLOWING** lava = Cobblestone
+- **Solution**: Bot users must ensure they're targeting lava SOURCE blocks
+- **Code Impact**: No code fix needed - this is correct Minecraft behavior
+- **Documentation**: Added to .claude/skills/team-coordination/SKILL.md
+
+**Team Deaths:**
+- Claude6: Killed, respawned, equipment lost
+- Claude7: Killed, respawned, equipment lost
+- Action: Safety directive issued
+
+**Phase 5 Progress Update (Current Session):**
+- ✅ Diamonds: 10 in chest (-10,94,33) - COMPLETE
+- ✅ Books: 1 in chest (-10,94,33) - COMPLETE
+- ⏳ Obsidian: 5/4 SECURED (awaiting storage)
+  - 1 in chest (-10,94,33)
+  - 2 held by Claude2 (洞窟内、帰還中)
+  - 2 held by Claude3 (洞窟内、帰還中)
+  - **Total: 5 obsidian** - exceeds Phase 5 requirement!
+- Status: Waiting for Claude2/3 to store obsidian, then craft enchanting table
+
+**Stick Crafting Bug Recurrence (Claude4):**
+- **Symptom**: "Failed to craft stick from birch_planks: Error: missing ingredient"
+- **Details**: birch_planks x16 in inventory, error at session start
+- **Status**: Bug was fixed in commit (bot-crafting.ts:409-427) but MCP server not restarted
+- **Action**: Will restart MCP WebSocket server after Phase 5 completion
+- **Workaround**: Try oak_planks instead, or wait for server restart
+
+---
+
+### [2026-02-16] PHASE 5 COMPLETE! 🎉
+
+**Achievement Unlocked: Enchanting Table**
+- ✅ Diamonds: 10 collected (8 remaining after crafting)
+- ✅ Book: 1 crafted and used
+- ✅ Obsidian: 6 collected (4 used for enchanting table, 2 spare)
+- ✅ **Enchanting Table: PLACED** at (-11, 95, 33) by Claude7
+
+**Team Contributions:**
+- Claude2: Obsidian x2 mined and stored
+- Claude3: Obsidian x2 mined (stored late, used as spare)
+- Claude7: Obsidian x1 mined, enchanting table crafted & placed 🏆
+- Claude4: Diamond & book collection
+- Claude6: Chest management & verification
+- All: Team coordination excellent
+
+**Challenges Overcome:**
+- Obsidian→Cobblestone confusion (flowing lava vs lava source - user education)
+- Multiple team deaths from lava/phantoms (safety protocols reinforced)
+- Stick crafting bug still present (MCP server restart pending)
+
+**Phase 6 (NETHER) Started:**
+- Goal: Blaze Rods x7+, Ender Pearls x12+
+- First Task: Build Nether Portal (need 10 obsidian, have 2 spare)
+- Status: Team assigned to obsidian mining, food gathering, equipment upgrade
+
+---
+
