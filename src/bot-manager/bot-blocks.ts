@@ -237,7 +237,8 @@ export async function digBlock(
   delay: (ms: number) => Promise<void>,
   moveToBasic: (username: string, x: number, y: number, z: number) => Promise<{ success: boolean; message: string }>,
   getBriefStatus: (username: string) => string,
-  autoCollect: boolean = true
+  autoCollect: boolean = true,
+  force: boolean = false
 ): Promise<string> {
   const bot = managed.bot;
   const username = managed.username;
@@ -256,18 +257,22 @@ export async function digBlock(
 
   const blockName = block.name;
 
-  // Check for lava in adjacent blocks before digging
-  const adjacentPositions = [
-    blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
-    blockPos.offset(0, 1, 0), blockPos.offset(0, -1, 0),
-    blockPos.offset(0, 0, 1), blockPos.offset(0, 0, -1),
-  ];
-  for (const adjPos of adjacentPositions) {
-    const adjBlock = bot.blockAt(adjPos);
-    if (adjBlock?.name === "lava") {
-      console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
-      return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`;
+  // Check for lava in adjacent blocks before digging (unless force=true)
+  if (!force) {
+    const adjacentPositions = [
+      blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
+      blockPos.offset(0, 1, 0), blockPos.offset(0, -1, 0),
+      blockPos.offset(0, 0, 1), blockPos.offset(0, 0, -1),
+    ];
+    for (const adjPos of adjacentPositions) {
+      const adjBlock = bot.blockAt(adjPos);
+      if (adjBlock?.name === "lava") {
+        console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
+        return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`;
+      }
     }
+  } else {
+    console.error(`[Dig] Force=true: Skipping lava check for ${blockName} at (${x}, ${y}, ${z})`);
   }
 
   // Creative mode or OP: use command
@@ -1212,28 +1217,13 @@ export async function useItemOnBlock(
     await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
     await new Promise(resolve => setTimeout(resolve, 100));
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-    // For buckets on liquid blocks, use activateBlock for proper targeting
-    // Then poll inventory to ensure the bucket state has updated
-    if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
-<<<<<<< Updated upstream
-      await bot.activateBlock(block);
-=======
-=======
     // For buckets on liquid blocks, use activateItem instead of activateBlock
     // This is the correct way to collect water/lava with buckets in Mineflayer
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
->>>>>>> main
       const initialItem = bot.heldItem?.name;
       console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
       bot.activateItem();
       bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
-<<<<<<< HEAD
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
 
       // Poll inventory until it updates (or timeout after 3 seconds)
       const startTime = Date.now();
@@ -1251,30 +1241,9 @@ export async function useItemOnBlock(
     }
 
     // Check what happened (e.g., bucket → water_bucket)
-    await new Promise(resolve => setTimeout(resolve, 200));
-=======
-    // Use activateBlock for bucket interaction with water/lava blocks
-    // activateBlock ensures the block is properly targeted
-    await bot.activateBlock(block);
-=======
-    } else {
-      // For other items, use activateBlock
-      await bot.activateBlock(block);
-    }
->>>>>>> main
-
-<<<<<<< Updated upstream
-    // Wait longer for inventory to update properly
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Force inventory update by checking actual inventory, not just heldItem
->>>>>>> main
-    bot.updateHeldItem();
-=======
-    // Check what happened (e.g., bucket → water_bucket)
     // Wait longer for server synchronization (1000ms instead of 500ms)
     await new Promise(resolve => setTimeout(resolve, 1000));
->>>>>>> Stashed changes
+    bot.updateHeldItem();
     const heldAfter = bot.heldItem;
     const heldName = heldAfter?.name || "nothing";
 
