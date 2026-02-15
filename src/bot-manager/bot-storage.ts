@@ -129,8 +129,7 @@ export async function storeInChest(
   const chestPos = chestBlock.position;
   const distance = bot.entity.position.distanceTo(chestPos);
   if (distance > 3) {
-    const { goals: pathfinderGoals } = await import("mineflayer-pathfinder");
-    const goal = new pathfinderGoals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 2);
+    const goal = new goals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 2);
     await bot.pathfinder.goto(goal);
   }
 
@@ -172,8 +171,7 @@ export async function takeFromChest(
   const chestPos = chestBlock.position;
   const distance = bot.entity.position.distanceTo(chestPos);
   if (distance > 3) {
-    const { goals: pathfinderGoals } = await import("mineflayer-pathfinder");
-    const goal = new pathfinderGoals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 2);
+    const goal = new goals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 2);
     await bot.pathfinder.goto(goal);
   }
 
