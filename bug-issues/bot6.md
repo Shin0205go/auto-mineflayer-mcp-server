@@ -2,27 +2,28 @@
 
 このファイルはClaude6専用です。
 
-## 2026-02-15: アイテム自動回収の問題 ✅ **FIXED**
+## 2026-02-15: アイテム自動回収の問題
 
 ### 現象
 - `minecraft_dig_block`で石炭鉱石を採掘後、「picked up 2 item(s)」と表示されるがインベントリに石炭が追加されない
 - `minecraft_smelt`で木炭を製錬後、「charcoal may have dropped」と警告が出るがインベントリに追加されない
 - `minecraft_collect_items`を実行しても「No items nearby」と表示される
 
-### 原因
-サーバー側のゲームルール設定が原因:
-- `doTileDrops = false` (ブロック破壊時にアイテムドロップしない)
-- `doMobLoot = false` (モブ討伐時にドロップしない)
-- `doEntityDrops = false` (エンティティがドロップしない)
+### 再現手順
+1. coal_oreを`minecraft_dig_block`で採掘
+2. インベントリを確認 → 石炭なし
+3. dark_oak_logを`minecraft_smelt`で製錬
+4. インベントリを確認 → 木炭なし
 
-### 解決方法
-`minecraft_diagnose_server({ auto_fix: true })` を実行してゲームルールを修正。
-各ボット（Claude4, 5, 6, 7）が接続時に自動実行済み。
+### 影響
+松明のクラフトに必要な石炭/木炭が入手できない
 
-### ステータス
-✅ FIXED - サーバーゲームルールが修正され、アイテムドロップが正常動作中
+### 調査が必要なファイル
+- `src/tools/building.ts` (dig_block)
+- `src/tools/crafting.ts` (smelt)
+- `src/bot-manager/index.ts` (アイテム収集ロジック)
 
-## 2026-02-15: 水バケツバグ ✅ **FIXED**
+## 2026-02-15: 水バケツバグ
 
 ### 現象
 - `minecraft_use_item_on_block`でバケツを水源に使用
@@ -30,16 +31,21 @@
 - しかしインベントリには`water_bucket`ではなく空の`bucket`のまま
 - 複数のボット（Claude4, 5, 6, 7）が同じ問題を報告
 
-### 原因
-- `activateBlock()`ではなく`activateItem()`+`deactivateItem()`が必要
-- サーバー同期待ち時間不足
-- インベントリ更新をポーリングで待機する必要がある
+### 再現手順
+1. 空のバケツを所持
+2. 水源ブロックに対して`minecraft_use_item_on_block(item_name="bucket", x, y, z)`を実行
+3. 成功メッセージが出るがインベントリに`water_bucket`が追加されない
 
-### 修正内容 (Bot1がコミット8c753a6で修正完了)
-- `bot.activateItem()`→100ms待機→`bot.deactivateItem()`の流れに変更
-- インベントリ更新を3秒間ポーリングで待機（100ms間隔でチェック）
-- 同期待ち時間を1000msに延長
-- `src/bot-manager/bot-blocks.ts` (useItemOnBlock関数)
+### 影響
+黒曜石作成に必要な水バケツが作れない（Phase 5完了がブロックされる）
 
-### ステータス
-✅ FIXED (2026-02-15, コミット8c753a6)
+### 代替案
+水源と溶岩源を直接隣接させて黒曜石を作る（Claude7提案）
+
+### 調査が必要なファイル
+- `src/tools/building.ts` (use_item_on_block)
+
+### 修正内容 (2026-02-15)
+- `src/bot-manager/bot-blocks.ts:1225` の待機時間を500ms→1000msに延長
+- サーバー同期を待つ時間が不足していたため、バケツ→water_bucketの変換が反映されなかった
+- 修正後は`npm run build`でビルドして再接続が必要
