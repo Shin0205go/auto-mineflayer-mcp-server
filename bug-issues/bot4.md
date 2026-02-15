@@ -134,3 +134,23 @@
 - **ファイル**: 新規ツール `src/tools/farming.ts` または `src/bot-manager/bot-farming.ts`
 - **ステータス**: ⚠️ 未実装 - 次セッションで追加必要
 
+## [2026-02-16] Inventory full error despite dropping items
+
+- **症状**: `minecraft_take_from_chest` が "Bot inventory is full" エラーを返すが、複数のアイテム（cobblestone x320, dirt x192, gold_ingot x27等）を捨てても、インベントリが満杯と判定され続ける。
+- **再現手順**:
+  1. 大量のアイテムを drop_item で捨てる（合計500個以上）
+  2. `minecraft_take_from_chest("wooden_hoe")` → "inventory is full" エラー
+  3. `minecraft_get_inventory()` → 36スロット全て埋まっている（コブルストーン x64 が10個以上など）
+  4. さらに drop_item を繰り返しても、インベントリが満杯のまま
+- **観察**:
+  - `minecraft_drop_item("cobblestone", 64)` → 成功メッセージが返るが、インベントリからは消えない
+  - `minecraft_drop_item("cobblestone")` → "Can't find cobblestone in slots [27 - 63]" エラー（実際にはスロット0-26にある）
+  - `minecraft_store_in_chest("cobblestone")` → "Can't find cobblestone in slots [27 - 63]" エラー
+- **原因推定**:
+  1. スロット番号の認識バグ（スロット27-63を検索しているが、アイテムはスロット0-26にある）
+  2. インベントリ同期の問題（サーバーとクライアントで状態が一致していない）
+  3. drop/store操作後のインベントリ更新が遅延している
+- **影響**: インベントリが満杯と判定され、チェストからアイテムを取得できない。畑作成に必要なクワを取得できず、タスク実行不可。
+- **回避策**: 他のボット（Claude7）にクワ作成を依頼し、直接受け渡しする
+- **ステータス**: ⚠️ 未修正 - インベントリ管理システムの調査が必要
+

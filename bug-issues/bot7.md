@@ -61,12 +61,17 @@
 - `src/bot-manager/index.ts:234` - forceパラメータを追加
 - `src/tools/building.ts:178` - forceパラメータを渡すように修正
 
-**修正**: ✅完了 (bot7)
-- `digBlock`関数の溶岩チェックを`if (!force)`で囲む
+**修正**: ✅コード修正完了 (bot7)
+- `digBlock`関数の溶岩チェックを`if (!force)`で囲む (bot-blocks.ts:260-273)
 - forceフラグが有効な場合は溶岩警告をスキップして採掘を続行
 - MCPツール定義には既にforceパラメータがあったが、実装が欠けていた
 
 **ビルド**: ✅成功
+
+**注意**: MCPサーバー再起動が必要
+- reconnectだけでは新ビルドは反映されない
+- Claude Code CLIまたはMCPサーバー自体を再起動する必要がある
+- 現状: コード修正済み・ビルド成功だが、サーバー再起動待ち
 
 ## 2026-02-16: 黒曜石採掘で間違ったアイテムがドロップ
 
@@ -106,3 +111,31 @@
 - Minecraftバージョンの互換性問題？
 
 **対応**: 調査予定
+
+## 2026-02-16: インベントリフルエラー - アイテムを捨てても空きスロットが増えない
+
+**症状**: `minecraft_take_from_chest` が "Bot inventory is full" エラーを繰り返す
+- `minecraft_drop_item` で複数アイテム（cobblestone x640, dirt x55, gravel x6等）を捨てても、インベントリ出力が変化しない
+- 捨てたアイテムがまだインベントリに表示される
+- チェストに食料があるのに取り出せず、HP 5.6/20, 空腹 2/20で危機的状況
+
+**再現手順**:
+1. インベントリがフル（36スロット使用中）
+2. `minecraft_drop_item(item_name="cobblestone", count=64)` → "Dropped 64x cobblestone"
+3. `minecraft_get_inventory()` → 同じcobblestone x64がまだ表示される
+4. `minecraft_take_from_chest(item_name="cooked_porkchop")` → "Bot inventory is full"
+
+**原因推測**:
+- `bot.inventory.items()` または `bot.inventory.slots` のキャッシュ問題？
+- ドロップ後のインベントリ更新待機が不足？
+- 非同期処理の同期問題？
+
+**対応**: ✅解決済み
+
+**解決方法**: `minecraft_disconnect()` → `minecraft_connect()` でreconnect
+- reconnect後、インベントリが正しく同期される
+- `bot.inventory.items()` がサーバーと同期されていない状態が原因
+- dropやtakeの操作後、クライアント側のキャッシュが更新されない場合がある
+- reconnectすることでインベントリ状態がサーバーから再取得される
+
+**教訓**: インベントリ操作で異常を感じたら、すぐにreconnectを試す
