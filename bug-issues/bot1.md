@@ -610,12 +610,28 @@
 - ✅ doEntityDrops: Enabled
 - ❓ doMobSpawning: Unknown (likely false - no passive mobs)
 
-**Session Actions (First 5 minutes):**
-1. Phase 2 announced to team
-2. Claude3 emergency: Directed to use respawn (refused, HP>4 threshold)
-3. All members redirected from Phase 5 tasks to Phase 2 food priority
-4. Farm construction directive issued (畑建設未完了 confirmed)
-5. Team assigned: Zombie hunting → store rotten_flesh in chest
+**Session Actions (First 30 minutes):**
+1. Phase 5 announced - Enchanting Table goal
+2. Gamerule fixes delegated (Claude1's commands still have NO response)
+3. Food crisis management - multiple members low HP/hunger
+4. Claude2 death (HP 5.7) - respawned HP/hunger 20/20
+5. Book materials confirmed - Claude4 has 2 books already!
+6. Obsidian mining assigned to Claude3 + Claude6
+7. Claude7 emergency - HP 5.6 critical, respawn recommended
+
+**Critical Discoveries:**
+- ✅ Books NOT needed: Claude4 has 2 books already
+- ✅ Diamonds secured: 17 in chest
+- ⏳ Obsidian: 0/4 (Claude3 no response, Claude6 starting)
+- ⚠️ Food crisis ongoing: No passive mobs spawning
+
+**Team Status (Current):**
+- Claude1: HP 20/20, hunger 20/20, coordinating at base
+- Claude2: HP/hunger 20/20 (after respawn), wood gathering
+- Claude3: NO RESPONSE (obsidian task assigned)
+- Claude4: Waiting at base with 2 books, ready to craft
+- Claude6: Obsidian mining started (bucket, lava search)
+- Claude7: HP 5.6 CRITICAL, fall damage, respawn recommended
 
 **Current Strategy:**
 - Primary: Zombie hunting for rotten_flesh (night time, doMobLoot enabled)
@@ -1071,22 +1087,27 @@
 
 ---
 
-### [2026-02-16] NEW Session #8 - Phase 2 Food Crisis (RECURRING)
+### [2026-02-16] NEW Session #9 - Phase 5 + Food Crisis (CONCURRENT)
 
 **Session Start Status:**
-- 📍 Phase: 2 (Food Stabilization) - INCOMPLETE (recurring issue)
-- ⚠️ CRITICAL FOOD CRISIS: 0 food in all chests (3rd consecutive session)
-- Team Status:
-  - Claude1: HP 20/20, hunger 20/20, 0 food, bone_meal x3, position (-9.5,110,2.5)
-  - Claude4: 3x deaths, seed x2 + water bucket, farm construction lead
-  - Claude6: 2x deaths, HP/hunger 20/20 after respawn, farm support
-  - Claude2: HP 5.7/20 injured, diamond x2 + diamond pickaxe secured
-  - Claude3,5,7: No response
+- 📍 Phase: 5 (Enchanting Table) - In Progress
+- ✅ Diamonds: 17 in chest at (-1,111,7)
+- ✅ Book materials: Available (paper possible via sugarcane)
+- ⏳ Obsidian: 0/4 needed
+- ⚠️ FOOD CRISIS: 0 food in all chests (RECURRING)
+
+**Team Status:**
+- Claude1: HP 20/20, hunger 20/20, 0 food, leader at (-0.3,109,9.8)
+- Claude2: Died 1x, respawned HP/hunger 20/20, iron armor (helmet/chest/legs), wood gathering
+- Claude4: Waiting at base, ready to craft enchanting table once obsidian arrives
+- Claude6: Gamerule fix requested, sugarcane search for books
+- Claude7: HP 7.6/20, hunger 4/20 CRITICAL, at base requesting food
+- Claude3: No response (obsidian mining assigned)
 
 **Gamerule Status:**
-- ✅ Fixed by Claude2: doTileDrops, doMobLoot, doEntityDrops all true
-- ❓ Claude1's /gamerule commands had NO response (cause unknown)
-- ❓ doMobSpawning: Not checked this session
+- ❓ Unknown - delegated to Claude4/Claude6
+- ❌ Claude1's /gamerule commands STILL have NO response (confirmed recurring bug)
+- ⚠️ doMobSpawning likely false (no passive mobs spawning)
 
 **Session Actions (First 15 minutes):**
 1. Phase 2 announced to team
@@ -1195,3 +1216,74 @@
 - Multiple bug fixes committed but NOT deployed (server restart needed)
 - Decision: Defer restart until Phase 2 completion (farm construction in progress)
 - Workarounds effective (hand-tilling works)
+
+### [2026-02-16] Inventory State Desync Bug (CRITICAL - NEW)
+
+**Reporter**: Claude7
+**Symptom**: minecraft_drop_item returns success but inventory doesn't change
+**Details**:
+- Inventory: 36 slots full
+- Command: `minecraft_drop_item("cobblestone", 64)`
+- Output: "Dropped 64x cobblestone" (success message)
+- Problem: `minecraft_get_inventory()` returns identical inventory (no change)
+- Impact: Cannot free inventory space, cannot pick up items, cannot access chest
+
+**Diagnosis**:
+- Mineflayer internal state desync with server
+- Similar to "item pickup disabled" bug pattern (Session #3, #7)
+- drop_item command sends packet but bot state not updated
+
+**Workarounds**:
+1. Reconnect (disconnect → reconnect) - may resolve state desync
+2. Respawn - guarantees full reset (HP/hunger/inventory all reset)
+
+**Risk**: HP 5.6, hunger 1/20 - respawn safer than reconnect attempt
+
+**Status**: ✅ RESOLVED
+**Priority**: CRITICAL (blocks food access, causes death)
+**Solution**: Reconnect (disconnect → reconnect) fixes the state desync
+
+**Code Location to Investigate**:
+- `src/bot-manager/bot-inventory.ts` - dropItem function
+- `src/tools/crafting.ts` - minecraft_drop_item tool
+- Possible: Missing inventory update polling after bot.toss()
+
+**Resolution**:
+- Claude7 tested reconnect → inventory bug fixed
+- No code changes needed - this is a Mineflayer internal state issue
+- Workaround: When inventory commands fail, reconnect before respawning
+
+---
+
+### [2026-02-16] bone_meal on wheat returns "invalid operation" (🔍 INVESTIGATING)
+
+**Reporter**: Claude2
+**Symptom**: minecraft_use_item_on_block with bone_meal on wheat crops returns "invalid operation" error
+**Details**:
+- Coordinates: (1,103,5), (1,104,5)
+- Wheat crops confirmed planted (find_block detected 2 wheat blocks)
+- Item: bone_meal x3 in inventory
+- Error: "invalid operation"
+- Expected: bone_meal accelerates wheat growth
+
+**Investigation**:
+- Code location: `src/bot-manager/bot-blocks.ts:1180-1267` (useItemOnBlock function)
+- Line 1230: Uses `bot.activateBlock(block)` for non-bucket items
+- Hypothesis 1: Minecraft/Mineflayer version incompatibility
+- Hypothesis 2: Wheat block state issue (not fully planted?)
+- Hypothesis 3: activateBlock doesn't support bone_meal usage
+
+**Workaround**:
+- Natural growth: Wait for wheat to grow over time
+- Scale strategy: Plant more seeds (7 → 21) to compensate for slower growth
+- Alternative: Store wheat directly instead of crafting bread
+
+**Status**: 🔍 INVESTIGATING
+**Priority**: MEDIUM (workaround exists)
+**Next Steps**:
+1. Request full error message from Claude2
+2. Test bone_meal on different crop types
+3. Check Mineflayer documentation for fertilizer usage
+
+---
+
