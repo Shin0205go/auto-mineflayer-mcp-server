@@ -62,11 +62,20 @@
 - **再現手順**:
   1. birch_log または dark_oak_log を採掘 → planks をクラフト
   2. `minecraft_craft("stick", 2)` → 失敗
+- **追加再現ケース (Claude4)**:
+  1. birch_log x14 所持、birch_planks x25 所持
+  2. birch_log → birch_planks x4 クラフト成功（合計41個に）
+  3. `minecraft_craft("stick", 4)` → "Failed to craft stick from dark_oak_planks: Error: missing ingredient"
+  4. インベントリにはbirch_planks x41, dark_oak_planks x2 があるが、stickを作れない
 - **根本原因**: `bot.recipesAll(item.id, null, null)` が空配列を返す。Mineflayerまたはminecraft-dataのバージョン互換性問題。
 - **試した修正**:
   1. (2026-02-16 18:xx) `bot.recipesFor()` をフォールバックとして追加 (line 409-429) - 効果なし
   2. dark_oak_planks で試す - 同じエラー
-- **影響**: diamond_pickaxe を作成できず、黒曜石採掘タスクを実行できない。
+  3. birch_log から新規planksをクラフトしてから試す - 同じエラー
+- **影響**:
+  - diamond_pickaxe を作成できず、黒曜石採掘タスクを実行できない
+  - 鍬（hoe）を作成できず、畑を作れない（farmland作成不可）
+  - 種を植えられないため、食料確保ができない
 - **次のステップ**:
   1. MCPサーバーを再起動して修正コードを適用
   2. それでも失敗する場合、手動でレシピオブジェクトを作成
@@ -96,4 +105,32 @@
   2. 移動開始時の距離を記録し、実際に移動したかチェック
   3. 最初のチェックで既に近い場合は「Already near target」メッセージを返す
 - **ステータス**: ⚠️ 原因特定済み・回避策あり - 恒久的修正は要検討（他機能への影響調査必要）
+
+## [2026-02-16] No tool to till soil / create farmland
+
+- **症状**: 小麦農場を作るために種を植えたいが、grass_blockを耕してfarmlandにするツールがない。クワもクラフトできない（stickバグ）。
+- **現状**:
+  - `minecraft_place_block("wheat_seeds", x, y, z)` は grass_block の上に置けない（farmland が必要）
+  - クワをクラフトできない（stick クラフトバグのため）
+  - 素手で右クリックして耕す機能がMCPツールに存在しない
+- **必要な機能**: `minecraft_till_soil(x, y, z)` - grass_block/dirt を farmland に変換するツール
+- **実装案**:
+  ```typescript
+  async tillSoil(x: number, y: number, z: number): Promise<string> {
+    const block = bot.blockAt(new Vec3(x, y, z));
+    if (!block || (block.name !== 'grass_block' && block.name !== 'dirt')) {
+      return `Cannot till: block at (${x},${y},${z}) is ${block?.name || 'air'}`;
+    }
+    // Use any item to right-click the block (or equip a hoe if available)
+    await bot.activateBlock(block);
+    await new Promise(r => setTimeout(r, 300));
+    const newBlock = bot.blockAt(new Vec3(x, y, z));
+    if (newBlock?.name === 'farmland') {
+      return `Tilled soil at (${x},${y},${z})`;
+    }
+    return `Failed to till at (${x},${y},${z})`;
+  }
+  ```
+- **ファイル**: 新規ツール `src/tools/farming.ts` または `src/bot-manager/bot-farming.ts`
+- **ステータス**: ⚠️ 未実装 - 次セッションで追加必要
 

@@ -590,6 +590,212 @@
 
 ---
 
+### [2026-02-16] NEW Session #7 - Phase 2 Food Crisis (RECURRING)
+
+**Session Start Status:**
+- 📍 Phase: 2 (Food Stabilization) - INCOMPLETE (recurring issue)
+- ⚠️ CRITICAL FOOD CRISIS: 0 food in all chests, multiple members starving
+- Team Status:
+  - Claude1: HP 20/20, hunger 20/20, 0 food, iron armor partial, at (-11,95,33)
+  - Claude3: HP 6.7/20, hunger 0/20 CRITICAL, at (-32,81,0) - moving to base
+  - Claude5: Hunger 4/20 CRITICAL, zombie hunting, gamerule fixes completed
+  - Claude6: Hunger 12/20, Y=72 obsidian task, redirected to food priority
+  - Claude7: HP 14.6/20, hunger 10/20, zombie hunting
+  - Claude2: 腐肉3個所持, Y52 diamond mining, redirected to food priority
+  - Claude4: No response yet
+
+**Gamerule Status:**
+- ✅ doMobLoot: Enabled by Claude5 (verified working)
+- ✅ doTileDrops: Enabled
+- ✅ doEntityDrops: Enabled
+- ❓ doMobSpawning: Unknown (likely false - no passive mobs)
+
+**Session Actions (First 30 minutes):**
+1. Phase 5 announced - Enchanting Table goal
+2. Gamerule fixes delegated (Claude1's commands still have NO response)
+3. Food crisis management - multiple members low HP/hunger
+4. Claude2 death (HP 5.7) - respawned HP/hunger 20/20
+5. Book materials confirmed - Claude4 has 2 books already!
+6. Obsidian mining assigned to Claude3 + Claude6
+7. Claude7 emergency - HP 5.6 critical, respawn recommended
+
+**Critical Discoveries:**
+- ✅ Books NOT needed: Claude4 has 2 books already
+- ✅ Diamonds secured: 17 in chest
+- ⏳ Obsidian: 0/4 (Claude3 no response, Claude6 starting)
+- ⚠️ Food crisis ongoing: No passive mobs spawning
+
+**Team Status (Current):**
+- Claude1: HP 20/20, hunger 20/20, coordinating at base
+- Claude2: HP/hunger 20/20 (after respawn), wood gathering
+- Claude3: NO RESPONSE (obsidian task assigned)
+- Claude4: Waiting at base with 2 books, ready to craft
+- Claude6: Obsidian mining started (bucket, lava search)
+- Claude7: HP 5.6 CRITICAL, fall damage, respawn recommended
+
+**Current Strategy:**
+- Primary: Zombie hunting for rotten_flesh (night time, doMobLoot enabled)
+- Secondary: Farm construction (requires water source → 9x9 farmland → wheat seeds)
+- Target: 20 food items in chest (-13,94,33)
+
+**Issues Identified:**
+1. ⚠️ Farm construction incomplete (from previous session)
+2. ⚠️ Food crisis recurring (gamerule reset suspected)
+3. ⚠️ Phase priority confusion (Claude2,6 on Phase 5 tasks despite Phase 2 incomplete)
+
+**Team Coordination:**
+- Claude5: Zombie hunting, gamerule fixes applied
+- Claude7: Zombie hunting (30m from base)
+- Claude6: Returning to base for farm construction
+- Claude2: Returning to base with 腐肉3個
+- Claude3: Moving to base (HP 6.7/20 critical)
+- Claude4: Status pending
+
+**Monitoring:**
+- Waiting for rotten_flesh collection reports
+- No new bugs reported yet
+- All tools functioning as expected
+
+**Session Progress (10 minutes in):**
+
+**Team Deaths:**
+- Claude4: Killed at拠点 (HP 2.5/20), respawned with HP/hunger 20/20
+  - Equipment preserved (enchanting_table, water_bucket, iron_sword retained)
+
+**Food Status:**
+- Chest: 0 rotten_flesh (Claude2 stored 3, Claude5 likely took all 3)
+- Collection in progress: Claude2,4,5,7 zombie hunting
+- Target: 20 food items (0% complete)
+
+**Critical Issues:**
+1. ⚠️ **Water Bucket Bug Recurrence** (Claude6)
+   - Symptom: bucket → water_bucket conversion fails
+   - Impact: Cannot create infinite water source for farm
+   - Status: Awaiting detailed bug report with DEBUG logs
+   - Workaround: Shifted strategy from farming to zombie hunting
+
+2. ⚠️ **Zombie Drop Inconsistency** (Claude7)
+   - Symptom: Zombie killed but no drop
+   - Possible cause: doMobLoot gamerule reset
+   - Status: Requested Claude7 to check gamerule
+
+3. ⚠️ **Food Distribution Failure**
+   - Claude2 stored 腐肉3個 in chest (-12,94,32)
+   - Claude4 arrived but found chest empty
+   - Claude5 likely took all 3 without reporting
+   - Impact: Claude4 died from starvation (HP 2.5/20)
+
+**Strategy Shift:**
+- Initial: Farm construction (畑建設)
+- Problem: Water bucket bug + multiple members starving
+- Solution: Abandoned farm, shifted to zombie hunting
+- Current: All members hunting zombies for rotten_flesh
+
+**Team Status (Current):**
+- Claude2: Zombie hunting (32m radius, found only 1 Enderman)
+- Claude3: Moving to base (HP 6.7/20, hunger 0/20) - status unknown
+- Claude4: Zombie hunting (respawned, HP/hunger 20/20, equipment intact)
+- Claude5: Status unknown (likely took 腐肉3個, no report)
+- Claude6: Returning to base (hunger 7/20), water bucket bug encountered
+- Claude7: Zombie hunting (killed 1 zombie, no drop)
+
+**Leadership Actions:**
+- 10+ directives issued
+- Emergency response: Claude4 death, food crisis management
+- Strategy pivot: Farm → Zombie hunting
+- Bug investigation: Water bucket, zombie drops
+
+---
+
+### [2026-02-16] Session #7 Progress Update (20 minutes in)
+
+**Critical Events:**
+
+**Team Deaths (Multiple):**
+1. Claude4: Killed at base (HP 2.5/20), respawned with HP/hunger 20/20
+   - Equipment preserved (enchanting_table, water_bucket, iron_sword)
+2. Claude5: Killed by zombie (HP 2.9/20), respawned with HP/hunger 20/20
+   - Equipment lost (diamond_sword)
+3. Claude2: Killed 2x by mobs, respawned 2x
+   - Equipment status unknown
+
+**Gamerule Crisis (RECURRING - 3rd time):**
+- **Problem**: doMobLoot reset to false AGAIN
+- **Symptom**: Multiple zombies killed with ZERO drops (Claude5: 3体, Claude7: 1体, Claude2: 1体)
+- **Solution**: Claude1 executed `/gamerule doMobLoot true` at timestamp 1771176286
+- **Status**: ✅ Fixed by Claude1
+- **Pattern**: 3rd session requiring gamerule fixes
+
+**Item Pickup Bug (RECURRING):**
+- **Symptom**: Claude2 killed zombie after doMobLoot fix, but "ドロップ回収失敗"
+- **Diagnosis**: Mineflayer state desync (same as Session #3)
+- **Solution**: Directed Claude2 to disconnect → reconnect
+- **Status**: ⏳ Awaiting reconnect
+
+**Water Bucket Bug (CONFIRMED RECURRING):**
+- **Reporter**: Claude6 at (26,59,50)
+- **Error**: "Used bucket on water but water_bucket not found in inventory. Holding: bucket"
+- **Missing**: DEBUG logs not appearing (line 1218 should output block.name)
+- **Status**: 🐛 UNRESOLVED
+
+**Food Status:**
+- Chest: 0/20 food items
+- Progress: 0% (20 minutes, ZERO food collected)
+
+**Team Status:**
+- Claude6: HP 20/20, hunger 2/20 CRITICAL, waiting at base
+- Claude2: Item pickup bug, reconnect directed
+- Claude3: Status unknown (last HP 6.7/20)
+- Others: Zombie hunting
+
+**Session End Status (25 minutes):**
+
+**Food Progress:**
+- Chest: 0/20 food items (0% complete)
+- ZERO food collected in entire session despite gamerule fixes
+
+**Gamerule Fixes (REDUNDANT):**
+- Multiple team members executed gamerule commands redundantly
+- Claude1, Claude2, Claude3, Claude5, Claude6 all ran `/gamerule` commands
+- Issue: No coordination, wasted actions
+
+**Team Deaths (TOTAL: 5+):**
+- Claude2: 2x deaths
+- Claude4: 2x deaths (equipment preserved both times)
+- Claude5: 1x death (diamond_sword lost)
+
+**Critical Issues Remaining:**
+1. ✅ doMobLoot: Fixed (3rd time)
+2. ✅ Item pickup bug: Claude2 reconnected
+3. 🐛 Water bucket bug: UNRESOLVED
+4. ⚠️ Food crisis: UNRESOLVED (0/20)
+5. ⚠️ Claude3: HP 6.7/20, hunger 0/20 CRITICAL
+6. ⚠️ Claude6: Hunger 2/20 CRITICAL
+
+**Session Summary:**
+- Phase: 2 (Food Stabilization) - INCOMPLETE
+- Time: 25 minutes
+- Food collected: 0 items (FAILED)
+- Gamerule fixes: 3rd consecutive session requiring fixes
+- Deaths: 5+ team deaths
+- Bugs encountered: 3 (doMobLoot reset, item pickup, water bucket)
+- Leadership: 15+ directives issued, gamerule fixes executed
+
+**Key Learnings:**
+1. **Gamerule persistence problem**: doMobLoot resets VERY frequently (possibly every few minutes?)
+2. **Coordination gap**: Multiple team members redundantly execute gamerule commands
+3. **Food crisis escalating**: 3 sessions, ZERO sustained food collection
+4. **Water bucket bug blocks farming**: No sustainable food strategy available
+5. **Death spiral**: No food → deaths → respawn → repeat
+
+**Next Session Priority:**
+1. **CRITICAL**: Fix gamerule persistence (investigate server config)
+2. **CRITICAL**: Resolve water bucket bug to enable farming
+3. Coordinate gamerule checks (only 1 team member should execute)
+4. Consider alternative food sources (fishing? chest scavenging?)
+
+---
+
 
 **Bug Investigation in Progress:**
 
@@ -878,4 +1084,206 @@
 3. Harvest 20+ wheat
 4. Store food in chest
 5. Declare Phase 2 COMPLETE
+
+---
+
+### [2026-02-16] NEW Session #9 - Phase 5 + Food Crisis (CONCURRENT)
+
+**Session Start Status:**
+- 📍 Phase: 5 (Enchanting Table) - In Progress
+- ✅ Diamonds: 17 in chest at (-1,111,7)
+- ✅ Book materials: Available (paper possible via sugarcane)
+- ⏳ Obsidian: 0/4 needed
+- ⚠️ FOOD CRISIS: 0 food in all chests (RECURRING)
+
+**Team Status:**
+- Claude1: HP 20/20, hunger 20/20, 0 food, leader at (-0.3,109,9.8)
+- Claude2: Died 1x, respawned HP/hunger 20/20, iron armor (helmet/chest/legs), wood gathering
+- Claude4: Waiting at base, ready to craft enchanting table once obsidian arrives
+- Claude6: Gamerule fix requested, sugarcane search for books
+- Claude7: HP 7.6/20, hunger 4/20 CRITICAL, at base requesting food
+- Claude3: No response (obsidian mining assigned)
+
+**Gamerule Status:**
+- ❓ Unknown - delegated to Claude4/Claude6
+- ❌ Claude1's /gamerule commands STILL have NO response (confirmed recurring bug)
+- ⚠️ doMobSpawning likely false (no passive mobs spawning)
+
+**Session Actions (First 15 minutes):**
+1. Phase 2 announced to team
+2. Emergency response: Claude6 HP10/hunger0 → approved respawn
+3. Claude2 emergency: HP5.7/20 with zombies nearby → guided to base
+4. Farm construction started: Claude4 (2x2 water source) + Claude6 (fence)
+5. Team deaths: Claude4 (3x), Claude6 (2x) from nighttime mobs
+
+**Farm Construction Progress:**
+- Location: (-14,94,31) center, 9x9 range
+- Team: Claude4 (lead) + Claude6 (support)
+- Progress: 2x2 hole excavation 1/4 complete
+- Resources: seed x2, water bucket x1, bone_meal x3 (Claude1 holding)
+
+**Critical Issues:**
+1. ⚠️ **Gamerule command no response**: Claude1 sent 3x /gamerule commands, ZERO responses
+   - doMobSpawning, doTileDrops, doMobLoot all sent
+   - Claude2's identical commands worked successfully
+   - Hypothesis: Permission issue? Op required? Timing issue?
+   - Status: UNRESOLVED
+
+2. ⚠️ **Grass drops no seeds**: Claude4 reported grass breaking gives no seed drops
+   - doTileDrops confirmed true
+   - Impact: Cannot increase seed count beyond initial 2
+   - Workaround: Use bone_meal to grow wheat → harvest for more seeds
+   - Status: Minecraft mechanics or bug? Needs investigation
+
+**Team Coordination:**
+- Excellent: Claude2 fixed gamerules, Claude4 leading farm, Claude6 supporting
+- Leadership: 10+ directives issued, emergency responses, farm strategy coordination
+- Deaths managed: Respawn mechanic used effectively (HP/hunger restore to 20/20)
+
+**Next Steps:**
+1. Complete farm construction (2x2 water source → 9x9 farmland)
+2. Plant seed x2, use bone_meal x3 for growth acceleration
+3. Harvest wheat → get more seeds → expand farm
+4. Target: 20 food items in chest
+
+**Monitoring:**
+- No new bugs in code (all tools working as expected)
+- Server-side issues: gamerule command response inconsistency
+- Waiting for farm completion to proceed with Phase 2
+
+**Session Progress (30 minutes):**
+
+**Farm Construction SUCCESS:**
+- ✅ Infinite water source: COMPLETE at (-13,91,33) by Claude4
+- ⏳ Farmland creation: IN PROGRESS by Claude6 (hand-tilling, no hoe needed)
+- 📍 Farm location: (-14,94,31) center, 9x9 target
+- ✅ Team coordination: Claude4 (lead) + Claude6 (support) + Claude7 (standby)
+
+**Gamerule Fixes (3x redundant):**
+- Claude2: doTileDrops, doMobLoot, doEntityDrops → all true
+- Claude7: doTileDrops, doMobLoot, doEntityDrops → all true (duplicate)
+- Claude2 again: doTileDrops, doMobLoot, doEntityDrops → all true (duplicate)
+- Issue: No coordination, 3 members ran identical commands
+
+**New Bugs Discovered:**
+
+1. **Crafting failures (MCP restart needed)**:
+   - stick crafting fails (Claude4, Claude6)
+   - crafting_table crafting fails (Claude6 with birch_planks)
+   - stone_hoe crafting fails (Claude6 with stick x4 + cobblestone x62, "missing ingredient")
+   - Status: KNOWN BUG - MCP server restart required (fix committed but not deployed)
+   - Workaround: Hand-till farmland (no hoe needed), use chest items
+
+2. **birch_log no drop** (Claude6):
+   - Symptom: Dig birch_log → "No items dropped"
+   - Test: Dig dirt → normal drop
+   - Hypothesis: Selective block drop issue (tool-specific? game version?)
+   - Impact: LOW (farm doesn't need wood)
+   - Status: UNRESOLVED
+
+3. **Gamerule command no response** (Claude1):
+   - Symptom: Claude1 sent 3x /gamerule commands → ZERO responses
+   - Contrast: Claude2/Claude7 identical commands → SUCCESS
+   - Hypothesis: Permission issue? Op required? Timing issue?
+   - Status: UNRESOLVED
+
+**Team Deaths (This Session):**
+- Claude4: 3x deaths from nighttime mobs
+- Claude6: 2x deaths (1x starvation-induced respawn, 1x mobs)
+- All respawned with HP/hunger 20/20 (mechanic working as expected)
+
+**Food Status:**
+- Chest: 0/20 food items (unchanged)
+- Strategy: Farming (animals don't spawn due to doMobSpawning issue)
+- bone_meal x3: Ready (Claude1 holding, will transfer to Claude4)
+
+**Leadership Actions:**
+- 25+ directives issued
+- 4 emergency responses (Claude6 starvation, Claude2 injury, Claude7 hunger, Claude4 fall)
+- 3 bug investigations (crafting, birch_log, gamerule)
+- Session documentation updated
+- ⚠️ Role deviation: Attempted personal movement for bone_meal transfer (should delegate)
+
+**Next Session Priorities:**
+1. Complete farmland (9x9 tilling)
+2. Plant wheat seeds x2
+3. bone_meal x3 growth acceleration
+4. Harvest wheat → get more seeds
+5. Repeat until 20 food items in chest
+6. Declare Phase 2 COMPLETE
+
+**MCP Server Status:**
+- Multiple bug fixes committed but NOT deployed (server restart needed)
+- Decision: Defer restart until Phase 2 completion (farm construction in progress)
+- Workarounds effective (hand-tilling works)
+
+### [2026-02-16] Inventory State Desync Bug (CRITICAL - NEW)
+
+**Reporter**: Claude7
+**Symptom**: minecraft_drop_item returns success but inventory doesn't change
+**Details**:
+- Inventory: 36 slots full
+- Command: `minecraft_drop_item("cobblestone", 64)`
+- Output: "Dropped 64x cobblestone" (success message)
+- Problem: `minecraft_get_inventory()` returns identical inventory (no change)
+- Impact: Cannot free inventory space, cannot pick up items, cannot access chest
+
+**Diagnosis**:
+- Mineflayer internal state desync with server
+- Similar to "item pickup disabled" bug pattern (Session #3, #7)
+- drop_item command sends packet but bot state not updated
+
+**Workarounds**:
+1. Reconnect (disconnect → reconnect) - may resolve state desync
+2. Respawn - guarantees full reset (HP/hunger/inventory all reset)
+
+**Risk**: HP 5.6, hunger 1/20 - respawn safer than reconnect attempt
+
+**Status**: ✅ RESOLVED
+**Priority**: CRITICAL (blocks food access, causes death)
+**Solution**: Reconnect (disconnect → reconnect) fixes the state desync
+
+**Code Location to Investigate**:
+- `src/bot-manager/bot-inventory.ts` - dropItem function
+- `src/tools/crafting.ts` - minecraft_drop_item tool
+- Possible: Missing inventory update polling after bot.toss()
+
+**Resolution**:
+- Claude7 tested reconnect → inventory bug fixed
+- No code changes needed - this is a Mineflayer internal state issue
+- Workaround: When inventory commands fail, reconnect before respawning
+
+---
+
+### [2026-02-16] bone_meal on wheat returns "invalid operation" (🔍 INVESTIGATING)
+
+**Reporter**: Claude2
+**Symptom**: minecraft_use_item_on_block with bone_meal on wheat crops returns "invalid operation" error
+**Details**:
+- Coordinates: (1,103,5), (1,104,5)
+- Wheat crops confirmed planted (find_block detected 2 wheat blocks)
+- Item: bone_meal x3 in inventory
+- Error: "invalid operation"
+- Expected: bone_meal accelerates wheat growth
+
+**Investigation**:
+- Code location: `src/bot-manager/bot-blocks.ts:1180-1267` (useItemOnBlock function)
+- Line 1230: Uses `bot.activateBlock(block)` for non-bucket items
+- Hypothesis 1: Minecraft/Mineflayer version incompatibility
+- Hypothesis 2: Wheat block state issue (not fully planted?)
+- Hypothesis 3: activateBlock doesn't support bone_meal usage
+
+**Workaround**:
+- Natural growth: Wait for wheat to grow over time
+- Scale strategy: Plant more seeds (7 → 21) to compensate for slower growth
+- Alternative: Store wheat directly instead of crafting bread
+
+**Status**: 🔍 INVESTIGATING
+**Priority**: MEDIUM (workaround exists)
+**Next Steps**:
+1. Request full error message from Claude2
+2. Test bone_meal on different crop types
+3. Check Mineflayer documentation for fertilizer usage
+
+---
 

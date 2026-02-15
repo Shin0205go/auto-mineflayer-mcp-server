@@ -122,3 +122,90 @@
 ✅ MCPサーバー再起動（pkill + nohup node dist/mcp-ws-server.js）
 
 **学習**: `git checkout HEAD --` は現在のHEADの状態に戻す。特定のコミットに戻すには `git checkout <commit> --` を使う
+
+### 再修正 (2026-02-16)
+❌ 前回の修正が不完全だった。`bot-blocks.ts:260-270`の溶岩チェックが`force`フラグを無視していた
+✅ `if (!force)` で溶岩チェックを囲んで修正
+✅ `npm run build` 成功
+⏳ MCPサーバー再起動が必要
+
+## 2026-02-16: アイテム自動拾得が完全に機能しない
+
+### 現象
+- ブロック採掘後、アイテムエンティティは生成されるが、プレイヤーが拾得できない
+- `minecraft_dig_block(auto_collect=true)` でも拾得失敗
+- `minecraft_collect_items()` を実行しても "No items collected" と表示
+- アイテムに手動で近づいても（0.5ブロック以内）自動拾得されない
+- 他のボット（Claude5）は正常に拾得できる報告あり → 個体差がある？
+
+### 再現手順
+1. diamond_pickaxe で obsidian を採掘 (`minecraft_dig_block(x=-8, y=37, z=8, force=true)`)
+2. "No items dropped (auto-collected or wrong tool)" と表示
+3. `minecraft_collect_items()` → "No items collected after 3 attempts"
+4. `minecraft_get_nearby_entities(range=10)` → item エンティティ3個確認（距離0.5, 1.3, 6.7ブロック）
+5. アイテムの位置に移動しても拾得されない
+
+### 証拠
+- エンティティリスト: `{"name":"item","type":"passive","distance":"0.5","position":{"x":"-2.1","y":"37.4","z":"12.9"}}`
+- 採掘したブロック: obsidian (ダイヤピッケル使用)
+- インベントリ: obsidian なし
+
+### 影響
+- Phase 6 のネザーゲート建設に必要な黒曜石10個が入手できない
+- 全ての採掘・狩猟・農業で報酬が得られない
+
+### 他ボットの状況
+- Claude5: アイテム拾得成功（dirt x3 を auto_collect=true で拾得）
+- Claude7: アイテム拾得失敗（Claude6 と同じ症状）
+- Claude3, Claude2: 不明
+
+### 調査が必要
+- なぜ一部のボット（Claude5）は成功し、他のボット（Claude6, Claude7）は失敗するのか？
+- サーバー設定の問題？ Mineflayer の問題？ MCP サーバーの問題？
+- gamerule doTileDrops/doMobLoot/doEntityDrops は全て true に設定済み
+
+## 2026-02-16: クラフトシステム全体が機能しない
+
+### 現象
+- 全ての高度なクラフトレシピ（作業台必要）が "missing ingredient" エラーで失敗
+- 簡易レシピ（2x2）も失敗する（crafting_table, wooden_hoe等）
+- 必要な素材を十分に持っているのにクラフトできない
+- 複数のボット（Claude4, Claude6）で同じ問題を確認
+
+### 再現手順
+1. oak_planks x4 を所持
+2. `minecraft_craft("crafting_table")` を実行
+3. "Failed to craft crafting_table from oak_planks: Error: missing ingredient" と表示
+4. インベントリには oak_planks x4 があるのに失敗
+
+### 具体例
+#### crafting_table
+- 所持: oak_planks x4
+- レシピ: oak_planks x4 (2x2)
+- 結果: "missing ingredient"
+
+#### stone_hoe
+- 所持: cobblestone x62+, stick x4
+- レシピ: cobblestone x2 + stick x2 (作業台必要)
+- 結果: "Failed to craft stone_hoe: Error: missing ingredient. Recipe needs: cobblestone(need 2), stick(need 2)"
+- 作業台: (-8, 93, 20) で実行
+
+#### wooden_hoe
+- 所持: oak_planks x4, stick x6
+- レシピ: oak_planks x2 + stick x2 (2x2)
+- 結果: "No recipe found for wooden_hoe"
+
+### 影響
+- Phase 2 の農場建設が完全にブロックされる
+- クワがないと farmland を作れず、種を植えられない
+- 食料生産ができず、全員が飢餓状態に陥る
+
+### リーダーの指示
+- 「素手で耕せ」と指示されたが、Minecraft仕様上クワは必須
+- 代替案: 次セッションでツール追加（MCP側の実装）
+
+### 調査が必要なファイル
+- `src/tools/crafting.ts` (craft関数)
+- `src/bot-manager/bot-crafting.ts` (クラフト実装)
+- Mineflayer の crafting API
+- レシピデータの読み込みロジック
