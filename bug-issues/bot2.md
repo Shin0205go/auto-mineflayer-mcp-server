@@ -12,18 +12,18 @@
 
 ---
 
-### [2026-02-15] minecraft_move_to が目標座標に到達しない
+### [2026-02-15] minecraft_move_to が目標座標に到達しない (✅ FIXED - 2026-02-16)
 - **症状**: `minecraft_move_to(x, y, z)`を呼んでも、実際の位置が変わらない、または目標と異なる座標に移動する
 - **例**:
   - `move_to(-71, 89, -49)` → 実際はY=90に移動
   - `move_to(-69, 62, -52)` → 実際はY=63に移動し、その後同じコマンドで位置が変わらない
   - `move_to(26, 10, 53)` → 「Moved near stone at (26.0, 7.0, 54.0)」と表示されるが、実際はY=95に留まる
   - **Claude4報告**: 3ブロック以内の短距離移動が特に失敗しやすい
-- **原因**: `src/tools/movement.ts`の`minecraft_move_to`実装に問題がある可能性
+- **原因**: `src/bot-manager/bot-movement.ts:94-99` で `distance < 2` の早期リターンがあり、pathfinderを起動せずに即座に成功を返していた
 - **影響**: 正確な位置への移動が必要な作業（チェスト操作、ブロック設置等）で支障
 - **回避策**: Claude4報告 - 一旦遠くに移動してから目標に向かう
-- **修正**: 未対応（要調査）
-- **ファイル**: `src/tools/movement.ts`
+- **修正**: ✅ Claude1が修正完了。94-99行の早期リターンを削除し、pathfinderに移動を任せるように変更
+- **ファイル**: `src/bot-manager/bot-movement.ts:88-102`
 
 ### [2026-02-15] minecraft_open_chest / store_in_chest / list_chest がタイムアウト
 - **症状**: チェスト操作系のツールが全て「Event windowOpen did not fire within timeout of 20000ms」でエラー
