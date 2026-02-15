@@ -139,3 +139,23 @@
 - reconnectすることでインベントリ状態がサーバーから再取得される
 
 **教訓**: インベントリ操作で異常を感じたら、すぐにreconnectを試す
+
+## 2026-02-16: minecraft_collect_items が連続失敗 - アイテムが拾えない
+
+**症状**: `minecraft_collect_items()` が "No items collected after 2 attempts" を繰り返す
+- Claude5が種x3をドロップしたが回収できない
+- 距離1.1mの至近距離でプレイヤー確認済み
+- 複数回試行しても同じ結果
+
+**再現手順**:
+1. Claude5が座標(-0.8, 95, 2.3)に種をドロップ
+2. `minecraft_collect_items()` → "No items collected after 2 attempts"
+3. 複数回試行しても同じ
+
+**原因推測**:
+- アイテムがすぐにdespawnしている？（gameruleの問題？）
+- `minecraft_collect_items` の実装問題（近くのアイテムを検出できない）
+- サーバーとクライアントの同期問題
+- インベントリフル問題の別バリエーション？
+
+**対応**: 調査予定、必要ならreconnectを試す
