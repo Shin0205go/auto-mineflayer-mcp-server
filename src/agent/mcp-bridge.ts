@@ -15,7 +15,6 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import WebSocket from "ws";
-import { getAgentSkill } from "../tools/learning.js";
 
 const MCP_WS_URL = process.env.MCP_WS_URL || "ws://localhost:8765";
 
@@ -227,72 +226,6 @@ class MCPBridge {
   }
 }
 
-/**
- * Analyze tool result and return relevant skill content
- * NOTE: Skill injection moved to mcp-ws-server.ts for reliability
- */
-function getRelevantSkill(toolName: string, resultText: string): string {
-  // Skill injection is now handled by MCP-WS-Server directly
-  // This function is kept for potential future use
-
-  // inventory check - no tools?
-  if (toolName === "minecraft_get_inventory") {
-    const hasPickaxe = /pickaxe/i.test(resultText);
-    const hasSword = /sword/i.test(resultText);
-    const hasAxe = /axe/i.test(resultText) && !/pickaxe/i.test(resultText);
-
-    if (!hasPickaxe && !hasAxe) {
-      // No tools at all - need wood gathering
-      const skill = getAgentSkill("wood-gathering");
-      return `\n\n📖 **推奨スキル: wood-gathering** (ツールがありません)\n${skill}`;
-    }
-
-    if (hasPickaxe && /wooden_pickaxe/i.test(resultText) && !/stone_pickaxe|iron_pickaxe|diamond_pickaxe/i.test(resultText)) {
-      // Only wooden pickaxe - need stone tools
-      const skill = getAgentSkill("stone-tools");
-      return `\n\n📖 **推奨スキル: stone-tools** (木のピッケルしかありません)\n${skill}`;
-    }
-
-    if (/stone_pickaxe/i.test(resultText) && !/iron_pickaxe|diamond_pickaxe/i.test(resultText)) {
-      // Only stone pickaxe - need iron mining
-      const skill = getAgentSkill("iron-mining");
-      return `\n\n📖 **推奨スキル: iron-mining** (石のピッケルがあります、鉄を目指しましょう)\n${skill}`;
-    }
-  }
-
-  // status check - low HP or hunger?
-  if (toolName === "minecraft_get_status") {
-    const healthMatch = resultText.match(/Health:\s*([\d.]+)/i) || resultText.match(/HP:\s*([\d.]+)/i);
-    const foodMatch = resultText.match(/Food:\s*(\d+)/i) || resultText.match(/空腹:\s*(\d+)/i);
-
-    const health = healthMatch ? parseFloat(healthMatch[1]) : 20;
-    const food = foodMatch ? parseInt(foodMatch[1]) : 20;
-
-    if (health < 10 || food < 10) {
-      const skill = getAgentSkill("food-hunting");
-      return `\n\n📖 **推奨スキル: food-hunting** (HP/空腹が低い)\n${skill}`;
-    }
-  }
-
-  // surroundings check - night time? hostile nearby?
-  if (toolName === "minecraft_get_surroundings") {
-    const isNight = /夜|night/i.test(resultText);
-    const hasHostile = /zombie|skeleton|creeper|spider|ゾンビ|スケルトン|クリーパー/i.test(resultText);
-    const noBed = !/bed|ベッド/i.test(resultText);
-
-    if (hasHostile) {
-      const skill = getAgentSkill("combat-basics");
-      return `\n\n📖 **推奨スキル: combat-basics** (敵が近くにいます)\n${skill}`;
-    }
-
-    if (isNight && noBed) {
-      const skill = getAgentSkill("bed-crafting");
-      return `\n\n📖 **推奨スキル: bed-crafting** (夜でベッドがありません)\n${skill}`;
-    }
-  }
-
-  return "";
-}
 
 async function main() {
   const bridge = new MCPBridge();

@@ -1,5 +1,4 @@
 import { botManager } from "../bot-manager/index.js";
-import { recallLocations } from "./learning.js";
 
 export const environmentTools = {
   minecraft_check_infrastructure: {
@@ -96,29 +95,6 @@ export async function handleEnvironmentTool(
         results.push(`🔥 Furnace: None nearby`);
       }
 
-      // Check saved locations
-      try {
-        const savedCraftingTables = recallLocations("crafting_table", pos?.x, pos?.z);
-        const savedFurnaces = recallLocations("furnace", pos?.x, pos?.z);
-
-        if (savedCraftingTables.length > 0) {
-          const nearest = savedCraftingTables[0];
-          const dist = pos ? Math.sqrt(Math.pow(nearest.x - pos.x, 2) + Math.pow(nearest.z - pos.z, 2)).toFixed(0) : "?";
-          results.push(`📍 Saved Crafting Tables: ${savedCraftingTables.length} (nearest: "${nearest.name}" at ${nearest.x},${nearest.y},${nearest.z} - ~${dist} blocks away)`);
-        } else {
-          results.push(`📍 Saved Crafting Tables: None saved yet`);
-        }
-
-        if (savedFurnaces.length > 0) {
-          const nearest = savedFurnaces[0];
-          const dist = pos ? Math.sqrt(Math.pow(nearest.x - pos.x, 2) + Math.pow(nearest.z - pos.z, 2)).toFixed(0) : "?";
-          results.push(`📍 Saved Furnaces: ${savedFurnaces.length} (nearest: "${nearest.name}" at ${nearest.x},${nearest.y},${nearest.z} - ~${dist} blocks away)`);
-        } else {
-          results.push(`📍 Saved Furnaces: None saved yet`);
-        }
-      } catch {
-        results.push(`📍 Saved Locations: Unable to check`);
-      }
 
       // Add recommendation
       results.push("");
