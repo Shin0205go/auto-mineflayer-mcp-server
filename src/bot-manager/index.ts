@@ -35,6 +35,7 @@ import {
   activateBlock as activateBlockBasic,
   useItemOnBlock as useItemOnBlockBasic,
   tillSoil as tillSoilBasic,
+  throwItem as throwItemBasic,
 } from "./bot-blocks.js";
 
 // Import bot-crafting functions
@@ -364,6 +365,12 @@ export class BotManager extends BotCore {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
     return await tillSoilBasic(managed, x, y, z);
+  }
+
+  async throwItem(username: string, itemName: string, count: number = 1): Promise<string> {
+    const managed = this.getBotByUsername(username);
+    if (!managed) throw new Error(`Bot ${username} not found`);
+    return await throwItemBasic(managed, itemName, count);
   }
 
   async dropItem(username: string, itemName: string, count?: number): Promise<string> {
