@@ -12,6 +12,55 @@
 
 ---
 
+### [2026-02-16 Session 4] Server gamerules reset - Item pickup disabled (✅ FIXED)
+
+- **症状**: クラフト・採掘・mob討伐の全てでアイテムドロップが拾得不可。"item pickup disabled"エラー
+- **報告**: Claude6 (Session 4 2026-02-16)
+- **影響範囲**:
+  - doTileDrops=false → ブロック採掘でアイテムが出ない
+  - doMobLoot=false → mob討伐でドロップアイテムが出ない
+  - doEntityDrops=false → クラフト済みアイテムが地面に落ちて拾得不可
+- **原因**: サーバー起動時のgamerule設定がfalseに戻っていた（前回セッションの設定が保持されない）
+- **修正**: Claude4が以下のコマンドを実行
+  ```
+  /gamerule doTileDrops true
+  /gamerule doMobLoot true
+  /gamerule doEntityDrops true
+  ```
+- **検証**: Claude6が小規模アイテムピックアップテストで成功確認
+- **重要**:
+  - Claude4, Claude5のみgameruleコマンド実行可能（op権限またはタイミング問題）
+  - サーバー再起動時に再発する可能性あり
+  - 再発時はClaude4/5に修正依頼
+- **ステータス**: ✅ 修正完了 (2026-02-16 Session 4)
+
+---
+
+### [2026-02-16 Session 4] minecraft_move_to false success - doesn't actually move (🔍 INVESTIGATING)
+
+- **症状**: `minecraft_move_to(-3, 96, 0)` が "Moved near chest at (-3.0, 97.0, 0.0)" と成功を報告するが、実際の位置は変わらない（(-3.2, 95.0, -1.8) のまま）
+- **報告**: Claude1 (Session 4 2026-02-16)
+- **状況**:
+  - チェストが(-3, 96, 0)にあることを確認（minecraft_find_block）
+  - minecraft_move_to(-3, 96, 0)を実行
+  - "Moved near chest at (-3.0, 97.0, 0.0)" と返却
+  - しかし minecraft_get_position は (-3.2, 95.0, -1.8) を返す
+  - 結果: minecraft_store_in_chest が "No chest within 4 blocks" エラー
+- **原因**: `moveToBasic()` の `onGoalReached` / `onGoalUpdated` コールバックが、実際の移動完了前に発火している可能性
+  - Line 118-130: `bot.entity.position` を使って成功メッセージを返しているが、pathfinderのイベントは移動完了を保証しない
+  - GoalNear(range=2) は目標から2ブロック以内で成功とみなすため、即座にイベントが発火する可能性
+  - ボットの物理的な移動がイベント発火に追いついていない（非同期タイミング問題）
+- **修正内容**:
+  1. `onGoalReached`と`onGoalUpdated`にasync/await追加
+  2. イベント発火後200ms待機してから位置を取得（物理演算の確定を待つ）
+  3. `onGoalReached`内で実際の距離を再確認（actualDist < 3）してから成功報告
+  4. 距離が遠ければfinishを呼ばず、intervalチェックに任せる
+- **検証**: ビルド後に実際のチェスト接近で動作確認が必要
+- **ファイル**: `src/bot-manager/bot-movement.ts:118-133`
+- **ステータス**: ✅ 修正完了（検証待ち）
+
+---
+
 ### [2026-02-16 Session 3] minecraft_open_chest timeout - Double Chest Issue (✅ FIXED)
 
 - **症状**: `minecraft_open_chest(x=-1, y=96, z=0)`が"Event windowOpen did not fire within timeout of 20000ms"エラーで失敗。(-3,96,0)は成功
