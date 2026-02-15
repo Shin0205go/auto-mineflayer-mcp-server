@@ -1215,16 +1215,33 @@ export async function useItemOnBlock(
     // For buckets on liquid blocks, use activateItem instead of activateBlock
     // This is the correct way to collect water/lava with buckets in Mineflayer
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
-      await bot.activateItem();
+      const initialItem = bot.heldItem?.name;
+      console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
+      bot.activateItem();
+
+      // Poll inventory until it updates (or timeout after 3 seconds)
+      const startTime = Date.now();
+      let pollCount = 0;
+      while (Date.now() - startTime < 3000) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const currentItem = bot.heldItem?.name;
+        pollCount++;
+        console.log(`[DEBUG Poll ${pollCount}] Current item: ${currentItem}`);
+        if (currentItem !== initialItem && (currentItem === "water_bucket" || currentItem === "lava_bucket")) {
+          console.log(`[DEBUG] Success! Bucket changed to ${currentItem}`);
+          break;
+        }
+      }
     } else {
       // For other items (water_bucket placing, flint_and_steel, etc.), use activateBlock
       await bot.activateBlock(block);
     }
 
     // Check what happened (e.g., bucket → water_bucket)
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 200));
     const heldAfter = bot.heldItem;
     const heldName = heldAfter?.name || "nothing";
+    console.log(`[DEBUG] Final held item: ${heldName}`);
 
     // Detect what happened based on item type
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water")) {
