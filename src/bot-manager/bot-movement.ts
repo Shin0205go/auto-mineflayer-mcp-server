@@ -91,6 +91,14 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
   const start = bot.entity.position;
   const distance = start.distanceTo(targetPos);
 
+  // If already at target (within 2 blocks), return success immediately
+  if (distance < 2) {
+    return {
+      success: true,
+      message: `Already at destination (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)})`
+    };
+  }
+
   const goal = new goals.GoalNear(x, y, z, 2);
 
   return new Promise((resolve) => {

@@ -1213,6 +1213,11 @@ export async function useItemOnBlock(
     await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
     await new Promise(resolve => setTimeout(resolve, 100));
 
+    // DEBUG: Always log block name for bucket operations
+    if (itemName === "bucket") {
+      console.log(`[DEBUG useItemOnBlock] Bucket on block: "${block.name}" at (${x},${y},${z})`);
+    }
+
     // For buckets on liquid blocks, use activateItem instead of activateBlock
     // This is the correct way to collect water/lava with buckets in Mineflayer
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
