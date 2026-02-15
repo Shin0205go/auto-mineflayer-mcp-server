@@ -1069,3 +1069,129 @@
 4. Store food in chest
 5. Declare Phase 2 COMPLETE
 
+---
+
+### [2026-02-16] NEW Session #8 - Phase 2 Food Crisis (RECURRING)
+
+**Session Start Status:**
+- 📍 Phase: 2 (Food Stabilization) - INCOMPLETE (recurring issue)
+- ⚠️ CRITICAL FOOD CRISIS: 0 food in all chests (3rd consecutive session)
+- Team Status:
+  - Claude1: HP 20/20, hunger 20/20, 0 food, bone_meal x3, position (-9.5,110,2.5)
+  - Claude4: 3x deaths, seed x2 + water bucket, farm construction lead
+  - Claude6: 2x deaths, HP/hunger 20/20 after respawn, farm support
+  - Claude2: HP 5.7/20 injured, diamond x2 + diamond pickaxe secured
+  - Claude3,5,7: No response
+
+**Gamerule Status:**
+- ✅ Fixed by Claude2: doTileDrops, doMobLoot, doEntityDrops all true
+- ❓ Claude1's /gamerule commands had NO response (cause unknown)
+- ❓ doMobSpawning: Not checked this session
+
+**Session Actions (First 15 minutes):**
+1. Phase 2 announced to team
+2. Emergency response: Claude6 HP10/hunger0 → approved respawn
+3. Claude2 emergency: HP5.7/20 with zombies nearby → guided to base
+4. Farm construction started: Claude4 (2x2 water source) + Claude6 (fence)
+5. Team deaths: Claude4 (3x), Claude6 (2x) from nighttime mobs
+
+**Farm Construction Progress:**
+- Location: (-14,94,31) center, 9x9 range
+- Team: Claude4 (lead) + Claude6 (support)
+- Progress: 2x2 hole excavation 1/4 complete
+- Resources: seed x2, water bucket x1, bone_meal x3 (Claude1 holding)
+
+**Critical Issues:**
+1. ⚠️ **Gamerule command no response**: Claude1 sent 3x /gamerule commands, ZERO responses
+   - doMobSpawning, doTileDrops, doMobLoot all sent
+   - Claude2's identical commands worked successfully
+   - Hypothesis: Permission issue? Op required? Timing issue?
+   - Status: UNRESOLVED
+
+2. ⚠️ **Grass drops no seeds**: Claude4 reported grass breaking gives no seed drops
+   - doTileDrops confirmed true
+   - Impact: Cannot increase seed count beyond initial 2
+   - Workaround: Use bone_meal to grow wheat → harvest for more seeds
+   - Status: Minecraft mechanics or bug? Needs investigation
+
+**Team Coordination:**
+- Excellent: Claude2 fixed gamerules, Claude4 leading farm, Claude6 supporting
+- Leadership: 10+ directives issued, emergency responses, farm strategy coordination
+- Deaths managed: Respawn mechanic used effectively (HP/hunger restore to 20/20)
+
+**Next Steps:**
+1. Complete farm construction (2x2 water source → 9x9 farmland)
+2. Plant seed x2, use bone_meal x3 for growth acceleration
+3. Harvest wheat → get more seeds → expand farm
+4. Target: 20 food items in chest
+
+**Monitoring:**
+- No new bugs in code (all tools working as expected)
+- Server-side issues: gamerule command response inconsistency
+- Waiting for farm completion to proceed with Phase 2
+
+**Session Progress (30 minutes):**
+
+**Farm Construction SUCCESS:**
+- ✅ Infinite water source: COMPLETE at (-13,91,33) by Claude4
+- ⏳ Farmland creation: IN PROGRESS by Claude6 (hand-tilling, no hoe needed)
+- 📍 Farm location: (-14,94,31) center, 9x9 target
+- ✅ Team coordination: Claude4 (lead) + Claude6 (support) + Claude7 (standby)
+
+**Gamerule Fixes (3x redundant):**
+- Claude2: doTileDrops, doMobLoot, doEntityDrops → all true
+- Claude7: doTileDrops, doMobLoot, doEntityDrops → all true (duplicate)
+- Claude2 again: doTileDrops, doMobLoot, doEntityDrops → all true (duplicate)
+- Issue: No coordination, 3 members ran identical commands
+
+**New Bugs Discovered:**
+
+1. **Crafting failures (MCP restart needed)**:
+   - stick crafting fails (Claude4, Claude6)
+   - crafting_table crafting fails (Claude6 with birch_planks)
+   - stone_hoe crafting fails (Claude6 with stick x4 + cobblestone x62, "missing ingredient")
+   - Status: KNOWN BUG - MCP server restart required (fix committed but not deployed)
+   - Workaround: Hand-till farmland (no hoe needed), use chest items
+
+2. **birch_log no drop** (Claude6):
+   - Symptom: Dig birch_log → "No items dropped"
+   - Test: Dig dirt → normal drop
+   - Hypothesis: Selective block drop issue (tool-specific? game version?)
+   - Impact: LOW (farm doesn't need wood)
+   - Status: UNRESOLVED
+
+3. **Gamerule command no response** (Claude1):
+   - Symptom: Claude1 sent 3x /gamerule commands → ZERO responses
+   - Contrast: Claude2/Claude7 identical commands → SUCCESS
+   - Hypothesis: Permission issue? Op required? Timing issue?
+   - Status: UNRESOLVED
+
+**Team Deaths (This Session):**
+- Claude4: 3x deaths from nighttime mobs
+- Claude6: 2x deaths (1x starvation-induced respawn, 1x mobs)
+- All respawned with HP/hunger 20/20 (mechanic working as expected)
+
+**Food Status:**
+- Chest: 0/20 food items (unchanged)
+- Strategy: Farming (animals don't spawn due to doMobSpawning issue)
+- bone_meal x3: Ready (Claude1 holding, will transfer to Claude4)
+
+**Leadership Actions:**
+- 25+ directives issued
+- 4 emergency responses (Claude6 starvation, Claude2 injury, Claude7 hunger, Claude4 fall)
+- 3 bug investigations (crafting, birch_log, gamerule)
+- Session documentation updated
+- ⚠️ Role deviation: Attempted personal movement for bone_meal transfer (should delegate)
+
+**Next Session Priorities:**
+1. Complete farmland (9x9 tilling)
+2. Plant wheat seeds x2
+3. bone_meal x3 growth acceleration
+4. Harvest wheat → get more seeds
+5. Repeat until 20 food items in chest
+6. Declare Phase 2 COMPLETE
+
+**MCP Server Status:**
+- Multiple bug fixes committed but NOT deployed (server restart needed)
+- Decision: Defer restart until Phase 2 completion (farm construction in progress)
+- Workarounds effective (hand-tilling works)
