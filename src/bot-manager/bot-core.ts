@@ -42,7 +42,9 @@ export class BotCore extends EventEmitter {
       return port;
     }
 
-    const viewerPort = this.nextViewerPort++;
+    // Derive port from username (Claude1→3001, Claude2→3002, etc.)
+    const match = username.match(/(\d+)$/);
+    const viewerPort = match ? 3000 + parseInt(match[1]) : this.nextViewerPort++;
     try {
       console.error(`[BotManager] Starting viewer for ${username} on port ${viewerPort}...`);
       mineflayerViewer(managed.bot, { port: viewerPort, firstPerson: true, viewDistance: 6 });
@@ -88,7 +90,13 @@ export class BotCore extends EventEmitter {
   requireSingleBot(): string {
     const username = this.getFirstBotUsername();
     if (!username) {
-      throw new Error("Not connected to any server");
+      // Provide helpful error message suggesting to connect first
+      const botUsername = process.env.BOT_USERNAME || "Claude";
+      const mcHost = process.env.MC_HOST || "localhost";
+      const mcPort = process.env.MC_PORT || "25565";
+      throw new Error(
+        `Not connected to any server. Use minecraft_connect(host="${mcHost}", port=${mcPort}, username="${botUsername}", agentType="game") first.`
+      );
     }
     return username;
   }
@@ -231,6 +239,8 @@ export class BotCore extends EventEmitter {
         port: config.port,
         username: config.username,
         version: config.version,
+        checkTimeoutInterval: 120000, // Check for timeout every 120 seconds (default: 30s)
+        hideErrors: false, // Show all errors for debugging
       });
 
       bot.once("spawn", () => {
@@ -460,20 +470,10 @@ export class BotCore extends EventEmitter {
           const reasonStr = typeof reason === 'string' ? reason : JSON.stringify(reason);
           console.error(`[BotManager] ${config.username} disconnected. Reason: ${reasonStr}`);
 
-          // Auto-reconnect after 30 seconds (prevent rapid reconnect loops)
-          const savedConfig = this.connectionConfigs.get(config.username);
-          if (savedConfig) {
-            console.error(`[BotManager] Auto-reconnecting ${config.username} in 30 seconds...`);
-            setTimeout(() => {
-              this.connect(savedConfig).then((result) => {
-                console.error(`[BotManager] Auto-reconnect successful: ${result}`);
-              }).catch((error) => {
-                console.error(`[BotManager] Auto-reconnect failed:`, error);
-              });
-            }, 30000);
-          } else {
-            console.error(`[BotManager] No saved config for ${config.username}, skipping auto-reconnect`);
-          }
+          // Auto-reconnect is disabled - let the caller (Claude Code loop) handle reconnection
+          // This prevents zombie connections when MCP processes are replaced
+          this.connectionConfigs.delete(config.username);
+          console.error(`[BotManager] ${config.username} will not auto-reconnect (managed by caller)`);
         });
 
         bot.on("kicked", (reason, loggedIn) => {
@@ -637,5 +637,6 @@ export class BotCore extends EventEmitter {
       managed.bot.quit();
     }
     this.bots.clear();
+    this.connectionConfigs.clear();
   }
 }

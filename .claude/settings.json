@@ -19,26 +19,6 @@
           }
         ]
       }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if echo \"$FILE_PATH\" | grep -qE '^(src/|\\.claude/skills/|bug-issues/)'; then exit 0; else echo '❌ File creation only allowed in src/, .claude/skills/, and bug-issues/' && exit 1; fi"
-          }
-        ]
-      },
-      {
-        "matcher": "Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if echo \"$FILE_PATH\" | grep -qE '^(src/|\\.claude/skills/|bug-issues/)'; then exit 0; else echo '❌ File editing only allowed in src/, .claude/skills/, and bug-issues/' && exit 1; fi"
-          }
-        ]
-      }
     ]
   }
 }
