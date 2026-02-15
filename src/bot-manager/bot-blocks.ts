@@ -1217,16 +1217,20 @@ export async function useItemOnBlock(
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" ||
                                     block.name === "lava" || block.name === "flowing_lava")) {
       bot.activateItem();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      bot.deactivateItem();
     } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
       // For placing fluids, also use activateItem
       bot.activateItem();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      bot.deactivateItem();
     } else {
       // For other items (bone_meal, flint_and_steel), use activateBlock
       await bot.activateBlock(block);
     }
 
     // Check what happened (e.g., bucket → water_bucket)
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise(resolve => setTimeout(resolve, 1000));
     const heldAfter = bot.heldItem;
     const heldName = heldAfter?.name || "nothing";
 
