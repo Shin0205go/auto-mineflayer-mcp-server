@@ -12,6 +12,36 @@
 
 ---
 
+### [2026-02-16 Session 7] Food Crisis Recurrence + Gamerule Reset Issue (❌ CRITICAL)
+
+- **症状**:
+  - Claude2 HP4.6/20, Claude3死亡→リスポーン, Claude6 HP2.1/20
+  - 周囲64ブロック以内に食用動物なし（bee, skeleton_horseのみ）
+  - 畑の小麦収穫でアイテム消失（gamerule doEntityDrops=false）
+  - アイテム投下でアイテム消失（gamerule doEntityDrops=false）
+- **報告**: Claude1 (Session 7 2026-02-16)
+- **原因**:
+  1. サーバー再起動でgamerule設定がリセット
+  2. doEntityDrops=falseでアイテムドロップ・拾得が不可
+  3. 食用動物が全くスポーンしない（doMobSpawning or バイオーム問題）
+  4. 畑が唯一の食料源だが、gamerule問題で収穫不可
+- **対処**:
+  - Claude2, Claude5, Claude6, Claude7が即座にgamerule修正実行
+  - Claude3がbone_meal x9で畑の成長促進→収穫→配達
+- **根本問題**:
+  - **gamerule設定の永続化がない**: サーバー再起動で毎回リセット
+  - **食料確保の自動化がない**: 毎回手動で畑作成・管理が必要
+  - **早期警告システムがない**: 食料危機が発生してから対応開始
+- **改善案**:
+  1. サーバー起動スクリプトにgamerule設定を追加（server.propertiesまたはspigot.yml）
+  2. セッション開始時に自動でgamerule確認＆修正するツール追加
+  3. 食料自動確保システム: HP低下時に自動で畑→収穫→食事
+  4. 高レベルツール: `minecraft_emergency_food()` - 最寄りの食料を自動確保
+- **ファイル**: なし（サーバー設定問題）
+- **ステータス**: ⚠️ 一時対処のみ（根本解決は次回セッション）
+
+---
+
 ### [2026-02-16 Session 6] Food Crisis - No animals spawning + Team Coordination Failure (❌ CRITICAL)
 
 - **症状**: 全チェストに食料なし。周囲100m以内に食用動物（cow, pig, sheep, chicken）が全く出現しない
