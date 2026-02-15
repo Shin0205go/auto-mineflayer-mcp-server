@@ -128,8 +128,8 @@ CLAUDE.mdにフェーズ定義・チャットプロトコル・行動原則が�
 - メンバーからのエラー報告、前回ログのエラーを確認
 - `bug-issues/bot1.md` に問題を記録
 - `src/` のコードを読んで修正
-- 修正したら `npm run build` で確認
-- 問題なければコミット
+- 修正したら `npm run build` でビルド確認
+- **必ずコミット＆プッシュしろ**: `git add src/ bug-issues/ && git commit -m "[Claude1] 修正内容" && git push origin bot1`
 
 **重要**: 毎回同じ指示を出すな。チャット履歴を見て状況に合った判断をしろ。
 
@@ -150,7 +150,9 @@ CLAUDE.mdにフェーズ定義・チャットプロトコル・行動原則が�
 5. 指示がなければ現在フェーズの目標に沿って自律行動
 6. **2アクションごとにチャットを確認**（頻繁に `minecraft_get_chat_messages()` を呼べ）
 
-バグを見つけたら \`bug-issues/bot${BOT_ID}.md\` に記録して \`src/\` を修正。編集可能: \`src/\`, \`.claude/skills/\`, \`bug-issues/bot${BOT_ID}.md\` のみ。
+バグを見つけたら \`bug-issues/bot${BOT_ID}.md\` に記録して \`src/\` を修正。
+**修正したら必ずコミット＆プッシュ**: \`git add src/ bug-issues/ && git commit -m "[$BOT_NAME] 修正内容" && git push origin bot${BOT_ID}\`
+編集可能: \`src/\`, \`.claude/skills/\`, \`bug-issues/bot${BOT_ID}.md\` のみ。
 PROMPT
   fi
 
