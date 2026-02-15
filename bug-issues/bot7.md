@@ -87,3 +87,22 @@
 3. インベントリ確認 → obsidianなし、cobblestone +2
 
 **対応**: 調査予定
+
+## 2026-02-16: crafting_table クラフトが "missing ingredient" エラー
+
+**症状**: `minecraft_craft(item_name="crafting_table")` が失敗
+- インベントリに birch_planks 9個、oak_planks 1個 あり（合計10個）
+- 作業台クラフトには4個のplanksが必要（十分な材料あり）
+- エラーメッセージ: "Failed to craft crafting_table from birch_planks: Error: missing ingredient"
+
+**再現手順**:
+1. birch_log 2個からbirch_planks 8個をクラフト（成功）
+2. 既存のoak_planks 1個、birch_planks 1個と合わせて合計10個
+3. `minecraft_craft(item_name="crafting_table", count=1)` → エラー
+
+**原因推測**:
+- simpleWoodenRecipes ハンドラーの問題？
+- 異なる種類のplanks（birch + oak）を混ぜているため？
+- Minecraftバージョンの互換性問題？
+
+**対応**: 調査予定
