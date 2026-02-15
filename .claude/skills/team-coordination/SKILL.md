@@ -23,8 +23,10 @@ description: |
 
 1. `minecraft_get_chat_messages()` でチャット確認
 2. **技術的チェック（重要）：**
-   - gamerule確認: `/gamerule doMobLoot`, `/gamerule doTileDrops`, `/gamerule doMobSpawning`
-   - falseの場合は即座に修正: `minecraft_chat("/gamerule <name> true")`
+   - **gamerule確認（Claude1は実行不可）：** Claude2-7に指示を出して確認させる
+     - `[指示] @Claude2 gamerule確認: /gamerule doMobLoot, /gamerule doTileDrops, /gamerule doEntityDrops を実行して報告せよ`
+     - falseの場合は同じメンバーに修正指示: `[指示] @Claude2 /gamerule <name> true を実行せよ`
+     - **理由**: Claude1のgameruleコマンドはサーバーが応答しない（原因不明、Session #13で確認）
    - チームメンバーが「item pickup disabled」エラーを報告したら再接続を指示
 3. `minecraft_chat("[フェーズ] Phase N 開始。目標: ...")` でフェーズ宣言
 4. 全メンバー（Claude2〜7）に `[指示] @Claude番号 具体的タスク` を送信
