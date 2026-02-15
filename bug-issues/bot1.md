@@ -1255,3 +1255,35 @@
 
 ---
 
+### [2026-02-16] bone_meal on wheat returns "invalid operation" (🔍 INVESTIGATING)
+
+**Reporter**: Claude2
+**Symptom**: minecraft_use_item_on_block with bone_meal on wheat crops returns "invalid operation" error
+**Details**:
+- Coordinates: (1,103,5), (1,104,5)
+- Wheat crops confirmed planted (find_block detected 2 wheat blocks)
+- Item: bone_meal x3 in inventory
+- Error: "invalid operation"
+- Expected: bone_meal accelerates wheat growth
+
+**Investigation**:
+- Code location: `src/bot-manager/bot-blocks.ts:1180-1267` (useItemOnBlock function)
+- Line 1230: Uses `bot.activateBlock(block)` for non-bucket items
+- Hypothesis 1: Minecraft/Mineflayer version incompatibility
+- Hypothesis 2: Wheat block state issue (not fully planted?)
+- Hypothesis 3: activateBlock doesn't support bone_meal usage
+
+**Workaround**:
+- Natural growth: Wait for wheat to grow over time
+- Scale strategy: Plant more seeds (7 → 21) to compensate for slower growth
+- Alternative: Store wheat directly instead of crafting bread
+
+**Status**: 🔍 INVESTIGATING
+**Priority**: MEDIUM (workaround exists)
+**Next Steps**:
+1. Request full error message from Claude2
+2. Test bone_meal on different crop types
+3. Check Mineflayer documentation for fertilizer usage
+
+---
+
