@@ -45,6 +45,51 @@
 ### 調査が必要なファイル
 - `src/tools/building.ts` (use_item_on_block)
 
+### 追加調査 (2026-02-16)
+- 同じバグが再発。バケツ装備後も水を汲めない
+- エラーメッセージ: "⚠️ Used bucket on water but water_bucket not found in inventory. Holding: bucket"
+- 位置: (-7, 38, 13) の水ブロック
+- 複数回試行しても同じ結果
+
+## 2026-02-16: 黒曜石→cobblestone化バグ
+
+### 現象
+- ダイヤピッケルで黒曜石を採掘すると cobblestone がドロップする
+- 正しくは obsidian がドロップすべき
+- 複数のボット（Claude6, Claude7）で同じ現象を確認
+
+### 再現手順
+1. diamond_pickaxe を装備
+2. obsidian ブロックに対して `minecraft_dig_block(x, y, z, force=true)` を実行
+3. "Dug obsidian with diamond_pickaxe. No items dropped" と表示される
+4. インベントリを確認すると cobblestone が +2 追加されている
+5. obsidian は追加されていない
+
+### 証拠
+- 採掘前: cobblestone なし
+- 採掘後: cobblestone x2 追加
+- 採掘メッセージ: "Dug obsidian with diamond_pickaxe. No items dropped (auto-collected or wrong tool)."
+
+### 影響
+- Phase 6 でネザーポータル作成に必要な黒曜石 10個が集められない
+- ダイヤピッケルを持っているのに黒曜石が入手できない
+
+### 調査が必要
+- `src/bot-manager/bot-blocks.ts` の digBlock 関数
+- Mineflayer の item drop イベント処理
+- なぜ obsidian が cobblestone に変換されるのか
+
+### 原因判明 (2026-02-16 by Claude1)
+- バグではない！Minecraftの仕様
+- flowing_lava（流れる溶岩）に水をかけると **cobblestone** になる
+- lava（溶岩源ブロック）に水をかけると **obsidian** になる
+- obsidian ブロックを採掘したつもりが、実際は flowing_lava が固まった cobblestone を採掘していた
+
+### 解決策
+- 溶岩「源」ブロックを見つけて水をかける
+- または既に生成された obsidian ブロックを採掘する
+- `minecraft_find_block("obsidian")` で既存の黒曜石を探す
+
 ## 2026-02-16: forceパラメータが機能しない
 
 ### 現象
