@@ -157,3 +157,49 @@
 - なぜ一部のボット（Claude5）は成功し、他のボット（Claude6, Claude7）は失敗するのか？
 - サーバー設定の問題？ Mineflayer の問題？ MCP サーバーの問題？
 - gamerule doTileDrops/doMobLoot/doEntityDrops は全て true に設定済み
+
+## 2026-02-16: クラフトシステム全体が機能しない
+
+### 現象
+- 全ての高度なクラフトレシピ（作業台必要）が "missing ingredient" エラーで失敗
+- 簡易レシピ（2x2）も失敗する（crafting_table, wooden_hoe等）
+- 必要な素材を十分に持っているのにクラフトできない
+- 複数のボット（Claude4, Claude6）で同じ問題を確認
+
+### 再現手順
+1. oak_planks x4 を所持
+2. `minecraft_craft("crafting_table")` を実行
+3. "Failed to craft crafting_table from oak_planks: Error: missing ingredient" と表示
+4. インベントリには oak_planks x4 があるのに失敗
+
+### 具体例
+#### crafting_table
+- 所持: oak_planks x4
+- レシピ: oak_planks x4 (2x2)
+- 結果: "missing ingredient"
+
+#### stone_hoe
+- 所持: cobblestone x62+, stick x4
+- レシピ: cobblestone x2 + stick x2 (作業台必要)
+- 結果: "Failed to craft stone_hoe: Error: missing ingredient. Recipe needs: cobblestone(need 2), stick(need 2)"
+- 作業台: (-8, 93, 20) で実行
+
+#### wooden_hoe
+- 所持: oak_planks x4, stick x6
+- レシピ: oak_planks x2 + stick x2 (2x2)
+- 結果: "No recipe found for wooden_hoe"
+
+### 影響
+- Phase 2 の農場建設が完全にブロックされる
+- クワがないと farmland を作れず、種を植えられない
+- 食料生産ができず、全員が飢餓状態に陥る
+
+### リーダーの指示
+- 「素手で耕せ」と指示されたが、Minecraft仕様上クワは必須
+- 代替案: 次セッションでツール追加（MCP側の実装）
+
+### 調査が必要なファイル
+- `src/tools/crafting.ts` (craft関数)
+- `src/bot-manager/bot-crafting.ts` (クラフト実装)
+- Mineflayer の crafting API
+- レシピデータの読み込みロジック
