@@ -1228,6 +1228,7 @@ export async function useItemOnBlock(
 =======
       bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
 
+<<<<<<< Updated upstream
       // Poll inventory until it updates (or timeout after 3 seconds)
       const startTime = Date.now();
       let pollCount = 0;
@@ -1250,6 +1251,11 @@ export async function useItemOnBlock(
     // Check what happened (e.g., bucket → water_bucket)
     await new Promise(resolve => setTimeout(resolve, 1000));
     bot.updateHeldItem();
+=======
+    // Check what happened (e.g., bucket → water_bucket)
+    // Wait longer for server synchronization (1000ms instead of 500ms)
+    await new Promise(resolve => setTimeout(resolve, 1000));
+>>>>>>> Stashed changes
     const heldAfter = bot.heldItem;
     const heldName = heldAfter?.name || "nothing";
 
