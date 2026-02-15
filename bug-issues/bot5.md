@@ -35,3 +35,19 @@
 
 ---
 
+### [2026-02-16] iron_pickaxe と iron_sword がインベントリから消失
+- **症状**: チェストから `iron_pickaxe` と `iron_sword` を取得（take_from_chest成功確認）し、装備もした（equip成功確認）。その後 pillar_up や move_to を実行したところ、いつの間にかインベントリから消失。stone_pickaxe と stone_sword のみ残っている。チェストにも戻っていない。
+- **発生状況**:
+  1. チェスト(-3,96,0)から iron_pickaxe と iron_sword を取得（成功）
+  2. iron_pickaxe を装備（成功）
+  3. pillar_up で11ブロック上昇
+  4. チェスト(2,106,-1)から diamond を取得
+  5. 拠点に戻る（move_to）
+  6. インベントリ確認 → iron_pickaxe/iron_sword が消失、stone系に戻っている
+- **原因**: 不明。インベントリ同期の問題か、アイテム管理のバグの可能性。
+- **影響**: Phase 4未達成。鉄装備を再取得する必要がある。
+- **修正予定**: インベントリ管理周りのコードを調査。
+- **ファイル**: `src/bot-manager/bot-items.ts`, `src/tools/crafting.ts`
+
+---
+
