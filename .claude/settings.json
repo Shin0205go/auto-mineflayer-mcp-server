@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if echo \"$FILE_PATH\" | grep -qE '^bug-issues/'; then if echo \"$FILE_PATH\" | grep -qE '^bug-issues/(bot1\\.md|README\\.md)$'; then exit 0; else echo '❌ Bot1 can only edit bug-issues/bot1.md' && exit 1; fi; fi; if echo \"$FILE_PATH\" | grep -qE '^(src/|\\.claude/skills/)'; then exit 0; else echo '❌ File creation only allowed in src/, .claude/skills/, and bug-issues/bot1.md' && exit 1; fi"
+            "command": "FILE_PATH=$(cat /dev/stdin | python3 -c \"import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))\" 2>/dev/null || echo ''); if echo \"$FILE_PATH\" | grep -qE '^(src/|bug-issues/|\\.claude/skills/)'; then exit 0; else echo \"File creation only allowed in src/, .claude/skills/, bug-issues/\" && exit 2; fi"
           }
         ]
       },
@@ -15,7 +15,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if echo \"$FILE_PATH\" | grep -qE '^bug-issues/'; then if echo \"$FILE_PATH\" | grep -qE '^bug-issues/(bot1\\.md|README\\.md)$'; then exit 0; else echo '❌ Bot1 can only edit bug-issues/bot1.md' && exit 1; fi; fi; if echo \"$FILE_PATH\" | grep -qE '^(src/|\\.claude/skills/)'; then exit 0; else echo '❌ File editing only allowed in src/, .claude/skills/, and bug-issues/bot1.md' && exit 1; fi"
+            "command": "FILE_PATH=$(cat /dev/stdin | python3 -c \"import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))\" 2>/dev/null || echo ''); if echo \"$FILE_PATH\" | grep -qE '^(src/|bug-issues/|\\.claude/skills/)'; then exit 0; else echo \"File editing only allowed in src/, .claude/skills/, bug-issues/\" && exit 2; fi"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'CHANGED=$(git diff --name-only -- src/ bug-issues/ .claude/skills/ 2>/dev/null); if [ -n \"$CHANGED\" ]; then BRANCH=$(git branch --show-current 2>/dev/null); BOT=$(echo $BRANCH | sed \"s/bot//\"); git add src/ bug-issues/ .claude/skills/ 2>/dev/null; git commit -m \"[Claude${BOT}] Auto-commit on stop\" 2>/dev/null; fi'",
+            "timeout": 30
           }
         ]
       }
