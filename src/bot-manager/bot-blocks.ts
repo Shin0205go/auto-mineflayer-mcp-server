@@ -1334,3 +1334,41 @@ export async function tillSoil(
     return `Failed to till soil at (${x}, ${y}, ${z}): ${errMsg}`;
   }
 }
+
+export async function throwItem(managed: ManagedBot, itemName: string, count: number = 1): Promise<string> {
+  const bot = managed.bot;
+
+  // Find the item in inventory
+  const item = bot.inventory.items().find((i: any) => i.name === itemName);
+  if (!item) {
+    return `No ${itemName} in inventory. Have: ${bot.inventory.items().map((i: any) => i.name).join(", ")}`;
+  }
+
+  if (item.count < count) {
+    return `Not enough ${itemName}. Have ${item.count}, need ${count}`;
+  }
+
+  try {
+    // Equip the item
+    await bot.equip(item, 'hand');
+    await new Promise(r => setTimeout(r, 100));
+
+    let thrown = 0;
+    for (let i = 0; i < count; i++) {
+      // Activate item to throw it
+      bot.activateItem();
+      await new Promise(r => setTimeout(r, 50));
+      bot.deactivateItem();
+      await new Promise(r => setTimeout(r, 200)); // Wait between throws
+      thrown++;
+    }
+
+    const remaining = bot.inventory.items().find((i: any) => i.name === itemName);
+    const remainingCount = remaining ? remaining.count : 0;
+
+    return `✅ Threw ${thrown}x ${itemName}. Remaining: ${remainingCount}`;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    return `Failed to throw ${itemName}: ${errMsg}`;
+  }
+}
