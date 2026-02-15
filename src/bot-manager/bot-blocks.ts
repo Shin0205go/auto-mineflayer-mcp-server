@@ -1212,9 +1212,19 @@ export async function useItemOnBlock(
     await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
     await new Promise(resolve => setTimeout(resolve, 100));
 
+<<<<<<< Updated upstream
     // Use activateBlock for bucket interaction with water/lava blocks
     // activateBlock ensures the block is properly targeted
     await bot.activateBlock(block);
+=======
+    // For buckets on liquid blocks, use activateItem instead of activateBlock
+    // This is the correct way to collect water/lava with buckets in Mineflayer
+    if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
+      const initialItem = bot.heldItem?.name;
+      console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
+      bot.activateItem();
+      bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
+>>>>>>> Stashed changes
 
     // Wait longer for inventory to update properly
     await new Promise(resolve => setTimeout(resolve, 500));
