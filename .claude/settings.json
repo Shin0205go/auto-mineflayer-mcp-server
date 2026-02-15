@@ -52,8 +52,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'CHANGED=$(git diff --name-only -- src/ bug-issues/ .claude/skills/ 2>/dev/null); if [ -n \"$CHANGED\" ]; then npm run build --silent 2>/dev/null; BRANCH=$(git branch --show-current 2>/dev/null); BOT=$(echo $BRANCH | sed \"s/bot//\"); git add src/ bug-issues/ .claude/skills/ 2>/dev/null; git commit -m \"[Claude${BOT}] Auto-commit on stop\" 2>/dev/null && git push origin $BRANCH 2>/dev/null; fi'",
-            "timeout": 60
+            "command": "bash scripts/hook-stop-auto-pr.sh",
+            "timeout": 90
           }
         ]
       }
