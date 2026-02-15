@@ -1333,3 +1333,29 @@
 
 ---
 
+### [2026-02-16] NEW Session #11 - Water Bucket Diagnostics Enhanced
+
+**Session Start Status:**
+- 📍 Phase: 3 (Stone Tools) - In Progress
+- ✅ Gamerules: Fixed by Claude5 (doTileDrops, doMobLoot, doEntityDrops)
+- ⚠️ Team Status: No responses for 3+ minutes (investigating)
+
+**Bug Fix - Water Bucket Diagnostics v2:**
+- **Problem**: bucket → water_bucket fails, DEBUG logs not appearing
+- **Root Cause**: block.name likely doesn't match "water" or "flowing_water"
+- **Solution**: Enhanced diagnostic logging
+  - File: `src/bot-manager/bot-blocks.ts:1218-1221`
+  - Changed DEBUG condition: `if (itemName === "bucket")` → `if (itemName === "bucket" || itemName === "water_bucket" || itemName === "lava_bucket")`
+  - Added block.type to output (reveals numeric block ID)
+  - New output: `[DEBUG useItemOnBlock] Item "bucket" on block: "water" (type: 123) at (x,y,z)`
+- **Purpose**: Identify actual block.name and block.type for water blocks in this Minecraft version
+- **Build**: ✅ Successful (tsc clean)
+- **Status**: ⏳ AWAITING MCP RESTART + TEAM TESTING
+
+**Next Actions:**
+1. Wait for team responses
+2. If water bucket bug reported, restart MCP server to deploy fix
+3. Request detailed bug report with new DEBUG output
+
+---
+

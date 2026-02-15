@@ -1216,8 +1216,8 @@ export async function useItemOnBlock(
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // DEBUG: Always log block name for bucket operations
-    if (itemName === "bucket") {
-      console.log(`[DEBUG useItemOnBlock] Bucket on block: "${block.name}" at (${x},${y},${z})`);
+    if (itemName === "bucket" || itemName === "water_bucket" || itemName === "lava_bucket") {
+      console.log(`[DEBUG useItemOnBlock] Item "${itemName}" on block: "${block.name}" (type: ${block.type}) at (${x},${y},${z})`);
     }
 
     // For buckets on liquid blocks, use activateItem instead of activateBlock
