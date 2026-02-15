@@ -83,8 +83,8 @@ while true; do
       echo "✅ Already up to date with main"
     fi
   else
-    echo "⚠️  Merge failed, aborting" | tee -a "$LOGFILE"
-    git merge --abort 2>/dev/null || true
+    echo "⚠️  Merge conflict detected - Claude will resolve during this loop" | tee -a "$LOGFILE"
+    # コンフリクトを残したまま進む（Claudeが解決する）
   fi
 
   git stash pop 2>/dev/null || true
@@ -98,6 +98,7 @@ while true; do
 
 ## 最初のアクション（必須）
 
+0. \`git status\` でコンフリクトがないか確認 → あれば最優先で解決
 1. \`minecraft_get_chat_messages()\` - 他のbotからのメッセージ確認
 2. \`minecraft_get_status()\` - 現在の状態確認
 3. \`minecraft_get_position()\` - 現在地確認
@@ -142,6 +143,13 @@ while true; do
 - 特定の操作が失敗しやすい → エラーハンドリング追加
 - 移動・採掘の効率が悪い → ロジック改善
 - 足りない機能がある → 新しいツールや機能を追加
+
+### gitコンフリクト解決
+他のbotと同じファイルを修正するとコンフリクトが起きます。
+1. \`git status\` でコンフリクトファイルを確認
+2. コンフリクトファイルを読んで \`<<<<<<<\` \`=======\` \`>>>>>>>\` を確認
+3. 両方の変更を活かすように手動で修正
+4. \`git add <file>\` → \`git commit\` で解決
 
 ### 注意
 - \`src/\` と \`.claude/skills/\` と \`bug-issues/bot${BOT_ID}.md\` のみ編集可能
