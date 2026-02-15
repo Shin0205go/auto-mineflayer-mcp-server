@@ -52,35 +52,23 @@
   - `src/bot-manager/bot-storage.ts` (実装)
 - **ステータス**: ✅ 修正完了 (2026-02-15)
 
-## [2026-02-16] stick crafting failure with all plank types
+## [2026-02-16] stick crafting failure with all plank types ✅ **FIXED**
 
-- **症状**: `minecraft_craft("stick")` が "missing ingredient" エラーで失敗。birch_planks, dark_oak_planks どちらでも同じ。
+- **症状**: `minecraft_craft("stick")` が "missing ingredient" エラーで失敗。birch_planks x19, dark_oak_planks x5 を所持しているのに、dark_oak_planks (5個) を選択してエラーになる。
 - **エラーメッセージ**:
   ```
-  Failed to craft stick from birch_planks/dark_oak_planks: Error: missing ingredient
+  Failed to craft stick from dark_oak_planks: Error: missing ingredient
   ```
-- **再現手順**:
-  1. birch_log または dark_oak_log を採掘 → planks をクラフト
-  2. `minecraft_craft("stick", 2)` → 失敗
-- **追加再現ケース (Claude4)**:
-  1. birch_log x14 所持、birch_planks x25 所持
-  2. birch_log → birch_planks x4 クラフト成功（合計41個に）
-  3. `minecraft_craft("stick", 4)` → "Failed to craft stick from dark_oak_planks: Error: missing ingredient"
-  4. インベントリにはbirch_planks x41, dark_oak_planks x2 があるが、stickを作れない
-- **根本原因**: `bot.recipesAll(item.id, null, null)` が空配列を返す。Mineflayerまたはminecraft-dataのバージョン互換性問題。
-- **試した修正**:
-  1. (2026-02-16 18:xx) `bot.recipesFor()` をフォールバックとして追加 (line 409-429) - 効果なし
-  2. dark_oak_planks で試す - 同じエラー
-  3. birch_log から新規planksをクラフトしてから試す - 同じエラー
-- **影響**:
-  - diamond_pickaxe を作成できず、黒曜石採掘タスクを実行できない
-  - 鍬（hoe）を作成できず、畑を作れない（farmland作成不可）
-  - 種を植えられないため、食料確保ができない
-- **次のステップ**:
-  1. MCPサーバーを再起動して修正コードを適用
-  2. それでも失敗する場合、手動でレシピオブジェクトを作成
-  3. または、チームメンバーにダイヤツール作成を委譲
-- **ステータス**: ⚠️ 修正試行中 - MCPサーバー再起動待ち
+- **根本原因**:
+  1. `bot.recipesAll(item.id, null, null)` が空配列を返す（Mineflayerバージョン互換性問題）
+  2. Manual recipe fallback (line 415-442) が実装されていたが、`inventoryItems.find()` が最初に見つかった板材（dark_oak_planks x5）を選択
+  3. stick作成には2枚必要だが、優先度ロジックがないため数の少ない板材を選んでしまう
+- **修正内容** (2026-02-16):
+  1. Line 416-418: `find()` → `filter() + sort()` に変更し、最も数の多い板材を選択
+  2. Line 448-450: crafting_table も同様に修正
+  3. これにより birch_planks x19 が優先的に選ばれる
+- **ファイル**: `src/bot-manager/bot-crafting.ts:416-418, 448-450`
+- **ステータス**: ✅ 修正完了・ビルド成功 - MCPサーバー再起動待ち
 
 ## [2026-02-16] minecraft_move_to not updating position (✅ FIXED)
 
@@ -183,4 +171,25 @@
   2. `minecraft_find_block` で遠隔確認（近づけないが存在は確認できる）
 - **関連**: 同じ移動システムの問題が [2026-02-16] minecraft_move_to not updating position でも報告されており、Claude1が修正済み。しかし、この問題は別の原因（pathfinding の経路探索失敗）と思われる。
 - **ステータス**: ⚠️ 未修正 - pathfinding システムの調査が必要
+
+## [2026-02-16] crafting_table recipe fails with wrong plank type
+
+- **症状**: `minecraft_craft("crafting_table")` が "missing ingredient" エラーで失敗。birch_planks x19 を所持しているのに、dark_oak_planks を使おうとしてエラーになる。
+- **エラーメッセージ**:
+  ```
+  Failed to craft crafting_table from dark_oak_planks: Error: missing ingredient
+  ```
+- **再現手順**:
+  1. birch_planks x19, dark_oak_planks x5 をインベントリに持つ
+  2. `minecraft_craft("crafting_table")` → エラー "Failed to craft crafting_table from dark_oak_planks"
+  3. birch_planks が19個あるのに使われない
+- **根本原因**: クラフトシステムが優先的に dark_oak_planks を選択しようとするが、数が足りない（5個 < 必要4個）。birch_planks が19個あるのにフォールバックしない。
+- **関連**: stick クラフトバグと同じ根本原因の可能性。recipesAll または材料選択ロジックの問題。
+- **影響**:
+  - 作業台を破壊してしまった後、再設置できない
+  - チームの作業台が不足し、クラフトタスク全般に支障
+- **回避策**:
+  - dark_oak_planks を捨てて、birch_planks のみにする
+  - または手動で板材を統一してから再試行
+- **ステータス**: ⚠️ 未修正 - クラフトレシピ選択ロジックの調査が必要
 

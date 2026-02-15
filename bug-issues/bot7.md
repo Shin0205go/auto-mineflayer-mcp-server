@@ -5,13 +5,23 @@
 ## 2026-02-15: stick クラフト失敗
 
 **症状**: `minecraft_craft(item_name="stick")` が "missing ingredient" エラー
-- インベントリに birch_planks 8個、oak_planks 4個 あり
-- 作業台の近く（1ブロック以内）でも失敗
-- エラーメッセージ: "Failed to craft stick from birch_planks: Error: missing ingredient"
+- インベントリに birch_planks 12個、dark_oak_planks 4個 あり
+- エラーメッセージ: "Failed to craft stick from dark_oak_planks: Error: missing ingredient"
 
-**原因推測**: `src/tools/crafting.ts` の `simpleWoodenRecipes` ハンドラーが動作していない可能性
+**原因**: `src/bot-manager/bot-crafting.ts:405-429`
+- `bot.recipesAll(item.id, null, null)` が0レシピを返す（Minecraftバージョンの問題）
+- fallbackとして `bot.recipesFor(item.id, null, 1, null)` を試すが、これも0レシピを返す
+- パラメータが不適切で必要な材料（planks）を指定していない
 
-**対応**: コードを調査して修正予定
+**修正**: ✅完了 (bot7)
+- `src/bot-manager/bot-crafting.ts:409-460` で手動レシピ実装
+- stick: 2 planks → 4 sticks (vertical pattern in 2x2 grid)
+- crafting_table: 4 planks → 1 crafting_table (2x2 grid)
+- `recipesAll/recipesFor` が0を返す場合、手動でレシピオブジェクトを作成
+- delta配列を追加して材料消費を明示
+- ビルド成功
+
+**注意**: MCPサーバー再起動が必要（reconnectでは反映されない）
 
 ## 2026-02-15: minecraft_use_item_on_block で水を汲んでも water_bucket にならない
 
@@ -178,3 +188,72 @@
 - `src/bot-manager/index.ts` に `throwItem` メソッド追加
 - ビルド成功
 - **注意**: MCPサーバー再起動が必要（reconnectでは反映されない）
+
+
+## 2026-02-16 セッション: Claude7の成果
+
+### 主要成果
+1. **leather x7発見**: チェスト(-37,97,7)でleather x7を発見・回収。Phase 5エンチャント台用の本作成に必須
+2. **stickクラフトバグ修正実装**: 手動レシピ実装済み、ビルド成功。サーバー再起動で反映予定
+3. **探索実施**: 半径100m+でサトウキビ・動物・水源を探索（未発見）
+4. **mobドロップテスト**: skeleton_horse討伐でドロップ0個確認
+
+### 課題
+- stickクラフトバグが未解決（サーバー未再起動）のため鉄ピッケル作成不可
+- サトウキビ・羊が見つからず（Phase 5の本作成に紙が必要）
+- 動物がほとんど存在しない環境（skeleton_horse・batのみ）
+
+### 次セッション優先事項
+- サーバー再起動でstickクラフト修正を検証
+- サトウキビ探索継続（本作成に必須）
+- 羊毛3個収集（ベッド作成用）
+
+## 2026-02-16 セッション2: stickクラフトバグ再発
+
+**症状**: `minecraft_craft(item_name="stick")` が再度失敗
+- インベントリに birch_planks x4, dark_oak_planks x4 あり
+- エラー: "Failed to craft stick from birch_planks: Error: missing ingredient"
+- 前回修正（手動レシピ実装）が反映されていない
+
+**原因**: MCPサーバーが再起動されていない
+- 前回のビルドは成功したがサーバーが古いバージョンを実行中
+- reconnectだけでは新コードは反映されない
+
+**対応**: サーバー再起動待ち、代わりにClaude4からiron_pickaxe配布を依頼
+
+**更新**: Claude4が追加修正実施（inventoryItems.find→sort使用で最多の板材選択）
+- MCP再起動で適用予定
+
+## 2026-02-16 セッション3: 重要アイテム発見
+
+**成果**: チェスト(-6,101,-14)で以下を発見・回収
+- **book x2**: Phase 5エンチャント台作成に必須！サトウキビ探索が不要に
+- **white_wool x3**: ベッド作成に使用可能
+- book x1を拠点(-3,96,0)にドロップ済（Claude1がエンチャント台作成予定）
+
+**minecraft_store_in_chest バグ**: "No chest within 4 blocks" エラー
+- チェストは存在し、minecraft_open_chestで開ける（座標-3,96,0）
+- しかしminecraft_store_in_chestは「No chest within 4 blocks」と返す
+- 回避策: minecraft_drop_itemを使用してチェスト付近にアイテムをドロップ
+- **更新**: 2回目の試行で成功。チェストに非常に近い位置（1ブロック以内）から実行する必要がある可能性
+
+**Phase 4達成**: Claude2からstick x2受取→iron_pickaxe作成成功
+- iron_pickaxe + iron_sword 所持完了
+- Phase 4完全達成！
+
+## 2026-02-16 セッション7: チーム畑作成と終了準備
+
+**状況**:
+- 接続時: HP 10/20, 空腹 0/20（危機的）
+- 位置: (-32,65,-93) → 拠点(0,95,0)付近へ移動
+- 所持品: water_bucket, iron_hoe, wheat_seeds, iron_sword, iron_pickaxe, iron_leggings/boots, 鉄インゴットx6, 丸石大量
+
+**対応**:
+- リーダー（Claude1）から「HP10維持なら餓死しない」「畑作成中(0,111,8)」との指示
+- 拠点チェスト(2,106,-1)で鉄インゴットx6を格納
+- Claude3が畑の水源を完成 (-2,108,11)
+
+**次セッション優先事項**:
+- Phase 5継続: エンチャント台作成（素材揃い済み: ダイヤ8+黒曜石4+本2）
+- 高レベル畑作成ツール実装
+- 食料安定化

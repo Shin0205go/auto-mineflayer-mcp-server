@@ -35,3 +35,33 @@
 
 ---
 
+### [2026-02-16] iron_pickaxe と iron_sword がインベントリから消失
+- **症状**: チェストから `iron_pickaxe` と `iron_sword` を取得（take_from_chest成功確認）し、装備もした（equip成功確認）。その後 pillar_up や move_to を実行したところ、いつの間にかインベントリから消失。stone_pickaxe と stone_sword のみ残っている。チェストにも戻っていない。
+- **発生状況**:
+  1. チェスト(-3,96,0)から iron_pickaxe と iron_sword を取得（成功）
+  2. iron_pickaxe を装備（成功）
+  3. pillar_up で11ブロック上昇
+  4. チェスト(2,106,-1)から diamond を取得
+  5. 拠点に戻る（move_to）
+  6. インベントリ確認 → iron_pickaxe/iron_sword が消失、stone系に戻っている
+- **原因**: 不明。インベントリ同期の問題か、アイテム管理のバグの可能性。
+- **影響**: Phase 4未達成。鉄装備を再取得する必要がある。
+- **修正予定**: インベントリ管理周りのコードを調査。
+- **ファイル**: `src/bot-manager/bot-items.ts`, `src/tools/crafting.ts`
+
+---
+
+### [2026-02-16] stick クラフトで birch_planks を使わず dark_oak_planks を選択 ✅ **FIXED**
+- **症状**: インベントリに `birch_planks x49` と `dark_oak_planks x7` がある状態で `minecraft_craft(item_name="stick", count=24)` を実行すると、`dark_oak_planks` から作ろうとして "missing ingredient" エラーになる。birch_planksが大量にあるのに使われない。
+- **エラーメッセージ**: `Failed to craft stick from dark_oak_planks: Error: missing ingredient. Try crafting planks from logs first`
+- **原因**: `inventoryItems.find(i => i.name.endsWith("_planks"))` がインベントリ順序で最初に見つかった planks を返すため、数量に関係なく dark_oak_planks が選ばれていた。
+- **影響**: stickが作成できず、鉄ツール作成に支障。Claude4, Claude7も同じ問題を報告。
+- **修正内容**:
+  - `inventoryItems.find()` → `inventoryItems.filter().sort((a,b) => b.count - a.count)[0]` に変更
+  - 最も数量が多い planks を選択するようにロジック改善
+  - stick と crafting_table の両方のマニュアルレシピ作成箇所を修正
+- **ファイル**: `src/bot-manager/bot-crafting.ts` (line 414-450)
+- **ステータス**: ✅ FIXED (2026-02-16, Bot5修正)
+
+---
+
