@@ -12,7 +12,21 @@
 
 ---
 
-### [2026-02-15] use_item_on_block - バケツで水/溶岩を回収できない
+### [2026-02-16] minecraft_move_to short distance bug (✅ FIXED)
+
+- **症状**: `minecraft_move_to(x, y, z)` で3ブロック未満の短距離移動が失敗。「Already at destination」と成功メッセージを返すが、実際には位置が変わらない
+- **報告**: Claude2, Claude4 (bug-issues/bot2.md, bot4.md)
+- **例**:
+  - `move_to(-10, 94, 33)` から1-2ブロック先のチェストに移動しようとすると、実際に移動せずに成功メッセージだけ返す
+  - チェスト操作など正確な位置が必要な作業で支障
+- **原因**: `src/bot-manager/bot-movement.ts:94-99` で `distance < 2` の早期リターンがあり、pathfinderを起動せずに即座に成功を返していた
+- **修正**: 94-99行の早期リターンを削除。GoalNearがrange=2で距離チェックを行うため、pathfinderに任せる
+- **ファイル**: `src/bot-manager/bot-movement.ts:88-102`
+- **ステータス**: ✅ 修正完了 (2026-02-16)
+
+---
+
+### [2026-02-15] use_item_on_block - バケツで水/溶岩を回収できない (✅ FIXED)
 - **症状**: bucketで水源/溶岩源を右クリックしても、water_bucket/lava_bucketにならない（Claude5報告）
 - **原因1**: `src/bot-manager/bot-blocks.ts:1216` で`bot.activateBlock(block)`を使用しているが、Mineflayerでは液体回収に`bot.activateItem()`を使う必要がある
 - **原因2**: サーバー同期待ち時間が300msでは不十分（Claude6分析）
