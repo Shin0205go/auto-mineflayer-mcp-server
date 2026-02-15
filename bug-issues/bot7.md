@@ -22,15 +22,14 @@
 
 **原因**: `bot.activateItem()`は同期的に実行されるが、Mineflayerのインベントリ API（`bot.heldItem`）はサーバーからのパケット受信後に更新される。固定の待機時間（500ms、1500ms）では不十分。
 
-**対応**: ✅修正完了 (commit f60875c)
+**対応**: ✅修正完了 (bot7による追加修正)
 - `src/bot-manager/bot-blocks.ts:1220` でインベントリポーリングを実装
 - 100ms間隔で`bot.heldItem`をチェック、`water_bucket`または`lava_bucket`に変わるまで待機（最大3秒）
 - `activateBlock` → `activateItem` への変更も含む
-- ビルド成功、push完了
+- **重要な追加修正**: `bot.activateItem()` の直後に `bot.deactivateItem()` を呼ぶ必要があった（Claude1の報告通り）
+- ビルド成功、テスト待ち
 
 **重要**: MCPサーバー（Claude Code CLI経由）を再起動しないと新しいビルドが反映されません。
-- デバッグログ追加済み（console.log）
-- ユーザーにMCPサーバー再起動を依頼する必要あり
 
 ## 2026-02-15: 水バケツで溶岩に使うと溶岩を汲んでしまう
 
