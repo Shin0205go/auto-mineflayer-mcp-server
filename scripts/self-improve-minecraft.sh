@@ -90,39 +90,49 @@ while true; do
   git stash pop 2>/dev/null || true
   echo ""
 
-  # リーダー/フォロワー判定
-  if [ "$BOT_ID" -eq 1 ]; then
-    ROLE="リーダー"
-    ROLE_ACTION="接続したら真っ先にフェーズを宣言し、全メンバーにタスクを振れ。自分の作業は指示を出した後。
-
-接続後すぐに以下を実行:
-minecraft_chat(\"[フェーズ] Phase 1 開始。全員の目標: spawn付近に共有拠点を作る\")
-minecraft_chat(\"[指示] @Claude2 木を64個集めて拠点に持ってきて\")
-minecraft_chat(\"[指示] @Claude3 丸石を集めてかまどとツルハシを作って\")
-minecraft_chat(\"[指示] @Claude4 食料確保。動物を探して肉を集めて\")
-minecraft_chat(\"[指示] @Claude5 周辺探索して平地と資源の場所を報告して\")
-minecraft_chat(\"[指示] @Claude6 木を集めてチェスト4個と作業台を作って\")
-minecraft_chat(\"[指示] @Claude7 石炭と丸石を集めて松明を作って\")"
-  else
-    ROLE="フォロワー"
-    ROLE_ACTION="チャットでリーダー(Claude1)の[指示]を確認し、あれば[了解]と返答して実行。なければ現在フェーズの目標に沿って自律行動。"
-  fi
-
   # プロンプトファイル作成（前回のログを含む）
-  cat > /tmp/minecraft_prompt_bot${BOT_ID}.md << PROMPT
-# $BOT_NAME — ${ROLE}
+  if [ "$BOT_ID" -eq 1 ]; then
+    cat > /tmp/minecraft_prompt_bot${BOT_ID}.md << 'PROMPT'
+# Claude1 — リーダー
 
-あなたは **$BOT_NAME**（${ROLE}）です。CLAUDE.mdにフェーズ定義・チャットプロトコル・行動原則が書いてあるので必ず従うこと。
+CLAUDE.mdにフェーズ定義・チャットプロトコル・行動原則が書いてある。必ず従え。
 
-## 最初のアクション
+## 手順（この順番を厳守。省略・並列実行・順番変更は禁止）
 
-0. \`git status\` でコンフリクト確認 → あれば解決
-1. サーバーに接続（\`minecraft_connect\`）
-2. \`minecraft_get_chat_messages()\` でチャット確認
-3. \`minecraft_get_status()\` + \`minecraft_get_position()\`
-4. **${ROLE_ACTION}**
+1. `git status` でコンフリクト確認 → あれば解決
+2. `minecraft_connect(username="Claude1")` で接続
+3. `minecraft_chat("[フェーズ] Phase 1 開始。全員の目標: spawn付近に共有拠点を作る")`
+4. `minecraft_chat("[指示] @Claude2 木を64個集めて拠点に持ってきて")`
+5. `minecraft_chat("[指示] @Claude3 丸石を集めてかまどとツルハシを作って")`
+6. `minecraft_chat("[指示] @Claude4 食料確保。動物を探して肉を集めて")`
+7. `minecraft_chat("[指示] @Claude5 周辺探索して平地と資源の場所を報告して")`
+8. `minecraft_chat("[指示] @Claude6 木を集めてチェスト4個と作業台を作って")`
+9. `minecraft_chat("[指示] @Claude7 石炭と丸石を集めて松明を作って")`
+10. ここまで完了してから `minecraft_get_status()` 等で自分の状態を確認し、自分の作業を始める
+
+ステップ3〜9を完了するまで、get_status/get_inventory/get_surroundings等の確認系ツールを呼ぶな。
+食料がなくても、HPが低くても、まず指示を出せ。自分のサバイバルは10の後。
+
+バグを見つけたら `bug-issues/bot1.md` に記録して `src/` を修正。編集可能: `src/`, `.claude/skills/`, `bug-issues/bot1.md` のみ。
+PROMPT
+  else
+    cat > /tmp/minecraft_prompt_bot${BOT_ID}.md << PROMPT
+# $BOT_NAME — フォロワー
+
+CLAUDE.mdにフェーズ定義・チャットプロトコル・行動原則が書いてある。必ず従え。
+
+## 手順
+
+1. \`git status\` でコンフリクト確認 → あれば解決
+2. \`minecraft_connect(username="$BOT_NAME")\` で接続
+3. \`minecraft_get_chat_messages()\` でリーダー(Claude1)の指示を確認
+4. 指示があれば \`minecraft_chat("[了解] @Claude1 ...")\` と返答して実行開始
+5. 指示がなければ現在フェーズの目標に沿って自律行動
+6. 5アクションごとにチャットを確認
 
 バグを見つけたら \`bug-issues/bot${BOT_ID}.md\` に記録して \`src/\` を修正。編集可能: \`src/\`, \`.claude/skills/\`, \`bug-issues/bot${BOT_ID}.md\` のみ。
+PROMPT
+  fi
 
 PROMPT
 
