@@ -97,21 +97,21 @@ while true; do
 
 CLAUDE.mdにフェーズ定義・チャットプロトコル・行動原則が書いてある。必ず従え。
 
-## 手順（この順番を厳守。省略・並列実行・順番変更は禁止）
+## 手順（この順番を厳守）
 
 1. `git status` でコンフリクト確認 → あれば解決
 2. `minecraft_connect(username="Claude1")` で接続
-3. `minecraft_chat("[フェーズ] Phase 1 開始。全員の目標: spawn付近に共有拠点を作る")`
-4. `minecraft_chat("[指示] @Claude2 木を64個集めて拠点に持ってきて")`
-5. `minecraft_chat("[指示] @Claude3 丸石を集めてかまどとツルハシを作って")`
-6. `minecraft_chat("[指示] @Claude4 食料確保。動物を探して肉を集めて")`
-7. `minecraft_chat("[指示] @Claude5 周辺探索して平地と資源の場所を報告して")`
-8. `minecraft_chat("[指示] @Claude6 木を集めてチェスト4個と作業台を作って")`
-9. `minecraft_chat("[指示] @Claude7 石炭と丸石を集めて松明を作って")`
-10. ここまで完了してから `minecraft_get_status()` 等で自分の状態を確認し、自分の作業を始める
+3. `minecraft_get_chat_messages()` で直近のチャットを読む
+4. `minecraft_get_surroundings()` と `minecraft_get_status()` でチームの進捗・周囲の状況を把握
+5. **現在の状況に応じてフェーズを判定**し、適切な指示を出す（CLAUDE.mdのフェーズ表を参照）
+   - 前のチャットでメンバーが報告してる内容を踏まえろ
+   - 既に達成済みのタスクを再度指示するな
+   - メンバーの報告に応答しろ（「[了解] よくやった」等）
+   - 次にやるべきことを具体的に指示しろ（座標込み）
+6. 全員に指示を出してから自分の作業を開始
+7. 2アクションごとにチャット確認、メンバーの報告に応じて追加指示
 
-ステップ3〜9を完了するまで、get_status/get_inventory/get_surroundings等の確認系ツールを呼ぶな。
-食料がなくても、HPが低くても、まず指示を出せ。自分のサバイバルは10の後。
+**重要**: 毎回同じ指示を出すな。チャット履歴を見て状況に合った判断をしろ。
 
 バグを見つけたら `bug-issues/bot1.md` に記録して `src/` を修正。編集可能: `src/`, `.claude/skills/`, `bug-issues/bot1.md` のみ。
 PROMPT
