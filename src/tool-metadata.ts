@@ -38,14 +38,6 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
   minecraft_smelt: { tags: ["smelting", "furnace", "ore", "basic"], category: "crafting", priority: 7 },
   minecraft_check_infrastructure: { tags: ["check", "crafting-table", "furnace", "info"], category: "info", priority: 6 },
 
-  // Learning & Memory (WebSocket only, but included for completeness)
-  save_memory: { tags: ["memory", "save", "remember", "location"], category: "learning", priority: 6 },
-  recall_memory: { tags: ["memory", "recall", "search", "location"], category: "learning", priority: 6 },
-  forget_memory: { tags: ["memory", "delete", "forget"], category: "learning", priority: 5 },
-  log_experience: { tags: ["learning", "experience", "log"], category: "learning", priority: 6 },
-  get_recent_experiences: { tags: ["learning", "experience", "history"], category: "learning", priority: 5 },
-  list_agent_skills: { tags: ["skills", "list", "available"], category: "skills", priority: 7 },
-  get_agent_skill: { tags: ["skills", "get", "knowledge"], category: "skills", priority: 7 },
 
   // Coordination
   agent_board_read: { tags: ["coordination", "board", "read", "communication"], category: "coordination", priority: 6 },

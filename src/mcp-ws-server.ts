@@ -10,7 +10,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { botManager } from "./bot-manager/index.js";
 import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
-import { learningTools, handleLearningTool, getAgentSkill } from "./tools/learning.js";
 import { taskCreate, taskList, taskGet, taskUpdate, TASK_MANAGEMENT_TOOLS } from "./tools/task-management.js";
 import {
   minecraft_gather_resources,
@@ -616,9 +615,6 @@ const tools = {
     },
   },
 
-  // === 自己学習ツール ===
-  ...learningTools,
-
   // === タスク管理ツール ===
   ...Object.fromEntries(
     TASK_MANAGEMENT_TOOLS.map(tool => [tool.name, {
@@ -1035,24 +1031,6 @@ async function handleTool(
       return await minecraft_validate_survival_environment(username, searchRadius);
     }
 
-    // === 自己学習ツール ===
-    case "log_experience":
-    case "get_recent_experiences":
-    case "reflect_and_learn":
-    case "save_rule":
-    case "get_rules":
-    case "get_reflection_insights":
-    case "remember_location":
-    case "recall_locations":
-    case "forget_location":
-    case "save_memory":
-    case "recall_memory":
-    case "forget_memory":
-    case "migrate_memory":
-    case "list_agent_skills":
-    case "get_agent_skill": {
-      return await handleLearningTool(name, args);
-    }
 
     // === タスク管理ツール ===
     case "task_create": {

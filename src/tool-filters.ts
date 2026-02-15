@@ -58,14 +58,6 @@ export const GAME_AGENT_TOOLS = new Set([
   "minecraft_flee",
   "minecraft_respawn",
 
-  // Learning (7 tools)
-  "log_experience",
-  "get_recent_experiences",
-  "save_memory",
-  "recall_memory",
-  "forget_memory",
-  "list_agent_skills",
-  "get_agent_skill",
 
   // Tool Search (1 tool)
   "search_tools",
