@@ -2,7 +2,7 @@ import { botManager } from "../bot-manager/index.js";
 
 export const storageTools = {
   minecraft_open_chest: {
-    description: "Open a chest and list its contents",
+    description: "Open a chest and list its contents. Use this ONLY to inspect chest contents. To take/store items, use minecraft_take_from_chest or minecraft_store_in_chest directly (they open the chest automatically).",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -24,7 +24,7 @@ export const storageTools = {
   },
 
   minecraft_take_from_chest: {
-    description: "Take items from a nearby chest (within 4 blocks)",
+    description: "Take items from a nearby chest (within 4 blocks). DO NOT call minecraft_open_chest first - this tool opens the chest automatically.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -42,7 +42,7 @@ export const storageTools = {
   },
 
   minecraft_store_in_chest: {
-    description: "Store items from inventory into a nearby chest (within 4 blocks)",
+    description: "Store items from inventory into a nearby chest (within 4 blocks). DO NOT call minecraft_open_chest first - this tool opens the chest automatically.",
     inputSchema: {
       type: "object" as const,
       properties: {

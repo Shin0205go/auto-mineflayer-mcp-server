@@ -176,6 +176,7 @@ export async function handleBuildingTool(
       const y = args.y as number;
       const z = args.z as number;
       const autoCollect = args.auto_collect !== undefined ? (args.auto_collect as boolean) : true;
+      const force = args.force !== undefined ? (args.force as boolean) : false;
 
       // Check if bot is connected first
       const bot = botManager.getBot(username);
@@ -202,7 +203,7 @@ export async function handleBuildingTool(
 
       try {
         // Always survival mode - actually mine the block
-        const result = await botManager.digBlock(username, x, y, z, false, autoCollect);
+        const result = await botManager.digBlock(username, x, y, z, false, autoCollect, force);
         return result;
       } catch (error) {
         if (error instanceof Error) {
