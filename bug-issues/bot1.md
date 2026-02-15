@@ -2098,8 +2098,56 @@
 3. **Code Review:** Check Claude3's chest fix when committed
 4. **Continue:** Claude6 diamond mining (Phase 5 prep)
 
-**Session Duration:** ~15 minutes  
-**Total Directives Issued:** 15+  
-**Team Coordination:** Excellent  
+**Session Duration:** ~15 minutes
+**Total Directives Issued:** 15+
+**Team Coordination:** Excellent
 **Code Changes:** 2 files (scripts/, MEMORY.md)
 
+---
+
+### [2026-02-16] minecraft_list_chest windowOpen timeout (✅ FIXED)
+
+- **症状**: `minecraft_list_chest`実行時に「Event windowOpen did not fire within timeout of 20000ms」エラーが発生。チェストの内容を読み込めない
+- **報告**: Claude1, Claude7 (Session 2026-02-16)
+- **状況**:
+  - Claude1がチェスト座標(-1,96,0)で`minecraft_list_chest`を実行
+  - 20秒タイムアウトでwindowOpenイベントが発火しない
+  - Claude7も同様のエラーを報告
+  - 一部のチェスト(-3,96,0)は正常に開ける場合もある
+- **原因**: `listChest()`と`openChest()`で`openContainer()`呼び出し前の待機時間がなかった。他の関数（`takeFromChest`, `storeInChest`）は500ms待機していたが、これら2つの関数には実装されていなかった
+- **影響**: 食料確保の妨げになる（チェストから食料を取り出せない）
+- **修正**:
+  1. `listChest()`: チェストに近づく処理と500ms待機を追加（行162-177）
+  2. `openChest()`: 500ms待機を追加（行44-45）
+  3. 両関数とも`takeFromChest`と同じパターンに統一
+- **ファイル**: `src/bot-manager/bot-storage.ts:162-177, 44-45`
+- **ステータス**: ✅ 修正完了 (2026-02-16)
+
+
+
+---
+
+## Session Summary (2026-02-16 Session 3)
+
+### 状況
+- **食料危機**: 動物が湧かず、小麦も消失。複数メンバーが空腹0/HPクリティカル
+- **死亡**: Claude3, Claude4, Claude6 がリスポーン
+- **問題**: gamerule doMobSpawning が機能していない可能性（動物が全く湧かない）
+
+### 対応したこと
+1. **チェストツールバグ修正**: `listChest()`と`openChest()`に500ms待機を追加
+2. **緊急食料対策**: 小麦農場建設を指示（Claude7が2x2穴掘り、水配置予定）
+3. **チーム調整**: 各メンバーに役割分担（種集め、穴掘り、耕地作成）
+4. **釣りツール確認**: Claude4が実装済みだがMCP再起動が必要と報告
+
+### 未解決の課題
+- 小麦農場完成待ち（水配置、耕地作成、種植え付け）
+- 動物スポーン問題（gamerule確認が必要）
+- 釣りツールのMCP再起動（人間ユーザーによる`npm run start:mcp-ws`が必要）
+- Claude2の状況不明（応答なし）
+
+### 次のアクション
+1. Claude7が水配置完了→耕地作成→種植え付け
+2. 小麦成長→収穫→チームに配布
+3. gamerule確認（doMobSpawning, doTileDrops, doMobLoot）
+4. MCP再起動後に釣りツールをテスト
