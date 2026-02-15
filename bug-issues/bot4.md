@@ -52,3 +52,26 @@
   - `src/bot-manager/bot-storage.ts` (実装)
 - **ステータス**: ✅ 修正完了 (2026-02-15)
 
+## [2026-02-16] stick crafting failure with birch_planks
+
+- **症状**: `minecraft_craft("stick")` が "no compatible recipe" エラーで失敗。`birch_planks` x4 所持時。
+- **エラーメッセージ**:
+  ```
+  Failed to craft stick from birch_planks: Error: missing ingredient
+  Cannot craft stick: No compatible recipe found. Have 4 planks and 0 sticks.
+  ```
+- **再現手順**:
+  1. birch_log を採掘 → birch_planks x4 をクラフト
+  2. `minecraft_craft("stick", 1)` → 失敗
+  3. `minecraft_craft_chain("diamond_pickaxe")` → stick不足で失敗
+- **原因推定**: `src/bot-manager/bot-crafting.ts` 356-460行の special handling で、`allRecipes.find()` (line 428) が birch_planks → stick のレシピを見つけられない。Minecraft version compatibility issue の可能性。
+- **影響**: diamond_pickaxe を作成できず、黒曜石採掘タスクを実行できない。
+- **回避策**:
+  1. oak_log など別の木材タイプを試す
+  2. チームメンバーに黒曜石採掘を委譲（Claude6 が実施）
+- **調査必要**:
+  - mcData に現在の Minecraft version 用のレシピがあるか確認
+  - line 428 の `compatibleRecipe` 検索ロジックをデバッグ
+  - birch_planks 使用時に `needsPlanks` フラグが正しく立つか確認
+- **ステータス**: ❌ OPEN - 要調査。Claude6 が黒曜石採掘を代行中。
+
