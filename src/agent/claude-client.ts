@@ -23,7 +23,7 @@ export interface ClaudeConfig {
   model?: string;
   maxTurns?: number;
   mcpServerUrl?: string;
-  agentName?: string;  // For board write hook
+  agentName?: string;
 }
 
 export interface AgentResult {
@@ -67,19 +67,6 @@ const DEFAULT_SYSTEM_INSTRUCTION = `あなたはMinecraftを自律的に操作�
 
 ### コミュニケーション
 - minecraft_chat: チャットを送信
-- agent_board_read/write: 掲示板で他エージェントと連携
-
-### 自己学習（重要！）
-- log_experience: 重要な行動の結果を記録（成功・失敗問わず）
-- get_recent_experiences: 過去の経験を振り返る
-- reflect_and_learn: 経験からパターンを分析、改善点を抽出
-- save_skill: 成功した手順をスキルとして保存
-- get_skills: 保存したスキルを参照
-
-### 場所記憶（重要！）
-- remember_location: **作業台・かまど・チェスト・拠点を設置したら必ず記憶！**
-- recall_locations: 保存した場所を思い出す（タイプや距離でフィルタ可能）
-- forget_location: 不要な場所を削除
 
 ## 行動ルール
 1. 接続は最初に一度だけ
@@ -91,13 +78,7 @@ const DEFAULT_SYSTEM_INSTRUCTION = `あなたはMinecraftを自律的に操作�
 7. 移動は歩いて行う（/tpコマンド禁止）
 8. **採掘時は松明を作って設置！** 光レベル7以下はモブスポーン危険
 9. **同じアプローチで3回失敗したら別の方法を試す！**
-10. **重要な行動後はlog_experienceで記録！** 成功も失敗も学びになる
-11. **10ループごとにreflect_and_learnで振り返り！**
-12. **作業台・かまど・チェスト設置後は必ずremember_location！** 場所を忘れない
-
-## 協調のヒント
-- agent_board_readで他エージェントのメッセージを確認
-- agent_board_writeで自分の状況や計画を共有
+10. **チャットで情報共有！** 発見・完了・危険を報告
 
 自律的に探索、採掘、建築を行い、サバイバルしてください。`;
 
@@ -260,16 +241,10 @@ export class ClaudeClient extends EventEmitter {
               const text = (block as TextBlock).text;
               console.log(`[Claude] ${text}`);
               this.emit("text", text);
-              // Log to board (truncate long messages)
-              const shortText = text.length > 80 ? text.slice(0, 80) + "..." : text;
-              this.logToBoard(`💭 ${shortText}`);
             } else if (block.type === "tool_use") {
               const toolBlock = block as ToolUseBlock;
               console.log(`[Claude] Tool: ${toolBlock.name}`, toolBlock.input);
               this.emit("tool_use", toolBlock.name, toolBlock.input);
-              // Log tool call to board
-              const toolShort = toolBlock.name.replace("mcp__minecraft-mcp__", "");
-              this.logToBoard(`🔧 ${toolShort}`);
             }
           }
         }
@@ -312,42 +287,6 @@ export class ClaudeClient extends EventEmitter {
   createQuery(prompt: string): Query {
     const options = this.createOptions();
     return query({ prompt, options });
-  }
-
-  /**
-   * Log a message to the board (fire and forget, non-blocking)
-   */
-  private logToBoard(message: string): void {
-    if (!this.mcp) return;
-    const agentName = this.config.agentName || "Claude";
-    // Fire and forget - don't await
-    this.mcp.callTool("agent_board_write", {
-      agent_name: agentName,
-      message,
-    }).catch(() => {
-      // Ignore errors for logging
-    });
-  }
-
-  /**
-   * Force write to agent board (called at end of each loop)
-   */
-  async forceBoardWrite(message: string): Promise<void> {
-    if (!this.mcp) {
-      console.error("[Claude] Cannot write to board - MCP not connected");
-      return;
-    }
-
-    const agentName = this.config.agentName || "Claude";
-    try {
-      console.log(`[Claude] Force writing to board: ${message}`);
-      await this.mcp.callTool("agent_board_write", {
-        agent_name: agentName,
-        message: `[ループ終了] ${message}`,
-      });
-    } catch (error) {
-      console.error("[Claude] Failed to write to board:", error);
-    }
   }
 
   /**

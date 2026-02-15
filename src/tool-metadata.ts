@@ -38,26 +38,6 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
   minecraft_smelt: { tags: ["smelting", "furnace", "ore", "basic"], category: "crafting", priority: 7 },
   minecraft_check_infrastructure: { tags: ["check", "crafting-table", "furnace", "info"], category: "info", priority: 6 },
 
-  // Learning & Memory (WebSocket only, but included for completeness)
-  save_memory: { tags: ["memory", "save", "remember", "location"], category: "learning", priority: 6 },
-  recall_memory: { tags: ["memory", "recall", "search", "location"], category: "learning", priority: 6 },
-  forget_memory: { tags: ["memory", "delete", "forget"], category: "learning", priority: 5 },
-  log_experience: { tags: ["learning", "experience", "log"], category: "learning", priority: 6 },
-  get_recent_experiences: { tags: ["learning", "experience", "history"], category: "learning", priority: 5 },
-  list_agent_skills: { tags: ["skills", "list", "available"], category: "skills", priority: 7 },
-  get_agent_skill: { tags: ["skills", "get", "knowledge"], category: "skills", priority: 7 },
-
-  // Coordination
-  agent_board_read: { tags: ["coordination", "board", "read", "communication"], category: "coordination", priority: 6 },
-  agent_board_write: { tags: ["coordination", "board", "write", "communication"], category: "coordination", priority: 6 },
-  agent_board_wait: { tags: ["coordination", "board", "wait", "sync"], category: "coordination", priority: 5 },
-  agent_board_clear: { tags: ["coordination", "board", "clear"], category: "coordination", priority: 4 },
-
-  // Task Management
-  task_create: { tags: ["task", "create", "plan"], category: "tasks", priority: 6 },
-  task_list: { tags: ["task", "list", "view"], category: "tasks", priority: 6 },
-  task_get: { tags: ["task", "get", "details"], category: "tasks", priority: 5 },
-  task_update: { tags: ["task", "update", "status"], category: "tasks", priority: 6 },
 
   // Dev Agent integration
   dev_publish_loop_result: { tags: ["dev", "loop", "result"], category: "dev", priority: 3 },
