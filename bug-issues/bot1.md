@@ -79,7 +79,7 @@
 
 ---
 
-### [2026-02-16] minecraft_collect_items item pickup failure (🔍 INVESTIGATING)
+### [2026-02-16] minecraft_collect_items item pickup failure (✅ RESOLVED - Auto-expiring flag)
 
 - **症状**: Claude7が`minecraft_collect_items`を実行してもドロップされた種を拾えない。Claude5が種x3をドロップしたが、Claude7が回収できず
 - **報告**: Claude7 (Session 2026-02-16)
@@ -88,15 +88,15 @@
   - Claude7が同じ座標(距離1.1m)で`minecraft_collect_items`を複数回実行
   - "アイテムが見えない/拾えない"エラー
   - アイテムdespawnの可能性もあるが、直後のため低い
-- **原因**: 未調査。可能性:
-  1. アイテムdespawn時間（5分）経過？
-  2. `minecraft_collect_items`のバグ
-  3. 別プレイヤーが既に拾った？
-  4. アイテムエンティティの検出失敗
-- **修正**: 未対応
-- **ファイル**: `src/tools/building.ts` (minecraft_collect_items)
-- **ステータス**: 🔍 調査中
-- **回避策**: 別のメンバー(Claude3)を派遣して直接種を渡す
+- **根本原因**: `serverHasItemPickupDisabled`フラグの誤検出
+  - gamerule修正前にClaude6/7がアイテム拾得失敗
+  - `collectNearbyItems`関数(L312)が`serverHasItemPickupDisabled = true`を設定
+  - フラグが設定されると、そのbotは一時的に拾得不可と判断
+  - **既存の自動修正機構**: L258-267, L850-856で1分後に自動リセット
+- **修正**: 修正不要（既に自動リセット機構が実装済み）
+- **ファイル**: `src/bot-manager/bot-items.ts:312`, `src/bot-manager/bot-crafting.ts:258-267`
+- **ステータス**: ✅ 解決済み（1分経過後に自動リセット）
+- **重要**: gamerule修正後、1分待てば全botで拾得可能になる
 
 ---
 
