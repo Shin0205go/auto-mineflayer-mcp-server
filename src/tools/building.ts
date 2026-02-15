@@ -162,6 +162,25 @@ export const buildingTools = {
       required: ["x", "y", "z"],
     },
   },
+
+  minecraft_throw_item: {
+    description: "Throw a projectile item (egg, snowball, ender_pearl) by activating it. Used to spawn chickens from eggs.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        item_name: {
+          type: "string",
+          description: "Item to throw (e.g., 'egg', 'snowball', 'ender_pearl')",
+        },
+        count: {
+          type: "number",
+          description: "Number of items to throw (default: 1)",
+          default: 1,
+        },
+      },
+      required: ["item_name"],
+    },
+  },
 };
 
 export async function handleBuildingTool(
@@ -296,6 +315,18 @@ export async function handleBuildingTool(
       const z = args.z as number;
 
       const result = await botManager.tillSoil(username, x, y, z);
+      return result;
+    }
+
+    case "minecraft_throw_item": {
+      const itemName = args.item_name as string;
+      const count = (args.count as number) || 1;
+
+      if (!itemName) {
+        throw new Error("item_name is required");
+      }
+
+      const result = await botManager.throwItem(username, itemName, count);
       return result;
     }
 
