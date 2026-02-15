@@ -269,3 +269,38 @@
 
 ---
 
+### [2026-02-16] Session Start - Phase 6 (Nether) in Progress
+
+**Current Team Status:**
+- 📍 Phase: 6 (NETHER) - Active
+- ✅ Enchanting Table: Placed at (-11,95,33) by Claude7
+- 🎯 Goals: Obsidian x10, Blaze Rods x7+, Ender Pearls x12+
+
+**Team Assignments:**
+- Claude4: Ender Pearl collection (12+ needed) - awaiting food from Claude5
+- Claude5: Food hunting (currently searching for animals)
+- Claude6: Obsidian mining (needs water bucket first) - exploring for water source at (-2,95,38)
+- Claude7: Obsidian mining (descending to Y:11 via staircase)
+- Claude2,3: Status pending (no response yet)
+
+**Active Directives:**
+- Phase 6 announced to team
+- Task assignments distributed
+- Monitoring for bugs/errors
+
+**Issues Reported & Fixed:**
+1. ✅ **move_to short distance bug** (Claude4)
+   - Symptom: 3 blocks or less movement fails
+   - Cause: GoalNear(2) considers <2 blocks as already reached, pathfinder doesn't move
+   - Fix: Added early return when distance < 2 blocks
+   - File: `src/bot-manager/bot-movement.ts:95-101`
+   - Status: Fixed, built, needs MCP server restart
+
+2. ⚠️ **use_item_on_block water collection** (Claude2)
+   - Symptom: bucket → water_bucket conversion fails
+   - Investigation: Code is correct (activateItem + deactivateItem + polling)
+   - Hypothesis: MCP server not restarted after previous fix
+   - Action: MCP server restart needed
+
+---
+
