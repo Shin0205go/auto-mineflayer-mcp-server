@@ -25,3 +25,13 @@
 
 ---
 
+### [2026-02-15] minecraft_open_chest と minecraft_take_from_chest でチェスト取り違え
+- **症状**: `minecraft_open_chest(x=-80, y=80, z=-53)` で開いたはずが、`minecraft_take_from_chest()` を呼ぶと別のチェスト (x=-81, y=79, z=-53) の内容が表示される。open_chestで "obsidian(1)" が表示されても、take_from_chestでは "diamond(5), leather(3), sugar_cane(10), book(1)" となり、obsidianが取得できない。
+- **原因**: MCPツールの内部状態管理で、複数のチェストが近くにある場合に、最後に開いたチェストではなく、別のチェストを参照している可能性がある。
+- **影響**: チェストから特定のアイテムを取り出せず、Phase 5の進行に支障。
+- **回避策**: チェストから取り出す代わりに、自分で黒曜石4個を作成する（溶岩+水バケツ）。
+- **修正予定**: `src/tools/crafting.ts` または `src/bot-manager/bot-items.ts` のチェスト操作関連コードを調査。
+- **ファイル**: `src/tools/crafting.ts`, `src/bot-manager/bot-items.ts`
+
+---
+
