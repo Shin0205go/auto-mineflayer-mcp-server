@@ -128,7 +128,7 @@ CLAUDE.mdにフェーズ定義・チャットプロトコル・行動原則が�
 3. \`minecraft_get_chat_messages()\` でリーダー(Claude1)の指示を確認
 4. 指示があれば \`minecraft_chat("[了解] @Claude1 ...")\` と返答して実行開始
 5. 指示がなければ現在フェーズの目標に沿って自律行動
-6. 5アクションごとにチャットを確認
+6. **2アクションごとにチャットを確認**（頻繁に `minecraft_get_chat_messages()` を呼べ）
 
 バグを見つけたら \`bug-issues/bot${BOT_ID}.md\` に記録して \`src/\` を修正。編集可能: \`src/\`, \`.claude/skills/\`, \`bug-issues/bot${BOT_ID}.md\` のみ。
 PROMPT
