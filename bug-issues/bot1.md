@@ -2184,3 +2184,15 @@
 - **ステータス**: ✅ 修正完了 (2026-02-16 Session 3)
 - **備考**: takeFromChest, storeInChestにも同じimport問題が存在する可能性あり。要監視
 
+
+### [2026-02-16 Session 3] takeFromChest/storeInChest GoalNear undefined (✅ FIXED)
+
+- **症状**: `minecraft_take_from_chest`実行時に"Cannot read properties of undefined (reading 'GoalNear')"エラー
+- **報告**: Claude1 (Session 3 2026-02-16)
+- **原因**: `bot-storage.ts`の132行・175行でdynamic import `await import("mineflayer-pathfinder")`を使用していたが、importが失敗してpath`finderGoals`がundefinedになっていた。ファイル冒頭で既に`import pkg from "mineflayer-pathfinder"; const { goals } = pkg;`とimport済みなのに、重複してdynamic importを試みていた
+- **修正**: dynamic importを削除し、冒頭でimport済みの`goals`を使用するように変更
+  - Before: `const { goals: pathfinderGoals } = await import("mineflayer-pathfinder"); const goal = new pathfinderGoals.GoalNear(...);`
+  - After: `const goal = new goals.GoalNear(...);`
+- **ファイル**: `src/bot-manager/bot-storage.ts:132-134, 175-177`
+- **ステータス**: ✅ 修正完了 (2026-02-16 Session 3)
+- **影響**: takeFromChest, storeInChestが正常動作するようになり、チェスト操作が可能に
