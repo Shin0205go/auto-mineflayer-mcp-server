@@ -148,7 +148,7 @@ PROMPT
   # Run Claude with timeout (20 minutes)
   # 環境変数でMCPサーバーに設定を渡す
   export BOT_USERNAME="$BOT_NAME"
-  export ENABLE_VIEWER="true"
+  export ENABLE_VIEWER="${ENABLE_VIEWER:-false}"
   cat /tmp/minecraft_prompt_bot${BOT_ID}.md | claude --dangerously-skip-permissions \
     --print \
     --verbose \
