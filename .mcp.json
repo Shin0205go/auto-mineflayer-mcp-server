@@ -5,7 +5,7 @@
       "args": ["dist/index.js"],
       "env": {
         "MC_HOST": "localhost",
-        "MC_PORT": "60038"
+        "MC_PORT": "25565"
       }
     }
   }
