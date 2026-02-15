@@ -27,12 +27,14 @@
 ## [2026-02-15] minecraft_use_item_on_block water bucket bug
 
 - **症状**: `minecraft_use_item_on_block`で水源から水を汲んでも、インベントリに`water_bucket`ではなく空の`bucket`のまま残る。メッセージは「Collected water with bucket → now holding bucket. Block at (-69, 62, -52) cleared.」と表示されるが、実際には水が入っていない
-- **原因**: `minecraft_use_item_on_block`ツールの実装でバケツのアイテム更新処理が正しく動作していない可能性。Mineflayerの`activateItem()`または`bot.inventory`の更新タイミングの問題
+- **原因**: `bot.activateBlock(block)`の後、待機時間が300msと短く、インベントリ更新が間に合わなかった。また、`bot.heldItem`ではなくインベントリ全体から`water_bucket`を探す必要があった
 - **影響**: 黒曜石作成にwater_bucketが必要だが、バケツで水を汲めないため作業不可
-- **回避策**: 水源と溶岩源を直接隣接させて黒曜石を生成する（バケツを使わない方法）
-- **修正予定**: `src/tools/building.ts`の`minecraft_use_item_on_block`実装を調査・修正
-- **ファイル**: `src/tools/building.ts`
-- **ステータス**: ⚠️ 未修正（回避策で進行中）
+- **修正内容**:
+  1. 待機時間を300ms→500msに延長
+  2. インベントリ全体から`water_bucket`または`lava_bucket`を検索して確認
+  3. バケツが正しく変換されていない場合、明示的にバグメッセージを返す
+- **ファイル**: `src/bot-manager/bot-blocks.ts:1210-1236`
+- **ステータス**: ✅ 修正完了・ビルド成功
 
 ## [2026-02-15] minecraft_take_from_chest timeout error
 

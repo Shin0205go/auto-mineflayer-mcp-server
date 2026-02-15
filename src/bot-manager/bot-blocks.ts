@@ -1215,16 +1215,30 @@ export async function useItemOnBlock(
     // activateBlock with the item in hand = right-click on block
     await bot.activateBlock(block);
 
-    // Check what happened (e.g., bucket → water_bucket)
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // Wait longer for the inventory to update (water bucket needs more time)
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Check inventory for the updated item (not just heldItem)
     const heldAfter = bot.heldItem;
     const heldName = heldAfter?.name || "nothing";
 
     // Detect what happened based on item type
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water")) {
-      return `Collected water with bucket → now holding ${heldName}. Block at (${x}, ${y}, ${z}) cleared.`;
+      // Verify water_bucket is in inventory
+      const waterBucket = bot.inventory.items().find(i => i.name === "water_bucket");
+      if (waterBucket) {
+        return `Collected water with bucket → now holding water_bucket. Block at (${x}, ${y}, ${z}) cleared.`;
+      } else {
+        return `Attempted to collect water but still holding ${heldName}. This may be a bucket bug.`;
+      }
     } else if (itemName === "bucket" && (block.name === "lava" || block.name === "flowing_lava")) {
-      return `Collected lava with bucket → now holding ${heldName}. Block at (${x}, ${y}, ${z}) cleared.`;
+      // Verify lava_bucket is in inventory
+      const lavaBucket = bot.inventory.items().find(i => i.name === "lava_bucket");
+      if (lavaBucket) {
+        return `Collected lava with bucket → now holding lava_bucket. Block at (${x}, ${y}, ${z}) cleared.`;
+      } else {
+        return `Attempted to collect lava but still holding ${heldName}. This may be a bucket bug.`;
+      }
     } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
       return `Placed ${itemName.replace("_bucket", "")} at (${x}, ${y}, ${z}). Now holding ${heldName}.`;
     } else {
