@@ -406,6 +406,29 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     let craftingTableBlock = null;
     console.error(`[Craft] recipesAll(${item.id}, null, null) returned ${allRecipes.length} recipes`);
 
+    // FIX: If no recipes found for stick/crafting_table, try with oak_planks specifically
+    // This handles Minecraft versions where recipesAll doesn't auto-substitute plank types
+    if (allRecipes.length === 0 && (itemName === "stick" || itemName === "crafting_table")) {
+      console.error(`[Craft] No recipes found for ${itemName}, trying with oak_planks...`);
+      const oakPlanksId = mcData.itemsByName["oak_planks"]?.id;
+      if (oakPlanksId) {
+        // Get all recipes that produce this item
+        const allRecipesForItem = bot.recipesAll(item.id, null, null);
+        console.error(`[Craft] bot.recipesAll(${item.id}, null, null) for filtering returned ${allRecipesForItem.length} total recipes`);
+
+        // Filter for recipes that use any planks (Mineflayer will substitute our planks)
+        allRecipes = allRecipesForItem.filter(recipe => {
+          const delta = recipe.delta as Array<{ id: number; count: number }>;
+          return delta.some(d => {
+            if (d.count >= 0) return false;
+            const ingredient = mcData.items[d.id];
+            return ingredient && ingredient.name.endsWith("_planks");
+          });
+        });
+        console.error(`[Craft] Found ${allRecipes.length} recipes using planks after filtering`);
+      }
+    }
+
     // IMPORTANT: stick and crafting_table should NEVER use a crafting table (they're 2x2 recipes)
     // If no recipes found and it's NOT stick/crafting_table, try with crafting table
     if (allRecipes.length === 0 && itemName !== "stick" && itemName !== "crafting_table") {

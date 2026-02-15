@@ -50,14 +50,40 @@
 
 **対応**: Claude1が調査中
 
-## 2026-02-15: minecraft_smelt が指定数より少ない量しか精錬しない
+## 2026-02-16: 溶岩隣接ブロックが採掘できない（force flag未実装）
 
-**症状**: `minecraft_smelt(item_name="raw_iron", count=8)` を実行
-- インベントリに raw_iron x8 あり
-- 実行結果: "Smelted 8x raw_iron" と表示される
-- しかし実際のインベントリには iron_ingot x2 しかない（8個ではなく2個）
-- raw_iron は消えている
+**症状**: 黒曜石の下に溶岩がある場合、`force=true`を指定しても採掘エラー
+- エラー: "🚨 警告: このブロックの隣に溶岩があります！"
+- `minecraft_dig_block(x, y, z, force=true)` でも同じエラー
 
-**影響**: Phase 4（鉄装備）で必要な鉄インゴットが不足する可能性
+**原因**: `digBlock`関数がforceパラメータを受け取っていたが実際には使用していなかった
+- `src/bot-manager/bot-blocks.ts:231` - forceパラメータを追加
+- `src/bot-manager/index.ts:234` - forceパラメータを追加
+- `src/tools/building.ts:178` - forceパラメータを渡すように修正
 
-**調査必要**: `src/bot-manager/bot-crafting.ts` または `src/tools/crafting.ts` の smelting ロジックを確認
+**修正**: ✅完了 (bot7)
+- `digBlock`関数の溶岩チェックを`if (!force)`で囲む
+- forceフラグが有効な場合は溶岩警告をスキップして採掘を続行
+- MCPツール定義には既にforceパラメータがあったが、実装が欠けていた
+
+**ビルド**: ✅成功
+
+## 2026-02-16: 黒曜石採掘で間違ったアイテムがドロップ
+
+**症状**: `minecraft_dig_block`で黒曜石を採掘すると、cobblestoneがドロップされる
+- ツール結果: "Dug obsidian with diamond_pickaxe and picked up 2 item(s)!"
+- 期待: obsidian x2がインベントリに追加
+- 実際: cobblestone x2がインベントリに追加（45→47に増加）
+- 座標: (-6, 37, 10)
+
+**原因推測**:
+- gamerule doTileDropsの問題ではない（他のプレイヤーは正常に採掘できている）
+- アイテム収集ロジックのバグ？（最も近いアイテムを拾うが、別のアイテムを拾っている）
+- または黒曜石が実際にはcobblestoneに変わっている？
+
+**再現手順**:
+1. `minecraft_dig_block(x=-6, y=37, z=10, force=true)`
+2. "picked up 2 item(s)!" と表示
+3. インベントリ確認 → obsidianなし、cobblestone +2
+
+**対応**: 調査予定

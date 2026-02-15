@@ -45,7 +45,80 @@
 ### 調査が必要なファイル
 - `src/tools/building.ts` (use_item_on_block)
 
-### 修正内容 (2026-02-15)
-- `src/bot-manager/bot-blocks.ts:1225` の待機時間を500ms→1000msに延長
-- サーバー同期を待つ時間が不足していたため、バケツ→water_bucketの変換が反映されなかった
-- 修正後は`npm run build`でビルドして再接続が必要
+### 追加調査 (2026-02-16)
+- 同じバグが再発。バケツ装備後も水を汲めない
+- エラーメッセージ: "⚠️ Used bucket on water but water_bucket not found in inventory. Holding: bucket"
+- 位置: (-7, 38, 13) の水ブロック
+- 複数回試行しても同じ結果
+
+## 2026-02-16: 黒曜石→cobblestone化バグ
+
+### 現象
+- ダイヤピッケルで黒曜石を採掘すると cobblestone がドロップする
+- 正しくは obsidian がドロップすべき
+- 複数のボット（Claude6, Claude7）で同じ現象を確認
+
+### 再現手順
+1. diamond_pickaxe を装備
+2. obsidian ブロックに対して `minecraft_dig_block(x, y, z, force=true)` を実行
+3. "Dug obsidian with diamond_pickaxe. No items dropped" と表示される
+4. インベントリを確認すると cobblestone が +2 追加されている
+5. obsidian は追加されていない
+
+### 証拠
+- 採掘前: cobblestone なし
+- 採掘後: cobblestone x2 追加
+- 採掘メッセージ: "Dug obsidian with diamond_pickaxe. No items dropped (auto-collected or wrong tool)."
+
+### 影響
+- Phase 6 でネザーポータル作成に必要な黒曜石 10個が集められない
+- ダイヤピッケルを持っているのに黒曜石が入手できない
+
+### 調査が必要
+- `src/bot-manager/bot-blocks.ts` の digBlock 関数
+- Mineflayer の item drop イベント処理
+- なぜ obsidian が cobblestone に変換されるのか
+
+### 原因判明 (2026-02-16 by Claude1)
+- バグではない！Minecraftの仕様
+- flowing_lava（流れる溶岩）に水をかけると **cobblestone** になる
+- lava（溶岩源ブロック）に水をかけると **obsidian** になる
+- obsidian ブロックを採掘したつもりが、実際は flowing_lava が固まった cobblestone を採掘していた
+
+### 解決策
+- 溶岩「源」ブロックを見つけて水をかける
+- または既に生成された obsidian ブロックを採掘する
+- `minecraft_find_block("obsidian")` で既存の黒曜石を探す
+
+## 2026-02-16: forceパラメータが機能しない
+
+### 現象
+- `minecraft_dig_block(force=true)`でも溶岩隣接ブロックが採掘できない
+- 黒曜石採掘でPhase 5進行がブロックされる
+
+### 原因
+1. `src/tools/building.ts:205` - `args.force`を読み取らずに`digBlock()`を呼んでいる
+2. `src/bot-manager/bot-blocks.ts:231` - `digBlock`関数が`force`パラメータを受け取っていない
+3. `src/bot-manager/bot-blocks.ts:260-271` - 溶岩チェックが無条件で実行され、`force`フラグを無視
+
+### 修正方針
+1. `building.ts` - `args.force`を読み取り
+2. `bot-manager/index.ts` - `digBlock`に`force`パラメータ追加
+3. `bot-blocks.ts` - `digBlock`関数に`force: boolean = false`パラメータ追加、溶岩チェックを`if (!force)`で囲む
+
+### 修正完了 (2026-02-16)
+✅ `src/bot-manager/bot-blocks.ts:231` - `force: boolean = false`パラメータ追加
+✅ `src/bot-manager/bot-blocks.ts:260` - 溶岩チェックを`if (!force)`で囲む
+✅ `src/bot-manager/index.ts:234` - `digBlock`メソッドに`force`パラメータ追加
+✅ `src/tools/building.ts:178` - `args.force`を読み取って`botManager.digBlock()`に渡す
+✅ ビルド成功
+
+**注意**: MCPサーバー再起動が必要（全ボット再接続）
+
+### 実装確認 (2026-02-16)
+❌ `git checkout HEAD --` で重複修正を元に戻したが、コミット46bf72c以前の状態に戻ってしまった
+✅ `git checkout 46bf72c -- <files>` で正しい実装を復元
+✅ `npm run build` で再ビルド成功
+✅ MCPサーバー再起動（pkill + nohup node dist/mcp-ws-server.js）
+
+**学習**: `git checkout HEAD --` は現在のHEADの状態に戻す。特定のコミットに戻すには `git checkout <commit> --` を使う
