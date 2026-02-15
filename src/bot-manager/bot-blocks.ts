@@ -1225,6 +1225,9 @@ export async function useItemOnBlock(
       bot.activateItem();
       bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
