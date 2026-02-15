@@ -91,9 +91,59 @@
       "Bash(npx pm2:*)",
       "Bash(pstree:*)",
       "Bash(ps:*)",
-      "mcp__mineflayer__search_tools"
+      "mcp__mineflayer__search_tools",
+<<<<<<< Updated upstream
+      "Bash(git -C /Users/shingo/Develop/auto-mineflayer-bot1 show fa4e02a --stat)",
+      "Bash(git -C /Users/shingo/Develop/auto-mineflayer-bot1 show 229441b --stat)",
+      "Bash(git -C /Users/shingo/Develop/auto-mineflayer-bot2 show:*)",
+      "Bash(git -C /Users/shingo/Develop/auto-mineflayer-bot5 show e72155f --stat)",
+      "Bash(git push:*)",
+      "Bash(for:*)",
+      "Bash(do echo \"Bot$i:\")",
+      "Bash(git -C /Users/shingo/Develop/auto-mineflayer-bot$i merge main --no-edit)",
+      "Bash(xargs:*)",
+      "Bash(__NEW_LINE_c2716709cb73c91f__ else echo \"No .claude/skills directory\")",
+      "Bash(__NEW_LINE_c2716709cb73c91f__ fi)",
+      "Bash(__NEW_LINE_c2716709cb73c91f__ done)",
+      "Bash(__NEW_LINE_f43af36a067e8e45__ else echo \"No learning directory\")",
+      "Bash(__NEW_LINE_f43af36a067e8e45__ fi)",
+      "Bash(__NEW_LINE_f43af36a067e8e45__ done)",
+      "Bash(__NEW_LINE_e47f61d0248c9f83__ fi)",
+      "Bash(__NEW_LINE_e47f61d0248c9f83__ done)",
+      "Bash(cat:*)",
+      "Bash(git -C /Users/shingo/Develop/auto-mineflayer-bot2 diff -- src/)",
+      "Bash(pkill:*)",
+      "Bash(python3:*)"
+=======
+      "Bash(git push:*)",
+      "Bash(pkill:*)",
+      "Bash(python3:*)",
+      "Bash(git merge:*)",
+      "Bash(git rebase:*)",
+      "Bash(git worktree remove:*)",
+      "Bash(for:*)",
+      "Bash(do echo -n \"bot$i: \" cd \"/Users/shingo/Develop/auto-mineflayer-bot$i\")",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr close:*)",
+      "Bash(do echo -n 'bot$i: ' cd /Users/shingo/Develop/auto-mineflayer-bot$i git stash push -m 'auto-stash before merge')",
+      "Bash(then echo else echo ' \\(conflict\\)' fi git stash pop)",
+      "Bash(bash -n:*)",
+      "Bash(do echo -n \"bot$i: \" cd /Users/shingo/Develop/auto-mineflayer-bot$i git merge main --no-edit)",
+      "Bash(do echo -n 'bot$i: ' cd /Users/shingo/Develop/auto-mineflayer-bot$i git stash push -m auto)",
+      "Bash(do echo '=== bot$i ===' cd /Users/shingo/Develop/auto-mineflayer-bot$i git log --oneline --author-date-order --no-merges --all -- src/ bug-issues/ .claude/skills/)",
+      "Bash(do echo -n 'bot$i: ' cd /Users/shingo/Develop/auto-mineflayer-bot$i git checkout --theirs .claude/settings.json)",
+      "Bash(gh pr view:*)",
+      "Bash(/Users/shingo/Develop/auto-mineflayer-mcp-server/scripts/hook-stop-auto-pr.sh:*)",
+      "Bash(do)",
+      "Bash(echo:*)",
+      "Bash(bash:*)"
+>>>>>>> Stashed changes
     ]
   },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "mineflayer"
+  ],
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -150,9 +200,5 @@
         ]
       }
     ]
-  },
-  "enabledMcpjsonServers": [
-    "mineflayer"
-  ],
-  "enableAllProjectMcpServers": true
+  }
 }

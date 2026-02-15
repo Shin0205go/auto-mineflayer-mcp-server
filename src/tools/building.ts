@@ -48,6 +48,10 @@ export const buildingTools = {
           type: "boolean",
           description: "Automatically collect dropped items after digging (default: true). Set to false if you want to manually control item pickup or if you're clearing inventory space.",
         },
+        force: {
+          type: "boolean",
+          description: "Force dig even if lava is adjacent (default: false). Use when mining obsidian or other blocks that naturally generate next to lava.",
+        },
       },
       required: ["x", "y", "z"],
     },
