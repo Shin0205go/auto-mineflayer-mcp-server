@@ -12,3 +12,15 @@
 
 ---
 
+## [2026-02-15] buildSystemPromptFromConfig missing export
+
+- **症状**: エージェント起動時に`Export named 'buildSystemPromptFromConfig' not found in module`エラー
+- **原因**: `claude-agent.ts`がインポートしようとしたが`claude-client.ts`にエクスポートされていなかった
+- **修正**:
+  1. `buildSystemPromptFromConfig`関数を`claude-client.ts`に追加・エクスポート
+  2. `updateSystemPrompt`メソッドを`ClaudeClient`に追加
+  3. `callMCPTool`メソッドを`ClaudeClient`に追加
+  4. `AgentResult`に`toolCalls`フィールド追加
+- **ファイル**: `src/agent/claude-client.ts`
+- **ステータス**: ✅ 修正完了
+
