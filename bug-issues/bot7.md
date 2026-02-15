@@ -20,14 +20,17 @@
 - インベントリ確認: `bucket x1` (water_bucketになっていない)
 - 水源ブロックは消えている ("Block at (-69, 62, -52) cleared")
 
-**原因推測**: `src/tools/building.ts` の `minecraft_use_item_on_block` 実装で、アイテム名の更新処理が不足している可能性
+**原因**: `bot.activateItem()`は同期的に実行されるが、Mineflayerのインベントリ API（`bot.heldItem`）はサーバーからのパケット受信後に更新される。固定の待機時間（500ms、1500ms）では不十分。
 
-**影響**: 黒曜石作成ができない（水バケツが必要）
+**対応**: ✅修正完了 (commit f60875c)
+- `src/bot-manager/bot-blocks.ts:1220` でインベントリポーリングを実装
+- 100ms間隔で`bot.heldItem`をチェック、`water_bucket`または`lava_bucket`に変わるまで待機（最大3秒）
+- `activateBlock` → `activateItem` への変更も含む
+- ビルド成功、push完了
 
-**対応**: ✅修正完了
-- `src/bot-manager/bot-blocks.ts:1216` を修正
-- `bot.activateBlock(block)` → `bot.activateItem()` に変更（バケツで液体を汲む場合）
-- ビルド成功、再テスト予定
+**重要**: MCPサーバー（Claude Code CLI経由）を再起動しないと新しいビルドが反映されません。
+- デバッグログ追加済み（console.log）
+- ユーザーにMCPサーバー再起動を依頼する必要あり
 
 ## 2026-02-15: 水バケツで溶岩に使うと溶岩を汲んでしまう
 
