@@ -257,9 +257,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   // Auto-clear flag after 5 minutes to allow retry (may have been temporary network issue)
   if (managed.serverHasItemPickupDisabled === true && managed.serverHasItemPickupDisabledTimestamp) {
     const timeSinceSet = Date.now() - managed.serverHasItemPickupDisabledTimestamp;
-    const FIVE_MINUTES = 5 * 60 * 1000;
+    const ONE_MINUTE = 60 * 1000;
 
-    if (timeSinceSet < FIVE_MINUTES) {
+    if (timeSinceSet < ONE_MINUTE) {
       throw new Error(`Cannot craft ${itemName}: Server item pickup recently failed (${Math.floor(timeSinceSet / 1000)}s ago). Wait or disconnect/reconnect to reset. This prevents wasting materials if pickup is truly broken.`);
     } else {
       // Auto-clear after 5 minutes to allow retry
@@ -349,10 +349,10 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   }
 
   // Special handling for planks -> stick/crafting_table/wooden_tools to avoid wood type issues
-  // NOTE: Disabled for both "stick" and "crafting_table" due to persistent "missing ingredient" errors
-  // General crafting path with material substitution (lines 511-574) works better for both
-  // The findCompatibleItem function properly handles all plank types as substitutes
-  const simpleWoodenRecipes: string[] = [];
+  // Re-enabled: the general crafting path fails with "no_table" for sticks because
+  // isSimpleRecipe=true skips crafting table search, but recipesAll returns 0 recipes
+  // without handling plank type substitution properly
+  const simpleWoodenRecipes: string[] = ["stick", "crafting_table"];
   if (simpleWoodenRecipes.includes(itemName)) {
     // Find any planks in inventory
     const anyPlanks = inventoryItems.find(i => i.name.endsWith("_planks"));
@@ -823,14 +823,18 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     throw new Error(`${itemName} requires a crafting table nearby (within 4 blocks). Inventory: ${inventory}`);
   }
 
-  // CRITICAL FIX: Check for server item pickup disabled BEFORE consuming materials
-  // This prevents permanent resource loss when crafted items drop but can't be collected
-  // DO NOT auto-clear this flag - server configuration rarely changes during a session
-  // Only clear on explicit reconnect or manual reset
+  // Check for server item pickup disabled BEFORE consuming materials
+  // Auto-clear after 1 minute to allow retry (gamerules may have been fixed)
   if (managed.serverHasItemPickupDisabled === true) {
     const timeSinceSet = managed.serverHasItemPickupDisabledTimestamp ? Date.now() - managed.serverHasItemPickupDisabledTimestamp : 0;
     const timeSince = Math.floor(timeSinceSet / 1000);
+    const ONE_MINUTE = 60 * 1000;
 
+    if (timeSinceSet > ONE_MINUTE) {
+      console.error(`[Craft] Clearing serverHasItemPickupDisabled flag after ${timeSince}s (auto-expire)`);
+      managed.serverHasItemPickupDisabled = false;
+      managed.serverHasItemPickupDisabledTimestamp = undefined;
+    } else {
     throw new Error(
       `Cannot craft ${itemName}: Server has item pickup disabled (detected ${timeSince}s ago). ` +
       `Crafted items will drop on ground and be permanently lost. ` +
@@ -838,6 +842,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       `Disconnect and reconnect to reset this flag if server config was fixed. ` +
       `Inventory: ${inventory}`
     );
+    }
   }
 
   try {
