@@ -1219,6 +1219,23 @@ export async function useItemOnBlock(
       console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
       bot.activateItem();
       bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
+<<<<<<< Updated upstream
+=======
+
+      // Poll inventory until it updates (or timeout after 3 seconds)
+      const startTime = Date.now();
+      let pollCount = 0;
+      while (Date.now() - startTime < 3000) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const currentItem = bot.heldItem?.name;
+        pollCount++;
+        console.log(`[DEBUG Poll ${pollCount}] Current item: ${currentItem}`);
+        if (currentItem !== initialItem && (currentItem === "water_bucket" || currentItem === "lava_bucket")) {
+          console.log(`[DEBUG] Success! Bucket changed to ${currentItem}`);
+          break;
+        }
+      }
+>>>>>>> Stashed changes
     } else {
       // Use activateBlock for other items
       await bot.activateBlock(block);
