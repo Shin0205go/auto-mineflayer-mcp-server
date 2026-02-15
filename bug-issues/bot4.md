@@ -193,3 +193,25 @@
   - または手動で板材を統一してから再試行
 - **ステータス**: ⚠️ 未修正 - クラフトレシピ選択ロジックの調査が必要
 
+## [2026-02-16] bone_meal crafting fails with item pickup disabled error
+
+- **症状**: `minecraft_craft("bone_meal", 2)` がエラーで失敗し、材料（bone x1）が消失した。bone_meal はクラフトされたがインベントリに入らなかった。
+- **エラーメッセージ**:
+  ```
+  Cannot craft bone_meal: Failed to craft bone_meal: Cannot craft bone_meal: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.
+  ```
+- **再現手順**:
+  1. bone x2 を所持している状態
+  2. `minecraft_craft("bone_meal", 2)` を実行
+  3. エラーメッセージが返り、bone が1個消費される
+  4. bone_meal はインベントリに現れず、地面にドロップした
+  5. `minecraft_collect_items()` で回収できた
+- **根本原因**: サーバーのgameruleで `doTileDrops` が一時的に無効化されている可能性。または、クラフト直後のアイテムドロップを拾う処理が不十分。
+- **影響**: bone_meal など1段階クラフトアイテムが作成できない。材料が無駄に消費される。
+- **回避策**: クラフト後に必ず `minecraft_collect_items()` を呼び出す
+- **修正案**:
+  1. `bot-crafting.ts` の `craft()` 関数末尾に自動で `collectItems()` を追加
+  2. または、クラフト失敗時にドロップしたアイテムを自動回収する処理を追加
+- **ファイル**: `src/bot-manager/bot-crafting.ts`
+- **ステータス**: ⚠️ 未修正 - 回避策（collect_items）で対応可能
+
