@@ -237,7 +237,8 @@ export async function digBlock(
   delay: (ms: number) => Promise<void>,
   moveToBasic: (username: string, x: number, y: number, z: number) => Promise<{ success: boolean; message: string }>,
   getBriefStatus: (username: string) => string,
-  autoCollect: boolean = true
+  autoCollect: boolean = true,
+  force: boolean = false
 ): Promise<string> {
   const bot = managed.bot;
   const username = managed.username;
@@ -256,17 +257,19 @@ export async function digBlock(
 
   const blockName = block.name;
 
-  // Check for lava in adjacent blocks before digging
-  const adjacentPositions = [
-    blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
-    blockPos.offset(0, 1, 0), blockPos.offset(0, -1, 0),
-    blockPos.offset(0, 0, 1), blockPos.offset(0, 0, -1),
-  ];
-  for (const adjPos of adjacentPositions) {
-    const adjBlock = bot.blockAt(adjPos);
-    if (adjBlock?.name === "lava") {
-      console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
-      return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`;
+  // Check for lava in adjacent blocks before digging (unless force=true)
+  if (!force) {
+    const adjacentPositions = [
+      blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
+      blockPos.offset(0, 1, 0), blockPos.offset(0, -1, 0),
+      blockPos.offset(0, 0, 1), blockPos.offset(0, 0, -1),
+    ];
+    for (const adjPos of adjacentPositions) {
+      const adjBlock = bot.blockAt(adjPos);
+      if (adjBlock?.name === "lava") {
+        console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
+        return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z})。force=trueで強制採掘可能。`;
+      }
     }
   }
 
@@ -1218,17 +1221,35 @@ export async function useItemOnBlock(
       const initialItem = bot.heldItem?.name;
       console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
       bot.activateItem();
+      await new Promise(resolve => setTimeout(resolve, 100));
       bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
+
+      // Poll inventory until it updates (or timeout after 3 seconds)
+      const startTime = Date.now();
+      let pollCount = 0;
+      while (Date.now() - startTime < 3000) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const currentItem = bot.heldItem?.name;
+        pollCount++;
+        console.log(`[DEBUG Poll ${pollCount}] Current item: ${currentItem}`);
+        if (currentItem !== initialItem && (currentItem === "water_bucket" || currentItem === "lava_bucket")) {
+          console.log(`[DEBUG] Success! Bucket changed to ${currentItem}`);
+          break;
+        }
+      }
+    } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
+      // For placing fluids, also use activateItem
+      bot.activateItem();
+      await new Promise(resolve => setTimeout(resolve, 100));
+      bot.deactivateItem();
     } else {
-      // For other items, use activateBlock
+      // For other items (bone_meal, flint_and_steel), use activateBlock
       await bot.activateBlock(block);
     }
 
-    // Wait longer for inventory to update properly
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Force inventory update by checking actual inventory, not just heldItem
-    bot.updateHeldItem();
+    // Check what happened (e.g., bucket → water_bucket)
+    // Wait longer for server synchronization (1000ms instead of 500ms)
+    await new Promise(resolve => setTimeout(resolve, 1000));
     const heldAfter = bot.heldItem;
     const heldName = heldAfter?.name || "nothing";
 
