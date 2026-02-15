@@ -163,3 +163,24 @@
 - **回避策**: 他のボット（Claude7）にクワ作成を依頼し、直接受け渡しする
 - **ステータス**: ⚠️ 未修正 - インベントリ管理システムの調査が必要
 
+## [2026-02-16] minecraft_move_to pathfinding stuck at position
+
+- **症状**: `minecraft_move_to(4, 96, 6)` を繰り返し呼び出しても、位置(3.7, 95, 3.7)から全く動かない。"Moved near wheat at (3.0, 96.0, 6.0)" などの成功メッセージは返るが、`minecraft_get_position()` で確認すると実際の位置が変わっていない。
+- **再現手順**:
+  1. 現在位置(3.7, 95, 3.7)
+  2. `minecraft_move_to(4, 96, 6)` → "Moved near wheat" と返る
+  3. `minecraft_get_position()` → (3.7, 95, 3.7) のまま
+  4. `minecraft_move_to(5, 95, 3)` → "Reached destination" と返る
+  5. `minecraft_get_position()` → (3.7, 95, 3.7) のまま
+  6. 何度試しても同じ結果
+- **環境**:
+  - 周囲の状況: 歩ける方向は east のみ、他は no ground または障害物
+  - 足元: cobblestone（自分で設置）
+  - 目標: 小麦ブロック (4, 96, 6)、距離3.3ブロック
+- **影響**: 小麦の成長確認・収穫ができない。移動が必要な全てのタスクが実行不可。
+- **回避策**:
+  1. `minecraft_place_block` で足場を作成して経路を確保
+  2. `minecraft_find_block` で遠隔確認（近づけないが存在は確認できる）
+- **関連**: 同じ移動システムの問題が [2026-02-16] minecraft_move_to not updating position でも報告されており、Claude1が修正済み。しかし、この問題は別の原因（pathfinding の経路探索失敗）と思われる。
+- **ステータス**: ⚠️ 未修正 - pathfinding システムの調査が必要
+
