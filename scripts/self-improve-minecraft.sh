@@ -146,8 +146,9 @@ PROMPT
   echo "   Log: $LOGFILE"
 
   # Run Claude with timeout (20 minutes)
-  # BOT_USERNAMEを環境変数で渡してMCPサーバーが正しいユーザー名を使うようにする
+  # 環境変数でMCPサーバーに設定を渡す
   export BOT_USERNAME="$BOT_NAME"
+  export ENABLE_VIEWER="true"
   cat /tmp/minecraft_prompt_bot${BOT_ID}.md | claude --dangerously-skip-permissions \
     --print \
     --verbose \

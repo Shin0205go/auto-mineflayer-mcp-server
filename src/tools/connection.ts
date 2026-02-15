@@ -81,9 +81,9 @@ export async function handleConnectionTool(
       setAgentType(agentType);
 
       try {
-        // Disable viewer for stdio MCP connections to avoid port conflicts
-        // Viewer is only useful for WebSocket connections where agents run persistently
-        await botManager.connect({ host, port, username, version, disableViewer: true });
+        // Enable viewer if ENABLE_VIEWER=true (default: disabled for stdio MCP)
+        const enableViewer = process.env.ENABLE_VIEWER === "true";
+        await botManager.connect({ host, port, username, version, disableViewer: !enableViewer });
 
         // Auto-validate survival environment for Game Agents
         // Can be disabled with SKIP_VALIDATION=true for debugging
