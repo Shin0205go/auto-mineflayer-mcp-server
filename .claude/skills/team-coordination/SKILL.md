@@ -22,9 +22,13 @@ description: |
 **接続直後にやること（サバイバルより先）：**
 
 1. `minecraft_get_chat_messages()` でチャット確認
-2. `minecraft_chat("[フェーズ] Phase N 開始。目標: ...")` でフェーズ宣言
-3. 全メンバー（Claude2〜7）に `[指示] @Claude番号 具体的タスク` を送信
-4. 全員に指示を出し終えてから自分の作業を開始
+2. **技術的チェック（重要）：**
+   - gamerule確認: `/gamerule doMobLoot`, `/gamerule doTileDrops`, `/gamerule doMobSpawning`
+   - falseの場合は即座に修正: `minecraft_chat("/gamerule <name> true")`
+   - チームメンバーが「item pickup disabled」エラーを報告したら再接続を指示
+3. `minecraft_chat("[フェーズ] Phase N 開始。目標: ...")` でフェーズ宣言
+4. 全メンバー（Claude2〜7）に `[指示] @Claude番号 具体的タスク` を送信
+5. 全員に指示を出し終えてから自分の作業を開始
 
 ****2アクションごとに**：**
 - チャットを確認
