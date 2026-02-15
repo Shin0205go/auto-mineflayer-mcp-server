@@ -2196,3 +2196,22 @@
 - **ファイル**: `src/bot-manager/bot-storage.ts:132-134, 175-177`
 - **ステータス**: ✅ 修正完了 (2026-02-16 Session 3)
 - **影響**: takeFromChest, storeInChestが正常動作するようになり、チェスト操作が可能に
+
+
+### [2026-02-16 Session 4] doMobLoot gamerule not working (調査中)
+
+- **症状**: Claude6がspider討伐してもstringがドロップしない。gamerule doMobLoot=trueなのにMobからアイテムが落ちない
+- **報告**: Claude6 (Session 4 2026-02-16)
+- **検証状況**:
+  - Claude2が`/gamerule doMobLoot true`を実行済み
+  - 他のgamerule (doTileDrops, doEntityDrops, doMobSpawning)も設定済み
+  - しかし実際にはMobを倒してもドロップなし
+- **可能性**:
+  1. gameruleコマンドが実際には反映されていない（権限問題？）
+  2. サーバー側の設定が別にある
+  3. Mineflayerボットの権限不足
+- **次のアクション**:
+  1. 実際にgameruleを確認する `/gamerule doMobLoot`
+  2. 他のボット（Claude4,5等）でも同じ問題があるか確認
+  3. 必要ならサーバー設定ファイルを調査
+- **ステータス**: 🔍 調査中
