@@ -10,7 +10,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { botManager } from "./bot-manager/index.js";
 import { readBoard, writeBoard, waitForNewMessage, clearBoard } from "./tools/coordination.js";
-import { taskCreate, taskList, taskGet, taskUpdate, TASK_MANAGEMENT_TOOLS } from "./tools/task-management.js";
 import {
   minecraft_gather_resources,
   minecraft_build_structure,
@@ -615,13 +614,6 @@ const tools = {
     },
   },
 
-  // === タスク管理ツール ===
-  ...Object.fromEntries(
-    TASK_MANAGEMENT_TOOLS.map(tool => [tool.name, {
-      description: tool.description,
-      inputSchema: tool.inputSchema
-    }])
-  ),
 };
 
 // Handle tool calls
@@ -1032,22 +1024,6 @@ async function handleTool(
     }
 
 
-    // === タスク管理ツール ===
-    case "task_create": {
-      return await taskCreate(args as any);
-    }
-
-    case "task_list": {
-      return await taskList(args as any);
-    }
-
-    case "task_get": {
-      return await taskGet(args as any);
-    }
-
-    case "task_update": {
-      return await taskUpdate(args as any);
-    }
 
     // === Combat tools ===
     case "minecraft_get_status":

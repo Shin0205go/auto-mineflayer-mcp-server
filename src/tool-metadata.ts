@@ -45,11 +45,6 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
   agent_board_wait: { tags: ["coordination", "board", "wait", "sync"], category: "coordination", priority: 5 },
   agent_board_clear: { tags: ["coordination", "board", "clear"], category: "coordination", priority: 4 },
 
-  // Task Management
-  task_create: { tags: ["task", "create", "plan"], category: "tasks", priority: 6 },
-  task_list: { tags: ["task", "list", "view"], category: "tasks", priority: 6 },
-  task_get: { tags: ["task", "get", "details"], category: "tasks", priority: 5 },
-  task_update: { tags: ["task", "update", "status"], category: "tasks", priority: 6 },
 
   // Dev Agent integration
   dev_publish_loop_result: { tags: ["dev", "loop", "result"], category: "dev", priority: 3 },
