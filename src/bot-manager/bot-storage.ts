@@ -41,6 +41,9 @@ export async function openChest(
     }
   }
 
+  // Wait a moment to prevent timing issues
+  await new Promise(resolve => setTimeout(resolve, 500));
+
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();
 
@@ -171,6 +174,18 @@ export async function listChest(managed: ManagedBot): Promise<string> {
   if (!chestBlock) {
     return "No chest found within 4 blocks. Move closer to a chest first.";
   }
+
+  // Move closer to chest to ensure we're within interaction range
+  const chestPos = chestBlock.position;
+  const distance = bot.entity.position.distanceTo(chestPos);
+  if (distance > 3) {
+    const { goals: pathfinderGoals } = await import("mineflayer-pathfinder");
+    const goal = new pathfinderGoals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 2);
+    await bot.pathfinder.goto(goal);
+  }
+
+  // Wait a moment to prevent timing issues
+  await new Promise(resolve => setTimeout(resolve, 500));
 
   const pos = chestBlock.position;
   const chest = await bot.openContainer(chestBlock);
