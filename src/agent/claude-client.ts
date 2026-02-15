@@ -10,6 +10,7 @@ import { EventEmitter } from "events";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { MCPWebSocketClientTransport } from "./mcp-ws-transport.js";
+import type { AgentConfig } from "../types/agent-config.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -30,6 +31,7 @@ export interface AgentResult {
   success: boolean;
   result?: string;
   error?: string;
+  toolCalls?: { tool: string; result: string; error?: string }[];
   usage?: {
     inputTokens: number;
     outputTokens: number;
@@ -81,6 +83,42 @@ const DEFAULT_SYSTEM_INSTRUCTION = `あなたはMinecraftを自律的に操作�
 10. **チャットで情報共有！** 発見・完了・危険を報告
 
 自律的に探索、採掘、建築を行い、サバイバルしてください。`;
+
+/**
+ * Build system prompt from agent config
+ */
+export function buildSystemPromptFromConfig(
+  config: AgentConfig,
+  serverInfo: { host: string; port: number; username: string }
+): string {
+  const { personality, priorities, thresholds } = config;
+
+  const priorityList = Object.entries(priorities)
+    .sort(([, a], [, b]) => b - a)
+    .map(([key, val]) => `  - ${key}: ${val}`)
+    .join("\n");
+
+  return `${DEFAULT_SYSTEM_INSTRUCTION}
+
+## エージェント設定 (v${config.version})
+**サーバー**: ${serverInfo.host}:${serverInfo.port} (${serverInfo.username})
+
+### 性格パラメータ
+- 攻撃性: ${personality.aggressiveness}/10
+- 探索意欲: ${personality.explorationDrive}/10
+- 資源収集欲: ${personality.resourceHoarding}/10
+- リスク許容度: ${personality.riskTolerance}/10
+
+### 優先度
+${priorityList}
+
+### 閾値
+- 逃走HP: ${thresholds.fleeHP}
+- 食事開始空腹度: ${thresholds.eatHunger}
+- 夜間行動開始時刻: ${thresholds.nightShelterTime}
+
+**重要**: 上記パラメータに従って行動を調整してください。`;
+}
 
 // Content block types
 interface TextBlock {
@@ -319,6 +357,23 @@ ${lines.join("\n")}
 **重要**: 上記イベントを確認し、必要に応じて対応してください。
 - health_changed/damaged → HPが低ければ食べるか逃げる
 - hostile_spawn → 戦うか逃げるか判断`;
+  }
+
+  /**
+   * Update system prompt dynamically
+   */
+  updateSystemPrompt(newPrompt: string): void {
+    this.config.systemInstruction = newPrompt;
+  }
+
+  /**
+   * Call MCP tool directly (for status checks)
+   */
+  async callMCPTool(toolName: string, input: Record<string, unknown>): Promise<unknown> {
+    if (!this.mcp) {
+      throw new Error("MCP not connected");
+    }
+    return await this.mcp.callTool(toolName, input);
   }
 
   /**
