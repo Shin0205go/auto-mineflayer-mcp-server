@@ -12,11 +12,14 @@
 
 ---
 
-### [2026-02-15] 水バケツが取得できない
+### [2026-02-15] 水バケツが取得できない ✅ **FIXED**
 - **症状**: `minecraft_use_item_on_block`で水源にバケツを使っても、インベントリが`bucket`のまま`water_bucket`にならない。ツール出力では「Collected water with bucket」と表示されるが、実際には水が入っていない。
-- **原因**: `minecraft_use_item_on_block`の実装バグ、またはMineflayerの`bot.bucketWater()`が正しく呼ばれていない可能性
-- **修正**: `src/tools/building.ts`の`use_item_on_block`実装を確認が必要
-- **ファイル**: `src/tools/building.ts`
-- **影響**: 黒曜石作成（水バケツ+溶岩源）ができない
-- **回避策**: 他のボットに黒曜石作成を任せる、または代替手段を探す
+- **原因**: `activateBlock()`ではなく`activateItem()`+`deactivateItem()`を使う必要がある。サーバー同期待ち時間不足。
+- **修正**: Bot1がコミット8c753a6で修正完了。`src/bot-manager/bot-blocks.ts`のuseItemOnBlock関数を修正。
+- **ファイル**: `src/bot-manager/bot-blocks.ts` (useItemOnBlock関数)
+- **修正内容**:
+  - `bot.activateItem()`→100ms待機→`bot.deactivateItem()`の流れに変更
+  - インベントリ更新を3秒間ポーリングで待機
+  - 同期待ち時間を1000msに延長
+- **ステータス**: ✅ FIXED (2026-02-15, コミット8c753a6)
 
