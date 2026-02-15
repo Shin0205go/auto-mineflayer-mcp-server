@@ -2,20 +2,47 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write",
+        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "FILE_PATH=$(cat /dev/stdin | python3 -c \"import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))\" 2>/dev/null || echo ''); if echo \"$FILE_PATH\" | grep -qE '^(src/|bug-issues/|\\.claude/skills/)'; then exit 0; else echo \"File creation only allowed in src/, .claude/skills/, bug-issues/\" && exit 2; fi"
+            "command": "python3 -c \"import sys,json; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); exit(0 if any(p.startswith(d) for d in ['src/','bug-issues/','.claude/skills/']) else 2)\" || echo 'Only src/, bug-issues/, .claude/skills/ editable'",
+            "statusMessage": "Checking file permissions"
           }
         ]
       },
       {
-        "matcher": "Edit",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "FILE_PATH=$(cat /dev/stdin | python3 -c \"import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))\" 2>/dev/null || echo ''); if echo \"$FILE_PATH\" | grep -qE '^(src/|bug-issues/|\\.claude/skills/)'; then exit 0; else echo \"File editing only allowed in src/, .claude/skills/, bug-issues/\" && exit 2; fi"
+            "command": "python3 -c \"import sys,json,re; cmd=json.load(sys.stdin).get('tool_input',{}).get('command',''); blocked=[r'git\\s+push\\s+--force',r'git\\s+push\\s+-f\\b',r'git\\s+reset\\s+--hard',r'rm\\s+-rf\\s+/',r'>\\.mcp\\.json',r'>\\.claude/settings']; exit(2 if any(re.search(p,cmd) for p in blocked) else 0)\" || echo 'Dangerous command blocked'",
+            "statusMessage": "Checking command safety"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import sys,json; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); exit(0) if p.startswith('src/') else exit(1)\" 2>/dev/null && npm run build --silent 2>/dev/null",
+            "timeout": 60,
+            "statusMessage": "Building after src/ edit"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'if git status --porcelain 2>/dev/null | grep -q \"^UU\\|^AA\\|^DD\"; then echo \"Resolving merge conflicts...\"; git checkout --theirs .claude/settings.json 2>/dev/null; git checkout --theirs logs/tool-execution.jsonl 2>/dev/null; git add -A 2>/dev/null; git commit -m \"Auto-resolve merge conflicts on session start\" 2>/dev/null; fi'",
+            "timeout": 15,
+            "statusMessage": "Checking git conflicts"
           }
         ]
       }
@@ -25,8 +52,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'CHANGED=$(git diff --name-only -- src/ bug-issues/ .claude/skills/ 2>/dev/null); if [ -n \"$CHANGED\" ]; then BRANCH=$(git branch --show-current 2>/dev/null); BOT=$(echo $BRANCH | sed \"s/bot//\"); git add src/ bug-issues/ .claude/skills/ 2>/dev/null; git commit -m \"[Claude${BOT}] Auto-commit on stop\" 2>/dev/null; fi'",
-            "timeout": 30
+            "command": "bash -c 'CHANGED=$(git diff --name-only -- src/ bug-issues/ .claude/skills/ 2>/dev/null); if [ -n \"$CHANGED\" ]; then npm run build --silent 2>/dev/null; BRANCH=$(git branch --show-current 2>/dev/null); BOT=$(echo $BRANCH | sed \"s/bot//\"); git add src/ bug-issues/ .claude/skills/ 2>/dev/null; git commit -m \"[Claude${BOT}] Auto-commit on stop\" 2>/dev/null && git push origin $BRANCH 2>/dev/null; fi'",
+            "timeout": 60
           }
         ]
       }
