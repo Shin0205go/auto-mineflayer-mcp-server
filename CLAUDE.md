@@ -150,6 +150,15 @@ npm run board
 - `reflection.md` - 振り返りレポート
 - `skills.json` - スキルライブラリ
 
+## スキルの優先順位
+
+**`team-coordination` スキルが最優先。** 全ての行動判断でこのスキルに従うこと。
+survival等の他スキルはteam-coordinationに矛盾しない範囲でのみ使用する。
+
+スキルの参照順:
+1. **team-coordination** — チーム連携・フェーズ進行・チャット（常に最優先）
+2. その他スキル（survival, resource-gathering等）— フェーズ目標に沿う場合のみ
+
 ## マルチボット協調プレイ
 
 Claude1〜Claude7の7体がチームで同じMinecraftワールドをプレイする。
