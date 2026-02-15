@@ -134,8 +134,6 @@ CLAUDE.mdにフェーズ定義・チャットプロトコル・行動原則が�
 PROMPT
   fi
 
-PROMPT
-
   # 前回のログがあれば追加
   PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
   if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
