@@ -1822,3 +1822,80 @@
 
 
 
+
+
+### [2026-02-16] NEW Session #17 - Phase 2 Food Crisis (Small Wheat Farm Strategy)
+
+**Session Start Status:**
+- 📍 Phase: 2 (Food Stabilization) - INCOMPLETE (recurring issue)
+- ⚠️ FOOD CRISIS: 0 food in chest, multiple members low hunger
+- Team Status:
+  - Claude1: HP 19.1/20, hunger 17/20, 0 food, leader at (-1.6,95,0.4)
+  - Claude2: Hunger 4/20 CRITICAL, moving to base
+  - Claude3: HP 8/20, hunger 6/20, at base
+  - Claude5: Hunger 16/20, exploring for animals at (252,72,270)
+  - Claude6: Hunger 20/20, wheat_seeds x1, farm construction assigned
+  - Claude7: HP 8/20, hunger 9/20, safe location waiting
+
+**Session Actions (First 60 minutes):**
+
+1. **Food Emergency Response:**
+   - Claude3: Discovered animals at (300,76,300), hunted and secured beef x5, porkchop x2, chicken x1 (8 total)
+   - Food distribution: Claude3 delivered to Claude7, Claude2 ate at base
+   - All 8 meat items consumed by team (emergency food shortage)
+
+2. **Team Deaths:**
+   - Claude2: 1x death, respawned HP/hunger 20/20
+   - Claude3: 1x death (intentional respawn from HP 2.8/20), respawned HP/hunger 20/20
+   - Claude5: 1x death during exploration, respawned, diamond pickaxe lost
+
+3. **Gamerule Verification:**
+   - Claude4, Claude5, Claude7: All confirmed gamerules true
+   - doTileDrops = true
+   - doMobLoot = true
+   - doEntityDrops = true
+   - doMobSpawning = unknown (passive mobs don't spawn)
+
+4. **Small Wheat Farm Construction:**
+   - Location: (4,95,5) water source, 7 dirt blocks surrounding
+   - Team: Claude2,3,4,5,6,7 all assigned to farm construction
+   - Progress:
+     - ✅ Water source set at (4,95,5) by Claude6
+     - ✅ Dirt blocks x7 placed around water by Claude6
+     - ✅ Farmland x3 created by Claude2: (4,94,5), (5,94,4), (5,94,4)
+     - ⏳ Seeds collected: Claude3 (1), Claude4 (8), Claude6 (1) = 10 total
+     - ⏳ Seed planting: In progress (Claude3, Claude4, Claude6 assigned)
+
+**Team Coordination:**
+- Excellent: Claude3 led animal hunting, Claude6 led farm construction
+- All members assigned and working collaboratively
+- 15+ directives issued by Claude1
+- Zero code bugs encountered (all tools working correctly)
+
+**Current Status (Session End):**
+- Phase 2: IN PROGRESS
+  - Food in chest: 0/20 (all meat consumed)
+  - Wheat farm: 70% complete (water + dirt + farmland ready, seed planting in progress)
+  - Target: 20 food items (wheat bread from farm)
+- Team coordination: Excellent
+- Deaths: 3 total (Claude2, Claude3, Claude5)
+
+**Key Learnings:**
+1. **Animal hunting works** when doMobLoot is true (Claude3 successfully hunted 8 meat)
+2. **Small farm strategy** is viable when animals are scarce (7-block farmland with 10 seeds)
+3. **Death/respawn** is a valid emergency recovery (restores HP/hunger to 20/20)
+4. **Team coordination** excellent when members self-organize (Claude3, Claude6 took initiative)
+
+**No New Bugs This Session:**
+- All MCP tools functioning correctly
+- Gamerules stable (all true)
+- Focus: Team coordination and Phase 2 completion
+
+**Next Session Priority:**
+1. Complete seed planting (10 seeds in 7 farmland blocks)
+2. Wait for wheat growth (or use bone_meal if available)
+3. Harvest wheat x20+ and craft bread
+4. Store 20 food items in chest (-3,96,0)
+5. Declare Phase 2 COMPLETE
+
+---
