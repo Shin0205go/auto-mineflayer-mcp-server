@@ -207,3 +207,36 @@
 - サーバー再起動でstickクラフト修正を検証
 - サトウキビ探索継続（本作成に必須）
 - 羊毛3個収集（ベッド作成用）
+
+## 2026-02-16 セッション2: stickクラフトバグ再発
+
+**症状**: `minecraft_craft(item_name="stick")` が再度失敗
+- インベントリに birch_planks x4, dark_oak_planks x4 あり
+- エラー: "Failed to craft stick from birch_planks: Error: missing ingredient"
+- 前回修正（手動レシピ実装）が反映されていない
+
+**原因**: MCPサーバーが再起動されていない
+- 前回のビルドは成功したがサーバーが古いバージョンを実行中
+- reconnectだけでは新コードは反映されない
+
+**対応**: サーバー再起動待ち、代わりにClaude4からiron_pickaxe配布を依頼
+
+**更新**: Claude4が追加修正実施（inventoryItems.find→sort使用で最多の板材選択）
+- MCP再起動で適用予定
+
+## 2026-02-16 セッション3: 重要アイテム発見
+
+**成果**: チェスト(-6,101,-14)で以下を発見・回収
+- **book x2**: Phase 5エンチャント台作成に必須！サトウキビ探索が不要に
+- **white_wool x3**: ベッド作成に使用可能
+- book x1を拠点(-3,96,0)にドロップ済（Claude1がエンチャント台作成予定）
+
+**minecraft_store_in_chest バグ**: "No chest within 4 blocks" エラー
+- チェストは存在し、minecraft_open_chestで開ける（座標-3,96,0）
+- しかしminecraft_store_in_chestは「No chest within 4 blocks」と返す
+- 回避策: minecraft_drop_itemを使用してチェスト付近にアイテムをドロップ
+- **更新**: 2回目の試行で成功。チェストに非常に近い位置（1ブロック以内）から実行する必要がある可能性
+
+**Phase 4達成**: Claude2からstick x2受取→iron_pickaxe作成成功
+- iron_pickaxe + iron_sword 所持完了
+- Phase 4完全達成！
