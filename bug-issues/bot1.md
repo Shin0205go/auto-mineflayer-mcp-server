@@ -12,6 +12,73 @@
 
 ---
 
+### [2026-02-16 Session 7] Food Crisis Recurrence + Gamerule Reset Issue (❌ CRITICAL)
+
+- **症状**:
+  - Claude2 HP4.6/20, Claude3死亡→リスポーン, Claude6 HP2.1/20
+  - 周囲64ブロック以内に食用動物なし（bee, skeleton_horseのみ）
+  - 畑の小麦収穫でアイテム消失（gamerule doEntityDrops=false）
+  - アイテム投下でアイテム消失（gamerule doEntityDrops=false）
+- **報告**: Claude1 (Session 7 2026-02-16)
+- **原因**:
+  1. サーバー再起動でgamerule設定がリセット
+  2. doEntityDrops=falseでアイテムドロップ・拾得が不可
+  3. 食用動物が全くスポーンしない（doMobSpawning or バイオーム問題）
+  4. 畑が唯一の食料源だが、gamerule問題で収穫不可
+- **対処**:
+  - Claude2, Claude5, Claude6, Claude7が即座にgamerule修正実行
+  - Claude3がbone_meal x9で畑の成長促進→収穫→配達
+- **根本問題**:
+  - **gamerule設定の永続化がない**: サーバー再起動で毎回リセット
+  - **食料確保の自動化がない**: 毎回手動で畑作成・管理が必要
+  - **早期警告システムがない**: 食料危機が発生してから対応開始
+- **改善案**:
+  1. サーバー起動スクリプトにgamerule設定を追加（server.propertiesまたはspigot.yml）
+  2. セッション開始時に自動でgamerule確認＆修正するツール追加
+  3. 食料自動確保システム: HP低下時に自動で畑→収穫→食事
+  4. 高レベルツール: `minecraft_emergency_food()` - 最寄りの食料を自動確保
+- **ファイル**: なし（サーバー設定問題）
+- **ステータス**: ⚠️ 一時対処のみ（根本解決は次回セッション）
+
+---
+
+### [2026-02-16 Session 6] Food Crisis - No animals spawning + Team Coordination Failure (❌ CRITICAL)
+
+- **症状**: 全チェストに食料なし。周囲100m以内に食用動物（cow, pig, sheep, chicken）が全く出現しない
+- **報告**: Claude1, Claude3, Claude4, Claude5, Claude6, Claude7 (Session 6 2026-02-16)
+- **影響範囲**:
+  - 複数メンバーが餓死（Claude2, Claude3, Claude5, Claude6, Claude7）
+  - HP回復不可、ダッシュ不可、採掘速度低下
+  - skeleton_horseのみ出現（食用不可）
+- **状況**:
+  - Claude6がgamerule修正実行（doTileDrops, doMobLoot, doEntityDrops → true）
+  - doMobSpawning の状態が未確認（Claude1はgameruleコマンド実行不可）
+  - 難易度設定で空腹死はしない模様（Claude7報告: HP10で減少停止）
+- **原因**:
+  1. doMobSpawning=false の可能性（passive mob spawning disabled）
+  2. バイオーム問題（動物がスポーンしないバイオーム）
+  3. ワールド生成設定（動物スポーン率が極端に低い）
+  4. **チーム連携の崩壊**: 畑作成に1時間以上かかっても未完成
+     - メンバー間の座標共有失敗
+     - 複数人が別々の場所で作業開始
+     - 作業中にメンバーが死亡・迷子・アイテムロスト
+     - リーダー（Claude1）の指示が複雑すぎて混乱を招いた
+- **対策（失敗）**:
+  - 水バケツ2個で無限水源→畑作成→骨粉で小麦速成→パン作成
+  - 実際: 1時間経過しても完成せず
+- **根本問題**:
+  - **高レベルタスク（minecraft_create_farm等）がない**: 低レベルツール（dig, place, use）の組み合わせが複雑すぎる
+  - **チーム作業の自動化がない**: 複数人での協調作業が非効率
+  - **食料緊急対応ツールがない**: 餓死寸前でも即座に食料確保できる手段がない
+- **改善案**:
+  1. 高レベルツール追加: `minecraft_create_basic_farm(location, size)` - 穴掘り・水源・耕作・種植えを自動実行
+  2. 緊急食料確保: `minecraft_emergency_food()` - 最寄りの食料源（動物・畑・チェスト）を自動で探して確保
+  3. チーム作業簡略化: リーダーは「畑作成せよ」のみ指示、詳細手順は各メンバーのスキルに任せる
+- **ファイル**: なし（サーバー設定問題 + ツール不足）
+- **ステータス**: ❌ 未解決（次回セッションで高レベルツール実装が必要）
+
+---
+
 ### [2026-02-16 Session 5] stick crafting bug - MCP server restart required
 
 - **症状**: Claude6, Claude7 が stick クラフト失敗を報告（"missing ingredient" エラー）
