@@ -2279,3 +2279,47 @@
   2. 他のボット（Claude4,5等）でも同じ問題があるか確認
   3. 必要ならサーバー設定ファイルを調査
 - **ステータス**: 🔍 調査中
+
+---
+
+### [2026-02-16 Session 6] stick crafting fix cherry-pick from bot4
+
+- **症状**: Claude7がstickクラフト失敗を報告（"missing ingredient" エラー）
+- **原因**: stick修正（commit 248927a）がbot4ブランチにあり、bot1ブランチにマージされていなかった
+- **修正内容**:
+  - bot4ブランチのcommit 248927aをbot1にcherry-pick
+  - `src/bot-manager/bot-crafting.ts:416-418, 448-450`
+  - `.find()` → `.filter() + .sort((a,b) => b.count - a.count)[0]` に変更
+  - 最多のplanksを選択することで、数量不足エラーを回避
+- **修正コマンド**:
+  ```bash
+  git cherry-pick 248927a
+  npm run build
+  ```
+- **影響**: stick、crafting_tableのクラフトが正常に動作
+- **ステータス**: ✅ 修正完了 (2026-02-16 Session 6)
+
+---
+
+### [2026-02-16 Session 6] Gamerule reset - Item pickup disabled (again)
+
+- **症状**: Claude3がY=77でブロック採掘時に "server has item pickup disabled" エラー
+- **原因**: サーバー再起動または設定リセットで gamerule が false に戻っていた
+  - doTileDrops=false → ブロック採掘でアイテムが出ない
+  - doMobLoot=false → mob討伐でドロップアイテムが出ない
+  - doEntityDrops=false → クラフト済みアイテムが地面に落ちて拾得不可
+- **修正**: Claude7が以下のコマンドを実行（成功確認済み）
+  ```
+  /gamerule doTileDrops true
+  /gamerule doMobLoot true
+  /gamerule doEntityDrops true
+  ```
+- **チャット出力**:
+  ```
+  Gamerule doTileDrops is now set to: true
+  Gamerule doMobLoot is now set to: true
+  Gamerule doEntityDrops is now set to: true
+  ```
+- **重要**: Claude7がgameruleコマンド実行可能（Claude4, Claude5と同様）
+- **再発防止**: サーバー起動スクリプトにgamerule設定を追加すべき
+- **ステータス**: ✅ 修正完了 (2026-02-16 Session 6)
