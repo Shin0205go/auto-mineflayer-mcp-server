@@ -1217,6 +1217,7 @@ export async function useItemOnBlock(
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" ||
                                     block.name === "lava" || block.name === "flowing_lava")) {
       bot.activateItem();
+<<<<<<< Updated upstream
       await new Promise(resolve => setTimeout(resolve, 100));
       bot.deactivateItem();
     } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
@@ -1224,6 +1225,23 @@ export async function useItemOnBlock(
       bot.activateItem();
       await new Promise(resolve => setTimeout(resolve, 100));
       bot.deactivateItem();
+=======
+      bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
+
+      // Poll inventory until it updates (or timeout after 3 seconds)
+      const startTime = Date.now();
+      let pollCount = 0;
+      while (Date.now() - startTime < 3000) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const currentItem = bot.heldItem?.name;
+        pollCount++;
+        console.log(`[DEBUG Poll ${pollCount}] Current item: ${currentItem}`);
+        if (currentItem !== initialItem && (currentItem === "water_bucket" || currentItem === "lava_bucket")) {
+          console.log(`[DEBUG] Success! Bucket changed to ${currentItem}`);
+          break;
+        }
+      }
+>>>>>>> Stashed changes
     } else {
       // For other items (bone_meal, flint_and_steel), use activateBlock
       await bot.activateBlock(block);
