@@ -62,11 +62,20 @@
 - **再現手順**:
   1. birch_log または dark_oak_log を採掘 → planks をクラフト
   2. `minecraft_craft("stick", 2)` → 失敗
+- **追加再現ケース (Claude4)**:
+  1. birch_log x14 所持、birch_planks x25 所持
+  2. birch_log → birch_planks x4 クラフト成功（合計41個に）
+  3. `minecraft_craft("stick", 4)` → "Failed to craft stick from dark_oak_planks: Error: missing ingredient"
+  4. インベントリにはbirch_planks x41, dark_oak_planks x2 があるが、stickを作れない
 - **根本原因**: `bot.recipesAll(item.id, null, null)` が空配列を返す。Mineflayerまたはminecraft-dataのバージョン互換性問題。
 - **試した修正**:
   1. (2026-02-16 18:xx) `bot.recipesFor()` をフォールバックとして追加 (line 409-429) - 効果なし
   2. dark_oak_planks で試す - 同じエラー
-- **影響**: diamond_pickaxe を作成できず、黒曜石採掘タスクを実行できない。
+  3. birch_log から新規planksをクラフトしてから試す - 同じエラー
+- **影響**:
+  - diamond_pickaxe を作成できず、黒曜石採掘タスクを実行できない
+  - 鍬（hoe）を作成できず、畑を作れない（farmland作成不可）
+  - 種を植えられないため、食料確保ができない
 - **次のステップ**:
   1. MCPサーバーを再起動して修正コードを適用
   2. それでも失敗する場合、手動でレシピオブジェクトを作成
