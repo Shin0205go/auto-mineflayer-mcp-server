@@ -115,13 +115,21 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       resolve(result);
     };
 
-    const onGoalReached = () => {
+    const onGoalReached = async () => {
+      // Wait for physics to settle - bot.entity.position may not be updated immediately when event fires
+      await delay(200);
       const pos = bot.entity.position;
-      finish({ success: true, message: `Reached destination (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})` });
+      // Verify we're actually within range before declaring success
+      const actualDist = pos.distanceTo(targetPos);
+      if (actualDist < 3) {
+        finish({ success: true, message: `Reached destination (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})` });
+      }
+      // If still too far, let the interval checks handle it
     };
 
-    const onGoalUpdated = () => {
+    const onGoalUpdated = async () => {
       // Goal was changed externally; treat as cancellation
+      await delay(200);  // Wait for physics to settle
       const pos = bot.entity.position;
       const dist = pos.distanceTo(targetPos);
       if (dist < 3) {
