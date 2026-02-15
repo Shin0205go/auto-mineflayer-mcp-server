@@ -67,3 +67,23 @@
 - MCPツール定義には既にforceパラメータがあったが、実装が欠けていた
 
 **ビルド**: ✅成功
+
+## 2026-02-16: 黒曜石採掘で間違ったアイテムがドロップ
+
+**症状**: `minecraft_dig_block`で黒曜石を採掘すると、cobblestoneがドロップされる
+- ツール結果: "Dug obsidian with diamond_pickaxe and picked up 2 item(s)!"
+- 期待: obsidian x2がインベントリに追加
+- 実際: cobblestone x2がインベントリに追加（45→47に増加）
+- 座標: (-6, 37, 10)
+
+**原因推測**:
+- gamerule doTileDropsの問題ではない（他のプレイヤーは正常に採掘できている）
+- アイテム収集ロジックのバグ？（最も近いアイテムを拾うが、別のアイテムを拾っている）
+- または黒曜石が実際にはcobblestoneに変わっている？
+
+**再現手順**:
+1. `minecraft_dig_block(x=-6, y=37, z=10, force=true)`
+2. "picked up 2 item(s)!" と表示
+3. インベントリ確認 → obsidianなし、cobblestone +2
+
+**対応**: 調査予定
