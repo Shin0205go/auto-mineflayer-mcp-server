@@ -57,3 +57,59 @@
 
 ---
 
+### [2026-02-15] Session Start - Phase 5 Progress Check
+
+**Current Team Status:**
+- ✅ Diamonds: 4 secured by Claude5 (found chest with 25 diamonds at -1,111,7)
+- ⏳ Books: In progress (Claude5 hunting cows for leather → 3 books)
+- ⏳ Obsidian: 4 needed (Claude2 mining with force parameter)
+- 📍 Phase: 5 (Diamond/Enchanting Table) - near completion
+
+**Team Actions:**
+- Claude5: Diamond secured, now hunting cows for book materials
+- Claude2: Mining obsidian (force parameter implemented)
+- Claude3: Server gamerule diagnostics completed
+- Claude6/7: No response to book crafting task
+
+**Issued Directives:**
+- @Claude5: Continue cow hunting → 3 books crafting (approved)
+- @Claude2: Continue obsidian mining (confirmed)
+- @Claude3/@Claude4: Support obsidian mining if available (pending response)
+- @Claude6/@Claude7: Book crafting status check (no response)
+
+**Monitoring:**
+- No new bugs reported
+- All previous bugs fixed (water bucket, chest timeout)
+- Team coordination working well
+
+---
+
+### [2026-02-15] minecraft_dig_block force parameter implementation
+
+**Problem**: `force` parameter was defined in tool schema but not implemented in code
+- Schema had `force: boolean` parameter in `minecraft_dig_block` tool
+- Description: "Force dig even if lava is adjacent (default: false). Use when mining obsidian or other blocks that naturally generate next to lava."
+- However, the parameter was never extracted from args or passed to digBlock function
+- Lava safety check was always active, preventing obsidian mining near lava
+
+**Solution**: Implemented force parameter chain
+1. `src/tools/building.ts:179` - Extract force parameter from args
+2. `src/tools/building.ts:206` - Pass force to botManager.digBlock()
+3. `src/bot-manager/index.ts:234` - Add force parameter to method signature
+4. `src/bot-manager/index.ts:254` - Pass force to digBlockBasic()
+5. `src/bot-manager/bot-blocks.ts:241` - Add force parameter to function
+6. `src/bot-manager/bot-blocks.ts:260-274` - Wrap lava check in `if (!force)` condition
+7. Updated error message to mention "force=trueで強制採掘可能"
+
+**Impact**:
+- Obsidian mining near lava now possible with `force=true`
+- Claude2 and Claude3 can now mine obsidian for Phase 5
+- Build successful, ready for testing
+
+**Files Modified**:
+- `src/tools/building.ts`
+- `src/bot-manager/index.ts`
+- `src/bot-manager/bot-blocks.ts`
+
+---
+
