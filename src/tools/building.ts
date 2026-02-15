@@ -114,6 +114,32 @@ export const buildingTools = {
       required: [],
     },
   },
+
+  minecraft_use_item_on_block: {
+    description: "Use a held item on a block at the specified coordinates. Use cases: bucket on water/lava to collect fluid, water_bucket to place water, flint_and_steel to ignite, bone_meal on crops, shears on sheep, etc.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        item_name: {
+          type: "string",
+          description: "Item to use (e.g., 'bucket', 'water_bucket', 'lava_bucket', 'flint_and_steel', 'bone_meal')",
+        },
+        x: {
+          type: "number",
+          description: "X coordinate of target block",
+        },
+        y: {
+          type: "number",
+          description: "Y coordinate of target block",
+        },
+        z: {
+          type: "number",
+          description: "Z coordinate of target block",
+        },
+      },
+      required: ["item_name", "x", "y", "z"],
+    },
+  },
 };
 
 export async function handleBuildingTool(
@@ -224,6 +250,20 @@ export async function handleBuildingTool(
     case "minecraft_pillar_up": {
       const height = Math.min((args.height as number) || 1, 15);
       const result = await botManager.pillarUp(username, height);
+      return result;
+    }
+
+    case "minecraft_use_item_on_block": {
+      const itemName = args.item_name as string;
+      const x = args.x as number;
+      const y = args.y as number;
+      const z = args.z as number;
+
+      if (!itemName) {
+        throw new Error("item_name is required");
+      }
+
+      const result = await botManager.useItemOnBlock(username, itemName, x, y, z);
       return result;
     }
 
