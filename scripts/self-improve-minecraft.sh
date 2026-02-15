@@ -163,7 +163,7 @@ PROMPT
   echo "▶️  Starting Claude Code ($BOT_NAME)..."
   echo "   Log: $LOGFILE"
 
-  # Run Claude with timeout (10 minutes)
+  # Run Claude with timeout (15 minutes)
   # 環境変数でMCPサーバーに設定を渡す
   export BOT_USERNAME="$BOT_NAME"
   export ENABLE_VIEWER="${ENABLE_VIEWER:-false}"
@@ -174,10 +174,10 @@ PROMPT
     --model $MODEL > "$LOGFILE" 2>&1 &
   CLAUDE_PID=$!
 
-  # Wait up to 600 seconds (10 minutes)
+  # Wait up to 900 seconds (15 minutes)
   EXIT_CODE=0
   WAITED=0
-  while [ $WAITED -lt 600 ]; do
+  while [ $WAITED -lt 900 ]; do
     if ! kill -0 $CLAUDE_PID 2>/dev/null; then
       wait $CLAUDE_PID 2>/dev/null
       EXIT_CODE=$?
@@ -190,7 +190,7 @@ PROMPT
   # Kill if still running (プロセスグループごと)
   if kill -0 $CLAUDE_PID 2>/dev/null; then
     echo "" | tee -a "$LOGFILE"
-    echo "⏱️  Timeout reached (10 minutes), stopping..." | tee -a "$LOGFILE"
+    echo "⏱️  Timeout reached (15 minutes), stopping..." | tee -a "$LOGFILE"
     pkill -P $CLAUDE_PID 2>/dev/null || true
     kill $CLAUDE_PID 2>/dev/null || true
     sleep 2
@@ -206,7 +206,7 @@ PROMPT
   if [ ${EXIT_CODE:-0} -eq 0 ]; then
     echo "✅ Completed successfully"
   elif [ ${EXIT_CODE:-0} -eq 124 ]; then
-    echo "⏱️  Timeout (10 minutes) - moving to next loop"
+    echo "⏱️  Timeout (15 minutes) - moving to next loop"
   else
     echo "❌ Exited with code ${EXIT_CODE:-0}"
   fi
