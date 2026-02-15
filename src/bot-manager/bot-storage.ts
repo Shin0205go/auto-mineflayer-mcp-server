@@ -81,6 +81,9 @@ export async function storeInChest(
     throw new Error(`No ${itemName} in inventory. Have: ${inventory}`);
   }
 
+  // Wait a moment if chest was recently used (prevent timing issues)
+  await new Promise(resolve => setTimeout(resolve, 200));
+
   const chest = await bot.openContainer(chestBlock);
   const storeCount = count || item.count;
   const actualCount = Math.min(storeCount, item.count);
@@ -111,6 +114,9 @@ export async function takeFromChest(
   if (!chestBlock) {
     throw new Error("No chest within 4 blocks.");
   }
+
+  // Wait a moment if chest was recently used (prevent timing issues)
+  await new Promise(resolve => setTimeout(resolve, 200));
 
   const chest = await bot.openContainer(chestBlock);
   const items = chest.containerItems();

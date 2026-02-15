@@ -36,16 +36,19 @@
 - **ファイル**: `src/bot-manager/bot-blocks.ts:1210-1236`
 - **ステータス**: ✅ 修正完了・ビルド成功
 
-## [2026-02-15] minecraft_take_from_chest timeout error
+## [2026-02-15] minecraft_take_from_chest timeout error ✅ **FIXED**
 
 - **症状**: `minecraft_take_from_chest`で「Event windowOpen did not fire within timeout of 20000ms」エラーが発生。`minecraft_open_chest`は成功してチェスト内容を表示できるが、その直後の`minecraft_take_from_chest`がタイムアウトする
 - **再現手順**:
   1. `minecraft_open_chest(x, y, z)` → 成功（チェスト内容表示）
   2. `minecraft_take_from_chest(item_name, count)` → タイムアウトエラー
-- **原因**: `minecraft_take_from_chest`がチェストを再度開こうとしているが、既に開いているウィンドウの処理が正しくない可能性
-- **影響**: チェストからアイテムを取得できないため、拠点の共有リソースにアクセス不可
-- **回避策**: 調査中
-- **修正予定**: `src/tools/crafting.ts`の`minecraft_take_from_chest`実装を調査
-- **ファイル**: `src/tools/crafting.ts`
-- **ステータス**: ⚠️ 未修正（調査中）
+- **原因**: `minecraft_open_chest`がチェストを閉じた直後に`minecraft_take_from_chest`が再度開こうとすると、タイミング問題で失敗する。また、エージェントが誤って両方を連続呼び出ししていた（不要）。
+- **修正内容**:
+  1. ツールの説明文を改善 - `minecraft_take_from_chest`と`minecraft_store_in_chest`は自動でチェストを開くことを明記
+  2. `minecraft_open_chest`の説明に「取得/保存には使わず、閲覧のみ」と明記
+  3. `takeFromChest`と`storeInChest`に200msの待機時間を追加（タイミング問題回避）
+- **ファイル**:
+  - `src/tools/storage.ts` (ツール説明)
+  - `src/bot-manager/bot-storage.ts` (実装)
+- **ステータス**: ✅ 修正完了 (2026-02-15)
 

@@ -49,3 +49,15 @@
 **回避策**: 溶岩源の上や隣の空気ブロックに対して水バケツを使う（設置する）
 
 **対応**: Claude1が調査中
+
+## 2026-02-15: minecraft_smelt が指定数より少ない量しか精錬しない
+
+**症状**: `minecraft_smelt(item_name="raw_iron", count=8)` を実行
+- インベントリに raw_iron x8 あり
+- 実行結果: "Smelted 8x raw_iron" と表示される
+- しかし実際のインベントリには iron_ingot x2 しかない（8個ではなく2個）
+- raw_iron は消えている
+
+**影響**: Phase 4（鉄装備）で必要な鉄インゴットが不足する可能性
+
+**調査必要**: `src/bot-manager/bot-crafting.ts` または `src/tools/crafting.ts` の smelting ロジックを確認
