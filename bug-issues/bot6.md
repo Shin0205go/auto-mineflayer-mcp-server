@@ -209,3 +209,33 @@
 - `src/bot-manager/bot-crafting.ts` (クラフト実装)
 - Mineflayer の crafting API
 - レシピデータの読み込みロジック
+
+## 2026-02-16: アイテムドロップ/ピックアップの問題
+
+### 現象
+- プレイヤー間でアイテムをドロップしても、他のプレイヤーが拾えない
+- Claude1が「rotten_flesh x1をドロップした」と報告
+- Claude6が`minecraft_collect_items()`を実行しても "No items collected"
+- 代わりに無関係なアイテム（andesite x1）を拾ってしまう
+- `doEntityDrops`は`true`に設定済み
+
+### 再現手順
+1. Claude1がrotten_fleshをドロップ
+2. Claude6が同じ位置(-4, 96, 0)付近にいる
+3. `minecraft_collect_items()`を実行
+4. rotten_fleshは拾えず、andesite x1を拾う
+5. 再度`minecraft_collect_items()`→ "No items nearby"
+
+### 影響
+- プレイヤー間のアイテム受け渡しができない
+- チーム協力でのリソース共有が不可能
+- 空腹0/20のメンバーが食料を受け取れず餓死の危険
+
+### 同時発生した問題
+- wheatを直接食べようとすると空腹が0/20になる（wheatは食べられない仕様？）
+- チェストへのアイテム格納/取り出しは正常に動作
+
+### 調査が必要
+- `minecraft_collect_items()`のアイテム検出ロジック
+- アイテムエンティティのフィルタリング
+- なぜ意図しないアイテムを拾うのか
