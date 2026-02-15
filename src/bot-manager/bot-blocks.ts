@@ -1212,6 +1212,7 @@ export async function useItemOnBlock(
     await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
     await new Promise(resolve => setTimeout(resolve, 100));
 
+<<<<<<< Updated upstream
     // For buckets on liquid blocks, use activateItem instead of activateBlock
     // This is the correct way to collect water/lava with buckets in Mineflayer
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
@@ -1221,16 +1222,28 @@ export async function useItemOnBlock(
       bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
     } else {
       // For other items, use activateBlock
+=======
+    // For buckets on water/lava, try activateItem instead of activateBlock
+    // activateItem uses the item in hand towards the block you're looking at
+    if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
+      await bot.activateItem();
+    } else {
+      // For other items (water_bucket, lava_bucket, etc), use activateBlock
+>>>>>>> Stashed changes
       await bot.activateBlock(block);
     }
 
-    // Wait longer for inventory to update properly
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Wait longer for inventory to update properly (extended to 1500ms)
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
     // Force inventory update by checking actual inventory, not just heldItem
     bot.updateHeldItem();
     const heldAfter = bot.heldItem;
     const heldName = heldAfter?.name || "nothing";
+
+    // Debug: log all bucket-related items
+    const buckets = bot.inventory.items().filter(i => i.name.includes("bucket"));
+    console.log(`[DEBUG] Buckets in inventory after action:`, buckets.map(b => b.name));
 
     // Detect what happened based on item type
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water")) {
