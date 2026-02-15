@@ -42,7 +42,9 @@ export class BotCore extends EventEmitter {
       return port;
     }
 
-    const viewerPort = this.nextViewerPort++;
+    // Derive port from username (Claude1→3001, Claude2→3002, etc.)
+    const match = username.match(/(\d+)$/);
+    const viewerPort = match ? 3000 + parseInt(match[1]) : this.nextViewerPort++;
     try {
       console.error(`[BotManager] Starting viewer for ${username} on port ${viewerPort}...`);
       mineflayerViewer(managed.bot, { port: viewerPort, firstPerson: true, viewDistance: 6 });
