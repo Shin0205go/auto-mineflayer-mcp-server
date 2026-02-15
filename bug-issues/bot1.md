@@ -1287,3 +1287,106 @@
 
 ---
 
+### [2026-02-16] NEW Session #10 - Phase 5 Progress
+
+**Session Start Status:**
+- 📍 Phase: 5 (Enchanting Table) - In Progress
+- ✅ Diamonds: 14 in chest/inventory (need 2) - COMPLETE
+- ✅ Books: 2 held by Claude4 (need 3) - 1 more needed
+- ✅ Obsidian: 2 in chest (need 4) - 2 more needed
+- ⚠️ Gamerule Issues: doTileDrops/doMobLoot/doEntityDrops all reset to false
+
+**Key Discovery:**
+- ❌ **Bots CANNOT use /commands**: minecraft_chat with "/" prefix doesn't work for bots
+- ✅ **Solution**: Human player or specific bot permission needed for gamerule commands
+- ✅ Claude6 successfully executed gamerule fixes (doTileDrops=true, doMobLoot=true, doEntityDrops=true)
+- ✅ Updated MEMORY.md with correct information about bot /command limitation
+
+**Team Assignments:**
+- Claude4: Waiting at base with book x2, diamond x14, ready to craft enchanting table
+- Claude5: Obsidian mining at (-8,35,9) - failed once due to doTileDrops, retrying after gamerule fix
+- Claude6: Obsidian mining support, gamerule fix completed
+- Claude2/Claude3/Claude7: Sugar cane exploration for book #3 (need 24 sugar cane total)
+
+**Gamerule Fix Timeline:**
+1. Claude5 reported "No items dropped" during obsidian mining
+2. Claude1 attempted /gamerule commands → no response (bot limitation)
+3. Directed Claude6 to execute gamerule commands
+4. Claude6 successfully fixed all 3 gamerules (doTileDrops, doMobLoot, doEntityDrops)
+5. Claude4 and Claude2 also verified gamerules (redundant but confirmed)
+
+**Current Progress:**
+- Obsidian: 2/4 (waiting for Claude5/Claude6 mining reports)
+- Books: 2/3 (waiting for sugar cane discovery)
+- Phase 5 completion: ~50% (materials gathering in progress)
+
+**Leadership Actions:**
+- Coordinated gamerule fix (delegated to Claude6)
+- Updated MEMORY.md with bot /command limitation
+- Directed team tasks (obsidian mining, sugar cane exploration)
+- Resolved Claude2 death confusion (false alarm)
+
+**No New Bugs This Session:**
+- All tools working as expected
+- Gamerule issue was server configuration, not code bug
+- Focus on team coordination and resource gathering
+
+---
+
+### [2026-02-16] NEW Session #11 - Water Bucket Diagnostics Enhanced
+
+**Session Start Status:**
+- 📍 Phase: 3 (Stone Tools) - In Progress
+- ✅ Gamerules: Fixed by Claude5 (doTileDrops, doMobLoot, doEntityDrops)
+- ⚠️ Team Status: No responses for 3+ minutes (investigating)
+
+**Bug Fix - Water Bucket Diagnostics v2:**
+- **Problem**: bucket → water_bucket fails, DEBUG logs not appearing
+- **Root Cause**: block.name likely doesn't match "water" or "flowing_water"
+- **Solution**: Enhanced diagnostic logging
+  - File: `src/bot-manager/bot-blocks.ts:1218-1221`
+  - Changed DEBUG condition: `if (itemName === "bucket")` → `if (itemName === "bucket" || itemName === "water_bucket" || itemName === "lava_bucket")`
+  - Added block.type to output (reveals numeric block ID)
+  - New output: `[DEBUG useItemOnBlock] Item "bucket" on block: "water" (type: 123) at (x,y,z)`
+- **Purpose**: Identify actual block.name and block.type for water blocks in this Minecraft version
+- **Build**: ✅ Successful (tsc clean)
+- **Status**: ⏳ AWAITING MCP RESTART + TEAM TESTING
+
+**Next Actions:**
+1. Wait for team responses
+2. If water bucket bug reported, restart MCP server to deploy fix
+3. Request detailed bug report with new DEBUG output
+
+---
+
+### [2026-02-16] NEW Session #12 - Phase 2 Food Crisis (Emergency)
+
+**Session Start Status:**
+- 📍 Phase: 2 (Food Stabilization) - CRITICAL
+- ⚠️ FOOD CRISIS: 0 food in chest, Claude1 hunger 20/20
+- Team Status: Claude2,3,4,5,7 all assigned to food tasks
+
+**Team Assignments:**
+- Claude2: Wheat seeds exploration + farm construction
+- Claude3: Fishing rod crafting (hunting spiders for string)
+- Claude4: Ground exploration for food/animals
+- Claude5: Farm construction (wheat_seeds x2, collecting +2 more)
+- Claude7: Animal exploration (100m) → assist Claude5 if no animals
+
+**Bug Fixes This Session:**
+
+1. **bone_meal error diagnostics enhanced** (🔧 IMPROVED)
+   - File: `src/bot-manager/bot-blocks.ts:1219-1221,1265-1267`
+   - Added bone_meal to DEBUG logging condition (line 1219)
+   - Enhanced error message to include block.name (line 1267)
+   - Purpose: Diagnose "invalid operation" error reported by Claude2 in Session #9
+   - Status: ✅ Built, awaiting MCP restart + team testing
+
+**Current Status:**
+- Leadership: Coordinating 5 team members on Phase 2 food tasks
+- No new bugs reported this session
+- All tools functioning as expected
+- Focus: Team coordination + diagnostic improvements
+
+---
+
