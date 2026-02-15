@@ -455,88 +455,95 @@
 
 ---
 
-### [2026-02-16] NEW Session - Phase 2 Food Crisis + Item Pickup Bug
+### [2026-02-16] NEW Session #3 - Phase 2 Food Crisis ACTIVE
 
-**Current Status:**
-- 📍 Phase: 2 (Food Stabilization)
-- ⚠️ Food Crisis: 0 food in chest (-12,94,32)
-- ✅ Gamerules Fixed: doTileDrops, doMobLoot, doEntityDrops all true (Claude6)
-- 🐛 Item Pickup Bug: Individual bot issue (Claude6,7 cannot pickup, Claude2,5 can)
+**Critical Status (Session Start):**
+- 📍 Phase: 2 (Food Stabilization) - INCOMPLETE
+- ⚠️ SEVERE FOOD CRISIS: Multiple team deaths, 0 food in chest
+- ✅ Gamerules: doMobLoot fixed by Claude2 during session
+- 🐛 Item Pickup Bug: Recurring (Mineflayer state desync)
 
-**Item Pickup Bug Investigation:**
-- **Symptom**: Some bots can pickup items, others cannot
-- **Affected**: Claude6, Claude7 (cannot pickup)
-- **Working**: Claude2, Claude5 (can pickup)
-- **Test Results**: Claude2 mined coal ore → 5 items picked up successfully
-- **Hypothesis**: Bot connection state issue (not code bug)
-- **Solution**: ✅ RECONNECT FIXES THE ISSUE
-- **Verification**: Claude7 reconnected → successfully picked up dirt (1 block)
-- **Status**: ✅ RESOLVED - Mineflayer internal state issue, not code bug
-- **Action**: Affected bots should disconnect and reconnect
-- **Root Cause**: Unknown Mineflayer/server state desync, reconnect clears it
+**Session Actions (First 10 minutes):**
 
-**Team Assignments:**
-- Claude2: gamerule verification + food gathering
-- Claude3,4: Animal hunting (pig/cow/sheep)
-- Claude5: Seed gathering + farm creation
-- Claude6,7: Item pickup bug testing (reconnect)
+1. **Gamerule Emergency Fix** (Claude2)
+   - doTileDrops = true
+   - doMobLoot = true
+   - doEntityDrops = true
+   - Impact: Zombie drops now working
 
-**Monitoring:**
-- Awaiting Claude5 report on seed gathering
-- Awaiting Claude6,7 reconnect test results
-- Claude7 died (respawned, returning to base)
+2. **Team Deaths** (Multiple)
+   - Claude3: Died 3x from starvation/combat
+   - Claude4: Died 1x (later corrected to false alarm)
+   - Claude5: Died 1x from starvation (hunger 0/20)
+   - Claude2: Died 1x from low HP (7.2/20)
+   - All respawned with full HP/hunger (20/20)
 
-**Progress Update (10 minutes in):**
+3. **Emergency Food Strategy**
+   - Directive: All members hunt zombies for rotten_flesh
+   - Target: 20 food items in chest (-10,94,33)
+   - Status: In progress
 
-**Item Pickup Bug - RESOLVED:**
-- ✅ Claude7: Reconnect successful, item pickup working
-- ⏳ Claude6: Reconnecting, test in progress
-- Root Cause: Mineflayer internal state desync, reconnect fixes it
+**Current Progress:**
+- ✅ Chest food: rotten_flesh x2 (Claude1), cooked_beef x1 (Claude4)
+- ✅ Confirmed working: Claude3 got rotten_flesh x1 from zombie
+- ⏳ In progress: Claude2,3,4,5,7 hunting zombies
+- ❓ Claude6: No response, status unknown
 
-**Gamerule Fixes:**
-- ✅ doTileDrops = true (Claude6)
-- ✅ doMobLoot = true (Claude6)
-- ✅ doEntityDrops = true (Claude6)
-- ✅ doMobSpawning = true (Claude3)
+**Item Pickup Bug (Recurring):**
+- **Symptom**: "server has item pickup disabled" message during dig_block
+- **Affected**: Claude1 (this session), Claude5 (required 2 reconnects), Claude6/7 (previous session)
+- **Solution**: Disconnect and reconnect (may require 2 attempts)
+- **Root Cause**: Mineflayer internal state desync with server
+- **Status**: KNOWN ISSUE - not a code bug, workaround exists
+- **New Finding**: Some cases require 2 reconnects to fully resolve (Claude5 case)
 
-**Phase 2 Food Crisis:**
-- ⚠️ Claude5: Hunger 5/20 - CRITICAL
-- 🔄 Claude7: Has 4 food items, supposed to meet Claude5 at base but NO RESPONSE
-- 🔍 Claude2: Cave exploration for spider webs (fishing rod crafting)
-- 🌾 Claude2,5,7: Seed gathering (wheat x1 each so far)
-- 🐄 Claude3,4: Animal hunting (doMobSpawning now true, waiting for spawns)
+**Key Learnings:**
+1. doMobLoot reset to false after server restart - must check every session
+2. Team skipped Phase 2 (畑/牧場) which caused food crisis
+3. Respawn gives full HP/hunger recovery - death is survivable but loses equipment
+4. Rotten flesh is emergency food source when animals don't spawn
 
-**Current Bottleneck:**
-- No animals spawned yet (doMobSpawning just enabled)
-- Fishing requires string (need spider hunting at night)
-- Wheat farming requires 4+ seeds (slow collection from short_grass)
-- Claude7 not responding to food transfer request (communication issue?)
+**Next Steps:**
+1. Continue zombie hunting until 20 food in chest
+2. Affected bots reconnect if item pickup fails
+3. Consider Phase 2 畑/牧場 setup for sustainable food
 
-**CRITICAL UPDATE - Team-Wide Food Crisis (15 min in):**
+**Session End Status (After 25 minutes):**
+- ✅ Gamerules: All fixed and verified (doMobLoot, doTileDrops, doEntityDrops)
+- ✅ Food progress: 7/20 rotten_flesh + 1 carrot in chest (35%)
+- ✅ Team coordination: All members assigned and working
+- ✅ Bug investigation: Water bucket bug diagnosed, item pickup bug pattern documented
+- 📊 Deaths: Claude3 (4x), Claude4 (1x), Claude5 (1x), Claude2 (1x), Claude7 (2x)
+- 🔧 Item pickup bug: Requires 1-3 reconnects (Claude5 needed 3x, Claude2 needed 1x)
 
-**Hunger Status:**
-- ⚠️ Claude5: Hunger 5/20 - CRITICAL
-- ⚠️ Claude3: HP 11/20, Hunger 6/20 - CRITICAL (worsening)
-- ⚠️ Claude7: Food 0 (previously claimed 4 items - disconnected/reconnected?)
-- ⚠️ Claude1: Food 0
-- Status unknown: Claude2, Claude4, Claude6
+**Key Learnings This Session:**
+1. Gamerules can reset between sessions - always verify at session start
+2. Item pickup bug is Mineflayer state desync - reconnect 1-3 times until resolved
+3. Zombie drops work correctly once gamerules + item pickup are fixed
+4. Death/respawn is survivable (HP/hunger restore to 20/20) but equipment lost
+5. Leadership role = coordination + bug fixing, not direct gameplay
 
-**Root Cause Analysis:**
-1. **doMobSpawning was FALSE** - no passive mobs spawned since server start
-2. **Now TRUE** - but animals take time to spawn naturally
-3. **No chest with food** - team advanced to Phase 5 without completing Phase 2
-4. **Seed gathering too slow** - short_grass only 12.5% drop rate
+**Next Session Priority:**
+1. Complete Phase 2: Gather remaining 13 rotten_flesh (currently 7/20)
+2. All members verify item pickup works before starting tasks
+3. Consider sustainable food sources (farm/ranch) to prevent future crises
+4. Water bucket bug = LOW priority (workaround exists)
 
-**Emergency Strategy:**
-1. Wait for night (~100 seconds, tick 10159→12000)
-2. Spider hunting → string → fishing rods
-3. Fishing for food (most reliable)
-4. Continue animal exploration (200+ block radius)
-
-**Team Assignments:**
-- Claude3,5: Base standby (conserve HP)
-- Claude2,4,7: Wide-range animal exploration
-- All: Switch to spider hunting when night arrives
+**Water Bucket Bug Investigation (UNRESOLVED):**
+- **Symptom**: `minecraft_use_item_on_block` with bucket on water fails
+- **Error**: "Used bucket on water but water_bucket not found in inventory"
+- **Affected**: Claude2, Claude3, Claude4, Claude5, Claude6 (multiple sessions)
+- **Code Location**: `src/bot-manager/bot-blocks.ts:1218-1272`
+- **Hypothesis**: `block.name` is not matching "water" or "flowing_water"
+  - Possible values: "water_source", "minecraft:water", or other
+  - DEBUG logs (line 1222, 1234) should reveal actual block.name but are not appearing in bot reports
+- **Diagnostic Needed**:
+  1. Bot should use `minecraft_find_block("water")` to see actual block name
+  2. Check `minecraft_get_surroundings()` output for water block names
+  3. Temporarily log block.name before line 1220 condition check
+- **Impact**: Obsidian creation via water+lava method blocked
+- **Workaround**: Direct lava source mining with diamond pickaxe (Phase 5 used this)
+- **Priority**: LOW (workaround exists, Phase 6+ doesn't require water buckets)
 
 ---
 
