@@ -33,6 +33,7 @@ import {
   digBlock as digBlockBasic,
   levelGround as levelGroundBasic,
   activateBlock as activateBlockBasic,
+  useItemOnBlock as useItemOnBlockBasic,
 } from "./bot-blocks.js";
 
 // Import bot-crafting functions
@@ -349,6 +350,12 @@ export class BotManager extends BotCore {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
     return await useItemBasic(managed.bot, itemName);
+  }
+
+  async useItemOnBlock(username: string, itemName: string, x: number, y: number, z: number): Promise<string> {
+    const managed = this.getBotByUsername(username);
+    if (!managed) throw new Error(`Bot ${username} not found`);
+    return await useItemOnBlockBasic(managed, x, y, z, itemName, this.moveTo.bind(this));
   }
 
   async dropItem(username: string, itemName: string, count?: number): Promise<string> {
