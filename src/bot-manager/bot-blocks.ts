@@ -237,7 +237,8 @@ export async function digBlock(
   delay: (ms: number) => Promise<void>,
   moveToBasic: (username: string, x: number, y: number, z: number) => Promise<{ success: boolean; message: string }>,
   getBriefStatus: (username: string) => string,
-  autoCollect: boolean = true
+  autoCollect: boolean = true,
+  force: boolean = false
 ): Promise<string> {
   const bot = managed.bot;
   const username = managed.username;
@@ -257,16 +258,20 @@ export async function digBlock(
   const blockName = block.name;
 
   // Check for lava in adjacent blocks before digging
-  const adjacentPositions = [
-    blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
-    blockPos.offset(0, 1, 0), blockPos.offset(0, -1, 0),
-    blockPos.offset(0, 0, 1), blockPos.offset(0, 0, -1),
-  ];
-  for (const adjPos of adjacentPositions) {
-    const adjBlock = bot.blockAt(adjPos);
-    if (adjBlock?.name === "lava") {
-      console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
-      return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`;
+  // Check for adjacent lava unless force=true
+  console.log(`[Dig] force parameter: ${force}`);
+  if (!force) {
+    const adjacentPositions = [
+      blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
+      blockPos.offset(0, 1, 0), blockPos.offset(0, -1, 0),
+      blockPos.offset(0, 0, 1), blockPos.offset(0, 0, -1),
+    ];
+    for (const adjPos of adjacentPositions) {
+      const adjBlock = bot.blockAt(adjPos);
+      if (adjBlock?.name === "lava") {
+        console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
+        return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`;
+      }
     }
   }
 
@@ -1212,24 +1217,16 @@ export async function useItemOnBlock(
     await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
     await new Promise(resolve => setTimeout(resolve, 100));
 
-<<<<<<< Updated upstream
     // For buckets on liquid blocks, use activateItem instead of activateBlock
     // This is the correct way to collect water/lava with buckets in Mineflayer
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
       const initialItem = bot.heldItem?.name;
       console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
       bot.activateItem();
+      await new Promise(resolve => setTimeout(resolve, 500)); // Wait for action to complete
       bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
     } else {
-      // For other items, use activateBlock
-=======
-    // For buckets on water/lava, try activateItem instead of activateBlock
-    // activateItem uses the item in hand towards the block you're looking at
-    if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
-      await bot.activateItem();
-    } else {
       // For other items (water_bucket, lava_bucket, etc), use activateBlock
->>>>>>> Stashed changes
       await bot.activateBlock(block);
     }
 

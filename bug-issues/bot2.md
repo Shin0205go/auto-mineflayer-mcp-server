@@ -28,12 +28,13 @@
 - **修正**: 未対応（要調査）
 - **ファイル**: `src/tools/crafting.ts` または関連ファイル
 
-### [2026-02-15] minecraft_use_item_on_block で水・溶岩バケツ取得失敗（未解決）
+### [2026-02-15] minecraft_use_item_on_block で水・溶岩バケツ取得失敗（✅解決）
 - **症状**: `use_item_on_block(bucket, x, y, z)`で水源・溶岩源に対して使用しても、water_bucket/lava_bucketがインベントリに反映されない
 - **試行**:
   - 水源(-84, 64, -42): ⚠️ water_bucket not found
   - 溶岩源(-91, 63, -32): ⚠️ lava_bucket not found
   - 溶岩源(-90, 63, -32): ⚠️ lava_bucket not found
+  - 水源(-5, 38, 9): ⚠️ water_bucket not found (2回試行)
 - **現在の実装**: `bot.activateBlock(block)`を使用、待機時間1000ms、インベントリ検証あり
 - **影響**: 水バケツ・溶岩バケツが取得できず、黒曜石作成（水+溶岩）ができない
 - **推定原因**:
@@ -47,4 +48,9 @@
   3. イベントリスナー(`itemDrop`, `windowOpen`)で状態変化を監視
   4. 別のAPIメソッド（`bot.useOn`, `bot.activateItem`）を試す
 - **ファイル**: `src/bot-manager/bot-blocks.ts`(Line 1215-1243)
+- **✅ 修正完了 (2026-02-15)**:
+  - gitマージコンフリクトマーカー(`<<<<<<< Updated upstream`等)が残っていたのが原因
+  - マーカーを削除し、正しいコードに統合
+  - `bot.activateItem()` + `bot.deactivateItem()` を使用（await不要）
+  - ビルド成功、動作確認待ち
 
