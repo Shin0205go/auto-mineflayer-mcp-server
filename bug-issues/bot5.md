@@ -70,5 +70,22 @@
 - **ファイル**: `src/bot-manager/bot-crafting.ts` (line 405-444)
 - **ステータス**: 🔴 未解決 (2026-02-16確認)
 
+### [2026-02-17] stick クラフト bug - ROOT CAUSE IDENTIFIED
+- **症状**: dark_oak_planks x4 を持っているのに stick craft が失敗
+- **エラー**: "Failed to craft stick from dark_oak_planks: Error: missing ingredient"
+- **根本原因**: bot-crafting.ts line 663-665
+  ```typescript
+  if ((itemName === "stick" || itemName === "crafting_table") && allRecipes.length > 0) {
+    compatibleRecipe = allRecipes[0];  // <- BUG: 互換性チェックなしで使用！
+  }
+  ```
+  - `bot.recipesAll()` がなんらかのレシピを返す（oak_planks等）
+  - その直後にすぐそのレシピを使用 → 互換性検証スキップ
+  - dark_oak_planks では実行失敗
+- **修正案**: lines 663-665 を削除して、常に compatibleRecipe search を実行させる
+  - または `allRecipes` をフィルタして `dark_oak_planks` 対応レシピを探す
+- **ファイル**: `src/bot-manager/bot-crafting.ts` (lines 663-665)
+- **ステータス**: 🔧 修正実装予定
+
 ---
 

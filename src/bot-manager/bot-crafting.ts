@@ -703,6 +703,46 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     // The planks/sticks filter below is only needed when recipesAll() returns
     // multiple native recipes and we need to pick the right one for our plank type.
     let compatibleRecipe: any;
+<<<<<<< HEAD
+
+    // BUGFIX (2026-02-17): Never use allRecipes[0] directly for stick/crafting_table!
+    // Always validate compatibility even for simple recipes, because bot.recipesAll() may
+    // return recipes that don't work with our plank types (dark_oak_planks etc).
+    // Old code at lines 663-667 skipped validation, causing "missing ingredient" errors.
+
+    // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
+    // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
+    compatibleRecipe = allRecipes.find(recipe => {
+      const delta = recipe.delta as Array<{ id: number; count: number }>;
+
+      // Check if this recipe uses planks and sticks (wooden tool pattern)
+      let needsPlanks = false;
+      let needsSticks = false;
+      let planksCount = 0;
+      let sticksCount = 0;
+
+      for (const d of delta) {
+        if (d.count >= 0) continue; // Skip output items
+
+        const ingredientItem = mcData.items[d.id];
+        if (!ingredientItem) continue;
+
+        if (ingredientItem.name.endsWith("_planks")) {
+          needsPlanks = true;
+          planksCount = Math.abs(d.count);
+        } else if (ingredientItem.name === "stick") {
+          needsSticks = true;
+          sticksCount = Math.abs(d.count);
+        }
+      }
+
+      // Verify we have enough materials
+      const hasEnoughPlanks = planksCount === 0 || totalPlanks >= planksCount;
+      const hasEnoughSticks = sticksCount === 0 || totalSticks >= sticksCount;
+
+      return (needsPlanks || needsSticks) && hasEnoughPlanks && hasEnoughSticks;
+    });
+=======
     if (allRecipes.length === 1) {
       compatibleRecipe = allRecipes[0];
       console.error(`[Craft] Using single recipe directly for ${itemName}`);
@@ -734,6 +774,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         return (needsPlanks || needsSticks) && hasEnoughPlanks && hasEnoughSticks;
       });
     }
+>>>>>>> origin/main
 
     if (!compatibleRecipe) {
       throw new Error(`Cannot craft ${itemName}: No compatible recipe found. Have ${totalPlanks} planks and ${totalSticks} sticks. Found ${allRecipes.length} recipes total. This may be a Minecraft version compatibility issue.`);
