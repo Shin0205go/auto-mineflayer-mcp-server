@@ -386,7 +386,10 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
 
   if (fallDistance > 20) {
     // Check if target or nearby blocks are water
+<<<<<<< HEAD
+=======
     const targetBlock = bot.blockAt(targetPos);
+>>>>>>> origin/main
     const isWaterNearby = () => {
       for (let dx = -1; dx <= 1; dx++) {
         for (let dy = -1; dy <= 1; dy++) {
