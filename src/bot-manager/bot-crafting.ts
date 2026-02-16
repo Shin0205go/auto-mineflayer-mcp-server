@@ -493,49 +493,56 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
     // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
     // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
-    const compatibleRecipe = allRecipes.find(recipe => {
-      // FIX: Handle manual recipe for stick/crafting_table which don't have proper delta
-      if ((itemName === "stick" || itemName === "crafting_table") && allRecipes.length === 1) {
-        // This is our manual recipe - use it directly
-        return true;
-      }
 
-      const delta = recipe.delta as Array<{ id: number; count: number }>;
-      if (!delta || !Array.isArray(delta)) {
-        console.error(`[Craft] Skipping recipe with invalid delta: ${JSON.stringify(recipe)}`);
-        return false;
-      }
+    // CRITICAL FIX: For stick/crafting_table, if we have a manual recipe, use it directly
+    // The manual recipe has the correct delta format but wasn't being matched before
+    let compatibleRecipe = null;
 
-      // Check if this recipe uses planks and sticks (wooden tool pattern)
-      let needsPlanks = false;
-      let needsSticks = false;
-      let planksCount = 0;
-      let sticksCount = 0;
-
-      for (const d of delta) {
-        if (d.count >= 0) continue; // Skip output items
-
-        const ingredientItem = mcData.items[d.id];
-        if (!ingredientItem) {
-          console.error(`[Craft] Cannot find item data for id ${d.id}`);
-          continue;
+    // Special handling for stick and crafting_table which have manual recipes
+    if ((itemName === "stick" || itemName === "crafting_table") && allRecipes.length > 0) {
+      // Use the first (and likely only) recipe - it's our manual recipe
+      compatibleRecipe = allRecipes[0];
+      console.error(`[Craft] Using manual recipe for ${itemName}`);
+    } else {
+      // For other items, find a compatible recipe
+      compatibleRecipe = allRecipes.find(recipe => {
+        const delta = recipe.delta as Array<{ id: number; count: number }>;
+        if (!delta || !Array.isArray(delta)) {
+          console.error(`[Craft] Skipping recipe with invalid delta: ${JSON.stringify(recipe)}`);
+          return false;
         }
 
-        if (ingredientItem.name.endsWith("_planks")) {
-          needsPlanks = true;
-          planksCount = Math.abs(d.count);
-        } else if (ingredientItem.name === "stick") {
-          needsSticks = true;
-          sticksCount = Math.abs(d.count);
+        // Check if this recipe uses planks and sticks (wooden tool pattern)
+        let needsPlanks = false;
+        let needsSticks = false;
+        let planksCount = 0;
+        let sticksCount = 0;
+
+        for (const d of delta) {
+          if (d.count >= 0) continue; // Skip output items
+
+          const ingredientItem = mcData.items[d.id];
+          if (!ingredientItem) {
+            console.error(`[Craft] Cannot find item data for id ${d.id}`);
+            continue;
+          }
+
+          if (ingredientItem.name.endsWith("_planks")) {
+            needsPlanks = true;
+            planksCount = Math.abs(d.count);
+          } else if (ingredientItem.name === "stick") {
+            needsSticks = true;
+            sticksCount = Math.abs(d.count);
+          }
         }
-      }
 
-      // Verify we have enough materials
-      const hasEnoughPlanks = planksCount === 0 || totalPlanks >= planksCount;
-      const hasEnoughSticks = sticksCount === 0 || totalSticks >= sticksCount;
+        // Verify we have enough materials
+        const hasEnoughPlanks = planksCount === 0 || totalPlanks >= planksCount;
+        const hasEnoughSticks = sticksCount === 0 || totalSticks >= sticksCount;
 
-      return (needsPlanks || needsSticks) && hasEnoughPlanks && hasEnoughSticks;
-    });
+        return (needsPlanks || needsSticks) && hasEnoughPlanks && hasEnoughSticks;
+      });
+    }
 
     if (!compatibleRecipe) {
       console.error(`[Craft] DEBUG: allRecipes.length=${allRecipes.length}, itemName=${itemName}`);
