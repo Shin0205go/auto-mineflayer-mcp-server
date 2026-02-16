@@ -104,15 +104,27 @@ export async function openChest(
 export async function storeInChest(
   managed: ManagedBot,
   itemName: string,
-  count?: number
+  count?: number,
+  x?: number,
+  y?: number,
+  z?: number
 ): Promise<string> {
   const bot = managed.bot;
 
-  // Find nearby chest
-  const chestBlock = bot.findBlock({
-    matching: (block) => block.name.includes("chest"),
-    maxDistance: 4,
-  });
+  // Use specified coordinates or find nearest chest
+  let chestBlock;
+  if (x !== undefined && y !== undefined && z !== undefined) {
+    const chestPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
+    chestBlock = bot.blockAt(chestPos);
+    if (!chestBlock || !chestBlock.name.includes("chest")) {
+      throw new Error(`No chest at (${x}, ${y}, ${z}). Found: ${chestBlock?.name || "nothing"}`);
+    }
+  } else {
+    chestBlock = bot.findBlock({
+      matching: (block) => block.name.includes("chest"),
+      maxDistance: 4,
+    });
+  }
 
   if (!chestBlock) {
     throw new Error("No chest within 4 blocks. Place a chest first.");
@@ -153,15 +165,27 @@ export async function storeInChest(
 export async function takeFromChest(
   managed: ManagedBot,
   itemName: string,
-  count?: number
+  count?: number,
+  x?: number,
+  y?: number,
+  z?: number
 ): Promise<string> {
   const bot = managed.bot;
 
-  // Find nearby chest
-  const chestBlock = bot.findBlock({
-    matching: (block) => block.name.includes("chest"),
-    maxDistance: 4,
-  });
+  // Use specified coordinates or find nearest chest
+  let chestBlock;
+  if (x !== undefined && y !== undefined && z !== undefined) {
+    const chestPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
+    chestBlock = bot.blockAt(chestPos);
+    if (!chestBlock || !chestBlock.name.includes("chest")) {
+      throw new Error(`No chest at (${x}, ${y}, ${z}). Found: ${chestBlock?.name || "nothing"}`);
+    }
+  } else {
+    chestBlock = bot.findBlock({
+      matching: (block) => block.name.includes("chest"),
+      maxDistance: 4,
+    });
+  }
 
   if (!chestBlock) {
     throw new Error("No chest within 4 blocks.");

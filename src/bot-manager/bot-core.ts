@@ -2,7 +2,7 @@ import mineflayer from "mineflayer";
 import { Vec3 } from "vec3";
 import { EventEmitter } from "events";
 import pkg from "mineflayer-pathfinder";
-const { pathfinder, Movements } = pkg;
+const { pathfinder, Movements, goals } = pkg;
 import prismarineViewer from "prismarine-viewer";
 const { mineflayer: mineflayerViewer } = prismarineViewer;
 import type { BotConfig, ManagedBot, GameEvent } from "./types.js";
@@ -278,6 +278,20 @@ export class BotCore extends EventEmitter {
         movements.dontMineUnderFallingBlock = true;
         movements.dontCreateFlow = true;
 
+        // Avoid walking through nether/end portals (prevents accidental dimension teleport)
+        const portalBlock = bot.registry.blocksByName["nether_portal"];
+        const endPortalBlock = bot.registry.blocksByName["end_portal"];
+        if (portalBlock) movements.blocksToAvoid.add(portalBlock.id);
+        if (endPortalBlock) movements.blocksToAvoid.add(endPortalBlock.id);
+
+        // Increase liquid cost to discourage pathfinding through water (prevents drowning)
+        // Default is 1 which treats water same as land. High cost makes pathfinder prefer land.
+        (movements as any).liquidCost = 100;
+
+        // Avoid lava completely (liquidCost alone doesn't distinguish water vs lava)
+        const lavaBlock = bot.registry.blocksByName["lava"];
+        if (lavaBlock) movements.blocksToAvoid.add(lavaBlock.id);
+
         bot.pathfinder.setMovements(movements);
         console.error(`[BotManager] Pathfinder configured: canDig=true, allow1by1towers=true, scaffoldingBlocks=${movements.scafoldingBlocks.length} types`);
 
@@ -338,6 +352,26 @@ export class BotCore extends EventEmitter {
             timestamp: Date.now(),
           });
           addEvent("chat", `${username}: ${message}`, { username, message });
+        });
+
+        // System/command messages (e.g., /locate results, gamerule confirmations)
+        bot.on("messagestr", (message: string, messagePosition: string) => {
+          // Skip chat messages that are already handled by "chat" event
+          // Chat event handles player messages like "<Player> message"
+          if (messagePosition === "chat" && message.match(/^<\w+>/)) return;
+
+          // Skip noisy messages
+          if (message.includes("Gamerule") || message.includes("gamerule")) return;
+          if (message.includes("Set the time to")) return;
+          if (message.includes("joined the game")) return;
+          if (message.includes("left the game")) return;
+
+          managedBot.chatMessages.push({
+            username: "[Server]",
+            message: message,
+            timestamp: Date.now(),
+          });
+          console.error(`[System/${messagePosition}] ${message}`);
         });
 
         // Item collected
@@ -441,6 +475,33 @@ export class BotCore extends EventEmitter {
             addEvent("damaged", `Took damage! Health: ${bot.health?.toFixed(1)}/20`, {
               health: bot.health,
             });
+            // Emergency lava escape: if standing in lava, immediately jump and sprint away
+            const feetBlock = bot.blockAt(bot.entity.position.floored());
+            if (feetBlock?.name === "lava") {
+              console.error(`[AutoFlee] IN LAVA! Emergency escape, HP=${bot.health.toFixed(1)}`);
+              bot.setControlState("jump", true);
+              bot.setControlState("sprint", true);
+              bot.setControlState("forward", true);
+              setTimeout(() => {
+                bot.setControlState("jump", false);
+                bot.setControlState("sprint", false);
+                bot.setControlState("forward", false);
+              }, 3000);
+            }
+            // Auto-flee when HP drops to 10 or below after taking damage
+            else if (bot.health <= 10) {
+              const nearestHostile = Object.values(bot.entities)
+                .filter(e => e !== bot.entity && e.name && isHostileMob(bot, e.name.toLowerCase()))
+                .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position))[0];
+              if (nearestHostile) {
+                const dir = bot.entity.position.minus(nearestHostile.position).normalize();
+                const fleeTarget = bot.entity.position.plus(dir.scaled(15));
+                console.error(`[AutoFlee] HP=${bot.health.toFixed(1)}, fleeing from ${nearestHostile.name}`);
+                try {
+                  bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
+                } catch (_) { /* ignore pathfinder errors during auto-flee */ }
+              }
+            }
           } else if (entity.position.distanceTo(bot.entity.position) < 10) {
             addEvent("entity_hurt", `${entity.name || "Entity"} took damage nearby`, {
               entityName: entity.name,

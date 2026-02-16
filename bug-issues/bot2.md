@@ -111,6 +111,26 @@
 
 ---
 
+### [2026-02-16] ネザーからオーバーワールドへ勝手に転送される
+- **症状**: `/tp execute in minecraft:the_nether run tp Claude2 290 80 -97`でネザーに転送された後、数秒でオーバーワールドに戻される
+- **詳細**:
+  - ネザーのブレイズスポナー(290, 78, -97)真上にTP成功
+  - ブレイズ1体を倒した直後、アイテム回収を試みたが何も見つからず
+  - 5秒待機後、entity確認でzombie/spider/skeleton等のオーバーワールド敵が出現
+  - 位置確認でオーバーワールド(5.5, 102, -5.5)に戻っていた
+- **推定原因**:
+  1. ネザーポータルのリンクが正しく設定されていない
+  2. スポナー真上にいたため、ポータルブロックの影響範囲内だった可能性
+  3. サーバー側のネザー/オーバーワールド同期の問題
+- **影響**: ブレイズ狩りができず、Phase 6が進まない
+- **次のアクション**:
+  1. スポナーから離れた場所（5-10ブロック）にTPしてもらう
+  2. ネザー要塞内の別の安全な場所で待機
+  3. ポータルを再構築してリンクを修正
+- **ファイル**: サーバー設定またはポータル構造の問題
+
+---
+
 ### [2026-02-16] throwItem / tillSoil インポートエラー（✅解決）
 - **症状**: MCPサーバー起動時に `SyntaxError: The requested module './bot-blocks.js' does not provide an export named 'throwItem'` で起動失敗
 - **原因**: `src/bot-manager/index.ts` で `throwItem`, `tillSoil` をインポートしているが、`bot-blocks.ts` に関数が定義されていなかった
@@ -123,3 +143,53 @@
   - ビルド成功
 - **ファイル**: `src/bot-manager/bot-blocks.ts`, `src/bot-manager/index.ts`, `src/tools/building.ts`
 
+---
+
+### [2026-02-16] minecraft_move_to が水中ルートを選択して溺死（✅解決）
+- **症状**: `minecraft_move_to(x, y, z)` のpathfinderが水中ルートを選択し、何度も溺死する
+- **発生例**:
+  - `move_to(-31, 89, 37)` → 水中を通過して2回溺死
+  - `move_to(-110, 22, -67)` → 43ブロック下降で落下ダメージ回避不可と判定されたが、実際には水中ルート
+- **影響**: Phase 6のエンダーマン狩りで移動中に何度も死亡。装備ロスト、時間浪費
+- **修正**: ✅完了
+  - `liquidCost=100` に設定してpathfinderが水を避けるように修正（Claude1）
+  - `move_to(-60, 95, -5)` で60m移動成功、溺死無し
+- **ファイル**: `src/bot-manager/bot-movement.ts` (pathfinder設定)
+
+---
+
+### [2026-02-16] エンダーマン狩りが困難（Overworld）
+- **症状**: エンダーマンが遠方（40-60ブロック）にしかスポーンせず、接近が困難
+- **試行**:
+  - `minecraft_attack(entity_name="enderman")` → "No enderman found within attack range"
+  - 夜間の平原で待機 → エンダーマンは発見できるが、常に遠方で近づけない
+- **問題点**:
+  1. エンダーマンのスポーン率が低い
+  2. 遠方のエンダーマンに近づこうとすると水中ルートで溺死
+  3. テレポートで逃げられる
+- **影響**: Phase 6のエンダーパール12個収集が非常に困難
+- **戦略**: Claude1がwarped forest（歪んだ森）バイオーム戦略を提案中
+  - ネザーのwarped forestではエンダーマンが大量にスポーン
+  - Claude6がネザーで `/locate biome warped_forest` を実行予定
+- **次のアクション**: warped forest座標の報告待ち、その後ネザーでの狩りに切替
+- **ファイル**: ゲームメカニクス（Overworld のエンダーマンスポーン率）
+
+---
+
+### [2026-02-16] crafting_table クラフト後にインベントリから消失
+- **症状**: `minecraft_craft(item_name="crafting_table")` 成功後、"Crafted 1x crafting_table"メッセージが表示されるが、その直後のインベントリには存在しない
+- **試行**:
+  - 1回目: クラフト成功 → `place_block(crafting_table)` で "No crafting_table in inventory" エラー
+  - 2回目: 再度クラフト成功 → またインベントリから消失
+- **影響**: 鉄ツール（iron_pickaxe等）が作成できず、石ブロックが掘れない。ネザーから脱出不可
+- **推定原因**:
+  1. `minecraft_craft` のインベントリ同期問題（アイテムが実際には追加されていない）
+  2. クラフト成功メッセージとインベントリ状態に乖離がある
+  3. `bot.inventory.items()` の取得タイミングが早すぎる
+- **次のアクション**:
+  1. `src/bot-manager/bot-crafting.ts` の `craft` 関数を調査
+  2. クラフト後の待機時間を追加
+  3. インベントリ同期を確認するデバッグログ追加
+- **ファイル**: `src/bot-manager/bot-crafting.ts`
+
+---

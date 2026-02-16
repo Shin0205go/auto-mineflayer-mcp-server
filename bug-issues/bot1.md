@@ -12,6 +12,113 @@
 
 ---
 
+### [2026-02-16 Session 19] Pathfinder routes through deep water causing drowning (✅ FIXED)
+- **症状**: Claude2がエンダーマン狩り中に繰り返し溺死。pathfinderが水中を通るルートを選択
+- **原因**: `mineflayer-pathfinder`のデフォルト`liquidCost=1`で、水を陸地と同コストで通過可能と判定。深い水域を横断するルートが選ばれ溺死
+- **修正**: `bot-core.ts`で`movements.liquidCost = 100`に設定。pathfinderが陸路を強く優先するようになった（水路を完全にブロックはしない）
+- **ファイル**: `src/bot-manager/bot-core.ts`
+- **ステータス**: ✅ 修正完了（commit 8cec55e）
+
+---
+
+### [2026-02-16 Session 18] Lava listed as passable block in moveTo() (✅ FIXED)
+- **症状**: Claude7がネザーで繰り返し溶岩死。pathfinderのblocksToAvoidに溶岩を追加済みなのに死亡が続く
+- **原因**: `moveTo()`内の`isPassableBlock()`関数に`"lava"`が含まれていた。ターゲット付近の立ち位置を探す際、溶岩を「立てる場所」として判定してしまう
+- **修正**: `isPassableBlock()`のpassable配列から`"lava"`を削除。pathfinderのblocksToAvoidと合わせて二重の溶岩回避が機能するようになった
+- **ファイル**: `src/bot-manager/bot-movement.ts`
+- **ステータス**: ✅ 修正完了（commit 0416942）
+
+---
+
+### [2026-02-16 Session 18] Chest take/store targets wrong chest when multiple chests nearby (✅ FIXED)
+- **症状**: `minecraft_open_chest(x,y,z)`で開いたチェストと`minecraft_take_from_chest()`で操作されるチェストが異なる
+- **原因**: `takeFromChest`/`storeInChest`が`bot.findBlock()`で最も近いチェストを検索するため、`open_chest`で指定したチェストとは別のチェストを操作する
+- **修正**: `takeFromChest`/`storeInChest`にオプションのx,y,z座標パラメータを追加。座標指定時はその位置のチェストを直接開く
+- **ファイル**: `src/bot-manager/bot-storage.ts`, `src/bot-manager/index.ts`, `src/tools/storage.ts`
+- **ステータス**: ✅ 修正完了（commit f96f3fc）
+
+---
+
+### [2026-02-16 Session 18] move_to cannot enter portals (blocksToAvoid) (✅ FIXED)
+- **症状**: `move_to`でポータルブロック座標を指定しても、pathfinderがポータルを回避して到達できない
+- **原因**: `blocksToAvoid`にnether_portalが含まれるため、pathfinderがポータルブロックへの経路を生成できない
+- **修正**: `moveTo`関数の先頭でターゲットブロックがポータルかチェックし、ポータルなら`enterPortal()`に委譲。`enterPortal()`は一時的にblocksToAvoidからポータルを除外する
+- **ファイル**: `src/bot-manager/bot-movement.ts`
+- **ステータス**: ✅ 修正完了（commit 7d9e3d2）※MCP再起動が必要
+
+---
+
+### [2026-02-16 Session 18] Pathfinder routes through lava (✅ FIXED)
+- **症状**: Claude6がネザーで「tried to swim in lava」で死亡。pathfinderが溶岩を通るルートを選択
+- **原因**: mineflayer-pathfinderの`liquidCost`はデフォルト1で、水と溶岩を区別しない。溶岩も水と同コストで通過可能と判定される
+- **修正**: `bot-core.ts`でlavaブロックを`movements.blocksToAvoid`に追加。pathfinderが溶岩を完全に回避するようになった
+- **ファイル**: `src/bot-manager/bot-core.ts`
+- **ステータス**: ✅ 修正完了（commit 1f63c94）
+
+---
+
+### [2026-02-16 Session 18] Ender pearl drops not collected after enderman kill (✅ FIXED)
+- **症状**: Claude3がエンダーマンを倒したがパールを取得できなかった。エンダーマンはテレポートするため、死亡位置がボットから離れている
+- **原因**: `attack()`と`fight()`で敵を倒した後、`collectNearbyItems()`を呼ぶがボットの現在位置付近しか検索しない。テレポートした敵の死亡位置にドロップがある
+- **修正**: `lastKnownTargetPos`を追跡し、敵が消えたらその位置まで移動してからアイテム回収。`attack()`と`fight()`両方に適用
+- **ファイル**: `src/bot-manager/bot-survival.ts`
+- **ステータス**: ✅ 修正完了（commit 386ee79）
+
+---
+
+### [2026-02-16 Session 17] Pathfinder walks through portals accidentally (✅ FIXED)
+- **症状**: ネザーでpathfinding中にポータルを通過してOverworldに戻される。Bot2報告: ブレイズスポナー付近でOverworld(5.5,102,-5.5)にテレポートされた
+- **原因**: mineflayer-pathfinderがポータルブロックを通過可能と判定し、経路にポータルを含めてしまう
+- **修正**: `bot-core.ts`でMovements.blocksToAvoidにnether_portal/end_portalを追加。`bot-movement.ts`のenterPortal()では意図的なポータル進入時に一時的にblocksToAvoidから除外し、遷移後に再追加
+- **ファイル**: `src/bot-manager/bot-core.ts`, `src/bot-manager/bot-movement.ts`
+- **ステータス**: ✅ 修正完了（commit b38751a）
+
+---
+
+### [2026-02-16 Session 17] dig_block force parameter not passed through (✅ FIXED)
+- **症状**: `minecraft_dig_block(force=true)`を使っても溶岩隣接ブロックを掘れない
+- **原因**: ツール定義(building.ts)でforceパラメータを読み取るが、`botManager.digBlock()`に渡していない。bot-manager/index.tsとbot-blocks.tsの関数にもforceパラメータがない
+- **修正**: 3ファイルを修正してforceパラメータをツール→botManager→digBlockBasicまで伝達
+- **ファイル**: `src/tools/building.ts`, `src/bot-manager/index.ts`, `src/bot-manager/bot-blocks.ts`
+- **ステータス**: ✅ 修正完了（commit c72fdc5）
+
+---
+
+### [2026-02-16 Session 14] move_to can't enter Nether/End portals (✅ FIXED)
+
+- **症状**: ネザーポータルの前にいるがmove_toでポータルに入れない。"Path blocked"エラー
+- **報告**: Claude3
+- **原因**: `isPassableBlock()`にnether_portal, end_portalが含まれていない。move_toがポータルブロックを固体と判定し、別の位置に移動しようとする
+- **修正**: `bot-movement.ts:289`のpassableリストに`"nether_portal", "end_portal"`を追加
+- **ファイル**: `src/bot-manager/bot-movement.ts:289`
+- **ステータス**: ✅ 修正完了（次回MCP再起動後に反映）
+
+---
+
+### [2026-02-16 Session 14] Chat command whitelist doesn't include Claude1-7 (✅ FIXED)
+
+- **症状**: Claude1が`/tp Claude3`を実行しようとすると「Command '/tp' is not allowed」エラー。ネザーで動けないClaude3をテレポートできない
+- **原因**: `src/tools/movement.ts:85`のwhitelistが`["Claude"]`のみで、Claude1〜Claude7が含まれていない
+- **修正**: whitelistを`["Claude", "Claude1", "Claude2", "Claude3", "Claude4", "Claude5", "Claude6", "Claude7"]`に拡大
+- **ファイル**: `src/tools/movement.ts:85`
+- **ステータス**: ✅ 修正完了（次回ビルド後に反映）
+
+---
+
+### [2026-02-16 Session 13] stick/crafting_table crafting - manual recipe rejected by filter (✅ FIXED)
+
+- **症状**: `minecraft_craft("stick")` が "missing ingredient" エラーで失敗。birch_planks x70 所持。manual recipe作成は成功するが、compatibleRecipe検索(line 661-690)で除外される
+- **報告**: Claude4, Claude5, Claude2
+- **原因**: manual recipeが`allRecipes`に追加された後、`compatibleRecipe`フィルターロジックが`mcData.items[d.id]`のlookupに失敗してrecipeを除外
+- **修正** (commit e91a82f):
+  1. stick/crafting_tableでmanual recipe(allRecipes.length===1)の場合、フィルターをバイパスして直接使用
+  2. window-based crafting fallback追加: `bot.clickWindow()`で2x2グリッドに直接アイテム配置
+  3. recipesFor fallbackも維持(3段階fallback)
+- **ファイル**: `src/bot-manager/bot-crafting.ts:661-700`
+- **ステータス**: ✅ 修正完了
+
+---
+
 ### [2026-02-16 Session 12] water_bucket/lava_bucket placement fails silently (✅ FIXED)
 
 - **症状**: `minecraft_use_item_on_block`でwater_bucketをlavaに使っても溶岩が固まらない。bucketでlavaを集めてもlava_bucketが生成されない。

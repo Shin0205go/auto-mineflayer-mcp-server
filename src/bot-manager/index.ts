@@ -25,7 +25,7 @@ import {
   digTunnel,
   mount,
   dismount,
-  enterPortal,
+  enterPortal as enterPortalBasic,
 } from "./bot-movement.js";
 
 // Import bot-blocks functions
@@ -163,12 +163,6 @@ export class BotManager extends BotCore {
     return await moveToBasic(managed, x, y, z);
   }
 
-  async enterPortal(username: string): Promise<string> {
-    const managed = this.getBotByUsername(username);
-    if (!managed) throw new Error(`Bot ${username} not found`);
-    return await enterPortal(managed);
-  }
-
   async pillarUp(username: string, height: number = 1, untilSky: boolean = false): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
@@ -214,6 +208,12 @@ export class BotManager extends BotCore {
     return await dismount(managed);
   }
 
+  async enterPortal(username: string): Promise<string> {
+    const managed = this.getBotByUsername(username);
+    if (!managed) throw new Error(`Bot ${username} not found`);
+    return await enterPortalBasic(managed);
+  }
+
   // ========== Block Manipulation Methods ==========
 
   async placeBlock(
@@ -238,7 +238,7 @@ export class BotManager extends BotCore {
     );
   }
 
-  async digBlock(username: string, x: number, y: number, z: number, useCommand: boolean = false, autoCollect: boolean = true): Promise<string> {
+  async digBlock(username: string, x: number, y: number, z: number, useCommand: boolean = false, autoCollect: boolean = true, force: boolean = false): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
 
@@ -257,7 +257,8 @@ export class BotManager extends BotCore {
       this.delay.bind(this),
       moveToBasicWrapper,
       this.getBriefStatus.bind(this),
-      autoCollect
+      autoCollect,
+      force
     );
   }
 
@@ -427,16 +428,16 @@ export class BotManager extends BotCore {
     return await openChestBasic(managed, x, y, z);
   }
 
-  async storeInChest(username: string, itemName: string, count?: number): Promise<string> {
+  async storeInChest(username: string, itemName: string, count?: number, x?: number, y?: number, z?: number): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
-    return await storeInChestBasic(managed, itemName, count);
+    return await storeInChestBasic(managed, itemName, count, x, y, z);
   }
 
-  async takeFromChest(username: string, itemName: string, count?: number): Promise<string> {
+  async takeFromChest(username: string, itemName: string, count?: number, x?: number, y?: number, z?: number): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
-    return await takeFromChestBasic(managed, itemName, count);
+    return await takeFromChestBasic(managed, itemName, count, x, y, z);
   }
 
   async listChest(username: string): Promise<string> {
