@@ -703,37 +703,44 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     // The planks/sticks filter below is only needed when recipesAll() returns
     // multiple native recipes and we need to pick the right one for our plank type.
     let compatibleRecipe: any;
-    if (allRecipes.length === 1) {
-      compatibleRecipe = allRecipes[0];
-      console.error(`[Craft] Using single recipe directly for ${itemName}`);
-    } else {
-      // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
-      compatibleRecipe = allRecipes.find(recipe => {
-        const delta = recipe.delta as Array<{ id: number; count: number }>;
 
-        let needsPlanks = false;
-        let needsSticks = false;
-        let planksCount = 0;
-        let sticksCount = 0;
+    // BUGFIX (2026-02-17): Always validate recipe compatibility even for simple recipes
+    // Always validate compatibility even for simple recipes, because bot.recipesAll() may
+    // return recipes that don't work with our plank types (dark_oak_planks etc).
+    // Never use allRecipes[0] directly for stick/crafting_table without validation!
 
-        for (const d of delta) {
-          if (d.count >= 0) continue;
-          const ingredientItem = mcData.items[d.id];
-          if (!ingredientItem) continue;
-          if (ingredientItem.name.endsWith("_planks")) {
-            needsPlanks = true;
-            planksCount = Math.abs(d.count);
-          } else if (ingredientItem.name === "stick") {
-            needsSticks = true;
-            sticksCount = Math.abs(d.count);
-          }
+    // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
+    // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
+    compatibleRecipe = allRecipes.find(recipe => {
+      const delta = recipe.delta as Array<{ id: number; count: number }>;
+
+      // Check if this recipe uses planks and sticks (wooden tool pattern)
+      let needsPlanks = false;
+      let needsSticks = false;
+      let planksCount = 0;
+      let sticksCount = 0;
+
+      for (const d of delta) {
+        if (d.count >= 0) continue; // Skip output items
+
+        const ingredientItem = mcData.items[d.id];
+        if (!ingredientItem) continue;
+
+        if (ingredientItem.name.endsWith("_planks")) {
+          needsPlanks = true;
+          planksCount = Math.abs(d.count);
+        } else if (ingredientItem.name === "stick") {
+          needsSticks = true;
+          sticksCount = Math.abs(d.count);
         }
+      }
 
-        const hasEnoughPlanks = planksCount === 0 || totalPlanks >= planksCount;
-        const hasEnoughSticks = sticksCount === 0 || totalSticks >= sticksCount;
-        return (needsPlanks || needsSticks) && hasEnoughPlanks && hasEnoughSticks;
-      });
-    }
+      // Verify we have enough materials
+      const hasEnoughPlanks = planksCount === 0 || totalPlanks >= planksCount;
+      const hasEnoughSticks = sticksCount === 0 || totalSticks >= sticksCount;
+
+      return (needsPlanks || needsSticks) && hasEnoughPlanks && hasEnoughSticks;
+    });
 
     if (!compatibleRecipe) {
       throw new Error(`Cannot craft ${itemName}: No compatible recipe found. Have ${totalPlanks} planks and ${totalSticks} sticks. Found ${allRecipes.length} recipes total. This may be a Minecraft version compatibility issue.`);
@@ -789,6 +796,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         // IMPORTANT: For stick/crafting_table, always pass undefined (never use table)
         const tableToUse = (itemName === "stick" || itemName === "crafting_table") ? undefined : (craftingTableBlock || undefined);
         console.error(`[Craft] Calling bot.craft() with table: ${tableToUse ? 'YES' : 'NO'}`);
+
+        const invBeforeSimple = bot.inventory.items().map(it => `${it.name}x${it.count}`).join(", ");
+        console.error(`[Craft] Inventory before simple wooden craft: ${invBeforeSimple}`);
 
         try {
           await bot.craft(compatibleRecipe, 1, tableToUse);
@@ -901,8 +911,36 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         // Wait for crafting to complete (match timing from general crafting path)
         await new Promise(resolve => setTimeout(resolve, 1500));
 
+        // Close any lingering crafting window to flush items to inventory
+        if (bot.currentWindow) {
+          bot.closeWindow(bot.currentWindow);
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+
         // Additional wait for inventory synchronization
         await new Promise(resolve => setTimeout(resolve, 700));
+
+        const invAfterSimple = bot.inventory.items().map(it => `${it.name}x${it.count}`).join(", ");
+        console.error(`[Craft] Inventory after simple wooden craft: ${invAfterSimple}`);
+
+        // Verify crafted item is in inventory
+        const craftedCheck = bot.inventory.items().find(it => it.name === itemName);
+        if (!craftedCheck) {
+          console.error(`[Craft] WARNING: ${itemName} not in inventory after simple wooden craft, trying to collect dropped items...`);
+          // Try to collect dropped items nearby
+          const { collectNearbyItems } = await import("./bot-items.js");
+          try {
+            await collectNearbyItems(managed);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } catch (collectErr) {
+            console.error(`[Craft] collectNearbyItems failed: ${collectErr}`);
+          }
+
+          const recheck = bot.inventory.items().find(it => it.name === itemName);
+          if (!recheck) {
+            throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting. Materials were consumed but item vanished. Try again.`);
+          }
+        }
       }
 
       const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
@@ -1377,6 +1415,13 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             .join(", ");
           console.error(`[Craft] Attempting recipe: ${recipeIngredients}`);
 
+          // Close any existing open window to prevent windowOpen event conflicts
+          if (bot.currentWindow) {
+            console.error(`[Craft] Closing existing open window before crafting`);
+            bot.closeWindow(bot.currentWindow);
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+
           // Ensure bot is close enough to crafting table before crafting (within 3.5 blocks)
           if (craftingTable) {
             const distToTable = bot.entity.position.distanceTo(craftingTable.position);
@@ -1394,9 +1439,74 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 }, 200);
               });
             }
+            // Look at the crafting table to ensure line-of-sight for windowOpen
+            await bot.lookAt(craftingTable.position.offset(0.5, 0.5, 0.5));
+            await new Promise(resolve => setTimeout(resolve, 100));
           }
 
-          await bot.craft(tryRecipe, 1, craftingTable || undefined);
+          // Try bot.craft() with crafting table
+          if (craftingTable) {
+            // Verify distance right before interaction
+            const finalDist = bot.entity.position.distanceTo(craftingTable.position);
+            if (finalDist > 4.5) {
+              console.error(`[Craft] Still too far from crafting table (${finalDist.toFixed(1)} blocks), aborting this attempt`);
+              throw new Error(`Too far from crafting table (${finalDist.toFixed(1)} blocks)`);
+            }
+            console.error(`[Craft] Distance to crafting table: ${finalDist.toFixed(1)} blocks`);
+
+            // Try direct bot.craft() with table reference first (simplest approach)
+            const invBefore = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(", ");
+            console.error(`[Craft] Inventory before craft: ${invBefore}`);
+            try {
+              await bot.craft(tryRecipe, 1, craftingTable);
+              const invAfter = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(", ");
+              console.error(`[Craft] Inventory after craft: ${invAfter}`);
+            } catch (directErr: any) {
+              const errMsg = String(directErr?.message || directErr);
+              console.error(`[Craft] Direct craft failed: ${errMsg}`);
+
+              // If windowOpen timeout, try pre-open approach
+              if (errMsg.includes("windowOpen")) {
+                // Close any lingering window
+                if (bot.currentWindow) {
+                  bot.closeWindow(bot.currentWindow);
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                }
+                // Re-look at the crafting table
+                await bot.lookAt(craftingTable.position.offset(0.5, 0.5, 0.5));
+                await new Promise(resolve => setTimeout(resolve, 200));
+
+                try {
+                  console.error(`[Craft] Pre-opening crafting table at ${craftingTable.position}...`);
+                  const tableWindow = await bot.openContainer(craftingTable);
+                  console.error(`[Craft] Crafting table window opened successfully`);
+                  // Wait for window to be fully ready
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                  // Now craft with table=undefined since window is already open
+                  await bot.craft(tryRecipe, 1, undefined);
+                  // Close the window after crafting
+                  bot.closeWindow(tableWindow);
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                } catch (preOpenErr: any) {
+                  const preMsg = String(preOpenErr?.message || preOpenErr);
+                  console.error(`[Craft] Pre-open craft also failed: ${preMsg}`);
+                  if (bot.currentWindow) {
+                    bot.closeWindow(bot.currentWindow);
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                  }
+                  throw preOpenErr;
+                }
+              } else {
+                throw directErr;
+              }
+            }
+          } else {
+            const invBefore = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(", ");
+            console.error(`[Craft] Inventory before simple craft: ${invBefore}`);
+            await bot.craft(tryRecipe, 1, undefined);
+            const invAfter = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(", ");
+            console.error(`[Craft] Inventory after simple craft: ${invAfter}`);
+          }
 
           // Wait for crafting to complete and item transfer
           // Increased timeout to 1500ms to handle slower servers
