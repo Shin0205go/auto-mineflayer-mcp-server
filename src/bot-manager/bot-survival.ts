@@ -4,7 +4,7 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 import type { ManagedBot } from "./types.js";
 import { isHostileMob, isFoodItem, isBedBlock } from "./minecraft-utils.js";
-import { collectNearbyItems } from "./bot-items.js";
+import { collectNearbyItems, equipArmor } from "./bot-items.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -194,7 +194,9 @@ export async function sleep(managed: ManagedBot): Promise<string> {
 export async function attack(managed: ManagedBot, entityName?: string): Promise<string> {
   const bot = managed.bot;
 
-  // Auto-equip best weapon before attacking
+  // Auto-equip best armor and weapon before attacking
+  try { await equipArmor(bot); } catch (_) { /* ignore armor equip errors */ }
+
   const weaponPriority = [
     "netherite_sword", "diamond_sword", "iron_sword", "stone_sword", "wooden_sword",
     "netherite_axe", "diamond_axe", "iron_axe", "stone_axe", "wooden_axe",
@@ -390,7 +392,9 @@ export async function fight(
 ): Promise<string> {
   const bot = managed.bot;
 
-  // Step 1: Equip best weapon
+  // Step 1: Equip best armor and weapon
+  try { await equipArmor(bot); } catch (_) { /* ignore armor equip errors */ }
+
   const weaponPriority = [
     "netherite_sword", "diamond_sword", "iron_sword", "stone_sword", "wooden_sword",
     "netherite_axe", "diamond_axe", "iron_axe", "stone_axe", "wooden_axe",
