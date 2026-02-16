@@ -25,6 +25,7 @@ import {
   digTunnel,
   mount,
   dismount,
+  enterPortal as enterPortalBasic,
 } from "./bot-movement.js";
 
 // Import bot-blocks functions
@@ -207,6 +208,12 @@ export class BotManager extends BotCore {
     return await dismount(managed);
   }
 
+  async enterPortal(username: string): Promise<string> {
+    const managed = this.getBotByUsername(username);
+    if (!managed) throw new Error(`Bot ${username} not found`);
+    return await enterPortalBasic(managed);
+  }
+
   // ========== Block Manipulation Methods ==========
 
   async placeBlock(
@@ -231,7 +238,7 @@ export class BotManager extends BotCore {
     );
   }
 
-  async digBlock(username: string, x: number, y: number, z: number, useCommand: boolean = false, autoCollect: boolean = true): Promise<string> {
+  async digBlock(username: string, x: number, y: number, z: number, useCommand: boolean = false, autoCollect: boolean = true, force: boolean = false): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
 
@@ -250,7 +257,8 @@ export class BotManager extends BotCore {
       this.delay.bind(this),
       moveToBasicWrapper,
       this.getBriefStatus.bind(this),
-      autoCollect
+      autoCollect,
+      force
     );
   }
 
@@ -382,6 +390,36 @@ export class BotManager extends BotCore {
     return await equipItemBasic(managed.bot, itemName);
   }
 
+  async tillSoil(username: string, x: number, y: number, z: number): Promise<string> {
+    const managed = this.getBotByUsername(username);
+    if (!managed) throw new Error(`Bot ${username} not found`);
+    const bot = managed.bot;
+    const hoeTypes = ["netherite_hoe", "diamond_hoe", "iron_hoe", "stone_hoe", "wooden_hoe"];
+    const hoe = hoeTypes.map(h => bot.inventory.items().find((i: any) => i.name === h)).find(Boolean);
+    if (!hoe) {
+      throw new Error("No hoe in inventory. Craft a hoe first (e.g., stone_hoe).");
+    }
+    return await useItemOnBlockBasic(managed, x, y, z, hoe.name, this.moveTo.bind(this));
+  }
+
+  async throwItem(username: string, itemName: string, count: number = 1): Promise<string> {
+    const managed = this.getBotByUsername(username);
+    if (!managed) throw new Error(`Bot ${username} not found`);
+    const bot = managed.bot;
+    let thrown = 0;
+    for (let i = 0; i < count; i++) {
+      const item = bot.inventory.items().find((it: any) => it.name === itemName);
+      if (!item) break;
+      await bot.equip(item, "hand");
+      bot.activateItem();
+      await new Promise(r => setTimeout(r, 300));
+      bot.deactivateItem();
+      await new Promise(r => setTimeout(r, 200));
+      thrown++;
+    }
+    return `Threw ${thrown}x ${itemName}`;
+  }
+
   // ========== Storage Methods ==========
 
   async openChest(username: string, x: number, y: number, z: number): Promise<string> {
@@ -390,16 +428,16 @@ export class BotManager extends BotCore {
     return await openChestBasic(managed, x, y, z);
   }
 
-  async storeInChest(username: string, itemName: string, count?: number): Promise<string> {
+  async storeInChest(username: string, itemName: string, count?: number, x?: number, y?: number, z?: number): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
-    return await storeInChestBasic(managed, itemName, count);
+    return await storeInChestBasic(managed, itemName, count, x, y, z);
   }
 
-  async takeFromChest(username: string, itemName: string, count?: number): Promise<string> {
+  async takeFromChest(username: string, itemName: string, count?: number, x?: number, y?: number, z?: number): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
-    return await takeFromChestBasic(managed, itemName, count);
+    return await takeFromChestBasic(managed, itemName, count, x, y, z);
   }
 
   async listChest(username: string): Promise<string> {

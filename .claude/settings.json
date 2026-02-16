@@ -20,6 +20,16 @@
             "statusMessage": "Checking command safety"
           }
         ]
+      },
+      {
+        "matcher": "mcp__mineflayer__minecraft_chat",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import sys,json; msg=json.load(sys.stdin).get('tool_input',{}).get('message',''); exit(2 if msg.startswith('/') else 0)\" || echo 'Slash commands blocked'",
+            "statusMessage": "Checking chat command"
+          }
+        ]
       }
     ],
     "PostToolUse": [

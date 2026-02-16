@@ -142,17 +142,30 @@ export async function placeBlock(
     }
   }
 
+  // Seed items place as crop blocks with different names
+  const seedToCropMap: Record<string, string> = {
+    "wheat_seeds": "wheat",
+    "beetroot_seeds": "beetroots",
+    "melon_seeds": "melon_stem",
+    "pumpkin_seeds": "pumpkin_stem",
+  };
+  const expectedBlockName = seedToCropMap[blockType] || blockType.replace("minecraft:", "");
+
   // Wait longer and verify placement multiple times
   await new Promise(resolve => setTimeout(resolve, 500));
   for (let i = 0; i < 3; i++) {
     const placedBlock = bot.blockAt(targetPos);
-    if (placedBlock && (placedBlock.name === blockType || placedBlock.name === blockType.replace("minecraft:", ""))) {
+    if (placedBlock && (placedBlock.name === blockType || placedBlock.name === blockType.replace("minecraft:", "") || placedBlock.name === expectedBlockName)) {
       return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)})` };
     }
     await new Promise(resolve => setTimeout(resolve, 200));
   }
 
   const finalBlock = bot.blockAt(targetPos);
+  // Check if the block placed is actually a crop from seeds
+  if (finalBlock && finalBlock.name === expectedBlockName) {
+    return { success: true, message: `Planted ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}) → ${finalBlock.name} (age 0)` };
+  }
   return { success: false, message: `Block not placed at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}). Current block: ${finalBlock?.name || "unknown"}` };
 }
 
@@ -216,9 +229,17 @@ function getExpectedDrop(blockName: string): string | null {
     "glowstone": "glowstone_dust",
     "redstone_lamp": "redstone_lamp", // Drops itself
     "sea_lantern": "prismarine_crystals",
-    "grass": "", // Drops nothing
-    "tall_grass": "", // Drops nothing (or seeds)
-    "fern": "", // Drops nothing (or seeds)
+    "grass": "wheat_seeds", // ~12.5% chance to drop seeds
+    "short_grass": "wheat_seeds", // 1.20+ renamed grass to short_grass
+    "tall_grass": "wheat_seeds", // ~12.5% chance to drop seeds
+    "fern": "wheat_seeds", // ~12.5% chance to drop seeds
+    "large_fern": "wheat_seeds", // ~12.5% chance to drop seeds
+
+    // Crop blocks - primary drops (mature crops drop both item + seeds)
+    "wheat": "wheat_seeds", // Always drops seeds; mature (age 7) also drops wheat item
+    "beetroots": "beetroot",
+    "carrots": "carrot",
+    "potatoes": "potato",
   };
 
   // If not in dropMappings, assume block drops itself (logs, planks, etc.)
@@ -237,7 +258,8 @@ export async function digBlock(
   delay: (ms: number) => Promise<void>,
   moveToBasic: (username: string, x: number, y: number, z: number) => Promise<{ success: boolean; message: string }>,
   getBriefStatus: (username: string) => string,
-  autoCollect: boolean = true
+  autoCollect: boolean = true,
+  force: boolean = false
 ): Promise<string> {
   const bot = managed.bot;
   const username = managed.username;
@@ -256,17 +278,35 @@ export async function digBlock(
 
   const blockName = block.name;
 
-  // Check for lava in adjacent blocks before digging
-  const adjacentPositions = [
-    blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
-    blockPos.offset(0, 1, 0), blockPos.offset(0, -1, 0),
-    blockPos.offset(0, 0, 1), blockPos.offset(0, 0, -1),
-  ];
-  for (const adjPos of adjacentPositions) {
-    const adjBlock = bot.blockAt(adjPos);
-    if (adjBlock?.name === "lava") {
-      console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
-      return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`;
+  // Check crop maturity before harvesting - immature crops only drop seeds, not the crop item
+  const cropBlocks = ["wheat", "beetroots", "carrots", "potatoes"];
+  if (cropBlocks.includes(blockName)) {
+    try {
+      const props = block.getProperties();
+      const age = props?.age;
+      const maxAge = blockName === "beetroots" ? 3 : 7; // beetroots max age is 3, others are 7
+      if (age !== undefined && Number(age) < maxAge) {
+        return `⚠️ ${blockName} is NOT mature (age=${age}/${maxAge}). Harvesting now will only give seeds, NOT the crop item. Wait for it to fully grow (age=${maxAge}) or apply bone_meal to speed up growth. Use minecraft_use_item_on_block with bone_meal on this block.`;
+      }
+    } catch (e) {
+      // getProperties may fail on some versions, continue with dig
+      console.error(`[Dig] Could not check crop maturity: ${e}`);
+    }
+  }
+
+  // Check for lava in adjacent blocks before digging (skip if force=true)
+  if (!force) {
+    const adjacentPositions = [
+      blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
+      blockPos.offset(0, 1, 0), blockPos.offset(0, -1, 0),
+      blockPos.offset(0, 0, 1), blockPos.offset(0, 0, -1),
+    ];
+    for (const adjPos of adjacentPositions) {
+      const adjBlock = bot.blockAt(adjPos);
+      if (adjBlock?.name === "lava") {
+        console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
+        return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z}). force=trueで強制的に掘ることも可能。`;
+      }
     }
   }
 
@@ -561,10 +601,12 @@ export async function digBlock(
 
     // Check if inventory is full - BLOCK mining to prevent item loss
     // UNLESS autoCollect is false (items will stay on ground for manual pickup)
-    // Count non-null slots in main inventory (slots 0-35)
-    const TOTAL_SLOTS = 36; // Standard Minecraft player inventory (9 hotbar + 27 main)
+    // Mineflayer inventory slots: 0=craft output, 1-4=craft grid, 5-8=armor,
+    // 9-35=main inventory (27), 36-44=hotbar (9), 45=off-hand
+    // Only count main inventory (9-35) + hotbar (36-44) = 36 usable slots
+    const TOTAL_SLOTS = 36; // 27 main + 9 hotbar
     let usedSlots = 0;
-    for (let slot = 0; slot < 36; slot++) {
+    for (let slot = 9; slot <= 44; slot++) {
       if (bot.inventory.slots[slot] !== null) {
         usedSlots++;
       }
@@ -880,7 +922,7 @@ export async function digBlock(
       // Re-check inventory fullness at this point (inventory state may have changed)
       const currentEmptySlots = TOTAL_SLOTS - (() => {
         let used = 0;
-        for (let slot = 0; slot < 36; slot++) {
+        for (let slot = 9; slot <= 44; slot++) {
           if (bot.inventory.slots[slot] !== null) used++;
         }
         return used;
@@ -909,9 +951,9 @@ export async function digBlock(
       if (nearbyItems) {
         const itemPos = nearbyItems.position ? nearbyItems.position.toString() : 'unknown';
         const itemDist = nearbyItems.position ? nearbyItems.position.distanceTo(bot.entity.position).toFixed(2) : '?';
-        console.error(`[Dig] ⚠️ Server config issue: items spawn but can't be collected (at ${itemPos}, ${itemDist}m)`);
+        console.error(`[Dig] ⚠️ Items spawned but not auto-collected (at ${itemPos}, ${itemDist}m) - may have been picked up by another bot or need manual collection`);
         // Return success message since block was actually mined successfully
-        return `✅ Dug ${blockName} with ${heldItem}. ⚠️ NOTE: Items dropped at ${itemPos} but server has item pickup disabled. Block mining works but resource collection impossible due to server configuration.` + getBriefStatus(username);
+        return `✅ Dug ${blockName} with ${heldItem}. ⚠️ NOTE: Items dropped at ${itemPos} (${itemDist}m away) but weren't auto-collected. Try minecraft_collect_items() or move closer.` + getBriefStatus(username);
       }
 
       // No item entities found - server configuration issue
@@ -1212,9 +1254,175 @@ export async function useItemOnBlock(
     await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Use activateBlock for bucket interaction with water/lava blocks
-    // activateBlock ensures the block is properly targeted
-    await bot.activateBlock(block);
+    // DEBUG: Always log block name for bucket and bone_meal operations
+    if (itemName === "bucket" || itemName === "water_bucket" || itemName === "lava_bucket" || itemName === "bone_meal") {
+      console.log(`[DEBUG useItemOnBlock] Item "${itemName}" on block: "${block.name}" (type: ${block.type}) at (${x},${y},${z})`);
+    }
+
+    // For buckets on liquid blocks, use _genericPlace to collect water/lava
+    // This sends the proper block_place packet with all required fields (including sequence)
+    if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
+      const initialItem = bot.heldItem?.name;
+      console.log(`[DEBUG] Initial item: ${initialItem}, collecting ${block.name} at (${x},${y},${z})`);
+
+      const expectedBucket = (block.name === "water" || block.name === "flowing_water") ? "water_bucket" : "lava_bucket";
+      let collected = false;
+
+      // Attempt 1: Use _genericPlace on the liquid block (sends proper protocol packet)
+      try {
+        console.log(`[DEBUG] Attempt 1: _genericPlace on ${block.name}`);
+        await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await (bot as any)._genericPlace(block, new Vec3(0, 1, 0), { swingArm: 'right' });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
+        console.error(`[DEBUG] _genericPlace attempt: collected=${collected}`);
+      } catch (e) {
+        console.error(`[DEBUG] _genericPlace for bucket collection failed: ${e}`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
+        if (collected) {
+          console.log(`[DEBUG] _genericPlace errored but bucket collected successfully`);
+        }
+      }
+
+      // Attempt 2: activateBlock on the liquid block
+      if (!collected) {
+        try {
+          console.error(`[DEBUG] Attempt 2: activateBlock on ${block.name}...`);
+          await bot.activateBlock(block);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
+          console.error(`[DEBUG] activateBlock attempt: collected=${collected}`);
+        } catch (e) {
+          console.error(`[DEBUG] activateBlock failed: ${e}`);
+        }
+      }
+
+      // Attempt 3: activateItem while looking at the liquid
+      if (!collected) {
+        try {
+          console.error(`[DEBUG] Attempt 3: activateItem while looking at ${block.name}...`);
+          await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+          await new Promise(resolve => setTimeout(resolve, 200));
+          bot.activateItem();
+          await new Promise(resolve => setTimeout(resolve, 500));
+          bot.deactivateItem();
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
+          console.error(`[DEBUG] activateItem attempt: collected=${collected}`);
+        } catch (e) {
+          console.error(`[DEBUG] activateItem failed: ${e}`);
+        }
+      }
+    } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
+      // For placing water/lava, we need to right-click a SOLID block's face.
+      // Use bot.placeBlock(solidBlock, faceVector) which handles protocol correctly.
+      console.log(`[DEBUG] Placing ${itemName} at (${x},${y},${z}) on block: "${block.name}" (solid: ${block.boundingBox === 'block'})`);
+
+      let referenceBlock: any = null;
+      let faceVector: Vec3 = new Vec3(0, 1, 0); // default: top face
+
+      if (block.boundingBox === 'block') {
+        referenceBlock = block;
+        faceVector = new Vec3(0, 1, 0);
+      } else {
+        const adjacentChecks = [
+          { offset: new Vec3(0, -1, 0), face: new Vec3(0, 1, 0) },
+          { offset: new Vec3(0, 0, -1), face: new Vec3(0, 0, 1) },
+          { offset: new Vec3(0, 0, 1), face: new Vec3(0, 0, -1) },
+          { offset: new Vec3(-1, 0, 0), face: new Vec3(1, 0, 0) },
+          { offset: new Vec3(1, 0, 0), face: new Vec3(-1, 0, 0) },
+          { offset: new Vec3(0, 1, 0), face: new Vec3(0, -1, 0) },
+        ];
+
+        for (const check of adjacentChecks) {
+          const adjPos = pos.plus(check.offset);
+          const adjBlock = bot.blockAt(adjPos);
+          if (adjBlock && adjBlock.boundingBox === 'block') {
+            referenceBlock = adjBlock;
+            faceVector = check.face;
+            console.log(`[DEBUG] Found solid block "${adjBlock.name}" at (${adjPos.x},${adjPos.y},${adjPos.z}), face=${faceVector}`);
+            break;
+          }
+        }
+
+        if (!referenceBlock) {
+          console.error(`[DEBUG] No solid block adjacent to (${x},${y},${z}) for water placement`);
+          throw new Error(`No solid block adjacent to (${x},${y},${z}) to place ${itemName} against. Need a solid block nearby.`);
+        }
+      }
+
+      let placed = false;
+
+      // Attempt 1: Use bot.placeBlock() - the proper Mineflayer API
+      try {
+        console.log(`[DEBUG] Attempt 1: bot.placeBlock on "${referenceBlock.name}" at (${referenceBlock.position.x},${referenceBlock.position.y},${referenceBlock.position.z}), face=${faceVector}`);
+        await bot.placeBlock(referenceBlock, faceVector);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const heldNow0 = bot.heldItem;
+        placed = !heldNow0 || heldNow0.name === "bucket";
+        console.log(`[DEBUG] placeBlock attempt: placed=${placed}, held=${heldNow0?.name}`);
+      } catch (e: any) {
+        const errMsg = e.message || String(e);
+        console.error(`[DEBUG] placeBlock for ${itemName} error: ${errMsg}`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const heldAfterError = bot.heldItem;
+        if (!heldAfterError || heldAfterError.name === "bucket") {
+          placed = true;
+          console.log(`[DEBUG] placeBlock errored but bucket was consumed - placement likely succeeded`);
+        }
+      }
+
+      // Attempt 2: activateBlock on the adjacent solid block (fallback)
+      if (!placed && referenceBlock) {
+        try {
+          console.log(`[DEBUG] Attempt 2: activateBlock on solid "${referenceBlock.name}"`);
+          await bot.lookAt(referenceBlock.position.offset(
+            0.5 + faceVector.x * 0.5,
+            0.5 + faceVector.y * 0.5,
+            0.5 + faceVector.z * 0.5
+          ));
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await bot.activateBlock(referenceBlock);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const heldNow = bot.heldItem;
+          placed = !heldNow || heldNow.name === "bucket";
+          console.log(`[DEBUG] activateBlock attempt: placed=${placed}, held=${heldNow?.name}`);
+        } catch (e) {
+          console.error(`[DEBUG] activateBlock for ${itemName} failed: ${e}`);
+        }
+      }
+
+      // Attempt 3: activateItem (right-click in the air while looking at target face)
+      if (!placed) {
+        try {
+          console.error(`[DEBUG] Attempt 3: activateItem while looking at solid block face`);
+          if (referenceBlock) {
+            await bot.lookAt(referenceBlock.position.offset(
+              0.5 + faceVector.x * 0.5,
+              0.5 + faceVector.y * 0.5,
+              0.5 + faceVector.z * 0.5
+            ));
+          } else {
+            await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+          }
+          await new Promise(resolve => setTimeout(resolve, 200));
+          bot.activateItem();
+          await new Promise(resolve => setTimeout(resolve, 500));
+          bot.deactivateItem();
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const heldNow2 = bot.heldItem;
+          placed = !heldNow2 || heldNow2.name === "bucket";
+          console.log(`[DEBUG] activateItem attempt: placed=${placed}, held=${heldNow2?.name}`);
+        } catch (e) {
+          console.error(`[DEBUG] activateItem for ${itemName} failed: ${e}`);
+        }
+      }
+    } else {
+      // For other items, use activateBlock
+      await bot.activateBlock(block);
+    }
 
     // Wait longer for inventory to update properly
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -1242,7 +1450,68 @@ export async function useItemOnBlock(
         return `⚠️ Used bucket on lava but lava_bucket not found in inventory. Holding: ${heldName}`;
       }
     } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
-      return `Placed ${itemName.replace("_bucket", "")} at (${x}, ${y}, ${z}). Now holding ${heldName}.`;
+      // Check if water/lava actually appeared, and if obsidian formed
+      await new Promise(resolve => setTimeout(resolve, 500)); // extra wait for world updates
+
+      // Verify bucket was consumed (held item should be empty bucket)
+      const bucketConsumed = !heldAfter || heldAfter.name === "bucket";
+      const placedFluid = itemName === "water_bucket" ? "water" : "lava";
+
+      // Check block at target position
+      const blockAfterPlace = bot.blockAt(pos);
+      const blockAfterName = blockAfterPlace?.name || "unknown";
+
+      // Verify water/lava appeared (may be at target or transformed to obsidian/cobblestone)
+      const fluidAppeared = blockAfterName === placedFluid || blockAfterName === `flowing_${placedFluid}`;
+      const transformed = blockAfterName === "obsidian" || blockAfterName === "cobblestone" || blockAfterName === "stone";
+
+      let obsidianInfo = "";
+      if (itemName === "water_bucket") {
+        // Search nearby for obsidian that may have formed
+        const nearbyObsidian: string[] = [];
+        for (let dx = -2; dx <= 2; dx++) {
+          for (let dy = -2; dy <= 2; dy++) {
+            for (let dz = -2; dz <= 2; dz++) {
+              const checkBlock = bot.blockAt(pos.offset(dx, dy, dz));
+              if (checkBlock?.name === "obsidian") {
+                nearbyObsidian.push(`(${pos.x+dx},${pos.y+dy},${pos.z+dz})`);
+              }
+            }
+          }
+        }
+        if (nearbyObsidian.length > 0) {
+          obsidianInfo = ` ✅ Obsidian formed at: ${nearbyObsidian.join(", ")}`;
+        } else if (transformed) {
+          obsidianInfo = ` Block at target transformed to: ${blockAfterName}`;
+        } else if (!fluidAppeared && !bucketConsumed) {
+          obsidianInfo = ` ⚠️ Water placement FAILED. Block at target: ${blockAfterName}. Bucket not consumed.`;
+        } else {
+          obsidianInfo = ` Block at target is now: ${blockAfterName}`;
+        }
+      }
+
+      if (!bucketConsumed) {
+        return `⚠️ ${itemName} placement may have FAILED at (${x}, ${y}, ${z}). Still holding ${heldName}. Block: ${blockAfterName}.${obsidianInfo}`;
+      }
+      return `✅ Placed ${placedFluid} at (${x}, ${y}, ${z}). Now holding ${heldName}.${obsidianInfo}`;
+    } else if (itemName === "bone_meal") {
+      // Report crop growth status after bone_meal application
+      const blockAfterBoneMeal = bot.blockAt(pos);
+      if (blockAfterBoneMeal) {
+        const cropBlocks = ["wheat", "beetroots", "carrots", "potatoes"];
+        if (cropBlocks.includes(blockAfterBoneMeal.name)) {
+          try {
+            const props = blockAfterBoneMeal.getProperties();
+            const age = props?.age;
+            const maxAge = blockAfterBoneMeal.name === "beetroots" ? 3 : 7;
+            if (age !== undefined) {
+              const mature = Number(age) >= maxAge;
+              return `Used bone_meal on ${blockAfterBoneMeal.name} at (${x}, ${y}, ${z}). Age: ${age}/${maxAge}${mature ? " ✅ MATURE - ready to harvest!" : " - not yet mature, apply more bone_meal"}`;
+            }
+          } catch (_) { /* fall through to generic message */ }
+        }
+      }
+      return `Used ${itemName} on ${block.name} at (${x}, ${y}, ${z}). Now holding ${heldName}.`;
     } else {
       return `Used ${itemName} on ${block.name} at (${x}, ${y}, ${z}). Now holding ${heldName}.`;
     }

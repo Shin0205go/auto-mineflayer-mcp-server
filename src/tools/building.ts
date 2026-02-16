@@ -244,7 +244,7 @@ export async function handleBuildingTool(
 
       try {
         // Always survival mode - actually mine the block
-        const result = await botManager.digBlock(username, x, y, z, false, autoCollect);
+        const result = await botManager.digBlock(username, x, y, z, false, autoCollect, force);
         return result;
       } catch (error) {
         if (error instanceof Error) {
@@ -306,6 +306,24 @@ export async function handleBuildingTool(
       }
 
       const result = await botManager.useItemOnBlock(username, itemName, x, y, z);
+      return result;
+    }
+
+    case "minecraft_till_soil": {
+      const x = args.x as number;
+      const y = args.y as number;
+      const z = args.z as number;
+      const result = await botManager.tillSoil(username, x, y, z);
+      return result;
+    }
+
+    case "minecraft_throw_item": {
+      const itemName = args.item_name as string;
+      const count = (args.count as number) || 1;
+      if (!itemName) {
+        throw new Error("item_name is required");
+      }
+      const result = await botManager.throwItem(username, itemName, count);
       return result;
     }
 
