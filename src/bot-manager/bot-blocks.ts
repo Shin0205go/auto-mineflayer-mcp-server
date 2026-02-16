@@ -216,9 +216,11 @@ function getExpectedDrop(blockName: string): string | null {
     "glowstone": "glowstone_dust",
     "redstone_lamp": "redstone_lamp", // Drops itself
     "sea_lantern": "prismarine_crystals",
-    "grass": "", // Drops nothing
-    "tall_grass": "", // Drops nothing (or seeds)
-    "fern": "", // Drops nothing (or seeds)
+    "grass": "wheat_seeds", // ~12.5% chance to drop seeds
+    "short_grass": "wheat_seeds", // 1.20+ renamed grass to short_grass
+    "tall_grass": "wheat_seeds", // ~12.5% chance to drop seeds
+    "fern": "wheat_seeds", // ~12.5% chance to drop seeds
+    "large_fern": "wheat_seeds", // ~12.5% chance to drop seeds
   };
 
   // If not in dropMappings, assume block drops itself (logs, planks, etc.)
@@ -564,10 +566,12 @@ export async function digBlock(
 
     // Check if inventory is full - BLOCK mining to prevent item loss
     // UNLESS autoCollect is false (items will stay on ground for manual pickup)
-    // Count non-null slots in main inventory (slots 0-35)
-    const TOTAL_SLOTS = 36; // Standard Minecraft player inventory (9 hotbar + 27 main)
+    // Mineflayer inventory slots: 0=craft output, 1-4=craft grid, 5-8=armor,
+    // 9-35=main inventory (27), 36-44=hotbar (9), 45=off-hand
+    // Only count main inventory (9-35) + hotbar (36-44) = 36 usable slots
+    const TOTAL_SLOTS = 36; // 27 main + 9 hotbar
     let usedSlots = 0;
-    for (let slot = 0; slot < 36; slot++) {
+    for (let slot = 9; slot <= 44; slot++) {
       if (bot.inventory.slots[slot] !== null) {
         usedSlots++;
       }
@@ -883,7 +887,7 @@ export async function digBlock(
       // Re-check inventory fullness at this point (inventory state may have changed)
       const currentEmptySlots = TOTAL_SLOTS - (() => {
         let used = 0;
-        for (let slot = 0; slot < 36; slot++) {
+        for (let slot = 9; slot <= 44; slot++) {
           if (bot.inventory.slots[slot] !== null) used++;
         }
         return used;
@@ -1220,13 +1224,57 @@ export async function useItemOnBlock(
       console.log(`[DEBUG useItemOnBlock] Item "${itemName}" on block: "${block.name}" (type: ${block.type}) at (${x},${y},${z})`);
     }
 
-    // For buckets on liquid blocks, use activateItem instead of activateBlock
-    // This is the correct way to collect water/lava with buckets in Mineflayer
+    // For buckets on liquid blocks, use low-level packet to collect water/lava
+    // activateItem() is broken in mineflayer 4.33+ (GitHub issue #3731)
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
       const initialItem = bot.heldItem?.name;
-      console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
-      bot.activateItem();
-      bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
+      console.log(`[DEBUG] Initial item: ${initialItem}, collecting ${block.name} at (${x},${y},${z})`);
+
+      // Method 1: Send raw block_place packet targeting the liquid block
+      // This bypasses the mineflayer activateItem bug
+      try {
+        (bot as any)._client.write('block_place', {
+          location: pos,
+          direction: 1, // top face
+          hand: 0,
+          cursorX: 0.5,
+          cursorY: 0.5,
+          cursorZ: 0.5,
+          insideBlock: false,
+        });
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } catch (e) {
+        console.error(`[DEBUG] block_place packet failed: ${e}, falling back to activateItem`);
+        // Fallback: try activateItem with longer delay
+        await bot.lookAt(pos);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        bot.activateItem();
+        await new Promise(resolve => setTimeout(resolve, 300));
+        bot.deactivateItem();
+      }
+    } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
+      // For placing water/lava, use raw packet targeting the block face
+      // activateBlock doesn't work for fluid placement on solid blocks
+      console.log(`[DEBUG] Placing ${itemName} at (${x},${y},${z}) on block: ${block.name}`);
+      await bot.lookAt(pos);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      try {
+        (bot as any)._client.write('block_place', {
+          location: pos,
+          direction: 1, // top face
+          hand: 0,
+          cursorX: 0.5,
+          cursorY: 0.5,
+          cursorZ: 0.5,
+          insideBlock: false,
+        });
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } catch (e) {
+        console.error(`[DEBUG] block_place for ${itemName} failed: ${e}, falling back to activateItem`);
+        bot.activateItem();
+        await new Promise(resolve => setTimeout(resolve, 300));
+        bot.deactivateItem();
+      }
     } else {
       // For other items, use activateBlock
       await bot.activateBlock(block);

@@ -12,6 +12,42 @@
 
 ---
 
+### [2026-02-16 Session 8] Inventory slot range bug - false "inventory full" (✅ FIXED)
+
+- **症状**: `minecraft_dig_block`と`minecraft_take_from_chest`がインベントリに空きがあるのに"inventory is full"と報告
+- **報告**: Bot4 (Session unfixed bug report)
+- **原因**: `bot.inventory.slots[0-35]`をチェックしていたが、mineflayerのスロット配置は:
+  - 0: crafting output, 1-4: crafting grid, 5-8: armor, 9-35: main inventory, 36-44: hotbar, 45: off-hand
+  - **slots 0-8 (crafting+armor) を誤ってカウント** → 装備するとスロットが埋まっていると判定
+  - **slots 36-44 (hotbar) を未カウント** → hotbarの空きスロットが無視される
+- **修正**: `src/bot-manager/bot-blocks.ts` のスロット範囲を `0..35` → `9..44` に修正（2箇所）
+- **ステータス**: ✅ 修正完了
+
+---
+
+### [2026-02-16 Session 8] Grass seed drop mapping missing short_grass (✅ FIXED)
+
+- **症状**: `minecraft_dig_block`で草を壊してもseed収集の追跡が行われない
+- **報告**: Claude2が種がドロップしないと報告
+- **原因**: `getExpectedDrop()`マッピングで`grass`と`tall_grass`のドロップが`""`(空文字)。
+  - Minecraft 1.20+では`short_grass`にリネームされたが、マッピングに未追加
+  - 空文字だとseed追跡ロジックがスキップされる
+- **修正**: `src/bot-manager/bot-blocks.ts`のdropMappingsに追加:
+  - `short_grass` → `wheat_seeds`
+  - `grass`, `tall_grass`, `fern`, `large_fern` → `wheat_seeds`
+- **ステータス**: ✅ 修正完了
+
+---
+
+### [2026-02-16 Session 8] Auto-gamerule missing doMobSpawning (✅ FIXED)
+
+- **症状**: bot-core.tsの自動gamerule修正にdoMobSpawningが含まれていない
+- **原因**: 元のコードはdoTileDrops, doMobLoot, doEntityDropsのみ設定
+- **修正**: `src/bot-manager/bot-core.ts`にdoMobSpawning trueを追加
+- **ステータス**: ✅ 修正完了
+
+---
+
 ### [2026-02-16 Session 7] Food Crisis Recurrence + Gamerule Reset Issue (❌ CRITICAL)
 
 - **症状**:

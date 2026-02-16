@@ -372,31 +372,72 @@ export function getSurroundings(bot: Bot): string {
  */
 export function findBlock(bot: Bot, blockName: string, maxDistance: number = 10): string {
   const pos = bot.entity.position;
-  const found: Array<{ x: number; y: number; z: number; distance: number; name: string }> = [];
   const searchName = blockName.toLowerCase();
 
-  // Search in a cube around the bot
-  for (let x = -maxDistance; x <= maxDistance; x++) {
-    for (let y = -maxDistance; y <= maxDistance; y++) {
-      for (let z = -maxDistance; z <= maxDistance; z++) {
-        const blockPos = pos.offset(x, y, z);
-        const block = bot.blockAt(blockPos);
-        if (block && block.name !== "air") {
-          const name = block.name.toLowerCase();
-          // Match exact, suffix (e.g., "bed" matches "red_bed"), or contains
-          const isMatch = name === searchName ||
-                         name.endsWith("_" + searchName) ||
-                         name.includes(searchName);
-          if (isMatch) {
-            const dist = pos.distanceTo(blockPos);
-            if (dist <= maxDistance) {
-              found.push({
-                x: Math.floor(blockPos.x),
-                y: Math.floor(blockPos.y),
-                z: Math.floor(blockPos.z),
-                distance: Math.round(dist * 10) / 10,
-                name: block.name,
-              });
+  // Use mineflayer's efficient bot.findBlocks API
+  const mcData = (bot as any).registry;
+
+  // Find all block IDs that match the search name
+  const matchingIds: number[] = [];
+  const blocksByName = mcData.blocksByName;
+  if (blocksByName) {
+    for (const [name, blockData] of Object.entries(blocksByName)) {
+      const lowerName = name.toLowerCase();
+      if (lowerName === searchName ||
+          lowerName.endsWith("_" + searchName) ||
+          lowerName.includes(searchName)) {
+        matchingIds.push((blockData as { id: number }).id);
+      }
+    }
+  }
+
+  const found: Array<{ x: number; y: number; z: number; distance: number; name: string }> = [];
+
+  if (matchingIds.length > 0) {
+    // Use bot.findBlocks - much faster than manual 3D loop
+    const positions = bot.findBlocks({
+      matching: matchingIds,
+      maxDistance: maxDistance,
+      count: 100,
+    });
+
+    for (const blockPos of positions) {
+      const block = bot.blockAt(blockPos);
+      if (block) {
+        const dist = pos.distanceTo(blockPos);
+        found.push({
+          x: blockPos.x,
+          y: blockPos.y,
+          z: blockPos.z,
+          distance: Math.round(dist * 10) / 10,
+          name: block.name,
+        });
+      }
+    }
+  } else {
+    // Fallback: manual search for blocks not in registry (shouldn't happen often)
+    const searchRadius = Math.min(maxDistance, 32); // Cap manual search
+    for (let x = -searchRadius; x <= searchRadius; x++) {
+      for (let y = -searchRadius; y <= searchRadius; y++) {
+        for (let z = -searchRadius; z <= searchRadius; z++) {
+          const blockPos = pos.offset(x, y, z);
+          const block = bot.blockAt(blockPos);
+          if (block && block.name !== "air") {
+            const name = block.name.toLowerCase();
+            const isMatch = name === searchName ||
+                           name.endsWith("_" + searchName) ||
+                           name.includes(searchName);
+            if (isMatch) {
+              const dist = pos.distanceTo(blockPos);
+              if (dist <= maxDistance) {
+                found.push({
+                  x: Math.floor(blockPos.x),
+                  y: Math.floor(blockPos.y),
+                  z: Math.floor(blockPos.z),
+                  distance: Math.round(dist * 10) / 10,
+                  name: block.name,
+                });
+              }
             }
           }
         }
