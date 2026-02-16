@@ -358,8 +358,21 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   // without handling plank type substitution properly
   const simpleWoodenRecipes: string[] = ["stick", "crafting_table"];
   if (simpleWoodenRecipes.includes(itemName)) {
-    // Find any planks in inventory
-    const anyPlanks = inventoryItems.find(i => i.name.endsWith("_planks"));
+    // Find the plank type with the highest count in inventory
+    const planksByType = new Map<string, number>();
+    let bestPlank: typeof inventoryItems[0] | undefined;
+    let bestPlankCount = 0;
+    for (const i of inventoryItems) {
+      if (i.name.endsWith("_planks")) {
+        const total = (planksByType.get(i.name) || 0) + i.count;
+        planksByType.set(i.name, total);
+        if (total > bestPlankCount) {
+          bestPlankCount = total;
+          bestPlank = i;
+        }
+      }
+    }
+    const anyPlanks = bestPlank;
     if (!anyPlanks) {
       throw new Error(`Cannot craft ${itemName}: Need any type of planks. Craft planks from logs first. Inventory: ${inventory}`);
     }
