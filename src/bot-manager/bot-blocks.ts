@@ -1425,6 +1425,24 @@ export async function useItemOnBlock(
       }
     } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
       return `Placed ${itemName.replace("_bucket", "")} at (${x}, ${y}, ${z}). Now holding ${heldName}.`;
+    } else if (itemName === "bone_meal") {
+      // Report crop growth status after bone_meal application
+      const blockAfterBoneMeal = bot.blockAt(pos);
+      if (blockAfterBoneMeal) {
+        const cropBlocks = ["wheat", "beetroots", "carrots", "potatoes"];
+        if (cropBlocks.includes(blockAfterBoneMeal.name)) {
+          try {
+            const props = blockAfterBoneMeal.getProperties();
+            const age = props?.age;
+            const maxAge = blockAfterBoneMeal.name === "beetroots" ? 3 : 7;
+            if (age !== undefined) {
+              const mature = Number(age) >= maxAge;
+              return `Used bone_meal on ${blockAfterBoneMeal.name} at (${x}, ${y}, ${z}). Age: ${age}/${maxAge}${mature ? " ✅ MATURE - ready to harvest!" : " - not yet mature, apply more bone_meal"}`;
+            }
+          } catch (_) { /* fall through to generic message */ }
+        }
+      }
+      return `Used ${itemName} on ${block.name} at (${x}, ${y}, ${z}). Now holding ${heldName}.`;
     } else {
       return `Used ${itemName} on ${block.name} at (${x}, ${y}, ${z}). Now holding ${heldName}.`;
     }
