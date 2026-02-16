@@ -50,6 +50,19 @@
 
 ---
 
+### [2026-02-16] stick クラフトバグ（✅解決）
+- **症状**: `minecraft_craft(item_name="stick")` で birch_planks x5 所持も "missing ingredient" エラー
+- **原因**: `src/bot-manager/bot-crafting.ts` の `compatibleRecipe` 検索ロジック（line 496-525）で、manual recipe が除外されていた
+  - stick の manual recipe は planks のみを使用（sticks は不要）
+  - 検索ロジックは `needsPlanks || needsSticks` をチェックするが、stick recipe は `needsSticks = false` となり、条件にマッチしなかった
+- **影響**: stick が作れず、石ツール（Phase 3 目標）が作成できない
+- **修正**: ✅完了（line 496-530）
+  - stick/crafting_table の場合は `needsPlanks && !needsSticks` の条件を追加
+  - planks の数だけチェックするように修正
+- **ファイル**: `src/bot-manager/bot-crafting.ts`
+
+---
+
 ### [2026-02-16] Claudeエージェント起動直後にシャットダウン（未解決）
 - **症状**: `npm run start:claude`でエージェント起動後、Loop 1開始→MCP接続→イベント購読→即座にシャットダウン
 - **ログ**:
