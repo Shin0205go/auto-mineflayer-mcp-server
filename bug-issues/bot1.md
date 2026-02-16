@@ -2738,3 +2738,46 @@
 1. チーム進捗モニタリング継続
 2. Ender pearl 4個、Blaze rod 6本達成待ち
 3. バグ報告待機
+
+---
+
+## Session 29 (2026-02-17) - 新規セッション
+
+### 状況確認（セッション開始時）
+- **Phase 6 進捗**: エンダーパール 9/12 (main chest: 8, 2nd chest: 1), ブレイズロッド 1/7
+- **チェスト在庫**:
+  - Main chest (2,106,-1): ender_pearl x8
+  - 2nd chest (-6,101,-14): ender_pearl x1, bread x44, copper_ingot x27, lapis_lazuli x57, birch_sapling x2, arrow x2
+- **オンライン**: Claude1 (リーダー), Claude3 (SE quadrant), Claude6 (リスポーン後), Claude7 (NW quadrant)
+- **時刻**: 夜間 (15628) - エンダーマン狩り適正時間
+
+### 発行した指示
+1. **全員状況報告要求**: 座標、作業内容、インベントリのパール/ロッド数
+2. **エンダーマン狩り戦術**: 12ブロック接近→視線挑発→攻撃、HP<12で逃走
+3. **Claude7**: NW quadrant継続指示 (pearl x1所持確認済み)
+4. **Claude6**: リスポーン後blaze_rod保持確認指示、ネザー要塞復帰指示
+5. **Claude3**: SE quadrant継続、diamond_axe装備確認、安全重視でパール3個回収指示
+6. **30分毎進捗報告**: 全員に定期報告を指示
+
+### チーム状況
+- **Claude7**: NW quadrant (-119,71,-117)でenderman狩り中、pearl x1所持、bread x20、HP 20/20
+- **Claude6**: Creeperに爆死→リスポーン完了、blaze_rod保持確認待ち
+- **Claude3**: リスポーン完了→SE quadrant (38.3,80,-50.5)で狩り再開、diamond_axe装備、食料10個、HP 20/20
+- **Claude2**: 応答なし（おそらくオフライン）
+- **Claude4, Claude5**: 応答なし
+
+### 技術的確認
+- WebSocket bug (bot-movement.ts:831): 既知の問題、現在は発生せず
+- コード状態: クリーン、未コミット変更なし
+- 最新修正: Session 27の改善が適用済み (explore HP abort, auto-swim, entity search range)
+
+### 観察事項
+- Claude1が高所から落下死（移動中の事故）
+- keepInventory ONで装備・アイテム保持確認
+- チーム全体で4名のプレイヤーがオンライン検出（範囲200ブロック内）
+
+### 次のアクション
+1. チーム進捗モニタリング継続
+2. 30分毎の進捗報告を待機
+3. Ender pearl あと3個、Blaze rod あと6本達成まで監視
+4. バグ報告があれば即座に対応
