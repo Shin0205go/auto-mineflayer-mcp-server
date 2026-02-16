@@ -747,13 +747,32 @@ export async function minecraft_explore_area(
           // Auto-fight hostile mobs when found during exploration (especially enderman)
           const combatTargets = ["enderman", "blaze", "zombie", "skeleton", "spider", "creeper"];
           if (combatTargets.some(mob => target.toLowerCase().includes(mob))) {
-            console.error(`[ExploreArea] Found ${target} — auto-engaging in combat!`);
-            try {
-              const fightResult = await botManager.attack(username, target);
-              findings.push(`Combat: ${fightResult}`);
-            } catch (fightErr) {
-              console.error(`[ExploreArea] Combat failed: ${fightErr}`);
-              findings.push(`Combat attempted but failed: ${fightErr}`);
+            // Loop: fight all nearby targets of this type, not just one
+            let fightCount = 0;
+            const maxFights = 5; // Safety limit per exploration step
+            while (fightCount < maxFights) {
+              const checkResult = botManager.findEntities(username, target, 32);
+              if (!checkResult.includes(target) || checkResult.startsWith("No")) break;
+
+              console.error(`[ExploreArea] Found ${target} (#${fightCount + 1}) — auto-engaging in combat!`);
+              try {
+                const fightResult = await botManager.attack(username, target);
+                findings.push(`Combat #${fightCount + 1}: ${fightResult}`);
+                fightCount++;
+                // Check HP before continuing
+                const botHealth = botManager.getBot(username)?.health ?? 20;
+                if (botHealth <= 12) {
+                  console.error(`[ExploreArea] HP low after combat, stopping fight chain`);
+                  break;
+                }
+              } catch (fightErr) {
+                console.error(`[ExploreArea] Combat failed: ${fightErr}`);
+                findings.push(`Combat attempted but failed: ${fightErr}`);
+                break;
+              }
+            }
+            if (fightCount > 0) {
+              console.error(`[ExploreArea] Fought ${fightCount} ${target}(s) at this location`);
             }
           }
         }
