@@ -7,6 +7,7 @@ import prismarineViewer from "prismarine-viewer";
 const { mineflayer: mineflayerViewer } = prismarineViewer;
 import type { BotConfig, ManagedBot, GameEvent } from "./types.js";
 import { isHostileMob, isPassiveMob } from "./minecraft-utils.js";
+import { equipArmor } from "./bot-items.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -580,9 +581,14 @@ export class BotCore extends EventEmitter {
           console.error(`[BotManager] ${config.username} died! Auto-respawning...`);
           addEvent("death", "Bot died! Respawning...");
           bot.chat("やられた！リスポーン中...");
-          setTimeout(() => {
+          setTimeout(async () => {
             bot.chat("復活しました！");
             addEvent("respawn", "Bot respawned");
+            // Auto-equip best armor after respawn
+            try {
+              await equipArmor(bot);
+              console.error(`[BotManager] Auto-equipped armor after respawn`);
+            } catch (_) { /* ignore armor equip errors */ }
           }, 2000);
         });
 
