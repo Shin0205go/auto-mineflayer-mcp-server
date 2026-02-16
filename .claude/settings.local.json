@@ -105,27 +105,8 @@
       "Bash(bash -n:*)",
       "Bash(bash:*)",
       "Bash(echo:*)",
-<<<<<<< HEAD
       "Bash(xargs:*)",
       "Bash(/Users/shingo/Develop/auto-mineflayer-mcp-server/scripts/hook-stop-auto-pr.sh:*)"
-=======
-<<<<<<< HEAD
-      "Bash(xargs:*)",
-      "Bash(/Users/shingo/Develop/auto-mineflayer-mcp-server/scripts/hook-stop-auto-pr.sh:*)"
-=======
-<<<<<<< HEAD
-      "Bash(xargs:*)",
-      "Bash(/Users/shingo/Develop/auto-mineflayer-mcp-server/scripts/hook-stop-auto-pr.sh:*)"
-=======
-<<<<<<< HEAD
-      "Bash(xargs:*)",
-      "Bash(/Users/shingo/Develop/auto-mineflayer-mcp-server/scripts/hook-stop-auto-pr.sh:*)"
-=======
-      "Bash(bash:*)"
->>>>>>> origin/main
->>>>>>> origin/main
->>>>>>> origin/main
->>>>>>> origin/main
     ]
   },
   "enableAllProjectMcpServers": true,
