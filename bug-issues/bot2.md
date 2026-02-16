@@ -176,6 +176,25 @@
 
 ---
 
+### [2026-02-16] minecraft_craft が全面的にタイムアウト (未解決)
+- **症状**: `minecraft_craft(item_name)` を呼ぶと全て "Event windowOpen did not fire within timeout of 20000ms" エラー
+- **試行**:
+  - `craft(stone_pickaxe)` → タイムアウト
+  - crafting_table の近くに移動してから再試行 → タイムアウト
+- **影響**: 一切のクラフトができない。ツール作成不可、Phase 3以降の進行不可
+- **推定原因**:
+  1. Mineflayer の `bot.openCraftingTable()` または `bot.craft()` API の問題
+  2. crafting_table ブロックの認識に失敗している
+  3. イベントリスナーの登録タイミング問題
+- **次のアクション**:
+  1. `src/bot-manager/bot-crafting.ts` の `craft` 関数にデバッグログ追加
+  2. crafting_table の検索・認識ロジックを確認
+  3. Mineflayer バージョン確認
+  4. 代替案: 他のbotに作成を依頼
+- **ファイル**: `src/bot-manager/bot-crafting.ts`
+
+---
+
 ### [2026-02-16] crafting_table クラフト後にインベントリから消失
 - **症状**: `minecraft_craft(item_name="crafting_table")` 成功後、"Crafted 1x crafting_table"メッセージが表示されるが、その直後のインベントリには存在しない
 - **試行**:
