@@ -528,6 +528,43 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       throw new Error(`Cannot craft ${itemName}: No compatible recipe found. Have ${totalPlanks} planks and ${totalSticks} sticks. Found ${allRecipes.length} recipes total. This may be a Minecraft version compatibility issue.`);
     }
 
+    // CRITICAL FIX: Mineflayer's bot.craft() does STRICT ID matching.
+    // If recipe requires oak_planks but we have birch_planks, it fails with "missing ingredient".
+    // We must replace the plank IDs in the recipe with the planks we actually have.
+    const ourPlanksItem = mcData.itemsByName[anyPlanks.name];
+    if (ourPlanksItem) {
+      const delta = compatibleRecipe.delta as Array<{ id: number; count: number }>;
+      const recipePlanksId = delta.find(d => {
+        if (d.count >= 0) return false;
+        const ing = mcData.items[d.id];
+        return ing?.name.endsWith("_planks");
+      })?.id;
+
+      if (recipePlanksId && recipePlanksId !== ourPlanksItem.id) {
+        console.error(`[Craft] Recipe uses plank ID ${recipePlanksId}, but we have ${anyPlanks.name} (ID ${ourPlanksItem.id}). Substituting...`);
+        // Replace plank IDs in delta
+        for (const d of delta) {
+          if (d.id === recipePlanksId) d.id = ourPlanksItem.id;
+        }
+        // Replace in inShape if present
+        if ((compatibleRecipe as any).inShape) {
+          const shape = (compatibleRecipe as any).inShape as number[][];
+          for (let row = 0; row < shape.length; row++) {
+            for (let col = 0; col < shape[row].length; col++) {
+              if (shape[row][col] === recipePlanksId) shape[row][col] = ourPlanksItem.id;
+            }
+          }
+        }
+        // Replace in ingredients if present
+        if ((compatibleRecipe as any).ingredients) {
+          const ingredients = (compatibleRecipe as any).ingredients as number[];
+          for (let i = 0; i < ingredients.length; i++) {
+            if (ingredients[i] === recipePlanksId) ingredients[i] = ourPlanksItem.id;
+          }
+        }
+      }
+    }
+
     console.error(`[Craft] Attempting to craft ${itemName} using ${anyPlanks.name} (have ${totalPlanks} planks)`);
     console.error(`[Craft] Compatible recipe found: ${JSON.stringify({
       requiresTable: compatibleRecipe.requiresTable,
