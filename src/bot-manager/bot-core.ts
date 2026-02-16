@@ -465,6 +465,8 @@ export class BotCore extends EventEmitter {
 
         // Oxygen level check (drowning detection + auto swim up)
         let lastOxygenLevel = 20;
+        let autoSwimActive = false;
+        let autoSwimInterval: ReturnType<typeof setInterval> | null = null;
         bot.on("breath", () => {
           const oxygen = bot.oxygenLevel ?? 20;
           // Only emit if oxygen is critically low AND decreasing (avoid false positives)
@@ -474,9 +476,10 @@ export class BotCore extends EventEmitter {
             });
           }
           // Auto swim up when oxygen is getting low (trigger early at 15 to prevent drowning)
-          if (oxygen < 15 && oxygen < lastOxygenLevel) {
+          if (oxygen < 15 && !autoSwimActive) {
             const feetBlock = bot.blockAt(bot.entity.position.floored());
             if (feetBlock?.name === "water") {
+              autoSwimActive = true;
               console.error(`[AutoSwim] Low oxygen (${oxygen}/20), swimming up!`);
               bot.pathfinder.setGoal(null); // Cancel current pathfinding
               // Look straight up so forward movement swims upward
@@ -484,11 +487,25 @@ export class BotCore extends EventEmitter {
               bot.setControlState("jump", true);
               bot.setControlState("sprint", true);
               bot.setControlState("forward", true);
-              setTimeout(() => {
-                bot.setControlState("jump", false);
-                bot.setControlState("sprint", false);
-                bot.setControlState("forward", false);
-              }, 5000); // Extended from 3s to 5s for deeper water
+              // Keep checking every 500ms — stop only when out of water or max 15s
+              let swimTicks = 0;
+              autoSwimInterval = setInterval(() => {
+                swimTicks++;
+                const currentFeet = bot.blockAt(bot.entity.position.floored());
+                const stillInWater = currentFeet?.name === "water";
+                if (!stillInWater || swimTicks >= 30) { // 30 * 500ms = 15s max
+                  bot.setControlState("jump", false);
+                  bot.setControlState("sprint", false);
+                  bot.setControlState("forward", false);
+                  autoSwimActive = false;
+                  if (autoSwimInterval) clearInterval(autoSwimInterval);
+                  autoSwimInterval = null;
+                  console.error(`[AutoSwim] Stopped swimming (${stillInWater ? "timeout" : "out of water"}) after ${swimTicks * 0.5}s`);
+                } else {
+                  // Keep looking up while swimming
+                  bot.look(bot.entity.yaw, -Math.PI / 2, true);
+                }
+              }, 500);
             }
           }
           lastOxygenLevel = oxygen;
