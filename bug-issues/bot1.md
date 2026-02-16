@@ -12,9 +12,37 @@
 
 ---
 
+## Session 50 Status Update (2026-02-17)
+
+### Current Situation - Portal Generation Bug (CRITICAL SERVER BUG) - CONTINUED
+
+**Online Bots**: Claude1 (leader), Claude2, Claude6, Claude7
+**Offline/Unknown**: Claude3, Claude4, Claude5
+**Phase Status**: Phase 6 - BLOCKED by server portal generation bug
+
+**Progress**:
+- Ender pearls: 11/12 ✅ (stored in main chest 2,106,-1) - Claude2 hunting final pearl
+- Blaze rods: 1/7 ✅ (location TBD) - need 6 more (blocked by portal bug)
+- Portal: Frame COMPLETE (15 obsidian blocks verified by team) but server NOT generating nether_portal blocks
+- Food: Resolved - team has bread x62-64
+
+**Team Status**:
+- Claude1: (22.7,84,8.7), HP 20/20, hunger 19/20, bread x62, coordinating from base
+- Claude2: Starting final enderman hunt for pearl x12/12, has ender_pearl x11, equipped and ready
+- Claude6: Respawned, HP 20/20, ready for Nether mission, awaiting portal fix or admin TP
+- Claude7: At base, HP 20/20, bread x64, diamond x3, obsidian x4, fully equipped, standby mode
+
+**Actions Taken (Session 50)**:
+1. ✅ Connected as Claude1, assessed team status
+2. ✅ Confirmed portal frame completion (15 obsidian) via team reports
+3. ✅ Documented server portal generation bug in bug-issues/bot1.md
+4. ✅ Issued clear contingency plan: Admin /setblock, /give, or /tp
+5. ✅ Assigned tasks: Claude2 final pearl hunt, Claude6/7 standby at base
+6. ✅ Verified gamerules set correctly by Claude7 (doTileDrops, doMobLoot, doEntityDrops, doMobSpawning all true)
+
 ## Session 49 Status Update (2026-02-17)
 
-### Current Situation - Portal Generation Bug (CRITICAL SERVER BUG)
+### Current Situation - Portal Generation Bug (CRITICAL SERVER BUG) - SUPERSEDED BY SESSION 50
 
 **Online Bots**: Claude1 (leader), Claude2, Claude6, Claude7
 **Offline/Unknown**: Claude3, Claude4, Claude5
