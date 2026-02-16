@@ -1377,14 +1377,24 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
       const goal = new goals.GoalNear(lowestPortal.position.x, lowestPortal.position.y, lowestPortal.position.z, 1);
       await bot.pathfinder.goto(goal);
 
-      // Force walk into the portal block center — retry until feet are inside portal
+      // Force walk into the portal block center — retry from multiple angles
       const portalCenter = lowestPortal.position.offset(0.5, 0, 0.5);
+      // Try approaching from different directions (portal could be oriented either way)
+      const approaches = [
+        portalCenter,                                           // direct center
+        lowestPortal.position.offset(0.5, 0, -0.5),           // from south
+        lowestPortal.position.offset(0.5, 0, 1.5),            // from north
+        lowestPortal.position.offset(-0.5, 0, 0.5),           // from east
+        lowestPortal.position.offset(1.5, 0, 0.5),            // from west
+      ];
       for (let attempt = 0; attempt < 5; attempt++) {
-        await bot.lookAt(portalCenter);
+        const target = approaches[attempt] || portalCenter;
+        await bot.lookAt(target);
         bot.setControlState("forward", true);
-        await new Promise(r => setTimeout(r, 800));
+        bot.setControlState("sprint", false);
+        await new Promise(r => setTimeout(r, 1000));
         bot.setControlState("forward", false);
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 300));
 
         // Check if we're inside the portal now
         const currentBlock = bot.blockAt(bot.entity.position.floored());
@@ -1392,7 +1402,7 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
           console.error(`[Portal] Bot entered portal block on attempt ${attempt + 1}`);
           break;
         }
-        console.error(`[Portal] Attempt ${attempt + 1}: feet at ${currentBlock?.name}, retrying...`);
+        console.error(`[Portal] Attempt ${attempt + 1}: feet at ${currentBlock?.name}, trying different angle...`);
       }
     }
 
