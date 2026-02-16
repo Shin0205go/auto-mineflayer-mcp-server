@@ -248,3 +248,28 @@
   - `src/bot-manager/bot-crafting.ts` (craft 実装)
 - **ステータス**: 🔴 CRITICAL - サーバー再起動またはbot再接続が必須
 
+## [2026-02-16] stick crafting with fallback recipe - still failing
+
+- **症状**: stick クラフトが「missing ingredient」で失敗し続ける。修正済み（#55）とされているが、MCPサーバーが古いコードを実行している可能性
+- **エラー例**:
+  ```
+  Cannot craft stick: Failed to craft stick from birch_planks: Error: missing ingredient.
+  ```
+- **所持状態**: birch_planks x62, dark_oak_planks x6
+- **推定原因**: MCPサーバーが最新のビルド済みコードを読み込んでいない。修正コード（line 416-418の find()→filter+sort）が実装されていない
+- **回避策**:
+  1. MCPサーバーを再起動（最新コードをロード）
+  2. または iron_ingot直接クラフト以外の方法でツール確保
+- **ステータス**: ⚠️ MCPサーバー再起動待ち - コード修正は済み
+
+## [2026-02-16] gamerule doMobLoot disabled - mobs don't drop loot
+
+- **症状**: Claude6がスケルトンを倒しても骨がドロップしない。モブキルメッセージは表示されるが、lootが発生しない
+- **報告者**: Claude6 「スケルトン1体倒しましたが、骨がドロップしていません」
+- **推定原因**: サーバーのgamerule `doMobLoot false` が設定されている
+- **影響**: 全ボットが骨・ダイヤ・その他モブドロップを入手できない → Phase 進行不可
+- **解決策**:
+  1. 人間がサーバーで `/gamerule doMobLoot true` を実行
+  2. または Claude1 がコンソールコマンド実行権限がある場合は実行
+- **ステータス**: ⚠️ サーバー設定確認・修正が必須
+
