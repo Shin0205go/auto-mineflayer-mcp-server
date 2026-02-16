@@ -705,8 +705,10 @@ export async function minecraft_explore_area(
         } catch (_) { /* no food available */ }
       }
 
-      // Abort if HP is critically low
-      if (hp <= 6) {
+      // Abort if HP is critically low (raised from 6 to 10 — enderman hits for 4.5-7.5 damage)
+      if (hp <= 10) {
+        // Try to eat before aborting
+        try { await botManager.eat(username); } catch (_) {}
         return `Exploration aborted at ${visitedPoints} points due to critical HP (${hp}/20). Flee and recover! Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
       }
 
@@ -813,15 +815,19 @@ export async function minecraft_explore_area(
                 const botAfterFight = botManager.getBot(username);
                 if (botAfterFight) {
                   const botHealth = botAfterFight.health ?? 20;
-                  if (botHealth <= 12) {
-                    console.error(`[ExploreArea] HP low after combat, stopping fight chain`);
-                    break;
-                  }
+                  // Eat between fights if HP or hunger is not full
                   if (botHealth < 18 && botAfterFight.food < 20) {
                     try {
                       await botManager.eat(username);
                       console.error(`[ExploreArea] Ate food between fights (HP: ${botHealth})`);
                     } catch (_) { /* no food available */ }
+                  }
+                  // After eating, check if HP is still dangerously low — abort exploration entirely
+                  const hpAfterEat = botAfterFight.health ?? 20;
+                  if (hpAfterEat <= 12) {
+                    console.error(`[ExploreArea] HP still low after combat+eating (${hpAfterEat}), aborting exploration`);
+                    try { await botManager.flee(username, 20); } catch (_) {}
+                    return `Exploration aborted after ${fightCount} fights due to low HP (${hpAfterEat}/20). Flee and recover! Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
                   }
                 }
               } catch (fightErr) {
