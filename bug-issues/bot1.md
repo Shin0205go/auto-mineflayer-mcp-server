@@ -2848,8 +2848,84 @@
 - エンダーマン発見率低い（Claude3, Claude7とも未発見）
 - 夜間の危険度が高い（複数ボットが低HP）
 
-### 次のアクション
-1. Claude5の生存確認
-2. 朝になったらベッド作成（Claude6担当）
-3. エンダーマン狩り継続（朝〜夜）
-4. 進捗報告待機
+### バグレポート
+
+#### [2026-02-17 Session 30] doEntityDrops not working - Enderman kills drop no pearls (🔴 UNRESOLVED)
+- **症状**: Claude7報告: エンダーマン撃破してもender_pearlがドロップしない
+- **検証**: bot-core.ts:319 でdoEntityDrops true設定済み
+- **根本原因**: `/gamerule` コマンドはOP権限が必要。ボットがOP権限なしで実行すると失敗するが、bot.chat()は成功/失敗を返さない
+- **コード箇所**:
+  - bot-core.ts:317-320 - 接続時に/gamerule送信（検証なし）
+  - environment.ts:259 - validate_survival_environmentでも送信
+- **解決策の選択肢**:
+  1. **推奨**: CLAUDE.mdに「ボットに/op権限を付与すること」を明記（人間プレイヤーの責任）
+  2. bot.chat()後にgamerule値を読み取って検証（複雑、タイミング問題あり）
+  3. エラーメッセージを監視（不確実）
+- **次のステップ**: 人間プレイヤーに全ボットへのOP付与を依頼するチャットを送信
+- **経過**: Claude3, Claude6, Claude2, Claude5が "Gamerule doEntityDrops is now set to: true" 受信
+- **しかし**: Claude7報告「エンダーマン3体撃破、pearl ドロップ0個」（Session 30継続中）
+- **矛盾**: gameruleメッセージは表示されるが、実際のドロップは発生していない
+- **新たな推測**:
+  1. gameruleメッセージは表示されるが実際には無効のまま
+  2. サーバー側でgameruleが別の値で上書きされている
+  3. エンダーマンの特殊なドロップ判定（doMobLoot が関係？）
+  4. ボットのOP権限がまだ不足
+- **Claude6の6個pearl**: Session 30以前に収集したもの（今回の3体は別）
+- **次のステップ**: 人間プレイヤーに `/gamerule doEntityDrops` の実際の値を確認依頼
+- **ステータス**: 🔴 未解決、Phase 6 ブロック中
+
+#### [2026-02-17 Session 30] Nether portal activation unclear (🔍 INVESTIGATING)
+- **症状**: ポータル起動が不明瞭。Claude6は「起動確認」報告、Claude1はnether_portalブロック検出できず
+- **試行**: Claude1が複数回flint_and_steel使用。(7,107,-3), (8,107,-3), (8,106,-3), (9,106,-3)
+- **座標**: Obsidian frame at X=7-10, Y=106-110, Z=-3 (4x5構造)
+- **可能性**:
+  1. ポータルは起動済みだがfind_blockが検出失敗（検索範囲の問題？）
+  2. Claude6とClaude1で見えているワールド状態が異なる（同期問題）
+  3. フレーム構造が不完全（内部2x3のair確認必要）
+- **次のステップ**: Claude6に実際にポータル入って確認させる
+- **ステータス**: 🔍 調査中
+
+### Session 30 最終状況 (🔴 Phase 6 停滞中 - 複数の重大問題)
+
+**Phase 6 重大障害 - 3つの未解決問題でブロック中**
+
+#### 🔴 重大問題 (未解決)
+1. **doEntityDrops未解決**: gameruleメッセージ表示されるが実際はドロップ無効（Claude7: 3体撃破でpearl 0個）
+2. **食料危機**: 全チェスト食料なし、複数ボットHP危険（Claude2: HP1, Claude4: HP6.4）
+3. **ネザーポータル未起動**: find_blockでnether_portal検出できず、Claude6も確認できず
+
+#### Phase 6 進捗
+- **エンダーパール**: 6/12 (Claude6所持) → あと6個必要
+- **ブレイズロッド**: 1/7 (誰かが所持) → あと6本必要
+
+#### 作戦展開中のボット
+- **Claude1**: base (2,106,-1), 指揮統制、バグ修正完了
+- **Claude2**: NE象限エンダーマン担当（指示送信済み）
+- **Claude3**: SE象限エンダーマン担当（指示送信済み）
+- **Claude4**: NW象限エンダーマン担当（指示送信済み）
+- **Claude5**: SW象限エンダーマン担当（探索中、(41.5,74,40.6)）
+- **Claude6**: pearl 6個預入後、ネザー要塞(-570,78,-715)へブレイズ狩り
+- **Claude7**: 中央エリアエンダーマン担当（指示送信済み）
+
+#### 発行済み指示
+1. エリア分散配置: 5名が異なる象限でエンダーマン狩り
+2. Claude6: pearl預入→ポータル起動→ネザー要塞でブレイズ6本
+3. 安全ルール: 夜間優先、HP<12で逃走、1-2個取ったら報告
+
+### Session 30 成果
+- ✅ バグ調査完了、bug-issues/bot1.md詳細記録
+- ✅ チーム指示配信（エリア分担、安全ルール）
+- ✅ Claude1 respawn機能活用（HP 2.8→20復帰）
+- ⚠️ 実際のゲーム進捗: Pearl 6/12維持（新規ドロップ0）、ブレイズロッド 1/7維持
+
+### 人間プレイヤーへの依頼（緊急）
+1. `/gamerule doEntityDrops` の実際の値確認（現在false?）
+2. `/gamerule doMobLoot` の実際の値確認
+3. 全ボットへのOP権限付与: `/op Claude1` ~ `/op Claude7`
+4. 手動でgamerule設定: `/gamerule doEntityDrops true`, `/gamerule doMobLoot true`
+
+### 次のアクション（人間プレイヤー対応後）
+1. gamerule修正確認→エンダーマン狩りテスト
+2. 食料生産（畑作成 or 動物狩り）
+3. ネザーポータル起動問題の解決
+4. Phase 6 再開
