@@ -491,6 +491,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       }
     }
 
+    // For stick and crafting_table manual recipes, use them directly (they only need planks)
     // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
     // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
     const compatibleRecipe = allRecipes.find(recipe => {
@@ -515,6 +516,11 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           needsSticks = true;
           sticksCount = Math.abs(d.count);
         }
+      }
+
+      // For stick/crafting_table: only planks needed
+      if ((itemName === "stick" || itemName === "crafting_table") && needsPlanks && !needsSticks) {
+        return totalPlanks >= planksCount;
       }
 
       // Verify we have enough materials
