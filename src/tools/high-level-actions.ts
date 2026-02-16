@@ -826,17 +826,26 @@ export async function minecraft_explore_area(
       }
 
       // Defensive combat: fight back if a hostile mob is very close (attacking us)
+      // Exclude creepers — fighting them at close range causes explosions, flee instead
       const botObj = botManager.getBot(username);
       if (botObj && botObj.health < 18) {
-        const nearHostile = Object.values(botObj.entities)
-          .filter(e => e !== botObj.entity && e.name && e.position.distanceTo(botObj.entity.position) < 5)
-          .filter(e => ["zombie", "skeleton", "spider", "creeper", "drowned", "husk", "stray", "wither_skeleton", "piglin_brute"].includes(e.name || ""))
-          .sort((a, b) => a.position.distanceTo(botObj.entity.position) - b.position.distanceTo(botObj.entity.position))[0];
-        if (nearHostile) {
-          console.error(`[ExploreArea] Defensive: ${nearHostile.name} attacking at ${nearHostile.position.distanceTo(botObj.entity.position).toFixed(1)} blocks, fighting back!`);
-          try {
-            await botManager.attack(username, nearHostile.name);
-          } catch (_) { /* ignore combat errors */ }
+        // Flee from nearby creepers first
+        const nearCreeper = Object.values(botObj.entities)
+          .find(e => e !== botObj.entity && e.name === "creeper" && e.position.distanceTo(botObj.entity.position) < 8);
+        if (nearCreeper) {
+          console.error(`[ExploreArea] Creeper nearby at ${nearCreeper.position.distanceTo(botObj.entity.position).toFixed(1)} blocks — fleeing!`);
+          try { await botManager.flee(username, 15); } catch (_) {}
+        } else {
+          const nearHostile = Object.values(botObj.entities)
+            .filter(e => e !== botObj.entity && e.name && e.position.distanceTo(botObj.entity.position) < 5)
+            .filter(e => ["zombie", "skeleton", "spider", "drowned", "husk", "stray", "wither_skeleton", "piglin_brute"].includes(e.name || ""))
+            .sort((a, b) => a.position.distanceTo(botObj.entity.position) - b.position.distanceTo(botObj.entity.position))[0];
+          if (nearHostile) {
+            console.error(`[ExploreArea] Defensive: ${nearHostile.name} attacking at ${nearHostile.position.distanceTo(botObj.entity.position).toFixed(1)} blocks, fighting back!`);
+            try {
+              await botManager.attack(username, nearHostile.name);
+            } catch (_) { /* ignore combat errors */ }
+          }
         }
       }
 
