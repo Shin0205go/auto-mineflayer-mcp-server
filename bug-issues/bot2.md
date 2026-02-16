@@ -59,3 +59,20 @@
   - `bot.activateItem()` + `bot.deactivateItem()` を使用（await不要）
   - ビルド成功、動作確認待ち
 
+### [2026-02-16] minecraft_use_item_on_block で水バケツからの水配置が失敗 🚨未解決
+- **症状**: `use_item_on_block(item_name="water_bucket", x, y, z)`を実行すると「Placed water at (x, y, z). Now holding water_bucket.」と表示されるが、実際には水が配置されず、water_bucketがインベントリに残る
+- **試行**:
+  - 修正1: activateItem() + deactivateItem() → 失敗
+  - 修正2: placeBlock(referenceBlock, Vec3(0,1,0)) → 失敗
+  - 修正3: activateItemで向いた方向に配置 → 失敗
+  - 修正4: placeBlock(下のブロック, 上面) + fallback → 失敗
+  - 全ての試行で`find_block("water", 5)`: No water found
+- **影響**: 畑作りに必要な水源が作れない、無限水源が作れない、Phase 2食料確保が停滞
+- **推定原因**:
+  - Mineflayerのwater_bucket配置の正しいAPIが不明
+  - equip/activateItem/placeBlockのいずれも機能していない
+  - MCPサーバーとMineflayerボット間の通信に問題がある可能性
+- **回避策**: 自然の水源を探して利用、またはClaude7が成功した方法を確認
+- **次のアクション**: Claude7がどうやって水配置に成功したか調査・コード比較
+- **ファイル**: `src/bot-manager/bot-blocks.ts:1230-1260`
+
