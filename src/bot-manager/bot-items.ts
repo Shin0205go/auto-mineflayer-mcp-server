@@ -504,6 +504,17 @@ export async function equipArmor(bot: Bot): Promise<string> {
     }
   }
 
+  // Also equip shield to off-hand if available
+  const shield = bot.inventory.items().find(i => i.name.includes("shield"));
+  if (shield) {
+    try {
+      await bot.equip(shield, "off-hand");
+      equipped.push(shield.name);
+    } catch {
+      // Already equipped or can't equip
+    }
+  }
+
   return equipped.length > 0
     ? `Equipped: ${equipped.join(", ")}`
     : "No armor to equip";
