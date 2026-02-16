@@ -545,7 +545,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       allRecipes = [manualRecipe as any];
     }
 
-    if (allRecipes.length === 0 && (itemName === "bread" || itemName === "bone_meal")) {
+    if (allRecipes.length === 0 && (itemName === "bread" || itemName === "bone_meal" || itemName === "shield")) {
       console.error(`[Craft] No recipes found for ${itemName}, using manual crafting...`);
 
       if (itemName === "bread") {
@@ -582,6 +582,35 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             { id: boneItem.id, count: -1 }
           ],
           requiresTable: false
+        };
+        allRecipes = [manualRecipe as any];
+      }
+
+      if (itemName === "shield") {
+        const ironItem = mcData.itemsByName["iron_ingot"];
+        if (!ironItem) throw new Error("Cannot find iron_ingot item data");
+        const ironInv = inventoryItems.filter(i => i.name === "iron_ingot").reduce((s, i) => s + i.count, 0);
+        if (ironInv < 1) throw new Error(`Cannot craft shield: Need 1 iron_ingot, have ${ironInv}`);
+        // Find any planks
+        const plankItem = inventoryItems.find(i => i.name.endsWith("_planks"));
+        if (!plankItem) throw new Error("Cannot craft shield: Need 6 planks");
+        const plankMcData = mcData.itemsByName[plankItem.name];
+        if (!plankMcData) throw new Error(`Cannot find item data for ${plankItem.name}`);
+        const plankInv = inventoryItems.filter(i => i.name === plankItem.name).reduce((s, i) => s + i.count, 0);
+        if (plankInv < 6) throw new Error(`Cannot craft shield: Need 6 planks, have ${plankInv}`);
+
+        const P = plankMcData.id;
+        const I = ironItem.id;
+        const manualRecipe = {
+          result: { id: item.id, count: 1 },
+          inShape: [[P, I, P], [P, P, P], [0, P, 0]],
+          ingredients: [P, I, P, P, P, P, P],
+          delta: [
+            { id: item.id, count: 1 },
+            { id: plankMcData.id, count: -6 },
+            { id: ironItem.id, count: -1 }
+          ],
+          requiresTable: true
         };
         allRecipes = [manualRecipe as any];
       }
