@@ -631,6 +631,17 @@ export async function minecraft_explore_area(
 ): Promise<string> {
   console.error(`[ExploreArea] Radius: ${radius}, Target: ${target || "general"}`);
 
+  // Warn if searching for enderman during daytime (they only spawn at night)
+  if (target?.toLowerCase() === "enderman") {
+    const bot = botManager.getBot(username);
+    if (bot) {
+      const timeOfDay = bot.time?.timeOfDay ?? 0;
+      if (timeOfDay < 13000 || timeOfDay > 23000) {
+        return `Cannot find enderman during daytime (current time: ${timeOfDay}). Endermen only spawn at night (13000-23000). Wait for nightfall or do other tasks like mining iron for armor.`;
+      }
+    }
+  }
+
   const startPos = botManager.getPosition(username);
   if (!startPos) {
     return "Failed to get bot position";
