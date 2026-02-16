@@ -12,6 +12,24 @@
 
 ---
 
+### [2026-02-16 Session 12] water_bucket/lava_bucket placement fails silently (✅ FIXED)
+
+- **症状**: `minecraft_use_item_on_block`でwater_bucketをlavaに使っても溶岩が固まらない。bucketでlavaを集めてもlava_bucketが生成されない。
+- **報告**: Claude3 (SOS)
+- **原因**:
+  1. Raw `block_place`パケットに`sequence`フィールドが欠落 — Minecraft 1.19+で必須のフィールドが送信されず、サーバーがパケットを無視
+  2. Attempt 1で`activateBlock(lavaBlock)`を試行 — 溶岩は非固体ブロックのため`activateBlock`が機能しない
+  3. `bot.lookAt()`がターゲット位置（溶岩）を見ていたが、`block_place`パケットは隣接固体ブロックを指定 — サーバーが不整合を検知
+- **修正** (commit baf62b2):
+  - water_bucket配置: `bot.placeBlock(adjacentSolidBlock, faceVector)`を使用。プロトコル形式、lookAt方向、sequenceフィールドを正しく処理
+  - bucket収集: `bot._genericPlace()`を使用。raw block_placeパケットの代替
+  - 検証強化: 水が実際に配置されたか、黒曜石が生成されたかを確認
+  - 隣接固体ブロックが見つからない場合のエラーメッセージ追加
+- **ファイル**: `src/bot-manager/bot-blocks.ts:1262-1430`
+- **ステータス**: ✅ 修正完了
+
+---
+
 ### [2026-02-16 Session 11] serverHasItemPickupDisabled false positive blocking crafting (✅ FIXED)
 
 - **症状**: Bot6,Bot7等でクラフトが全て「Server has item pickup disabled」で拒否される。実際にはアイテムピックアップは正常動作中
