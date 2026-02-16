@@ -136,7 +136,12 @@ export function getSurroundings(bot: Bot): string {
   } else if (food <= 14) {
     warnings.push(`⚠️ 空腹注意: ${food}/20 - 食事推奨`);
   }
-  if (oxygen < 10) {
+  // Only warn about oxygen if bot is actually in water
+  // oxygenLevel can be stale/unreliable when not underwater
+  const blockAtFeet = bot.blockAt(bot.entity.position);
+  const blockAtHead = bot.blockAt(bot.entity.position.offset(0, 1, 0));
+  const isInWater = blockAtFeet?.name === "water" || blockAtHead?.name === "water";
+  if (oxygen < 10 && isInWater) {
     warnings.push(`🚨 酸素不足: ${oxygen}/20 - 水上へ脱出！`);
   }
   if (foodCount === 0) {
