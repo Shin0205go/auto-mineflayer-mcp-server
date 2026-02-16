@@ -491,6 +491,49 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       }
     }
 
+    // Manual recipe fallback for common items when recipesAll returns nothing
+    if (allRecipes.length === 0 && (itemName === "bread" || itemName === "bone_meal")) {
+      console.error(`[Craft] No recipes found for ${itemName}, using manual crafting...`);
+
+      if (itemName === "bread") {
+        const wheatItem = mcData.itemsByName["wheat"];
+        if (!wheatItem) throw new Error("Cannot find wheat item data");
+        const wheatInv = inventoryItems.filter(i => i.name === "wheat").reduce((s, i) => s + i.count, 0);
+        if (wheatInv < 3) throw new Error(`Cannot craft bread: Need 3 wheat, have ${wheatInv}`);
+
+        const manualRecipe = {
+          result: { id: item.id, count: 1 },
+          inShape: [[wheatItem.id, wheatItem.id, wheatItem.id]],
+          ingredients: [wheatItem.id, wheatItem.id, wheatItem.id],
+          delta: [
+            { id: item.id, count: 1 },
+            { id: wheatItem.id, count: -3 }
+          ],
+          requiresTable: true
+        };
+        allRecipes = [manualRecipe as any];
+      }
+
+      if (itemName === "bone_meal") {
+        const boneItem = mcData.itemsByName["bone"];
+        if (!boneItem) throw new Error("Cannot find bone item data");
+        const boneInv = inventoryItems.filter(i => i.name === "bone").reduce((s, i) => s + i.count, 0);
+        if (boneInv < 1) throw new Error(`Cannot craft bone_meal: Need 1 bone, have ${boneInv}`);
+
+        const manualRecipe = {
+          result: { id: item.id, count: 3 },
+          inShape: [[boneItem.id]],
+          ingredients: [boneItem.id],
+          delta: [
+            { id: item.id, count: 3 },
+            { id: boneItem.id, count: -1 }
+          ],
+          requiresTable: false
+        };
+        allRecipes = [manualRecipe as any];
+      }
+    }
+
     // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
     // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
     const compatibleRecipe = allRecipes.find(recipe => {
