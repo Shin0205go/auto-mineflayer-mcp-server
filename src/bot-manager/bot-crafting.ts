@@ -743,7 +743,42 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         // IMPORTANT: For stick/crafting_table, always pass undefined (never use table)
         const tableToUse = (itemName === "stick" || itemName === "crafting_table") ? undefined : (craftingTableBlock || undefined);
         console.error(`[Craft] Calling bot.craft() with table: ${tableToUse ? 'YES' : 'NO'}`);
-        await bot.craft(compatibleRecipe, 1, tableToUse);
+
+        try {
+          await bot.craft(compatibleRecipe, 1, tableToUse);
+        } catch (craftErr: any) {
+          // Fallback: If bot.craft() fails with manual recipe, try recipesFor as alternative
+          const craftErrMsg = craftErr.message || String(craftErr);
+          console.error(`[Craft] bot.craft() failed: ${craftErrMsg}, trying recipesFor fallback...`);
+
+          if (craftErrMsg.includes("missing ingredient") && (itemName === "stick" || itemName === "crafting_table")) {
+            // Try recipesFor with specific planks item as metadata
+            const planksInInv = bot.inventory.items().filter(inv => inv.name.endsWith("_planks"));
+            let fallbackWorked = false;
+
+            for (const planksStack of planksInInv) {
+              try {
+                const recipesFor = bot.recipesFor(item.id, planksStack.type, 1, null);
+                console.error(`[Craft] recipesFor(${item.id}, ${planksStack.type}, 1, null) returned ${recipesFor.length} recipes`);
+                if (recipesFor.length > 0) {
+                  await bot.craft(recipesFor[0], 1, undefined);
+                  fallbackWorked = true;
+                  break;
+                }
+              } catch (e2) {
+                console.error(`[Craft] recipesFor fallback with ${planksStack.name} failed: ${e2}`);
+              }
+            }
+
+            if (!fallbackWorked) {
+              // Final fallback: use /recipe command if bot is OP
+              console.error(`[Craft] All craft attempts failed, throwing original error`);
+              throw craftErr;
+            }
+          } else {
+            throw craftErr;
+          }
+        }
 
         // Wait for crafting to complete (match timing from general crafting path)
         await new Promise(resolve => setTimeout(resolve, 1500));
