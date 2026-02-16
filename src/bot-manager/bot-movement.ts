@@ -1332,7 +1332,14 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
     throw new Error("No nether portal found within 10 blocks");
   }
 
+  // Temporarily allow stepping on portal blocks (normally avoided to prevent accidental teleport)
+  const portalBlockId = bot.registry.blocksByName["nether_portal"]?.id;
+
   try {
+    if (portalBlockId !== undefined) {
+      bot.pathfinder.movements.blocksToAvoid.delete(portalBlockId);
+    }
+
     // Move to portal block center
     const goals = new GoalBlock(portalBlock.position.x, portalBlock.position.y, portalBlock.position.z);
     await bot.pathfinder.goto(goals);
@@ -1358,11 +1365,19 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
       const cleanup = () => {
         clearTimeout(timeout);
         bot.removeListener("spawn", onSpawn);
+        // Re-add portal to blocksToAvoid after transition
+        if (portalBlockId !== undefined) {
+          bot.pathfinder.movements.blocksToAvoid.add(portalBlockId);
+        }
       };
 
       bot.on("spawn", onSpawn);
     });
   } catch (err) {
+    // Re-add portal to blocksToAvoid on failure
+    if (portalBlockId !== undefined) {
+      bot.pathfinder.movements.blocksToAvoid.add(portalBlockId);
+    }
     const errMsg = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to enter portal: ${errMsg}`);
   }

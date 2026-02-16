@@ -278,6 +278,12 @@ export class BotCore extends EventEmitter {
         movements.dontMineUnderFallingBlock = true;
         movements.dontCreateFlow = true;
 
+        // Avoid walking through nether/end portals (prevents accidental dimension teleport)
+        const portalBlock = bot.registry.blocksByName["nether_portal"];
+        const endPortalBlock = bot.registry.blocksByName["end_portal"];
+        if (portalBlock) movements.blocksToAvoid.add(portalBlock.id);
+        if (endPortalBlock) movements.blocksToAvoid.add(endPortalBlock.id);
+
         bot.pathfinder.setMovements(movements);
         console.error(`[BotManager] Pathfinder configured: canDig=true, allow1by1towers=true, scaffoldingBlocks=${movements.scafoldingBlocks.length} types`);
 
