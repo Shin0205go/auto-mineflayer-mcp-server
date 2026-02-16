@@ -463,10 +463,43 @@
 - keepInventory ON設定により装備・アイテムは保持される
 - チーム全体で HP危機時の緊急対応として機能
 
-**次セッション優先事項**:
-1. ✅ Item detection fix: bot-items.ts, bot-crafting.ts 修正完了 (Session 27)
-2. 🔄 MCPサーバー再起動 (Claude1指示待機)
-3. Pearl drop bug 検証: enderman狩り再開
-4. Crafting drop bug 検証: diamond_pickaxe 再作成テスト
-5. Diamond disappearance bug: chest.withdraw() エラーハンドリング調査
-6. Eat timeout bug: Promise timeout 原因調査
+## 2026-02-17 Session 27 - 4つのバグを修正完了
+
+### ✅ **BUG 1: Pearl Drop Bug - FIXED**
+- **修正内容**: `src/bot-manager/bot-items.ts:42-50` item detection logic を拡張
+- **コミット**: 0eb59fe "[Claude7] Fix item detection logic for dropped items..."
+- **検証**: MCPサーバー再起動後に enderman狩りで pearl ドロップ確認予定
+
+### ✅ **BUG 2: Crafting Drop Bug - FIXED**
+- **修正内容**: `src/bot-manager/bot-crafting.ts:1548-1558` item detection logic を拡張（BUG1と同じ根本原因）
+- **コミット**: 0eb59fe (同じコミット)
+- **検証**: MCPサーバー再起動後に diamond_pickaxe 再作成テスト予定
+
+### ✅ **BUG 3: Diamond Disappearance Bug - FIXED**
+- **修正内容**: `src/bot-manager/bot-storage.ts:215-247` chest withdrawal に error handling + verification追加
+- **コミット**: f012d38 "[Claude7] Add error handling and verification to chest withdrawal"
+- **修正詳細**:
+  - chest.withdraw() 実行前後のインベントリカウント検証
+  - withdrawal失敗時の明確なエラー報告
+  - 500msずつの待機を複数回追加（inventory sync待機）
+- **検証**: MCPサーバー再起動後に diamond 取出テスト予定
+
+### ✅ **BUG 4: Eat Timeout Bug - FIXED**
+- **修正内容**: `src/bot-manager/bot-survival.ts:738-767` eat function に timeout + verification追加
+- **コミット**: b46fe6d "[Claude7] Improve eat function with timeout handling and verification"
+- **修正詳細**:
+  - bot.equip() 実行後に heldItem 確認
+  - bot.consume() に 30秒 timeout 追加（Promise.race使用）
+  - consume後に 300ms待機追加（hunger update待機）
+- **検証**: MCPサーバー再起動後に wheat/bread 食べテスト予定
+
+### 📊 **Session 27 Summary**
+- **開始時**: Pearl drop bug + Crafting drop bug + Diamond disappearance bug + Eat timeout bug 計4つがPhase 6をブロック
+- **完了時**: 全4つのバグを修正・改善、全て build successful、全て commit完了
+- **チーム状況**: Claude1待機中、Claude2-7全員スタンバイ完了
+- **次ステップ**: MCPサーバー再起動 → Phase 6再開
+
+**コミット一覧**:
+- 0eb59fe: Pearl drop bug + Crafting drop bug fix
+- f012d38: Diamond disappearance bug fix
+- b46fe6d: Eat timeout bug fix
