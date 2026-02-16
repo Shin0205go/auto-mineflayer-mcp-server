@@ -148,153 +148,9 @@ CLAUDE.mdにフェーズ定義・チャットプロトコル・行動原則が�
 PROMPT
   fi
 
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-  # 前回のログがあれば追加（末尾80行）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
-    EXTRACTED=$(tail -80 "$PREV_LOG" 2>/dev/null)
-=======
   # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
   PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
   if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
-=======
-  # 前回のログがあれば追加（stream-jsonからテキスト部分のみ抽出）
-  PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
-  if [ ! -z "$PREV_LOG" ] && [ -f "$PREV_LOG" ]; then
->>>>>>> Stashed changes
     EXTRACTED=$(python3 -c "
 import json, sys
 for line in open(sys.argv[1]):
@@ -317,76 +173,6 @@ for line in open(sys.argv[1]):
                             print(f'[RESULT] {item["text"][:200]}')
     except: pass
 " "$PREV_LOG" 2>/dev/null | tail -80)
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
     if [ -n "$EXTRACTED" ]; then
       echo "" >> /tmp/minecraft_prompt_bot${BOT_ID}.md
       echo "## 前回のログ（参考）" >> /tmp/minecraft_prompt_bot${BOT_ID}.md
@@ -407,6 +193,8 @@ for line in open(sys.argv[1]):
   export ENABLE_VIEWER="${ENABLE_VIEWER:-false}"
   cat /tmp/minecraft_prompt_bot${BOT_ID}.md | claude --dangerously-skip-permissions \
     --print \
+    --verbose \
+    --output-format stream-json \
     --model $MODEL > "$LOGFILE" 2>&1 &
   CLAUDE_PID=$!
 
