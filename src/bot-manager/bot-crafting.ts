@@ -1377,6 +1377,25 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             .join(", ");
           console.error(`[Craft] Attempting recipe: ${recipeIngredients}`);
 
+          // Ensure bot is close enough to crafting table before crafting (within 3.5 blocks)
+          if (craftingTable) {
+            const distToTable = bot.entity.position.distanceTo(craftingTable.position);
+            if (distToTable > 3.5) {
+              console.error(`[Craft] Too far from crafting table (${distToTable.toFixed(1)} blocks), moving closer...`);
+              const goal = new goals.GoalNear(craftingTable.position.x, craftingTable.position.y, craftingTable.position.z, 2);
+              bot.pathfinder.setGoal(goal);
+              await new Promise<void>((resolve) => {
+                const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
+                const check = setInterval(() => {
+                  const d = bot.entity.position.distanceTo(craftingTable!.position);
+                  if (d < 3.5 || !bot.pathfinder.isMoving()) {
+                    clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+                  }
+                }, 200);
+              });
+            }
+          }
+
           await bot.craft(tryRecipe, 1, craftingTable || undefined);
 
           // Wait for crafting to complete and item transfer
