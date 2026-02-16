@@ -284,6 +284,10 @@ export class BotCore extends EventEmitter {
         if (portalBlock) movements.blocksToAvoid.add(portalBlock.id);
         if (endPortalBlock) movements.blocksToAvoid.add(endPortalBlock.id);
 
+        // Avoid lava (default liquidCost=1 doesn't distinguish water vs lava)
+        const lavaBlock = bot.registry.blocksByName["lava"];
+        if (lavaBlock) movements.blocksToAvoid.add(lavaBlock.id);
+
         bot.pathfinder.setMovements(movements);
         console.error(`[BotManager] Pathfinder configured: canDig=true, allow1by1towers=true, scaffoldingBlocks=${movements.scafoldingBlocks.length} types`);
 
