@@ -305,7 +305,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   // First check nearby (5 blocks) - but skip for simple recipes
   // Using 5 blocks to be more forgiving of bot positioning
-  let craftingTable = null;
+  let craftingTable: ReturnType<typeof bot.findBlock> = null;
   if (!isSimpleRecipe) {
     craftingTable = bot.findBlock({
       matching: craftingTableId,
@@ -790,6 +790,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         const tableToUse = (itemName === "stick" || itemName === "crafting_table") ? undefined : (craftingTableBlock || undefined);
         console.error(`[Craft] Calling bot.craft() with table: ${tableToUse ? 'YES' : 'NO'}`);
 
+        const invBeforeSimple = bot.inventory.items().map(it => `${it.name}x${it.count}`).join(", ");
+        console.error(`[Craft] Inventory before simple wooden craft: ${invBeforeSimple}`);
+
         try {
           await bot.craft(compatibleRecipe, 1, tableToUse);
         } catch (craftErr: any) {
@@ -901,8 +904,36 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         // Wait for crafting to complete (match timing from general crafting path)
         await new Promise(resolve => setTimeout(resolve, 1500));
 
+        // Close any lingering crafting window to flush items to inventory
+        if (bot.currentWindow) {
+          bot.closeWindow(bot.currentWindow);
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+
         // Additional wait for inventory synchronization
         await new Promise(resolve => setTimeout(resolve, 700));
+
+        const invAfterSimple = bot.inventory.items().map(it => `${it.name}x${it.count}`).join(", ");
+        console.error(`[Craft] Inventory after simple wooden craft: ${invAfterSimple}`);
+
+        // Verify crafted item is in inventory
+        const craftedCheck = bot.inventory.items().find(it => it.name === itemName);
+        if (!craftedCheck) {
+          console.error(`[Craft] WARNING: ${itemName} not in inventory after simple wooden craft, trying to collect dropped items...`);
+          // Try to collect dropped items nearby
+          const { collectNearbyItems } = await import("./bot-items.js");
+          try {
+            await collectNearbyItems(managed);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } catch (collectErr) {
+            console.error(`[Craft] collectNearbyItems failed: ${collectErr}`);
+          }
+
+          const recheck = bot.inventory.items().find(it => it.name === itemName);
+          if (!recheck) {
+            throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting. Materials were consumed but item vanished. Try again.`);
+          }
+        }
       }
 
       const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
@@ -939,6 +970,72 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     console.error(`[Craft] Using crafting table (3x3) for ${itemName}, found ${recipes.length} recipes`);
   } else {
     console.error(`[Craft] No 2x2 recipes and no crafting table found for ${itemName}`);
+  }
+
+  // Manual recipe fallback for armor and other shaped items when recipesAll returns 0
+  // These require a crafting table (3x3 grid). Shape uses 1=material, 0=empty.
+  if (recipes.length === 0) {
+    const armorRecipes: Record<string, { material: string; shape: number[][]; materialCount: number }> = {
+      "iron_helmet":      { material: "iron_ingot", shape: [[1,1,1],[1,0,1]],             materialCount: 5 },
+      "iron_chestplate":  { material: "iron_ingot", shape: [[1,0,1],[1,1,1],[1,1,1]],     materialCount: 8 },
+      "iron_leggings":   { material: "iron_ingot", shape: [[1,1,1],[1,0,1],[1,0,1]],     materialCount: 7 },
+      "iron_boots":       { material: "iron_ingot", shape: [[1,0,1],[1,0,1]],             materialCount: 4 },
+      "diamond_helmet":   { material: "diamond",    shape: [[1,1,1],[1,0,1]],             materialCount: 5 },
+      "diamond_chestplate":{ material: "diamond",   shape: [[1,0,1],[1,1,1],[1,1,1]],     materialCount: 8 },
+      "diamond_leggings": { material: "diamond",    shape: [[1,1,1],[1,0,1],[1,0,1]],     materialCount: 7 },
+      "diamond_boots":    { material: "diamond",    shape: [[1,0,1],[1,0,1]],             materialCount: 4 },
+    };
+
+    const armorRecipe = armorRecipes[itemName];
+    if (armorRecipe) {
+      const materialItem = mcData.itemsByName[armorRecipe.material];
+      if (materialItem) {
+        const materialInv = inventoryItems.filter(i => i.name === armorRecipe.material).reduce((s, i) => s + i.count, 0);
+        if (materialInv >= armorRecipe.materialCount) {
+          // Need a crafting table for armor (3x3 recipes)
+          if (!craftingTable) {
+            const craftingTableId = mcData.blocksByName.crafting_table?.id;
+            craftingTable = bot.findBlock({ matching: craftingTableId, maxDistance: 32 });
+            if (craftingTable) {
+              // Move to crafting table
+              const goal = new goals.GoalNear(craftingTable.position.x, craftingTable.position.y, craftingTable.position.z, 3);
+              bot.pathfinder.setGoal(goal);
+              await new Promise<void>((resolve) => {
+                const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 10000);
+                const check = setInterval(() => {
+                  if (craftingTable && bot.entity.position.distanceTo(craftingTable.position) < 4 || !bot.pathfinder.isMoving()) {
+                    clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+                  }
+                }, 300);
+              });
+            }
+          }
+
+          if (!craftingTable) {
+            throw new Error(`${itemName} requires a crafting_table nearby. Place one first. Inventory: ${inventory}`);
+          }
+
+          const inShape = armorRecipe.shape.map(row =>
+            row.map(cell => cell === 1 ? materialItem.id : 0)
+          );
+          const ingredients = inShape.flat().filter(id => id !== 0);
+
+          const manualRecipe = {
+            result: { id: item.id, count: 1 },
+            inShape,
+            ingredients,
+            delta: [
+              { id: item.id, count: 1 },
+              { id: materialItem.id, count: -armorRecipe.materialCount },
+            ],
+            requiresTable: true,
+          };
+
+          console.error(`[Craft] Manual armor recipe created for ${itemName} using ${armorRecipe.material}`);
+          recipes = [manualRecipe as any];
+        }
+      }
+    }
   }
 
   // Helper function to check if we have a compatible item
@@ -1311,7 +1408,98 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             .join(", ");
           console.error(`[Craft] Attempting recipe: ${recipeIngredients}`);
 
-          await bot.craft(tryRecipe, 1, craftingTable || undefined);
+          // Close any existing open window to prevent windowOpen event conflicts
+          if (bot.currentWindow) {
+            console.error(`[Craft] Closing existing open window before crafting`);
+            bot.closeWindow(bot.currentWindow);
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+
+          // Ensure bot is close enough to crafting table before crafting (within 3.5 blocks)
+          if (craftingTable) {
+            const distToTable = bot.entity.position.distanceTo(craftingTable.position);
+            if (distToTable > 3.5) {
+              console.error(`[Craft] Too far from crafting table (${distToTable.toFixed(1)} blocks), moving closer...`);
+              const goal = new goals.GoalNear(craftingTable.position.x, craftingTable.position.y, craftingTable.position.z, 2);
+              bot.pathfinder.setGoal(goal);
+              await new Promise<void>((resolve) => {
+                const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
+                const check = setInterval(() => {
+                  const d = bot.entity.position.distanceTo(craftingTable!.position);
+                  if (d < 3.5 || !bot.pathfinder.isMoving()) {
+                    clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+                  }
+                }, 200);
+              });
+            }
+            // Look at the crafting table to ensure line-of-sight for windowOpen
+            await bot.lookAt(craftingTable.position.offset(0.5, 0.5, 0.5));
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+
+          // Try bot.craft() with crafting table
+          if (craftingTable) {
+            // Verify distance right before interaction
+            const finalDist = bot.entity.position.distanceTo(craftingTable.position);
+            if (finalDist > 4.5) {
+              console.error(`[Craft] Still too far from crafting table (${finalDist.toFixed(1)} blocks), aborting this attempt`);
+              throw new Error(`Too far from crafting table (${finalDist.toFixed(1)} blocks)`);
+            }
+            console.error(`[Craft] Distance to crafting table: ${finalDist.toFixed(1)} blocks`);
+
+            // Try direct bot.craft() with table reference first (simplest approach)
+            const invBefore = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(", ");
+            console.error(`[Craft] Inventory before craft: ${invBefore}`);
+            try {
+              await bot.craft(tryRecipe, 1, craftingTable);
+              const invAfter = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(", ");
+              console.error(`[Craft] Inventory after craft: ${invAfter}`);
+            } catch (directErr: any) {
+              const errMsg = String(directErr?.message || directErr);
+              console.error(`[Craft] Direct craft failed: ${errMsg}`);
+
+              // If windowOpen timeout, try pre-open approach
+              if (errMsg.includes("windowOpen")) {
+                // Close any lingering window
+                if (bot.currentWindow) {
+                  bot.closeWindow(bot.currentWindow);
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                }
+                // Re-look at the crafting table
+                await bot.lookAt(craftingTable.position.offset(0.5, 0.5, 0.5));
+                await new Promise(resolve => setTimeout(resolve, 200));
+
+                try {
+                  console.error(`[Craft] Pre-opening crafting table at ${craftingTable.position}...`);
+                  const tableWindow = await bot.openContainer(craftingTable);
+                  console.error(`[Craft] Crafting table window opened successfully`);
+                  // Wait for window to be fully ready
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                  // Now craft with table=undefined since window is already open
+                  await bot.craft(tryRecipe, 1, undefined);
+                  // Close the window after crafting
+                  bot.closeWindow(tableWindow);
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                } catch (preOpenErr: any) {
+                  const preMsg = String(preOpenErr?.message || preOpenErr);
+                  console.error(`[Craft] Pre-open craft also failed: ${preMsg}`);
+                  if (bot.currentWindow) {
+                    bot.closeWindow(bot.currentWindow);
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                  }
+                  throw preOpenErr;
+                }
+              } else {
+                throw directErr;
+              }
+            }
+          } else {
+            const invBefore = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(", ");
+            console.error(`[Craft] Inventory before simple craft: ${invBefore}`);
+            await bot.craft(tryRecipe, 1, undefined);
+            const invAfter = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(", ");
+            console.error(`[Craft] Inventory after simple craft: ${invAfter}`);
+          }
 
           // Wait for crafting to complete and item transfer
           // Increased timeout to 1500ms to handle slower servers

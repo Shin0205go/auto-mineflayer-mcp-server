@@ -12,6 +12,124 @@
 
 ---
 
+### [2026-02-16 Session 28] Multiple bot deaths - equipment loss cycle (✅ MITIGATED)
+- **症状**: Claude2, Claude3, Claude4が短時間で繰り返し死亡。Zombie/fall damage。死亡→リスポーン→再度死亡のループ
+- **原因**:
+  1. keepInventory ONでもリスポーン後に装備がインベントリから消失している（サーバー側の問題？）
+  2. 夜間に装備なしで移動→Zombie遭遇→死亡のパターン
+  3. Auto-equip armor (bot-core.ts line 622)は動作しているが、装備がインベントリにない場合は無効
+- **修正内容** (commit 4b689ea):
+  1. リスポーン1秒後に装備確認チェックを追加
+  2. 武器/防具がない場合、チャットで警告「[警告] 装備なし。Base帰還・装備回復推奨」
+  3. 夜間+装備なしの場合は強い警告「[警告] 装備なし+夜間。移動危険。シェルター待機推奨」
+  4. respawn_warning イベントをログに記録
+- **効果**: ボット自身が装備なし状態を認識でき、エージェントが適切な行動（シェルター待機/base帰還）を取れる
+- **ファイル**: `src/bot-manager/bot-core.ts` (respawn handler lines 612-650)
+- **ステータス**: ✅ 緩和策実装完了（根本原因はサーバー側、回避策で対応）
+
+---
+
+### [2026-02-16 Session 27] Claude4 spawned/teleported into solid stone blocks (✅ RESOLVED)
+- **症状**: Claude4が座標(142, 66, -146)で石ブロックに完全に囲まれ脱出不可
+- **原因**: サーバー側のスポーン位置決定の問題
+- **対応**: Claude5が救助完了。その後Claude4は正常動作
+- **ファイル**: N/A（サーバー側問題）
+- **ステータス**: ✅ 解決済
+
+---
+
+### [2026-02-16 Session 21] /give command items not appearing in bot inventory (Known Issue)
+- **症状**: `/give Claude2 bread 10` でサーバーは「Gave 10 [Bread] to Claude2」と表示するが、Claude2のMineflayerボットのインベントリに反映されない
+- **再現**: /give bread、/give cooked_beef 両方で発生。disconnect→reconnect後も変わらず
+- **回避策**: チェストに入れて `minecraft_take_from_chest` で取得すれば正常動作
+- **原因**: Mineflayerが `/give` による `set_slot` パケットを正しく処理していない可能性。Mineflayerのバグか、パケット順序の問題
+- **対応**: コード修正は困難（Mineflayer内部の問題）。チェスト経由で物資を渡す運用で回避
+- **ファイル**: N/A（Mineflayerライブラリ内部）
+- **ステータス**: ⚠️ 回避策あり（チェスト経由）
+
+---
+
+### [2026-02-16 Session 21] Portal entry fails — bot stands on obsidian frame instead of inside portal (✅ FIXED)
+- **症状**: Claude6がネザーポータルに入ろうとすると、足元がobsidian（フレーム）で頭がnether_portalブロックの状態で止まり、転送されずタイムアウト
+- **原因**: `enterPortal()`が`GoalBlock`でポータルブロック座標に移動するが、pathfinderはポータルブロックの上（=obsidianフレーム上）に立ってしまう。また1秒だけforward歩行して止まるため、ポータル内に確実に入れていなかった
+- **修正**: (1) 最下段のポータルブロックを検索して足元ターゲットに (2) `GoalNear(range=1)`で近づいてからforward歩行を最大5回リトライし、足元がnether_portalか確認 (3) タイムアウトを15→30秒に延長
+- **ファイル**: `src/bot-manager/bot-movement.ts`
+- **ステータス**: ✅ 修正完了（commit 9ed0ad9）
+
+---
+
+### [2026-02-16 Session 19] Pathfinder routes through deep water causing drowning (✅ FIXED)
+- **症状**: Claude2がエンダーマン狩り中に繰り返し溺死。pathfinderが水中を通るルートを選択
+- **原因**: `mineflayer-pathfinder`のデフォルト`liquidCost=1`で、水を陸地と同コストで通過可能と判定。深い水域を横断するルートが選ばれ溺死
+- **修正**: `bot-core.ts`で`movements.liquidCost = 100`に設定。pathfinderが陸路を強く優先するようになった（水路を完全にブロックはしない）
+- **ファイル**: `src/bot-manager/bot-core.ts`
+- **ステータス**: ✅ 修正完了（commit 8cec55e）
+
+---
+
+### [2026-02-16 Session 18] Lava listed as passable block in moveTo() (✅ FIXED)
+- **症状**: Claude7がネザーで繰り返し溶岩死。pathfinderのblocksToAvoidに溶岩を追加済みなのに死亡が続く
+- **原因**: `moveTo()`内の`isPassableBlock()`関数に`"lava"`が含まれていた。ターゲット付近の立ち位置を探す際、溶岩を「立てる場所」として判定してしまう
+- **修正**: `isPassableBlock()`のpassable配列から`"lava"`を削除。pathfinderのblocksToAvoidと合わせて二重の溶岩回避が機能するようになった
+- **ファイル**: `src/bot-manager/bot-movement.ts`
+- **ステータス**: ✅ 修正完了（commit 0416942）
+
+---
+
+### [2026-02-16 Session 18] Chest take/store targets wrong chest when multiple chests nearby (✅ FIXED)
+- **症状**: `minecraft_open_chest(x,y,z)`で開いたチェストと`minecraft_take_from_chest()`で操作されるチェストが異なる
+- **原因**: `takeFromChest`/`storeInChest`が`bot.findBlock()`で最も近いチェストを検索するため、`open_chest`で指定したチェストとは別のチェストを操作する
+- **修正**: `takeFromChest`/`storeInChest`にオプションのx,y,z座標パラメータを追加。座標指定時はその位置のチェストを直接開く
+- **ファイル**: `src/bot-manager/bot-storage.ts`, `src/bot-manager/index.ts`, `src/tools/storage.ts`
+- **ステータス**: ✅ 修正完了（commit f96f3fc）
+
+---
+
+### [2026-02-16 Session 18] move_to cannot enter portals (blocksToAvoid) (✅ FIXED)
+- **症状**: `move_to`でポータルブロック座標を指定しても、pathfinderがポータルを回避して到達できない
+- **原因**: `blocksToAvoid`にnether_portalが含まれるため、pathfinderがポータルブロックへの経路を生成できない
+- **修正**: `moveTo`関数の先頭でターゲットブロックがポータルかチェックし、ポータルなら`enterPortal()`に委譲。`enterPortal()`は一時的にblocksToAvoidからポータルを除外する
+- **ファイル**: `src/bot-manager/bot-movement.ts`
+- **ステータス**: ✅ 修正完了（commit 7d9e3d2）※MCP再起動が必要
+
+---
+
+### [2026-02-16 Session 18] Pathfinder routes through lava (✅ FIXED)
+- **症状**: Claude6がネザーで「tried to swim in lava」で死亡。pathfinderが溶岩を通るルートを選択
+- **原因**: mineflayer-pathfinderの`liquidCost`はデフォルト1で、水と溶岩を区別しない。溶岩も水と同コストで通過可能と判定される
+- **修正**: `bot-core.ts`でlavaブロックを`movements.blocksToAvoid`に追加。pathfinderが溶岩を完全に回避するようになった
+- **ファイル**: `src/bot-manager/bot-core.ts`
+- **ステータス**: ✅ 修正完了（commit 1f63c94）
+
+---
+
+### [2026-02-16 Session 18] Ender pearl drops not collected after enderman kill (✅ FIXED)
+- **症状**: Claude3がエンダーマンを倒したがパールを取得できなかった。エンダーマンはテレポートするため、死亡位置がボットから離れている
+- **原因**: `attack()`と`fight()`で敵を倒した後、`collectNearbyItems()`を呼ぶがボットの現在位置付近しか検索しない。テレポートした敵の死亡位置にドロップがある
+- **修正**: `lastKnownTargetPos`を追跡し、敵が消えたらその位置まで移動してからアイテム回収。`attack()`と`fight()`両方に適用
+- **ファイル**: `src/bot-manager/bot-survival.ts`
+- **ステータス**: ✅ 修正完了（commit 386ee79）
+
+---
+
+### [2026-02-16 Session 17] Pathfinder walks through portals accidentally (✅ FIXED)
+- **症状**: ネザーでpathfinding中にポータルを通過してOverworldに戻される。Bot2報告: ブレイズスポナー付近でOverworld(5.5,102,-5.5)にテレポートされた
+- **原因**: mineflayer-pathfinderがポータルブロックを通過可能と判定し、経路にポータルを含めてしまう
+- **修正**: `bot-core.ts`でMovements.blocksToAvoidにnether_portal/end_portalを追加。`bot-movement.ts`のenterPortal()では意図的なポータル進入時に一時的にblocksToAvoidから除外し、遷移後に再追加
+- **ファイル**: `src/bot-manager/bot-core.ts`, `src/bot-manager/bot-movement.ts`
+- **ステータス**: ✅ 修正完了（commit b38751a）
+
+---
+
+### [2026-02-16 Session 17] dig_block force parameter not passed through (✅ FIXED)
+- **症状**: `minecraft_dig_block(force=true)`を使っても溶岩隣接ブロックを掘れない
+- **原因**: ツール定義(building.ts)でforceパラメータを読み取るが、`botManager.digBlock()`に渡していない。bot-manager/index.tsとbot-blocks.tsの関数にもforceパラメータがない
+- **修正**: 3ファイルを修正してforceパラメータをツール→botManager→digBlockBasicまで伝達
+- **ファイル**: `src/tools/building.ts`, `src/bot-manager/index.ts`, `src/bot-manager/bot-blocks.ts`
+- **ステータス**: ✅ 修正完了（commit c72fdc5）
+
+---
+
 ### [2026-02-16 Session 14] move_to can't enter Nether/End portals (✅ FIXED)
 
 - **症状**: ネザーポータルの前にいるがmove_toでポータルに入れない。"Path blocked"エラー
@@ -2505,3 +2623,49 @@
 - **重要**: Claude7がgameruleコマンド実行可能（Claude4, Claude5と同様）
 - **再発防止**: サーバー起動スクリプトにgamerule設定を追加すべき
 - **ステータス**: ✅ 修正完了 (2026-02-16 Session 6)
+
+### [2026-02-16 Session 21] Claude2 craft windowOpen timeout
+- **症状**: Claude2で全てのcraft呼び出しが "Event windowOpen did not fire within timeout of 20000ms" で失敗。素材は消費されるがアイテムが出来ない。stick, crafting_table, stone_pickaxe全て同様。3回再接続しても改善せず。他のボットは正常。
+- **原因**: bot.craft()がcrafting tableを開く際にwindowOpenイベントがサーバーから返らない。line-of-sight不足またはサーバー側のウィンドウ状態不整合の可能性。
+- **修正**: commit e126a2f — (1) crafting table方向にlookAt()で視線を向けてからcraft (2) windowOpenタイムアウト時にwindowを閉じてリトライ。2x2クラフト(stick/crafting_table)はtable不使用パスなのでwindowOpen関係なし — Claude2の問題はstone_pickaxe等のtable使用レシピが主因。
+- **ステータス**: ✅ 修正完了 — Claude2でstone_pickaxeクラフト成功確認
+
+---
+
+## Session Summary (2026-02-17)
+
+### 状況確認
+- **Phase 6 進捗**: エンダーパール 8/12, ブレイズロッド 1/7
+- **チェスト在庫**: diamond(6), obsidian(3), gold_ingot(11), lapis_lazuli(54), blaze_rod(1), ender_pearl(8), book(1)
+- **食料危機**: チェストにパンなし。Claude4がパン3個所持のみ
+- **オンラインボット**: Claude1 (リーダー), Claude3 (リスポーン後), Claude4 (NW quadrant)
+- **時刻**: 夜間 (15628) - エンダーマン狩り適正時間
+
+### 発行した指示
+1. **Phase 6 継続宣言**: ブレイズロッド7本(現1/7), エンダーパール12個(現8/12)
+2. **タスク割当**:
+   - Claude2-5: エンダーマン狩り (NE, SE, NW, SW各エリア)
+   - Claude6-7: ネザー要塞(-570,78,-715)でブレイズ狩り
+3. **装備確認指示**: Claude3にリスポーン後の装備確認を指示
+4. **食料問題通知**: チェストにパンなし、各自で確保推奨
+
+### コード確認
+- 最新コミット (4b689ea): Respawn safety check 実装済み - 装備なしリスポーン時に警告
+- Commit c3b9633: Auto-equip armor after respawn 実装済み
+- 探索・戦闘最適化: entity search range 48 blocks, auto-swim persistence, HP abort threshold 10
+
+### 観察事項
+- Claude3がゾンビに倒され、リスポーン後に復帰
+- Claude4が gamerule 設定を実行、NW quadrantへ移動中
+- 他のボット(Claude2,5,6,7)は応答なし - おそらくオフライン
+
+### 次のアクション
+1. チーム状況の継続監視
+2. バグ報告の待機・対応
+3. コード改善の検討
+4. Phase 6 完了条件達成の確認
+
+### 技術的メモ
+- keepInventory=ON - 死亡時アイテム保持
+- Auto-equip armor: 実装済み、リスポーン2秒後に自動装備
+- Respawn warning: 実装済み、装備なしリスポーン時に警告チャット
