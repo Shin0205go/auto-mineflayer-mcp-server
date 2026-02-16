@@ -784,12 +784,39 @@ export class BotManager extends EventEmitter {
 
     const bot = managed.bot;
     const pos = bot.entity.position;
-    const found: Array<{ x: number; y: number; z: number; distance: number }> = [];
 
-    // Search in a cube around the bot
-    for (let x = -maxDistance; x <= maxDistance; x++) {
-      for (let y = -maxDistance; y <= maxDistance; y++) {
-        for (let z = -maxDistance; z <= maxDistance; z++) {
+    // Use bot.findBlock() API for efficient searching (much faster than 3-loop cube scan)
+    try {
+      const blockType = bot.registry?.blocksByName?.[blockName];
+      if (blockType) {
+        const results = bot.findBlocks({
+          matching: blockType.id,
+          maxDistance: maxDistance,
+          count: 10,
+        });
+
+        if (results.length > 0) {
+          const found = results.map(p => ({
+            x: p.x,
+            y: p.y,
+            z: p.z,
+            distance: Math.round(pos.distanceTo(p) * 10) / 10,
+          })).sort((a, b) => a.distance - b.distance);
+
+          const result = found.map(b => `(${b.x}, ${b.y}, ${b.z}) - ${b.distance} blocks away`).join("\n");
+          return `Found ${found.length} ${blockName}. Nearest:\n${result}`;
+        }
+      }
+    } catch (err) {
+      console.error(`[FindBlock] bot.findBlocks() failed for ${blockName}: ${err}, falling back to manual search`);
+    }
+
+    // Fallback: manual cube search (for blocks not in registry or if API fails)
+    const found: Array<{ x: number; y: number; z: number; distance: number }> = [];
+    const searchDist = Math.min(maxDistance, 32); // Cap manual search to avoid lag
+    for (let x = -searchDist; x <= searchDist; x++) {
+      for (let y = -searchDist; y <= searchDist; y++) {
+        for (let z = -searchDist; z <= searchDist; z++) {
           const blockPos = pos.offset(x, y, z);
           const block = bot.blockAt(blockPos);
           if (block && block.name === blockName) {
@@ -811,10 +838,7 @@ export class BotManager extends EventEmitter {
       return `No ${blockName} found within ${maxDistance} blocks`;
     }
 
-    // Sort by distance
     found.sort((a, b) => a.distance - b.distance);
-
-    // Return up to 10 nearest
     const nearest = found.slice(0, 10);
     const result = nearest.map(b => `(${b.x}, ${b.y}, ${b.z}) - ${b.distance} blocks away`).join("\n");
     return `Found ${found.length} ${blockName}. Nearest:\n${result}`;
