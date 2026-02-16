@@ -244,7 +244,7 @@ export async function handleBuildingTool(
 
       try {
         // Always survival mode - actually mine the block
-        const result = await botManager.digBlock(username, x, y, z, false, autoCollect, force);
+        const result = await botManager.digBlock(username, x, y, z, false, autoCollect);
         return result;
       } catch (error) {
         if (error instanceof Error) {

@@ -48,3 +48,45 @@
   4. 別のAPIメソッド（`bot.useOn`, `bot.activateItem`）を試す
 - **ファイル**: `src/bot-manager/bot-blocks.ts`(Line 1215-1243)
 
+---
+
+### [2026-02-16] Claudeエージェント起動直後にシャットダウン（未解決）
+- **症状**: `npm run start:claude`でエージェント起動後、Loop 1開始→MCP接続→イベント購読→即座にシャットダウン
+- **ログ**:
+  ```
+  [Agent] === Loop 1 ===
+  [MCP-WS] Connected to MCP server
+  [Claude] MCP hook connection ready
+  [Claude] Subscribed to events for Claude2
+  [Agent] Shutting down...
+  ```
+- **推定原因**:
+  1. Claude SDK の `query()` 関数が Claude Code 環境で正常に動作しない
+  2. OAuth認証に問題がある
+  3. `runQuery()` がエラーをスローせずにプロセスを終了させている
+- **調査内容**:
+  - エラーログなし（例外は発生していない）
+  - `cleanup()` が呼ばれている（SIGINT/SIGTERM または fatal error）
+  - `runQuery()` が実行される前にシャットダウンしている可能性
+- **次のアクション**:
+  1. `claude-client.ts` の `runQuery` にデバッグログ追加
+  2. Claude SDK のバージョンとClaude Code互換性確認
+  3. 別の認証方法を試す（API キー直接指定）
+  4. フォアグラウンドで実行してすべての出力をキャプチャ
+- **影響**: Claude2エージェントが自律動作できない。手動でMCPツールを呼び出す必要あり
+- **ファイル**: `src/agent/claude-agent.ts`, `src/agent/claude-client.ts`
+
+---
+
+### [2026-02-16] throwItem / tillSoil インポートエラー（✅解決）
+- **症状**: MCPサーバー起動時に `SyntaxError: The requested module './bot-blocks.js' does not provide an export named 'throwItem'` で起動失敗
+- **原因**: `src/bot-manager/index.ts` で `throwItem`, `tillSoil` をインポートしているが、`bot-blocks.ts` に関数が定義されていなかった
+- **影響**: MCPサーバーが起動できない
+- **修正**: ✅完了
+  - `src/bot-manager/bot-blocks.ts` に `throwItem` 関数を実装（line 1296-1323）
+  - `src/bot-manager/bot-blocks.ts` に `tillSoil` 関数を実装（line 1267-1293）
+  - `src/bot-manager/index.ts` の `digBlock` 呼び出しで不要な `force` 引数を削除
+  - `src/tools/building.ts` の `digBlock` 呼び出しで不要な `force` 引数を削除
+  - ビルド成功
+- **ファイル**: `src/bot-manager/bot-blocks.ts`, `src/bot-manager/index.ts`, `src/tools/building.ts`
+

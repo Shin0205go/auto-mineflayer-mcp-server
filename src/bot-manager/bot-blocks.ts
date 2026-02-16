@@ -1260,3 +1260,98 @@ export async function useItemOnBlock(
     throw new Error(`Failed to use ${itemName} on block at (${x}, ${y}, ${z}): ${errMsg}`);
   }
 }
+
+/**
+ * Till soil to create farmland
+ */
+export async function tillSoil(
+  managed: ManagedBot,
+  x: number,
+  y: number,
+  z: number
+): Promise<string> {
+  const bot = managed.bot;
+  const pos = new Vec3(x, y, z);
+  const block = bot.blockAt(pos);
+
+  if (!block) {
+    throw new Error(`No block at (${x}, ${y}, ${z})`);
+  }
+
+  // Check if block can be tilled
+  if (block.name !== "grass_block" && block.name !== "dirt") {
+    throw new Error(`Cannot till ${block.name}. Only grass_block and dirt can be tilled.`);
+  }
+
+  // Move closer if needed
+  const dist = bot.entity.position.distanceTo(pos);
+  if (dist > 4.5) {
+    const goal = new goals.GoalNear(x, y, z, 3);
+    bot.pathfinder.setGoal(goal);
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    bot.pathfinder.setGoal(null);
+  }
+
+  // Try to equip a hoe if available
+  const hoes = ["netherite_hoe", "diamond_hoe", "iron_hoe", "stone_hoe", "wooden_hoe"];
+  let hoeEquipped = false;
+  for (const hoeName of hoes) {
+    const hoe = bot.inventory.items().find(i => i.name === hoeName);
+    if (hoe) {
+      await bot.equip(hoe, "hand");
+      hoeEquipped = true;
+      break;
+    }
+  }
+
+  // Till the soil
+  try {
+    await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await bot.activateBlock(block);
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Verify it became farmland
+    const blockAfter = bot.blockAt(pos);
+    if (blockAfter && blockAfter.name === "farmland") {
+      return `Tilled ${block.name} at (${x}, ${y}, ${z}) → farmland${hoeEquipped ? " (with hoe)" : " (bare hands)"}`;
+    } else {
+      return `Attempted to till ${block.name} at (${x}, ${y}, ${z}), result: ${blockAfter?.name || "unknown"}`;
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to till soil at (${x}, ${y}, ${z}): ${errMsg}`);
+  }
+}
+
+/**
+ * Throw an item (eggs, snowballs, ender pearls, etc.)
+ */
+export async function throwItem(
+  managed: ManagedBot,
+  itemName: string,
+  count: number = 1
+): Promise<string> {
+  const bot = managed.bot;
+
+  // Find and equip the item
+  const item = bot.inventory.items().find(i => i.name === itemName);
+  if (!item) {
+    const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
+    throw new Error(`No ${itemName} in inventory. Have: ${inventory}`);
+  }
+
+  if (item.count < count) {
+    throw new Error(`Not enough ${itemName}. Have: ${item.count}, requested: ${count}`);
+  }
+
+  await bot.equip(item, "hand");
+
+  // Throw the item(s)
+  for (let i = 0; i < count; i++) {
+    bot.activateItem();
+    await new Promise(resolve => setTimeout(resolve, 200)); // Delay between throws
+  }
+
+  return `Threw ${count}x ${itemName}`;
+}
