@@ -280,9 +280,9 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
 
   try {
     while (attacks < maxAttacks) {
-      // Check HP - flee if critically low
-      if (bot.health <= 8) {
-        console.error(`[Attack] HP critically low (${bot.health}), fleeing from ${target.name}!`);
+      // Check HP - flee if low (raised from 8 to 12 for better survival margin)
+      if (bot.health <= 12) {
+        console.error(`[Attack] HP low (${bot.health}), fleeing from ${target.name}!`);
         bot.pathfinder.setGoal(null);
         // Try to eat food while fleeing
         const food = bot.inventory.items().find(i => i.name === "bread" || i.name === "cooked_beef" || i.name === "cooked_porkchop" || i.name === "cooked_chicken" || i.name === "golden_apple" || i.name === "baked_potato" || i.name === "cooked_mutton" || i.name === "cooked_cod" || i.name === "cooked_salmon");
@@ -384,7 +384,7 @@ export async function fight(
   managed: ManagedBot,
   flee: (managed: ManagedBot, distance: number) => Promise<string>,
   entityName?: string,
-  fleeHealthThreshold: number = 6
+  fleeHealthThreshold: number = 12
 ): Promise<string> {
   const bot = managed.bot;
 
