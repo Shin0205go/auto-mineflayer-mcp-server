@@ -423,9 +423,10 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     let craftingTableBlock = null;
     console.error(`[Craft] recipesAll(${item.id}, null, null) returned ${allRecipes.length} recipes`);
 
-    // FIX: If no recipes found for stick/crafting_table, use manual recipe crafting
-    // This handles Minecraft versions where recipesAll/recipesFor don't work properly
-    if (allRecipes.length === 0 && (itemName === "stick" || itemName === "crafting_table")) {
+    // FIX: ALWAYS use manual recipe for stick/crafting_table
+    // recipesAll() often returns broken recipes for these items (Mineflayer version bug)
+    // Manual recipe is more reliable than filtering broken recipesAll results
+    if (itemName === "stick" || itemName === "crafting_table") {
       console.error(`[Craft] No recipes found with recipesAll, using manual crafting...`);
 
       // Manual crafting for stick: 2 planks → 4 sticks
