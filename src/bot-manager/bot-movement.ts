@@ -1,6 +1,7 @@
 import { Vec3 } from "vec3";
 import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
+const { GoalBlock } = goals;
 import type { ManagedBot } from "./types.js";
 import { isHostileMob } from "./minecraft-utils.js";
 
@@ -268,11 +269,20 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
 
   console.error(`[Move] From (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)}) to (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
 
-  // Check if target position is inside a solid block
+  // Check if target position is a portal block — delegate to enterPortal()
   const targetBlock = bot.blockAt(targetPos);
+  if (targetBlock && (targetBlock.name === "nether_portal" || targetBlock.name === "end_portal")) {
+    console.error(`[Move] Target is a ${targetBlock.name}, delegating to enterPortal()...`);
+    try {
+      return await enterPortal(managed);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return `Failed to enter portal at (${x}, ${y}, ${z}): ${errMsg}` + getBriefStatus(managed);
+    }
+  }
   const isPassableBlock = (name: string) => {
     if (!name) return false;
-    const passable = ["air", "cave_air", "void_air", "water", "lava",
+    const passable = ["air", "cave_air", "void_air", "water",
       "grass", "tall_grass", "fern", "large_fern", "dead_bush",
       "dandelion", "poppy", "blue_orchid", "allium", "azure_bluet",
       "red_tulip", "orange_tulip", "white_tulip", "pink_tulip",
@@ -286,6 +296,7 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
       "blue_carpet", "brown_carpet", "green_carpet", "red_carpet", "black_carpet",
       "sugar_cane", "kelp", "seagrass", "tall_seagrass",
       "crimson_fungus", "warped_fungus", "crimson_roots", "warped_roots", "nether_sprouts",
+      "nether_portal", "end_portal",
       "sign", "wall_sign", "hanging_sign"];
     return passable.includes(name) || name.includes("sign") || name.includes("carpet") || name.includes("button") || name.includes("pressure_plate");
   };
@@ -334,14 +345,16 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   }
 
   // SAFETY CHECK: If target is significantly lower, prevent fall damage
-  // by refusing to path there if it would require falling more than 3 blocks
+  // Pathfinder handles moderate height changes with digging/towers (maxDropDown=4)
+  // Only block extreme drops (>50 blocks) where pathfinder would likely fail or time out
   // EXCEPTION: Allow if target is water (no fall damage in water)
   const currentY = bot.entity.position.y;
   const targetY = y;
   const fallDistance = currentY - targetY;
 
-  if (fallDistance > 3) {
+  if (fallDistance > 20) {
     // Check if target or nearby blocks are water
+    const targetBlock = bot.blockAt(targetPos);
     const isWaterNearby = () => {
       for (let dx = -1; dx <= 1; dx++) {
         for (let dy = -1; dy <= 1; dy++) {
@@ -357,11 +370,13 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
       return false;
     };
 
-    if (!isWaterNearby()) {
-      console.error(`[Move] Safety check: target is ${fallDistance.toFixed(0)} blocks lower - would cause fall damage!`);
-      return `Cannot move to (${x}, ${y}, ${z}) - target is ${fallDistance.toFixed(0)} blocks lower than current position. This would cause fall damage. Use minecraft_dig_block or minecraft_pillar_up to descend safely, or choose a closer target at similar height.` + getBriefStatus(managed);
+    const isSafeGround = targetBlock && (isPassableBlock(targetBlock.name) || targetBlock.name === "air");
+    if (!isSafeGround && !isWaterNearby()) {
+      // Target is a solid non-water block and fall is significant - risky
+      console.error(`[Move] High fall (${fallDistance.toFixed(0)} blocks) to solid block ${targetBlock?.name || "unknown"}`);
+      // Continue anyway - pathfinder may find a safe route
     } else {
-      console.error(`[Move] Safety check: target is ${fallDistance.toFixed(0)} blocks lower but water detected - allowing movement`);
+      console.error(`[Move] Large descent ${fallDistance.toFixed(0)} blocks allowed (safe ground or water detected)`);
     }
   }
 
@@ -1310,5 +1325,125 @@ export async function dismount(managed: ManagedBot): Promise<string> {
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to dismount: ${errMsg}`);
+  }
+}
+
+/**
+ * Enter a Nether portal and teleport to the Nether/Overworld
+ */
+export async function enterPortal(managed: ManagedBot): Promise<string> {
+  const bot = managed.bot;
+  const startDimension = bot.game.dimension;
+
+  // Find nearest nether_portal block
+  const portalBlock = bot.findBlock({
+    matching: (block) => block.name === "nether_portal",
+    maxDistance: 10,
+  });
+
+  if (!portalBlock) {
+    throw new Error("No nether portal found within 10 blocks");
+  }
+
+  // Find the lowest portal block in this portal (bottom of the portal opening)
+  // The bot needs its feet inside a portal block, so target the lowest one
+  let lowestPortal = portalBlock;
+  for (let dy = -1; dy >= -3; dy--) {
+    const below = bot.blockAt(portalBlock.position.offset(0, dy, 0));
+    if (below && below.name === "nether_portal") {
+      lowestPortal = below;
+    } else {
+      break;
+    }
+  }
+
+  console.error(`[Portal] Found portal at (${lowestPortal.position.x}, ${lowestPortal.position.y}, ${lowestPortal.position.z}), bot at (${bot.entity.position.x.toFixed(1)}, ${bot.entity.position.y.toFixed(1)}, ${bot.entity.position.z.toFixed(1)})`);
+
+  // Check if bot is already inside the portal block
+  const botBlockPos = bot.entity.position.floored();
+  const blockAtFeet = bot.blockAt(botBlockPos);
+  const alreadyInPortal = blockAtFeet?.name === "nether_portal";
+  if (alreadyInPortal) {
+    console.error(`[Portal] Bot is already inside portal block, waiting for dimension change...`);
+  }
+
+  // Temporarily allow stepping on portal blocks (normally avoided to prevent accidental teleport)
+  const portalBlockId = bot.registry.blocksByName["nether_portal"]?.id;
+
+  try {
+    if (portalBlockId !== undefined) {
+      bot.pathfinder.movements.blocksToAvoid.delete(portalBlockId);
+    }
+
+    if (!alreadyInPortal) {
+      // Move near the lowest portal block (not ON it, but beside it)
+      const goal = new goals.GoalNear(lowestPortal.position.x, lowestPortal.position.y, lowestPortal.position.z, 1);
+      await bot.pathfinder.goto(goal);
+
+      // Force walk into the portal block center — retry from multiple angles
+      const portalCenter = lowestPortal.position.offset(0.5, 0, 0.5);
+      // Try approaching from different directions (portal could be oriented either way)
+      const approaches = [
+        portalCenter,                                           // direct center
+        lowestPortal.position.offset(0.5, 0, -0.5),           // from south
+        lowestPortal.position.offset(0.5, 0, 1.5),            // from north
+        lowestPortal.position.offset(-0.5, 0, 0.5),           // from east
+        lowestPortal.position.offset(1.5, 0, 0.5),            // from west
+      ];
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const target = approaches[attempt] || portalCenter;
+        await bot.lookAt(target);
+        bot.setControlState("forward", true);
+        bot.setControlState("sprint", false);
+        await new Promise(r => setTimeout(r, 1000));
+        bot.setControlState("forward", false);
+        await new Promise(r => setTimeout(r, 300));
+
+        // Check if we're inside the portal now
+        const currentBlock = bot.blockAt(bot.entity.position.floored());
+        if (currentBlock?.name === "nether_portal") {
+          console.error(`[Portal] Bot entered portal block on attempt ${attempt + 1}`);
+          break;
+        }
+        console.error(`[Portal] Attempt ${attempt + 1}: feet at ${currentBlock?.name}, trying different angle...`);
+      }
+    }
+
+    // Wait for dimension change (teleport) — portals need ~4s standing inside
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error("Portal teleport timeout after 30 seconds"));
+      }, 30000);
+
+      const onSpawn = () => {
+        const newDimension = bot.game.dimension;
+        if (newDimension !== startDimension) {
+          cleanup();
+          const dimName = String(newDimension).includes("nether") ? "Nether" :
+                         String(newDimension).includes("overworld") ? "Overworld" :
+                         String(newDimension).includes("end") ? "End" : String(newDimension);
+          resolve(`Teleported to ${dimName} via portal. Position: (${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.y)}, ${Math.round(bot.entity.position.z)})`);
+        }
+      };
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        bot.removeListener("spawn", onSpawn);
+        // Re-add portal to blocksToAvoid after transition
+        if (portalBlockId !== undefined) {
+          bot.pathfinder.movements.blocksToAvoid.add(portalBlockId);
+        }
+      };
+
+      bot.on("spawn", onSpawn);
+    });
+  } catch (err) {
+    // Re-add portal to blocksToAvoid on failure
+    if (portalBlockId !== undefined) {
+      bot.pathfinder.movements.blocksToAvoid.add(portalBlockId);
+    }
+    const errMsg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to enter portal: ${errMsg}`);
   }
 }

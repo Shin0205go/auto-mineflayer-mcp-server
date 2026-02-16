@@ -2,11 +2,12 @@ import mineflayer from "mineflayer";
 import { Vec3 } from "vec3";
 import { EventEmitter } from "events";
 import pkg from "mineflayer-pathfinder";
-const { pathfinder, Movements } = pkg;
+const { pathfinder, Movements, goals } = pkg;
 import prismarineViewer from "prismarine-viewer";
 const { mineflayer: mineflayerViewer } = prismarineViewer;
 import type { BotConfig, ManagedBot, GameEvent } from "./types.js";
 import { isHostileMob, isPassiveMob } from "./minecraft-utils.js";
+import { equipArmor } from "./bot-items.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -278,6 +279,26 @@ export class BotCore extends EventEmitter {
         movements.dontMineUnderFallingBlock = true;
         movements.dontCreateFlow = true;
 
+        // Avoid walking through nether/end portals (prevents accidental dimension teleport)
+        const portalBlock = bot.registry.blocksByName["nether_portal"];
+        const endPortalBlock = bot.registry.blocksByName["end_portal"];
+        if (portalBlock) movements.blocksToAvoid.add(portalBlock.id);
+        if (endPortalBlock) movements.blocksToAvoid.add(endPortalBlock.id);
+
+        // Increase liquid cost to discourage pathfinding through water (prevents drowning)
+        // Default is 1 which treats water same as land. High cost makes pathfinder prefer land.
+        (movements as any).liquidCost = 100;
+
+        // Avoid lava completely (liquidCost alone doesn't distinguish water vs lava)
+        const lavaBlock = bot.registry.blocksByName["lava"];
+        if (lavaBlock) movements.blocksToAvoid.add(lavaBlock.id);
+
+        // Avoid fire and soul_fire blocks (common in Nether fortresses)
+        const fireBlock = bot.registry.blocksByName["fire"];
+        const soulFireBlock = bot.registry.blocksByName["soul_fire"];
+        if (fireBlock) movements.blocksToAvoid.add(fireBlock.id);
+        if (soulFireBlock) movements.blocksToAvoid.add(soulFireBlock.id);
+
         bot.pathfinder.setMovements(movements);
         console.error(`[BotManager] Pathfinder configured: canDig=true, allow1by1towers=true, scaffoldingBlocks=${movements.scafoldingBlocks.length} types`);
 
@@ -338,6 +359,26 @@ export class BotCore extends EventEmitter {
             timestamp: Date.now(),
           });
           addEvent("chat", `${username}: ${message}`, { username, message });
+        });
+
+        // System/command messages (e.g., /locate results, gamerule confirmations)
+        bot.on("messagestr", (message: string, messagePosition: string) => {
+          // Skip chat messages that are already handled by "chat" event
+          // Chat event handles player messages like "<Player> message"
+          if (messagePosition === "chat" && message.match(/^<\w+>/)) return;
+
+          // Skip noisy messages
+          if (message.includes("Gamerule") || message.includes("gamerule")) return;
+          if (message.includes("Set the time to")) return;
+          if (message.includes("joined the game")) return;
+          if (message.includes("left the game")) return;
+
+          managedBot.chatMessages.push({
+            username: "[Server]",
+            message: message,
+            timestamp: Date.now(),
+          });
+          console.error(`[System/${messagePosition}] ${message}`);
         });
 
         // Item collected
@@ -422,8 +463,10 @@ export class BotCore extends EventEmitter {
           });
         });
 
-        // Oxygen level check (drowning detection)
+        // Oxygen level check (drowning detection + auto swim up)
         let lastOxygenLevel = 20;
+        let autoSwimActive = false;
+        let autoSwimInterval: ReturnType<typeof setInterval> | null = null;
         bot.on("breath", () => {
           const oxygen = bot.oxygenLevel ?? 20;
           // Only emit if oxygen is critically low AND decreasing (avoid false positives)
@@ -431,6 +474,39 @@ export class BotCore extends EventEmitter {
             addEvent("drowning", `LOW OXYGEN: ${oxygen}/20! Swim up immediately!`, {
               oxygenLevel: oxygen,
             });
+          }
+          // Auto swim up when oxygen is getting low (trigger at 18 for extra safety)
+          // Removed feet check — trigger on oxygen alone to catch all water situations
+          if (oxygen < 18 && !autoSwimActive) {
+            autoSwimActive = true;
+            console.error(`[AutoSwim] Low oxygen (${oxygen}/20), swimming up!`);
+            bot.pathfinder.setGoal(null); // Cancel current pathfinding
+            // Look straight up so forward movement swims upward
+            bot.look(bot.entity.yaw, -Math.PI / 2, true);
+            bot.setControlState("jump", true);
+            bot.setControlState("sprint", true);
+            bot.setControlState("forward", true);
+            // Keep checking every 500ms — stop when oxygen recovers or max 30s
+            let swimTicks = 0;
+            autoSwimInterval = setInterval(() => {
+              swimTicks++;
+              const currentOxygen = bot.oxygenLevel ?? 20;
+              // Stop if oxygen recovered OR max time reached (30s)
+              // Removed stillInWater check to keep swimming until oxygen is restored
+              if (currentOxygen > 19 || swimTicks >= 60) { // 60 * 500ms = 30s max
+                bot.setControlState("jump", false);
+                bot.setControlState("sprint", false);
+                bot.setControlState("forward", false);
+                autoSwimActive = false;
+                if (autoSwimInterval) clearInterval(autoSwimInterval);
+                autoSwimInterval = null;
+                const reason = currentOxygen > 19 ? "oxygen recovered" : "timeout";
+                console.error(`[AutoSwim] Stopped swimming (${reason}) after ${swimTicks * 0.5}s, oxygen: ${currentOxygen}/20`);
+              } else {
+                // Keep looking up while swimming
+                bot.look(bot.entity.yaw, -Math.PI / 2, true);
+              }
+            }, 500);
           }
           lastOxygenLevel = oxygen;
         });
@@ -441,6 +517,52 @@ export class BotCore extends EventEmitter {
             addEvent("damaged", `Took damage! Health: ${bot.health?.toFixed(1)}/20`, {
               health: bot.health,
             });
+            // Emergency escape: if standing in lava or fire, immediately jump and sprint away
+            const feetBlock = bot.blockAt(bot.entity.position.floored());
+            const feetBlockBelow = bot.blockAt(bot.entity.position.floored().offset(0, -1, 0));
+            const isInLava = feetBlock?.name === "lava";
+            const isInFire = feetBlock?.name === "fire" || feetBlock?.name === "soul_fire" || feetBlockBelow?.name === "magma_block";
+            if (isInLava || isInFire) {
+              console.error(`[AutoFlee] ${isInLava ? "IN LAVA" : "ON FIRE"}! Emergency escape, HP=${bot.health.toFixed(1)}`);
+              bot.setControlState("jump", true);
+              bot.setControlState("sprint", true);
+              bot.setControlState("forward", true);
+              setTimeout(() => {
+                bot.setControlState("jump", false);
+                bot.setControlState("sprint", false);
+                bot.setControlState("forward", false);
+              }, isInLava ? 3000 : 1500);
+              // Auto-eat while escaping fire/lava
+              const food = bot.inventory.items().find(i =>
+                ["bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "baked_potato", "cooked_mutton", "golden_apple"].includes(i.name)
+              );
+              if (food && bot.food < 20) {
+                bot.equip(food, "hand").then(() => bot.consume()).catch(() => {});
+              }
+            }
+            // Auto-flee when HP drops to 10 or below after taking damage
+            else if (bot.health <= 10) {
+              const nearestHostile = Object.values(bot.entities)
+                .filter(e => e !== bot.entity && e.name && isHostileMob(bot, e.name.toLowerCase()))
+                .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position))[0];
+              if (nearestHostile) {
+                const dir = bot.entity.position.minus(nearestHostile.position).normalize();
+                const fleeTarget = bot.entity.position.plus(dir.scaled(15));
+                // Fix Session 32: Keep Y coordinate to avoid falling off cliffs
+                fleeTarget.y = bot.entity.position.y;
+                console.error(`[AutoFlee] HP=${bot.health.toFixed(1)}, fleeing from ${nearestHostile.name}`);
+                try {
+                  bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
+                } catch (_) { /* ignore pathfinder errors during auto-flee */ }
+                // Auto-eat while fleeing to recover HP
+                const food = bot.inventory.items().find(i =>
+                  ["bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "baked_potato", "cooked_mutton", "cooked_cod", "cooked_salmon", "golden_apple"].includes(i.name)
+                );
+                if (food && bot.food < 20) {
+                  bot.equip(food, "hand").then(() => bot.consume()).catch(() => {});
+                }
+              }
+            }
           } else if (entity.position.distanceTo(bot.entity.position) < 10) {
             addEvent("entity_hurt", `${entity.name || "Entity"} took damage nearby`, {
               entityName: entity.name,
@@ -494,9 +616,39 @@ export class BotCore extends EventEmitter {
           console.error(`[BotManager] ${config.username} died! Auto-respawning...`);
           addEvent("death", "Bot died! Respawning...");
           bot.chat("やられた！リスポーン中...");
-          setTimeout(() => {
+          setTimeout(async () => {
             bot.chat("復活しました！");
             addEvent("respawn", "Bot respawned");
+
+            // Auto-equip best armor after respawn
+            try {
+              await equipArmor(bot);
+              console.error(`[BotManager] Auto-equipped armor after respawn`);
+            } catch (_) { /* ignore armor equip errors */ }
+
+            // Safety check: warn if unarmed and at night
+            setTimeout(() => {
+              const hasWeapon = bot.inventory.items().some(i =>
+                i.name.includes("sword") || i.name.includes("axe")
+              );
+              const hasArmor = bot.inventory.items().some(i =>
+                i.name.includes("helmet") || i.name.includes("chestplate") ||
+                i.name.includes("leggings") || i.name.includes("boots")
+              );
+              const time = bot.time.timeOfDay;
+              const isNight = time >= 12541 && time < 23458;
+
+              if (!hasWeapon || !hasArmor) {
+                console.error(`[Respawn Safety] ${config.username} respawned without equipment! Weapon: ${hasWeapon}, Armor: ${hasArmor}`);
+                if (isNight) {
+                  bot.chat("[警告] 装備なし+夜間。移動危険。シェルター待機推奨");
+                  addEvent("respawn_warning", "Respawned without equipment during night");
+                } else {
+                  bot.chat("[警告] 装備なし。Base帰還・装備回復推奨");
+                  addEvent("respawn_warning", "Respawned without equipment");
+                }
+              }
+            }, 1000);
           }, 2000);
         });
 

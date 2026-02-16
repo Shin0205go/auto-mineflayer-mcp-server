@@ -258,7 +258,8 @@ export async function digBlock(
   delay: (ms: number) => Promise<void>,
   moveToBasic: (username: string, x: number, y: number, z: number) => Promise<{ success: boolean; message: string }>,
   getBriefStatus: (username: string) => string,
-  autoCollect: boolean = true
+  autoCollect: boolean = true,
+  force: boolean = false
 ): Promise<string> {
   const bot = managed.bot;
   const username = managed.username;
@@ -293,17 +294,19 @@ export async function digBlock(
     }
   }
 
-  // Check for lava in adjacent blocks before digging
-  const adjacentPositions = [
-    blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
-    blockPos.offset(0, 1, 0), blockPos.offset(0, -1, 0),
-    blockPos.offset(0, 0, 1), blockPos.offset(0, 0, -1),
-  ];
-  for (const adjPos of adjacentPositions) {
-    const adjBlock = bot.blockAt(adjPos);
-    if (adjBlock?.name === "lava") {
-      console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
-      return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`;
+  // Check for lava in adjacent blocks before digging (skip if force=true)
+  if (!force) {
+    const adjacentPositions = [
+      blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
+      blockPos.offset(0, 1, 0), blockPos.offset(0, -1, 0),
+      blockPos.offset(0, 0, 1), blockPos.offset(0, 0, -1),
+    ];
+    for (const adjPos of adjacentPositions) {
+      const adjBlock = bot.blockAt(adjPos);
+      if (adjBlock?.name === "lava") {
+        console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
+        return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z}). force=trueで強制的に掘ることも可能。`;
+      }
     }
   }
 

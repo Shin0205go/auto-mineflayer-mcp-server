@@ -248,3 +248,94 @@
   - `src/bot-manager/bot-crafting.ts` (craft 実装)
 - **ステータス**: 🔴 CRITICAL - サーバー再起動またはbot再接続が必須
 
+## [2026-02-16] stuck in stone cavern - can't place blocks or escape
+
+- **症状**: Claude4が完全に石ブロックで囲まれており、`minecraft_place_block`で crafting_table を設置できない。pillar_up も部分的にしか機能しない。
+- **再現手順**:
+  1. 接続時の座標: (140.5, 65, -146.5) - 完全に石で囲まれた空間
+  2. `minecraft_place_block("crafting_table", x, y, z)` → "Block not placed. Current block: stone" エラー
+  3. `minecraft_pillar_up(10)` → "Pillared up 0.9 blocks (Y:66→67, placed 1/5). PARTIAL: Stopped early" で止まる
+  4. `minecraft_move_to` で移動可能な方向（east）に移動しても、石に囲まれたままブロック設置不可
+- **原因推定**:
+  1. ブロック設置システムが、周囲が stone で満たされている場合に設置位置を見つけられない
+  2. または、設置座標計算が不適切で常に stone ブロックを選択
+  3. pillar_up も同じ理由で失敗している可能性
+- **影響**:
+  - crafting_table を設置できない → stone_pickaxe をクラフトできない
+  - stone_pickaxe がない → stone ブロック破壊できない
+  - enderman 狩り任務（pearl+2本）を実行不可
+- **回避策**:
+  1. Claude1 に助言を求める（リーダーの支援）
+  2. または、別のボットが crafting_table を近くに設置してくれるのを待つ
+  3. または、`minecraft_get_surroundings` で air ブロックを見つけてそこに設置
+- **ステータス**: ⚠️ 環境バグ報告済み (2026-02-16) - Claude1の確認待ち
+
+## [2026-02-16] stick crafting with fallback recipe - still failing
+
+- **症状**: stick クラフトが「missing ingredient」で失敗し続ける。修正済み（#55）とされているが、MCPサーバーが古いコードを実行している可能性
+- **エラー例**:
+  ```
+  Cannot craft stick: Failed to craft stick from birch_planks: Error: missing ingredient.
+  ```
+- **所持状態**: birch_planks x62, dark_oak_planks x6
+- **推定原因**: MCPサーバーが最新のビルド済みコードを読み込んでいない。修正コード（line 416-418の find()→filter+sort）が実装されていない
+- **回避策**:
+  1. MCPサーバーを再起動（最新コードをロード）
+  2. または iron_ingot直接クラフト以外の方法でツール確保
+- **ステータス**: ⚠️ MCPサーバー再起動待ち - コード修正は済み
+
+## [2026-02-16] gamerule doMobLoot disabled - mobs don't drop loot
+
+- **症状**: Claude6がスケルトンを倒しても骨がドロップしない。モブキルメッセージは表示されるが、lootが発生しない
+- **報告者**: Claude6 「スケルトン1体倒しましたが、骨がドロップしていません」
+- **推定原因**: サーバーのgamerule `doMobLoot false` が設定されている
+- **影響**: 全ボットが骨・ダイヤ・その他モブドロップを入手できない → Phase 進行不可
+- **解決策**:
+  1. 人間がサーバーで `/gamerule doMobLoot true` を実行
+  2. または Claude1 がコンソールコマンド実行権限がある場合は実行
+- **ステータス**: ⚠️ サーバー設定確認・修正が必須
+
+## [2026-02-16] Claude1 continuous teleportation and death loop 🔴 CRITICAL
+
+- **症状**: Claude1がネザーの安全プラットフォーム(0.5, 70, 0.5)から突然繰り返し遠い座標にテレポートされ、その直後に死亡を繰り返す。テレポート先: (200.5, 70, -199.5), (400.5, 70, 0.5), (-199.5, 70, 0.5)など、非常に遠い座標へのテレポート。
+- **サイクル**:
+  1. Claude1が Teleported to [遠い座標] というメッセージ（自動実行）
+  2. 数秒後に やられた！リスポーン中...
+  3. リスポーン後、再び テレポート実行
+  4. ループ継続
+- **推定原因**:
+  1. サーバーにコマンドブロックまたはMod が設置されており、Claude1に対して自動テレポートを実行している
+  2. または、クライアント側の問題で意図しないテレポートコマンドが送信されている
+  3. または、Minecraftサーバーの設定エラー
+- **影響**:
+  - リーダー(Claude1)が機能不全に陥り、チーム全体の指揮・指示ができない
+  - Nether Phase 進行完全停止
+  - 他のボット(Claude2-7)が指示なしで放置状態
+- **観察**:
+  - Claude1以外のボット(Claude2, Claude3, Claude4, Claude5)は安全プラットフォームでも同じテレポートが発生せず、正常
+  - Claude5も一度死亡し、リスポーン後に異常なし
+  - 異常はClaudeに対してのみ発生している可能性
+- **推奨解決策**:
+  1. **サーバー調査**: MinecraftサーバーでCommandBlock/Mod確認、無効化
+  2. **Claude1再接続**: 完全に切断・再接続してセッションをリセット
+  3. **全ボット再接続**: インベントリ・状態同期の強制更新
+- **ステータス**: 🔴 CRITICAL - サーバー侵入/設定エラー の可能性。即対応が必要。
+
+## [2026-02-16] stick crafting still failing after "fix" - MCPサーバー未更新
+
+- **症状**: `minecraft_craft("stick")` が「Failed to craft stick from dark_oak_planks: Error: missing ingredient」エラーで失敗。birch_planks x4, dark_oak_planks x16 を所持していても失敗。
+- **再現手順**:
+  1. inventory に複数種類の planks がある状態
+  2. `minecraft_craft("stick", 1)` を実行
+  3. エラーで失敗、planks が消費されない
+- **調査結果**:
+  - コード (`src/bot-manager/bot-crafting.ts` line 416-418) は修正済み（`find()` → `filter()+sort()` で最も数が多い planks を選択）
+  - しかし、実際には dark_oak_planks x5 が選ばれてエラーになる
+  - 修正コードが実行されていない → MCPサーバーが古い `.js` ファイルをキャッシュしている
+- **原因**: MCPサーバープロセスが起動時に `dist/` フォルダ内の古い `.js` をキャッシュ。`npm run build` で `dist/` は更新されたが、MCPサーバープロセスが再起動されていない
+- **影響**: stick クラフト不可 → pickaxe クラフト不可 → mining・道具製作全般が停止
+- **解決策**:
+  1. MCPサーバープロセスを再起動 (`kill` + `npm run start:mcp-ws`)
+  2. または、全MCPサーバーを完全に停止・再起動
+- **ステータス**: ⚠️ MCPサーバー再起動待ち - コード修正は済み (line 416-418)
+

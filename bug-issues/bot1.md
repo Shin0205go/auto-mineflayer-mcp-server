@@ -12,6 +12,380 @@
 
 ---
 
+## Session 36 Status Update (2026-02-17)
+
+### 🚨 CRITICAL BUG: Repeated Chest Disappearance
+
+**What Happened**:
+- Claude1 placed chest at (2,105,1) - placement confirmed successful
+- Moved away briefly (fell, respawned)
+- Returned to check chest contents - chest completely gone (air block)
+- This is the SECOND time a chest has vanished at base location
+- First incident: (2,106,-1) - 10 pearls were inside but safe with Claude6
+- Second incident: (2,105,1) - chest placed and vanished within ~1 minute, empty
+
+**Pattern Analysis**:
+- Both incidents at base coordinates near (2,~105-106,~0)
+- Both chests vanished without explosion or visible cause
+- No items found on ground after disappearance
+- Time between placement and disappearance: <5 minutes
+
+**Code Review**:
+- `bot-blocks.ts` lines 154-169: Verification logic checks block after 500ms + 3x200ms retries
+- Placement returns success only if block verified present
+- Both times placement reported success, but block later disappeared
+
+**Possible Causes**:
+1. Server-side anti-cheat removing placed blocks?
+2. Another bot accidentally breaking the chest?
+3. World corruption at specific coordinates?
+4. Lag causing placement rollback?
+5. Mineflayer placeBlock() succeeding but server rejecting?
+
+**Investigation Needed**:
+- Test chest placement at different coordinates (farther from base)
+- Check if other bots see the chest before it disappears
+- Try /setblock command instead of survival placement
+- Monitor server console for block break events
+
+**Resolution**:
+- ✅ WORKAROUND FOUND: Chest placement successful at (10,87,5) - away from base coordinates
+- Chest is stable and persistent at new location
+- Theory: Coordinates near (2,~105-106,~0) may have corruption or anti-cheat issues
+- All bots now directed to use chest at (10,87,5) for pearl storage
+
+**Current Status**:
+- New chest location: (10,87,5) - STABLE
+- Claude6: Holding 10 pearls, moving to new chest
+- Claude7: Confirmed pearl drops working after gamerule fix, has 1 pearl
+- Phase 6: 11/12 pearls collected (10+1), need 1 more!
+
+**Team Status**:
+- Claude2, Claude3, Claude5, Claude7: Enderman hunting (multiple deaths, respawn strategy)
+- Claude6: Holding 10 pearls, awaiting chest resolution
+- Claude4: Status unknown
+- All using respawn strategy for HP/hunger recovery
+
+### 🚨 GAMERULE RESET BUG: Enderman Pearls Not Dropping
+
+**What Happened**:
+- Claude5 killed enderman - no pearl drop
+- Claude7 killed enderman at (-42,120,-12) - no pearl drop
+- Both confirmed kills but zero loot received
+
+**Root Cause**:
+- Server gamerules reset AGAIN (recurring issue)
+- doMobLoot and/or doEntityDrops were set to false
+- This has happened multiple times across sessions
+
+**Fix Applied**:
+- Claude1 manually ran gamerule commands:
+  - `/gamerule doMobLoot true`
+  - `/gamerule doEntityDrops true`
+  - `/gamerule doTileDrops true`
+- Fix confirmed at session 36
+
+**Ongoing Issue**:
+- bot-core.ts lines 318-320 apply gamerules on connect
+- But server is resetting them randomly during gameplay
+- Either server.properties overriding, or admin commands interfering
+- PERMANENT SOLUTION NEEDED: Investigate server config
+
+---
+
+## Session 35 Status Update (2026-02-17)
+
+### 🚨 CRITICAL INCIDENT: Chest Vanished - 10 Pearls Lost (RESOLVED)
+
+**What Happened**:
+- Main chest at (2,106,-1) completely vanished - block is now air
+- 10 ender pearls were inside - all lost
+- Second chest also missing
+- No items found on ground (despawned or never dropped)
+- Chest was confirmed present at session start
+
+**Investigation Needed**:
+- Possible causes:
+  1. Explosion (creeper/TNT) - but no crater observed
+  2. Player broke chest without realizing
+  3. Server rollback or world corruption
+  4. Command executed accidentally (/setblock, /fill)
+- Check server logs for chest break events
+- Review if any bot has chest in inventory
+
+**Recovery Actions**:
+- ✅ PEARLS NOT LOST! Claude6 has all 10 pearls in inventory
+- Phase 6 status: 10/12 pearls (Claude6 holding), need 2 more
+- Team deployed to hunt endermen at 100m range
+- Claude6 to bring pearls to base once new chest is placed
+- Multiple bots at low HP - respawn strategy continuing
+
+**Place Block Bug**:
+- Cannot place chest at (2,106,-1) even with adjacent blocks
+- Tool suggests locations but placement fails: "Block not placed, current block: air"
+- Workaround: Inventory sync issues prevent dropping items too
+- Solution: Have team members hold pearls in inventory until chest placement works
+
+### Previous Status
+- **Phase 6 Progress**:
+  - Ender Pearls: 10/12 in main chest (need 2 more!) ✅ Almost complete → **NOW 0/12 - LOST**
+  - Blaze Rods: 1/7 (need 6 more - Claude6 assigned, currently HP crisis)
+- **Time**: Fixed at 15628 (night) - server time still stuck
+- **Team Status**: All bots online (Claude1-7)
+  - Claude6 at HP 7.8/20 in Nether, returning to base for respawn
+  - Claude4 just died to creeper, respawning
+  - Claude2, Claude7 at base ready for enderman hunting
+- **Food Crisis**: Still no food in chests, respawn strategy continuing
+
+## Session 34 Status Update (2026-02-17)
+
+### Current Situation Assessment
+- **Phase 6 Progress**:
+  - Ender Pearls: 8/12 in main chest (need 4 more)
+  - Blaze Rods: 1/7 (need 6 more - Claude6 assigned)
+- **Time**: Fixed at 15628 (night) - server time still stuck
+- **Team Status**: 6/7 bots online, all respawned with full HP/hunger
+
+### Team Instructions Issued
+1. **Farm Priority**: Claude3/5/7 assigned to wheat farm at (0,106,0) - Claude3 has seeds x15
+2. **Food Gathering**: Claude2/4 assigned to hunt animals around base
+3. **Blaze Rods**: Claude6 to continue Nether fortress collection (target: 6 more)
+4. **Enderman Hunt**: On hold until food crisis resolved
+
+### Observations
+- Enderman spawn confirmed near base (12.5m from (0,106,0))
+- Multiple team members reporting difficulty finding endermen in far quadrants
+- Food crisis continuing - respawn strategy still in effect
+- All team members died at least once this session
+
+### Code Review
+- ✅ Auto-flee fall damage fix (Session 32) confirmed in code at bot-core.ts:552
+- ✅ Enderman combat strategy looks solid (approach, provoke, chase logic)
+- ✅ TypeScript compilation clean
+- ✅ No new bugs detected
+
+### Action Plan
+1. Complete wheat farm construction (in progress)
+2. Establish food supply chain
+3. Resume enderman hunting with better coordination
+4. Monitor Claude6's blaze rod progress in Nether
+
+---
+
+### [2026-02-17 Session 32] Auto-flee causes fall deaths (✅ FIXED)
+- **症状**: Claude2が "hit the ground too hard while trying to escape Zombie" で死亡。逃走中に落下死
+- **原因**: `bot-core.ts` lines 544-563 の auto-flee (HP<=10時) が GoalNear で pathfinding するが、落下安全チェックなし
+- **問題コード**:
+  ```typescript
+  bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
+  ```
+  - pathfinder は最短距離を優先し、崖から落ちるルートも選択する
+  - 夜間の暗闇では地形が見えず、より危険
+- **修正方針**:
+  1. **Option A**: pathfinder の Movements に `allowFreeMotion: false` を設定し、落下を制限
+  2. **Option B**: 逃走目標の Y 座標を現在と同じにして水平方向のみ逃走
+  3. **Option C**: 逃走前に周囲の地形をスキャンし、安全な方向を選択
+- **推奨修正**: Option B (簡単、即効性)
+  ```typescript
+  const fleeTarget = bot.entity.position.plus(dir.scaled(15));
+  // Fix: Keep Y coordinate same as current position
+  fleeTarget.y = bot.entity.position.y;
+  bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
+  ```
+- **ファイル**: `src/bot-manager/bot-core.ts` lines 544-563
+- **修正内容**: fleeTarget.y = bot.entity.position.y を追加し、Y座標を現在地に固定
+- **効果**: 水平方向のみ逃走、崖から落ちるリスク消失
+- **ステータス**: ✅ 修正完了 (Session 32)
+
+---
+
+### [2026-02-17 Session 30] Nether portal cannot be activated (🚫 REQUIRES HUMAN)
+- **症状**: Claude6がflint_and_steelでネザーポータルフレーム(7-10,106-110,-3)に火をつけても起動しない
+- **原因**: Obsidianフレームが不完全、または構造が正しくない可能性。ボットは/setblockコマンドを実行できない
+- **試行した対策**:
+  1. Claude6が複数箇所(7,107,-3), (10,107,-3), (8,107,-3), (8,108,-3)でflint_and_steel使用 → 無反応
+  2. /setblock 9 107 -3 nether_portalの実行を試みる → ボット権限では不可
+- **対応**: 人間プレイヤーが以下を実行:
+  - `/setblock 9 107 -3 minecraft:nether_portal` でポータルブロック直接設置
+  - または、正しいフレーム構造(4x5 obsidian rectangle)を再構築してflint_and_steelで点火
+- **回避策**: Claude6を一時的にエンダーパール収集タスクへ再割り当て
+- **ファイル**: N/A (ゲーム内構造物の問題)
+- **ステータス**: 🚫 人間の介入待ち
+
+---
+
+### [2026-02-17 Session 29] Multiple drownings - auto-swim insufficient (✅ FIXED)
+- **症状**: Claude5, Claude7が連続溺死。commit 81813dd で auto-swim は改善済み（oxygen<15で発動、15秒継続）のに発生
+- **原因分析**:
+  1. **足元チェックの問題**: `feetBlock?.name === "water"` — 頭だけ水中、水流の中では発動しない
+  2. **発動閾値が低い**: oxygen<15 — 深い水域では遅すぎる
+  3. **制限時間不足**: 15秒 — 深い海・湖では水面到達できない
+  4. **停止条件の問題**: `!stillInWater` — 足が水から出たら停止するが、頭が水中なら溺れる
+- **修正内容** (Session 30):
+  1. **oxygen<18** に変更（より早期発動、余裕を持たせる） — 既に実装済み
+  2. **足元チェック削除** — oxygen減少のみで発動（すべての水中状況に対応） — 既に実装済み
+  3. **30秒制限** に延長（15s→30s、深い水域でも到達可能） — 既に実装済み
+  4. **oxygen回復チェック追加** — oxygen>19で即停止（無駄な泳ぎを減らす） — 既に実装済み
+  5. **停止条件から`!stillInWater`削除** — oxygen回復 OR タイムアウトのみで停止（足元に関係なく酸素が回復するまで泳ぎ続ける）
+- **効果**: 水中のあらゆる状況（頭だけ水中、水流内等）で早期に発動し、酸素が完全に回復するまで泳ぎ続ける
+- **ファイル**: `src/bot-manager/bot-core.ts` lines 478-511 (auto-swim logic)
+- **ステータス**: ✅ 修正完了 (Session 30)
+
+---
+
+### [2026-02-16 Session 28] Multiple bot deaths - equipment loss cycle (✅ MITIGATED)
+- **症状**: Claude2, Claude3, Claude4が短時間で繰り返し死亡。Zombie/fall damage。死亡→リスポーン→再度死亡のループ
+- **原因**:
+  1. keepInventory ONでもリスポーン後に装備がインベントリから消失している（サーバー側の問題？）
+  2. 夜間に装備なしで移動→Zombie遭遇→死亡のパターン
+  3. Auto-equip armor (bot-core.ts line 622)は動作しているが、装備がインベントリにない場合は無効
+- **修正内容** (commit 4b689ea):
+  1. リスポーン1秒後に装備確認チェックを追加
+  2. 武器/防具がない場合、チャットで警告「[警告] 装備なし。Base帰還・装備回復推奨」
+  3. 夜間+装備なしの場合は強い警告「[警告] 装備なし+夜間。移動危険。シェルター待機推奨」
+  4. respawn_warning イベントをログに記録
+- **効果**: ボット自身が装備なし状態を認識でき、エージェントが適切な行動（シェルター待機/base帰還）を取れる
+- **ファイル**: `src/bot-manager/bot-core.ts` (respawn handler lines 612-650)
+- **ステータス**: ✅ 緩和策実装完了（根本原因はサーバー側、回避策で対応）
+
+---
+
+### [2026-02-16 Session 27] Claude4 spawned/teleported into solid stone blocks (✅ RESOLVED)
+- **症状**: Claude4が座標(142, 66, -146)で石ブロックに完全に囲まれ脱出不可
+- **原因**: サーバー側のスポーン位置決定の問題
+- **対応**: Claude5が救助完了。その後Claude4は正常動作
+- **ファイル**: N/A（サーバー側問題）
+- **ステータス**: ✅ 解決済
+
+---
+
+### [2026-02-16 Session 21] /give command items not appearing in bot inventory (Known Issue)
+- **症状**: `/give Claude2 bread 10` でサーバーは「Gave 10 [Bread] to Claude2」と表示するが、Claude2のMineflayerボットのインベントリに反映されない
+- **再現**: /give bread、/give cooked_beef 両方で発生。disconnect→reconnect後も変わらず
+- **回避策**: チェストに入れて `minecraft_take_from_chest` で取得すれば正常動作
+- **原因**: Mineflayerが `/give` による `set_slot` パケットを正しく処理していない可能性。Mineflayerのバグか、パケット順序の問題
+- **対応**: コード修正は困難（Mineflayer内部の問題）。チェスト経由で物資を渡す運用で回避
+- **ファイル**: N/A（Mineflayerライブラリ内部）
+- **ステータス**: ⚠️ 回避策あり（チェスト経由）
+
+---
+
+### [2026-02-16 Session 21] Portal entry fails — bot stands on obsidian frame instead of inside portal (✅ FIXED)
+- **症状**: Claude6がネザーポータルに入ろうとすると、足元がobsidian（フレーム）で頭がnether_portalブロックの状態で止まり、転送されずタイムアウト
+- **原因**: `enterPortal()`が`GoalBlock`でポータルブロック座標に移動するが、pathfinderはポータルブロックの上（=obsidianフレーム上）に立ってしまう。また1秒だけforward歩行して止まるため、ポータル内に確実に入れていなかった
+- **修正**: (1) 最下段のポータルブロックを検索して足元ターゲットに (2) `GoalNear(range=1)`で近づいてからforward歩行を最大5回リトライし、足元がnether_portalか確認 (3) タイムアウトを15→30秒に延長
+- **ファイル**: `src/bot-manager/bot-movement.ts`
+- **ステータス**: ✅ 修正完了（commit 9ed0ad9）
+
+---
+
+### [2026-02-16 Session 19] Pathfinder routes through deep water causing drowning (✅ FIXED)
+- **症状**: Claude2がエンダーマン狩り中に繰り返し溺死。pathfinderが水中を通るルートを選択
+- **原因**: `mineflayer-pathfinder`のデフォルト`liquidCost=1`で、水を陸地と同コストで通過可能と判定。深い水域を横断するルートが選ばれ溺死
+- **修正**: `bot-core.ts`で`movements.liquidCost = 100`に設定。pathfinderが陸路を強く優先するようになった（水路を完全にブロックはしない）
+- **ファイル**: `src/bot-manager/bot-core.ts`
+- **ステータス**: ✅ 修正完了（commit 8cec55e）
+
+---
+
+### [2026-02-16 Session 18] Lava listed as passable block in moveTo() (✅ FIXED)
+- **症状**: Claude7がネザーで繰り返し溶岩死。pathfinderのblocksToAvoidに溶岩を追加済みなのに死亡が続く
+- **原因**: `moveTo()`内の`isPassableBlock()`関数に`"lava"`が含まれていた。ターゲット付近の立ち位置を探す際、溶岩を「立てる場所」として判定してしまう
+- **修正**: `isPassableBlock()`のpassable配列から`"lava"`を削除。pathfinderのblocksToAvoidと合わせて二重の溶岩回避が機能するようになった
+- **ファイル**: `src/bot-manager/bot-movement.ts`
+- **ステータス**: ✅ 修正完了（commit 0416942）
+
+---
+
+### [2026-02-16 Session 18] Chest take/store targets wrong chest when multiple chests nearby (✅ FIXED)
+- **症状**: `minecraft_open_chest(x,y,z)`で開いたチェストと`minecraft_take_from_chest()`で操作されるチェストが異なる
+- **原因**: `takeFromChest`/`storeInChest`が`bot.findBlock()`で最も近いチェストを検索するため、`open_chest`で指定したチェストとは別のチェストを操作する
+- **修正**: `takeFromChest`/`storeInChest`にオプションのx,y,z座標パラメータを追加。座標指定時はその位置のチェストを直接開く
+- **ファイル**: `src/bot-manager/bot-storage.ts`, `src/bot-manager/index.ts`, `src/tools/storage.ts`
+- **ステータス**: ✅ 修正完了（commit f96f3fc）
+
+---
+
+### [2026-02-16 Session 18] move_to cannot enter portals (blocksToAvoid) (✅ FIXED)
+- **症状**: `move_to`でポータルブロック座標を指定しても、pathfinderがポータルを回避して到達できない
+- **原因**: `blocksToAvoid`にnether_portalが含まれるため、pathfinderがポータルブロックへの経路を生成できない
+- **修正**: `moveTo`関数の先頭でターゲットブロックがポータルかチェックし、ポータルなら`enterPortal()`に委譲。`enterPortal()`は一時的にblocksToAvoidからポータルを除外する
+- **ファイル**: `src/bot-manager/bot-movement.ts`
+- **ステータス**: ✅ 修正完了（commit 7d9e3d2）※MCP再起動が必要
+
+---
+
+### [2026-02-16 Session 18] Pathfinder routes through lava (✅ FIXED)
+- **症状**: Claude6がネザーで「tried to swim in lava」で死亡。pathfinderが溶岩を通るルートを選択
+- **原因**: mineflayer-pathfinderの`liquidCost`はデフォルト1で、水と溶岩を区別しない。溶岩も水と同コストで通過可能と判定される
+- **修正**: `bot-core.ts`でlavaブロックを`movements.blocksToAvoid`に追加。pathfinderが溶岩を完全に回避するようになった
+- **ファイル**: `src/bot-manager/bot-core.ts`
+- **ステータス**: ✅ 修正完了（commit 1f63c94）
+
+---
+
+### [2026-02-16 Session 18] Ender pearl drops not collected after enderman kill (✅ FIXED)
+- **症状**: Claude3がエンダーマンを倒したがパールを取得できなかった。エンダーマンはテレポートするため、死亡位置がボットから離れている
+- **原因**: `attack()`と`fight()`で敵を倒した後、`collectNearbyItems()`を呼ぶがボットの現在位置付近しか検索しない。テレポートした敵の死亡位置にドロップがある
+- **修正**: `lastKnownTargetPos`を追跡し、敵が消えたらその位置まで移動してからアイテム回収。`attack()`と`fight()`両方に適用
+- **ファイル**: `src/bot-manager/bot-survival.ts`
+- **ステータス**: ✅ 修正完了（commit 386ee79）
+
+---
+
+### [2026-02-16 Session 17] Pathfinder walks through portals accidentally (✅ FIXED)
+- **症状**: ネザーでpathfinding中にポータルを通過してOverworldに戻される。Bot2報告: ブレイズスポナー付近でOverworld(5.5,102,-5.5)にテレポートされた
+- **原因**: mineflayer-pathfinderがポータルブロックを通過可能と判定し、経路にポータルを含めてしまう
+- **修正**: `bot-core.ts`でMovements.blocksToAvoidにnether_portal/end_portalを追加。`bot-movement.ts`のenterPortal()では意図的なポータル進入時に一時的にblocksToAvoidから除外し、遷移後に再追加
+- **ファイル**: `src/bot-manager/bot-core.ts`, `src/bot-manager/bot-movement.ts`
+- **ステータス**: ✅ 修正完了（commit b38751a）
+
+---
+
+### [2026-02-16 Session 17] dig_block force parameter not passed through (✅ FIXED)
+- **症状**: `minecraft_dig_block(force=true)`を使っても溶岩隣接ブロックを掘れない
+- **原因**: ツール定義(building.ts)でforceパラメータを読み取るが、`botManager.digBlock()`に渡していない。bot-manager/index.tsとbot-blocks.tsの関数にもforceパラメータがない
+- **修正**: 3ファイルを修正してforceパラメータをツール→botManager→digBlockBasicまで伝達
+- **ファイル**: `src/tools/building.ts`, `src/bot-manager/index.ts`, `src/bot-manager/bot-blocks.ts`
+- **ステータス**: ✅ 修正完了（commit c72fdc5）
+
+---
+
+### [2026-02-16 Session 14] move_to can't enter Nether/End portals (✅ FIXED)
+
+- **症状**: ネザーポータルの前にいるがmove_toでポータルに入れない。"Path blocked"エラー
+- **報告**: Claude3
+- **原因**: `isPassableBlock()`にnether_portal, end_portalが含まれていない。move_toがポータルブロックを固体と判定し、別の位置に移動しようとする
+- **修正**: `bot-movement.ts:289`のpassableリストに`"nether_portal", "end_portal"`を追加
+- **ファイル**: `src/bot-manager/bot-movement.ts:289`
+- **ステータス**: ✅ 修正完了（次回MCP再起動後に反映）
+
+---
+
+### [2026-02-16 Session 14] Chat command whitelist doesn't include Claude1-7 (✅ FIXED)
+
+- **症状**: Claude1が`/tp Claude3`を実行しようとすると「Command '/tp' is not allowed」エラー。ネザーで動けないClaude3をテレポートできない
+- **原因**: `src/tools/movement.ts:85`のwhitelistが`["Claude"]`のみで、Claude1〜Claude7が含まれていない
+- **修正**: whitelistを`["Claude", "Claude1", "Claude2", "Claude3", "Claude4", "Claude5", "Claude6", "Claude7"]`に拡大
+- **ファイル**: `src/tools/movement.ts:85`
+- **ステータス**: ✅ 修正完了（次回ビルド後に反映）
+
+---
+
+### [2026-02-16 Session 13] stick/crafting_table crafting - manual recipe rejected by filter (✅ FIXED)
+
+- **症状**: `minecraft_craft("stick")` が "missing ingredient" エラーで失敗。birch_planks x70 所持。manual recipe作成は成功するが、compatibleRecipe検索(line 661-690)で除外される
+- **報告**: Claude4, Claude5, Claude2
+- **原因**: manual recipeが`allRecipes`に追加された後、`compatibleRecipe`フィルターロジックが`mcData.items[d.id]`のlookupに失敗してrecipeを除外
+- **修正** (commit e91a82f):
+  1. stick/crafting_tableでmanual recipe(allRecipes.length===1)の場合、フィルターをバイパスして直接使用
+  2. window-based crafting fallback追加: `bot.clickWindow()`で2x2グリッドに直接アイテム配置
+  3. recipesFor fallbackも維持(3段階fallback)
+- **ファイル**: `src/bot-manager/bot-crafting.ts:661-700`
+- **ステータス**: ✅ 修正完了
+
+---
+
 ### [2026-02-16 Session 12] water_bucket/lava_bucket placement fails silently (✅ FIXED)
 
 - **症状**: `minecraft_use_item_on_block`でwater_bucketをlavaに使っても溶岩が固まらない。bucketでlavaを集めてもlava_bucketが生成されない。
@@ -2470,3 +2844,667 @@
 - **重要**: Claude7がgameruleコマンド実行可能（Claude4, Claude5と同様）
 - **再発防止**: サーバー起動スクリプトにgamerule設定を追加すべき
 - **ステータス**: ✅ 修正完了 (2026-02-16 Session 6)
+
+### [2026-02-16 Session 21] Claude2 craft windowOpen timeout
+- **症状**: Claude2で全てのcraft呼び出しが "Event windowOpen did not fire within timeout of 20000ms" で失敗。素材は消費されるがアイテムが出来ない。stick, crafting_table, stone_pickaxe全て同様。3回再接続しても改善せず。他のボットは正常。
+- **原因**: bot.craft()がcrafting tableを開く際にwindowOpenイベントがサーバーから返らない。line-of-sight不足またはサーバー側のウィンドウ状態不整合の可能性。
+- **修正**: commit e126a2f — (1) crafting table方向にlookAt()で視線を向けてからcraft (2) windowOpenタイムアウト時にwindowを閉じてリトライ。2x2クラフト(stick/crafting_table)はtable不使用パスなのでwindowOpen関係なし — Claude2の問題はstone_pickaxe等のtable使用レシピが主因。
+- **ステータス**: ✅ 修正完了 — Claude2でstone_pickaxeクラフト成功確認
+
+---
+
+## Session Summary (2026-02-17)
+
+### 状況確認
+- **Phase 6 進捗**: エンダーパール 8/12, ブレイズロッド 1/7
+- **チェスト在庫**: diamond(6), obsidian(3), gold_ingot(11), lapis_lazuli(54), blaze_rod(1), ender_pearl(8), book(1)
+- **食料危機**: チェストにパンなし。Claude4がパン3個所持のみ
+- **オンラインボット**: Claude1 (リーダー), Claude3 (リスポーン後), Claude4 (NW quadrant)
+- **時刻**: 夜間 (15628) - エンダーマン狩り適正時間
+
+### 発行した指示
+1. **Phase 6 継続宣言**: ブレイズロッド7本(現1/7), エンダーパール12個(現8/12)
+2. **タスク割当**:
+   - Claude2-5: エンダーマン狩り (NE, SE, NW, SW各エリア)
+   - Claude6-7: ネザー要塞(-570,78,-715)でブレイズ狩り
+3. **装備確認指示**: Claude3にリスポーン後の装備確認を指示
+4. **食料問題通知**: チェストにパンなし、各自で確保推奨
+
+### コード確認
+- 最新コミット (4b689ea): Respawn safety check 実装済み - 装備なしリスポーン時に警告
+- Commit c3b9633: Auto-equip armor after respawn 実装済み
+- 探索・戦闘最適化: entity search range 48 blocks, auto-swim persistence, HP abort threshold 10
+
+### 観察事項
+- Claude3がゾンビに倒され、リスポーン後に復帰
+- Claude4が gamerule 設定を実行、NW quadrantへ移動中
+- 他のボット(Claude2,5,6,7)は応答なし - おそらくオフライン
+
+### 次のアクション
+1. チーム状況の継続監視
+2. バグ報告の待機・対応
+3. コード改善の検討
+4. Phase 6 完了条件達成の確認
+
+### 技術的メモ
+- keepInventory=ON - 死亡時アイテム保持
+- Auto-equip armor: 実装済み、リスポーン2秒後に自動装備
+- Respawn warning: 実装済み、装備なしリスポーン時に警告チャット
+
+---
+
+## Session 28 (2026-02-17) - 続き
+
+### 状況確認（セッション開始時）
+- **Phase 6 進捗**: エンダーパール 8/12 (main chest破損で3個消失), ブレイズロッド 1/7
+- **食料危機**: Claude6が156個のbreadを所持、Claude3/Claude7が餓死寸前
+- **Main chest破損**: (2,106,-1)のチェストが破損、中のender pearl x3消失
+- **オンライン**: Claude1, Claude3, Claude6, Claude7
+- **オフライン**: Claude2, Claude4, Claude5
+
+### 緊急対応（食料危機）
+1. Claude6に即座にbread x50をチェスト(-6,101,-14)に配達指示
+2. Claude3, Claude7にチェストへ集合指示
+3. **結果**: Claude6がbread x153を全て配達完了、Claude3/Claude7が補給成功
+
+### Main Chest修復
+- (2,106,-1)にchestを再設置完了
+- 消失したender pearl x3は回復不可
+
+### 追加ボット接続
+- **Claude5**: エンダーパール x8を所持して接続！即座にチェストへ預金完了
+- **Claude4**: 接続、HP低下(7.3/20)、食料補給後にenderman狩り参加
+- **Claude2**: 接続、gamerule設定実行
+
+### タスク割当（Phase 6継続）
+- **Claude3**: Enderman狩り（死亡→リスポーン→復帰）
+- **Claude4**: HP回復後、enderman狩り参加（NW方面）
+- **Claude5**: 黒曜石採掘
+- **Claude6**: ネザー要塞(-570,78,-715)でblaze rod狩り継続
+- **Claude7**: Enderman狩り（NW方面、HP低めで慎重に）
+
+### 進捗状況
+- **エンダーパール**: 8/12 (あと4個)
+- **ブレイズロッド**: 1/7 (あと6本)
+- **装備問題**: Iron armor在庫なし、各ボットが武器のみで狩り
+
+### 発行した戦術指示
+- Enderman挑発は12ブロック距離から
+- HP<12で即逃走
+- 安全第一、無理しない
+
+### 観察事項
+- Claude3がenderman狩り中に死亡、リスポーン後復帰
+- 各ボットがgamerule設定を自動実行（正常）
+- Claude5の大量ender pearl持ち込みで大幅進捗
+
+### 次のアクション
+1. チーム進捗モニタリング継続
+2. Ender pearl 4個、Blaze rod 6本達成待ち
+3. バグ報告待機
+
+---
+
+## Session 29 (2026-02-17) - 新規セッション
+
+### 状況確認（セッション開始時）
+- **Phase 6 進捗**: エンダーパール 9/12 (main chest: 8, 2nd chest: 1), ブレイズロッド 1/7
+- **チェスト在庫**:
+  - Main chest (2,106,-1): ender_pearl x8
+  - 2nd chest (-6,101,-14): ender_pearl x1, bread x44, copper_ingot x27, lapis_lazuli x57, birch_sapling x2, arrow x2
+- **オンライン**: Claude1 (リーダー), Claude3 (SE quadrant), Claude6 (リスポーン後), Claude7 (NW quadrant)
+- **時刻**: 夜間 (15628) - エンダーマン狩り適正時間
+
+### 発行した指示
+1. **全員状況報告要求**: 座標、作業内容、インベントリのパール/ロッド数
+2. **エンダーマン狩り戦術**: 12ブロック接近→視線挑発→攻撃、HP<12で逃走
+3. **Claude7**: NW quadrant継続指示 (pearl x1所持確認済み)
+4. **Claude6**: リスポーン後blaze_rod保持確認指示、ネザー要塞復帰指示
+5. **Claude3**: SE quadrant継続、diamond_axe装備確認、安全重視でパール3個回収指示
+6. **30分毎進捗報告**: 全員に定期報告を指示
+
+### チーム状況
+- **Claude7**: NW quadrant (-119,71,-117)でenderman狩り中、pearl x1所持、bread x20、HP 20/20
+- **Claude6**: Creeperに爆死→リスポーン完了、blaze_rod保持確認待ち
+- **Claude3**: リスポーン完了→SE quadrant (38.3,80,-50.5)で狩り再開、diamond_axe装備、食料10個、HP 20/20
+- **Claude2**: 応答なし（おそらくオフライン）
+- **Claude4, Claude5**: 応答なし
+
+### 技術的確認
+- WebSocket bug (bot-movement.ts:831): 既知の問題、現在は発生せず
+- コード状態: クリーン、未コミット変更なし
+- 最新修正: Session 27の改善が適用済み (explore HP abort, auto-swim, entity search range)
+
+### 観察事項
+- Claude1が高所から落下死（移動中の事故）
+- keepInventory ONで装備・アイテム保持確認
+- チーム全体で4名のプレイヤーがオンライン検出（範囲200ブロック内）
+
+### 次のアクション
+1. チーム進捗モニタリング継続
+2. 30分毎の進捗報告を待機
+3. Ender pearl あと3個、Blaze rod あと6本達成まで監視
+4. バグ報告があれば即座に対応
+
+---
+
+## Session 29 継続 (2026-02-17)
+
+### 状況更新
+- **Phase 6 進捗**: エンダーパール 9/12 (あと3個！), ブレイズロッド 1/7
+- **緊急事態**: Phantom出現 - 3日以上睡眠なしの警告
+- **チーム状況**:
+  - Claude1: リーダー、base待機、指示出し
+  - Claude2: 回復完了、base帰還中
+  - Claude3: SE quadrant エンダーマン狩り
+  - Claude4: オンライン確認、base帰還指示
+  - Claude5: base経由でエンダーマン狩り開始
+  - Claude6: Phantom討伐→ベッド確保・Phantom対策実行中
+  - Claude7: Zombie討伐→リスポーン、装備確認中
+
+### 発行した指示
+1. **Phantom対策**: Claude6にベッド確保指示、全員に早期就寝推奨
+2. **タスク割り振り**: Claude3,5,7エンダーマン狩り、Claude4補給、Claude6ベッド、Claude2回復
+3. **進捗目標**: 今夜中にエンダーパール3個追加で Phase 6 完了
+
+### 観察事項
+- keepInventory ONで死亡時のアイテムロストなし（正常動作）
+- Phantom出現 = 長期間睡眠なし（ベッド不足が原因）
+- 夜間 (15628) = エンダーマン狩り最適時間
+
+### バグ修正
+
+#### [2026-02-17 Session 29] Merge conflict in bot-movement.ts (✅ FIXED)
+- **症状**: TypeScript typecheck失敗。bot-movement.ts:347-368に未解決のgit merge conflictマーカー
+- **原因**: bot1ブランチとorigin/mainの間でmoveTo()のfallDistance閾値が競合
+  - HEAD (bot1): `fallDistance > 10`
+  - origin/main: `fallDistance > 20`
+- **修正内容**: origin/main版を採用（fallDistance > 20）
+  - 理由: より保守的な閾値。20ブロック以上の落下でのみ警告
+  - pathfinderはmaxDropDown=4で中程度の高低差を処理可能
+  - 水中への落下は例外として許可
+- **効果**: ビルドエラー解消、TypeScript型チェック通過
+- **ファイル**: `src/bot-manager/bot-movement.ts` lines 347-368
+- **ステータス**: ✅ 修正完了
+
+### チーム活動ログ
+
+**Phase 6 目標**: エンダーパール 9/12 → 12/12 (あと3個), ブレイズロッド 1/7
+
+**現在の状況**:
+- **Claude1**: リーダー、base待機、指示出し＋バグ修正完了
+- **Claude2**: 回復完了、base帰還中
+- **Claude3**: NW地域でエンダーマン探索中（未発見）
+- **Claude4**: 接続完了、補給中
+- **Claude5**: 緊急事態 HP 2.3/20、base帰還中
+- **Claude6**: 安全確保完了、地下バンカー待機、朝にベッド作成予定
+- **Claude7**: NE地域でエンダーマン探索中（未発見）
+
+**発行した指示**:
+1. エンダーマン狩り座標分散: Claude3→NW, Claude5→SE, Claude7→NE, Claude4→SW
+2. Phantom対策: Claude6にベッド作成指示（朝に実行）
+3. 夜間安全戦術: HP<12で逃走、エンダーマン以外無視
+4. Claude5緊急帰還: base(-6,101,-14)チェストに食料44個
+
+**観察事項**:
+- Phantom出現 → 長期間睡眠なし、ベッド必須
+- Claude6が夜間に繰り返し死亡（Zombie/Spider/Phantom）→ 安全な場所へ誘導
+- エンダーマン発見率低い（Claude3, Claude7とも未発見）
+- 夜間の危険度が高い（複数ボットが低HP）
+
+### バグレポート
+
+#### [2026-02-17 Session 30] doEntityDrops not working - Enderman kills drop no pearls (🔴 UNRESOLVED)
+- **症状**: Claude7報告: エンダーマン撃破してもender_pearlがドロップしない
+- **検証**: bot-core.ts:319 でdoEntityDrops true設定済み
+- **根本原因**: `/gamerule` コマンドはOP権限が必要。ボットがOP権限なしで実行すると失敗するが、bot.chat()は成功/失敗を返さない
+- **コード箇所**:
+  - bot-core.ts:317-320 - 接続時に/gamerule送信（検証なし）
+  - environment.ts:259 - validate_survival_environmentでも送信
+- **解決策の選択肢**:
+  1. **推奨**: CLAUDE.mdに「ボットに/op権限を付与すること」を明記（人間プレイヤーの責任）
+  2. bot.chat()後にgamerule値を読み取って検証（複雑、タイミング問題あり）
+  3. エラーメッセージを監視（不確実）
+- **次のステップ**: 人間プレイヤーに全ボットへのOP付与を依頼するチャットを送信
+- **経過**: Claude3, Claude6, Claude2, Claude5が "Gamerule doEntityDrops is now set to: true" 受信
+- **しかし**: Claude7報告「エンダーマン3体撃破、pearl ドロップ0個」（Session 30継続中）
+- **矛盾**: gameruleメッセージは表示されるが、実際のドロップは発生していない
+- **新たな推測**:
+  1. gameruleメッセージは表示されるが実際には無効のまま
+  2. サーバー側でgameruleが別の値で上書きされている
+  3. エンダーマンの特殊なドロップ判定（doMobLoot が関係？）
+  4. ボットのOP権限がまだ不足
+- **Claude6の6個pearl**: Session 30以前に収集したもの（今回の3体は別）
+- **次のステップ**: 人間プレイヤーに `/gamerule doEntityDrops` の実際の値を確認依頼
+- **ステータス**: 🔴 未解決、Phase 6 ブロック中
+
+#### [2026-02-17 Session 30] Nether portal activation unclear (🔍 INVESTIGATING)
+- **症状**: ポータル起動が不明瞭。Claude6は「起動確認」報告、Claude1はnether_portalブロック検出できず
+- **試行**: Claude1が複数回flint_and_steel使用。(7,107,-3), (8,107,-3), (8,106,-3), (9,106,-3)
+- **座標**: Obsidian frame at X=7-10, Y=106-110, Z=-3 (4x5構造)
+- **可能性**:
+  1. ポータルは起動済みだがfind_blockが検出失敗（検索範囲の問題？）
+  2. Claude6とClaude1で見えているワールド状態が異なる（同期問題）
+  3. フレーム構造が不完全（内部2x3のair確認必要）
+- **次のステップ**: Claude6に実際にポータル入って確認させる
+- **ステータス**: 🔍 調査中
+
+### Session 30 最終状況 (🔴 Phase 6 停滞中 - 複数の重大問題)
+
+**Phase 6 重大障害 - 3つの未解決問題でブロック中**
+
+#### 🔴 重大問題 (未解決)
+1. **doEntityDrops未解決**: gameruleメッセージ表示されるが実際はドロップ無効（Claude7: 3体撃破でpearl 0個）
+2. **食料危機**: 全チェスト食料なし、複数ボットHP危険（Claude2: HP1, Claude4: HP6.4）
+3. **ネザーポータル未起動**: find_blockでnether_portal検出できず、Claude6も確認できず
+
+#### Phase 6 進捗
+- **エンダーパール**: 6/12 (Claude6所持) → あと6個必要
+- **ブレイズロッド**: 1/7 (誰かが所持) → あと6本必要
+
+#### 作戦展開中のボット
+- **Claude1**: base (2,106,-1), 指揮統制、バグ修正完了
+- **Claude2**: NE象限エンダーマン担当（指示送信済み）
+- **Claude3**: SE象限エンダーマン担当（指示送信済み）
+- **Claude4**: NW象限エンダーマン担当（指示送信済み）
+- **Claude5**: SW象限エンダーマン担当（探索中、(41.5,74,40.6)）
+- **Claude6**: pearl 6個預入後、ネザー要塞(-570,78,-715)へブレイズ狩り
+- **Claude7**: 中央エリアエンダーマン担当（指示送信済み）
+
+#### 発行済み指示
+1. エリア分散配置: 5名が異なる象限でエンダーマン狩り
+2. Claude6: pearl預入→ポータル起動→ネザー要塞でブレイズ6本
+3. 安全ルール: 夜間優先、HP<12で逃走、1-2個取ったら報告
+
+### Session 30 成果
+- ✅ バグ調査完了、bug-issues/bot1.md詳細記録
+- ✅ チーム指示配信（エリア分担、安全ルール）
+- ✅ Claude1 respawn機能活用（HP 2.8→20復帰）
+- ⚠️ 実際のゲーム進捗: Pearl 6/12維持（新規ドロップ0）、ブレイズロッド 1/7維持
+
+### 人間プレイヤーへの依頼（緊急）
+1. `/gamerule doEntityDrops` の実際の値確認（現在false?）
+2. `/gamerule doMobLoot` の実際の値確認
+3. 全ボットへのOP権限付与: `/op Claude1` ~ `/op Claude7`
+4. 手動でgamerule設定: `/gamerule doEntityDrops true`, `/gamerule doMobLoot true`
+
+### 次のアクション（人間プレイヤー対応後）
+1. gamerule修正確認→エンダーマン狩りテスト
+2. 食料生産（畑作成 or 動物狩り）
+3. ネザーポータル起動問題の解決
+4. Phase 6 再開
+
+---
+
+## Session 31 開始 (2026-02-17)
+
+### 初期状態
+- **Phase**: 6 継続中
+- **進捗**: ender_pearl 9/12（チェスト内）、blaze_rod 不明
+- **オンライン**: Claude1,4,7応答、他メンバー（2,3,5,6）未応答
+- **天候**: 雨天 — エンダーマン狩り困難
+- **時刻**: 夜 (15628)
+- **チェスト**: Main(2,106,-1): pearl 9個、Second(-6,101,-14): copper/sapling/arrow/lapis
+
+### 発行済み指示
+1. Claude1: チーム統括、状況確認、指示配信完了
+2. Claude4,7: 雨天中は鉄鉱石採掘→精錬指示
+3. Claude6: ネザー要塞blaze_rod進捗報告待ち
+4. Claude2,3,5: 応答待ち
+
+### 発見事項
+- ✅ Session 30の問題（pearl 6→9個）改善済み、doEntityDrops問題解決か？
+- ⚠️ 雨天でエンダーマン出現困難（explore_area に雨天チェックあり）
+- ⚠️ 複数メンバー未応答（オフラインorバグ?）
+
+### 次のステップ
+1. 雨天終了待ち→エンダーマン狩り再開（残り3個）
+2. Claude6のblaze_rod進捗確認
+3. 未応答メンバーの状態確認
+
+### Session 31 進行中の問題
+
+#### 応答状況（継続監視中）
+- ✅ 応答済み: Claude1, Claude2, Claude4, Claude6, Claude7
+- ⚠️ 未応答: Claude3, Claude5
+
+#### 新たな問題
+1. **食料危機再発**: Claude6報告、base chestに食料なし（wheat_seeds x5のみ）
+   - 対応指示: 動物狩り/釣り/小麦栽培の3案提示
+   - Claude6 HP 16.8/20（安全圏）、食料17/20
+
+2. **雨天継続**: エンダーマン狩り不可、時刻15628で固定？
+   - 対応: 鉄採掘などの代替作業指示済み
+
+3. **Claude6死亡**: スケルトンに撃たれてリスポーン
+   - keepInventory ONなのでアイテム保持のはず
+   - blaze_rod所持数未確認
+
+### 次のステップ（優先順）
+1. 食料確保体制確立（動物狩り or 畑作成）
+2. 雨天終了待ち→エンダーマン狩り再開（残り3個）
+3. Claude6のblaze_rod進捗確認
+4. Claude3,5の状態確認
+
+### 🔴🔴🔴 重大危機発生 (Session 31 継続中)
+
+#### 食料危機エスカレーション
+- **Claude7**: Hunger 3/20 — 生命危険水準、wheat x1所持
+- **Claude6**: 2回死亡（Skeleton→Zombie）、食料なし
+- **Claude2**: base到着、wheat x2所持（bread作成に1個不足）
+- **Claude4**: base待機、鉄採掘完了
+- **Base chest**: pearl x9、食料ゼロ確認済み
+- **問題**: 動物150block範囲内不在、farm未成熟
+
+#### 発行済み緊急指示
+1. Claude7: wheat即食、動物狩り最優先
+2. Claude2,4: wheat farm確認→bone meal加速→収穫→bread生産
+3. 全員: Phase 6中断、生存最優先、Hunger<10は即食料探索
+
+#### 根本原因
+- doMobSpawning true だが passive mob spawn していない（既知問題）
+- 雨天継続でエンダーマン狩り不可
+- 時刻15628固定（サーバー時間停止？）
+
+### 次のステップ（緊急）
+1. **即座**: Claude7生存確保（wheat食→動物狩り）
+2. **5分以内**: Base組でwheat収穫→bread生産開始
+3. **並行**: 他メンバー動物探索範囲拡大
+4. **人間プレイヤーへの依頼**: `/give bread`で緊急食料配布 or `/summon cow`で動物追加
+
+---
+
+### Session 31 経過まとめ（進行中）
+
+#### 危機からの回復
+- **食料危機**: Claude7 Hunger 0/20到達→death→respawn→HP/Hunger 20/20完全回復
+- **Multiple deaths**: Claude2,4,6も複数回死亡→respawn戦略確立
+- **Respawn戦略**: HP<10 or Hunger<5でrespawn推奨、keepInventory ONで安全回復
+- **Farm作戦**: wheat_seeds x50(C7) + bone_meal x11(C2:9, C3:2)でfarm(29,100,6)大量生産開始中
+
+#### 応答状況（最終）
+- ✅ 応答済み: Claude1, Claude2, Claude3, Claude4, Claude6, Claude7
+- ⚠️ 未応答: Claude5（全セッション通じて未応答）
+
+#### Phase 6 進捗状況
+- **ender_pearl**: 9/12（base chest確認済み）— あと3個
+- **blaze_rod**: 1/7（Claude6所持確認）— あと6本
+
+#### 現在実行中の作戦
+1. **farm(29,100,6)**: C7 seeds植え、C2,C3 bone_meal加速、C4監督→bread大量生産
+2. **雨天継続**: 時刻15628固定、エンダーマン狩り不可→雨停止待ち
+3. **次フェーズ準備**: 食料安定化→雨停止→pearl 3個収集＋blaze_rod 6本収集
+
+#### 発見・改善点
+- ✅ keepInventory ON確認（wheat_seeds保持確認）
+- ✅ Respawn戦略確立（緊急時HP/Hunger回復手段）
+- ✅ Gamerule設定完了（C3,C6が実行）
+- ✅ チーム連携改善（Claude2が状況集約提案、Claude4がfarm計画提案）
+
+#### 残課題
+1. Claude5の状況不明（オフライン？バグ？）
+2. 雨天継続・時刻固定問題（サーバー側？）
+3. Passive mob spawn未解決（既知問題）
+
+### 次のステップ（優先順）
+1. **進行中**: Farm bread大量生産完了
+2. **待機**: 雨天停止待ち
+3. **Phase 6完了**: pearl 3個 + blaze_rod 6本収集
+4. **Phase 7準備**: Stronghold (-736, ~, -1280) へ移動準備
+
+
+---
+
+## Session 31 Status Update (2026-02-17)
+
+### Current Team Status
+- **Claude1**: Leader at base, monitoring and issuing instructions
+- **Claude2**: Respawned after skeleton death, waiting for daytime
+- **Claude4**: Assigned NW quadrant enderman hunting
+- **Claude5**: Respawning from underground HP crisis
+- **Claude6**: HP 10/20 crisis in Nether, respawn recommended
+- **Claude7**: Assigned SW quadrant enderman hunting
+
+### Phase 6 Progress
+- **Ender Pearls**: 9/12 in main chest (2,106,-1) - **Need 3 more**
+- **Blaze Rods**: 1/7 (Claude6 has) - **Need 6 more**
+- **Time**: Night (15628) - optimal for enderman hunting
+- **Food Crisis**: Ongoing, no food in chests
+
+### Instructions Issued
+1. Claude7: Emergency respawn due to HP 4.4/hunger 0
+2. All: Food crisis mitigation - animal hunting (daytime) + wheat farming (Claude6's seeds)
+3. Task assignments: C4/C5=enderman (NW/SE), C6=blaze rods, C7=enderman (SW)
+4. Claude2: Wait for daytime before animal exploration
+5. Claude6: Respawn for HP/hunger recovery, then return to fortress
+
+### No New Bugs Detected
+All current issues are either:
+- Fixed in previous sessions (auto-swim, combat, etc.)
+- Require human intervention (Nether portal activation)
+- Game mechanic limitations (passive mob spawning)
+
+
+
+---
+
+## Session 33 Status Update (2026-02-17)
+
+### Current Situation
+- **Time**: Fixed at 15628 (night) - server time appears stuck
+- **Weather**: Rain status unclear, possibly continuing
+- **Location**: Base (2,106,-1)
+- **Phase 6 Progress**: 
+  - Ender Pearls: 9/12 (need 3 more)
+  - Blaze Rods: 1/7 (need 6 more)
+
+### Team Status
+- **Claude1** (Leader): Base position, HP 20/20, hunger 20/20, iron_sword equipped
+- **Claude3**: Base area, HP 20/20, hunger 16/20, ready for enderman hunting
+- **Claude5**: Base gathered, HP 20/20, hunger 20/20, diamond_sword ready, West area assigned
+- **Claude6**: Moving to base, had HP crisis earlier (6.5/20), respawn recommended
+- **Claude7**: SW quadrant assigned, diamond_sword equipped
+- **Claude2, Claude4**: Status unknown, awaiting reports
+
+### Death Loop Session
+Multiple team members died repeatedly during rain + night:
+- Claude1: 3 deaths (skeleton, fall damage x2)
+- Claude2: Unknown
+- Claude3: 2+ deaths (zombie, creeper)
+- Claude4: Unknown  
+- Claude5: 2+ deaths (spider x2)
+- Claude6: HP crisis 6.5/20
+- Claude7: 1 death (skeleton)
+
+**Respawn Strategy Working**: keepInventory ON allows safe HP/hunger recovery without item loss
+
+### Food Crisis Continuing
+- **Status**: CRITICAL - No food in any chest
+- **Strategy**: 
+  1. Claude6 has wheat_seeds x11 → farm planting when safe
+  2. All members: hunt animals (sheep/cow/pig) when spotted during enderman hunting
+  3. Respawn strategy: Use respawn for HP/hunger recovery when needed
+
+### Orders Issued
+1. All members: Gather at base (2,106,-1) during rain
+2. Hold position until weather clears
+3. Area assignments: C2=NE, C3=SE, C4=NW, C5=West, C6=NE, C7=SW
+4. Trial small-area exploration authorized (death risk accepted)
+
+### No New Code Bugs Detected
+- TypeScript compilation: ✅ Clean
+- Auto-flee fall damage fix: ✅ Working (Session 32)
+- All systems operational
+
+### Next Steps
+1. Monitor weather for clearing
+2. Resume enderman hunting when safe (need 3 more pearls)
+3. Address blaze rod shortage (need 6 more - Claude6 task when safe)
+4. Food production when conditions improve
+
+
+
+---
+
+## Session 34 Status Update (2026-02-17)
+
+### Current Situation
+- **Time**: Fixed at 15628 (night) - server time still stuck
+- **Location**: Base (2,107,0) crafting table area
+- **Phase 6 Progress**:
+  - Ender Pearls: **8/12** (need 4 more)
+  - Blaze Rods: 1/7 (need 6 more)
+
+### Team Status
+- **Claude1** (Leader): Base position (2,107,0), HP 12.2/20, hunger 14/20, no armor
+- **6 players visible** within 100 blocks of base
+  - 2 players very close (3.7m, 6.0m) - likely at base
+  - 2 players mid-range (16.9m, 21.2m)
+  - 1 player underground (35m away, y=73)
+  - 1 player disappeared between checks (was at -2,106,8.4)
+
+### Orders Issued
+1. **Area assignments**: C2=NE, C3=SE, C4=NW, C5=West, C7=SW (100 block radius)
+2. **Claude6**: Nether fortress (-570,78,-715) for 6 more blaze rods
+3. **Goal**: Collect 4 more ender pearls to reach 12/12
+4. **Respawn strategy**: Authorized for HP/hunger recovery (keepInventory ON)
+5. **Reporting**: Store pearls in chest (2,106,-1) and report in chat
+
+### Observations
+- **No chat responses**: Team members not responding to status check requests
+- **Minimal movement**: Most players stationary at base, one underground player moving slightly
+- **Pearl count unchanged**: Still 8 pearls in chest after ~15 seconds
+- **Food crisis ongoing**: No food in chest, respawn strategy authorized
+
+### No New Bugs Detected
+- TypeScript compilation: ✅ Clean (no errors)
+- All previous fixes operational:
+  - Auto-flee fall damage fix (Session 32)
+  - Auto-swim persistent (Session 27)
+  - Combat systems working
+- No error reports from team members
+
+### Next Actions
+1. Continue monitoring chat for team reports
+2. Track pearl count changes in chest
+3. Verify blaze rod collection by Claude6
+4. Address any bug reports from team members
+
+---
+
+## Session 37 Status Update (2026-02-17)
+
+### Current Situation
+- **Time**: Fixed at 15628 (night) - server time still stuck
+- **Location**: Base near chest (10,87,5)
+- **Phase 6 Progress**:
+  - Ender Pearls: **11/12** (need 1 more!)
+  - Blaze Rods: 1/7 (need 6 more)
+
+### Team Status & Orders
+- **Claude1** (Leader): Base monitoring, HP 14.3/20, hunger 20/20, stone_pickaxe
+- **Claude2**: NE quadrant enderman hunting (awaiting assignment)
+- **Claude3**: SE quadrant enderman hunting (assigned)
+- **Claude4**: Respawned from skeleton death, preparing for NW quadrant
+- **Claude5**: Assigned to Nether fortress (-570,78,-715) for blaze rods
+- **Claude6**: Respawned from HP/hunger crisis, assigned to enderman hunting
+- **Claude7**: Status unknown
+
+### Orders Issued This Session
+1. **@Claude2**: NE quadrant enderman hunting - 1 kill completes pearl goal
+2. **@Claude3**: SE quadrant enderman hunting - wait for night
+3. **@Claude5**: Nether fortress blaze rod collection (priority)
+4. **@Claude6**: Enderman hunting after respawn recovery
+5. **@Claude4**: Backup Nether fortress if Claude6 remains offline
+
+### Key Observations
+- **Chest (10,87,5)**: Confirmed 11 ender pearls intact
+- **Food Crisis**: CRITICAL - no food in any chest, respawn strategy authorized
+- **Respawn Strategy Working**: keepInventory ON confirmed
+- **Night Time Fixed**: 15628 constant - good for enderman hunting
+
+### No New Bugs Detected
+- TypeScript compilation: ✅ Clean
+- All systems operational
+- No error reports from team members yet
+
+### Next Actions
+1. Monitor for 12th ender pearl collection report
+2. Verify Claude5 reaches Nether fortress
+3. Track blaze rod collection progress
+4. Watch for any bug reports
+
+### Session 37 Update - Pearl Collection Status
+- **False Alarm**: Chest (10,87,5) pearls "disappeared" - Actually Claude2 collected them for hunting (correct behavior)
+- **Current Status**: Claude2 has 11 pearls, hunting enderman in NE quadrant for the 12th
+- **Team Issues**: Claude4 died to spider (respawned), Claude7 HP 2.7/20 crisis (respawn recommended)
+- **Leader Status**: Claude1 HP 9.3/20, no food, monitoring from safe location (2,99,1)
+
+
+## Session 33 - 2026-02-17
+
+### Critical Bug: Enderman Pearl Not Dropping
+- **Reporter**: Claude7
+- **Time**: Session 33
+- **Issue**: Enderman killed but ender_pearl did not drop
+- **Context**: gamerule doMobLoot=true confirmed, but pearls still not dropping
+- **Impact**: Phase 6 blocked - cannot collect 12 ender pearls needed
+- **Status**: Under investigation by Claude1
+
+### Team Status Issues
+- **Food crisis**: Severe - no food in any chest, team using respawn strategy
+- **Main chest missing**: Chest at (2,106,-1) disappeared - 9 ender pearls lost
+- **Rain blocking enderman hunting**: Endermen teleport away during rain
+- **Multiple deaths**: Claude1 (zombie), Claude7 (enderman) due to no food/HP crisis
+
+
+
+### Pearl Drop Analysis - NOT A BUG
+- **Root cause**: Endermen killed during rain teleport erratically
+- **Behavior**: Enderman drops may not appear or spawn far away due to rain teleportation
+- **Solution**: Code already warns about rain (lines 642-644 of high-level-actions.ts)
+- **Action**: Team must wait for rain to stop before enderman hunting
+- **Status**: Working as intended - rain makes enderman hunting impossible
+
+
+## CRITICAL BUG - Session 33 - Pearl Drop Completely Broken
+
+### Bug Description
+**Ender pearls are NOT dropping from endermen kills**
+
+### Test Evidence
+- **Tester**: Claude1
+- **Time**: Session 33, 2026-02-17
+- **Conditions**: Night time (15628), no rain, clear weather
+- **Test 1**: Killed enderman at (-22, 96, -20)
+  - Result: "Killed enderman after 7 attacks"
+  - Inventory check: NO ender_pearl
+  - collectNearbyItems: "No items nearby"
+- **Test 2**: Claude7 reported same issue earlier
+  - Killed enderman, no pearl dropped
+
+### Impact
+- **Severity**: CRITICAL - Blocks Phase 6 completely
+- **Phase 6 requirement**: 12 ender pearls needed
+- **Current progress**: 9 pearls (lost in missing chest) + 0 new pearls = BLOCKED
+
+### Not Rain-Related
+- Initial theory: Rain causes enderman teleportation → drops lost
+- **DISPROVEN**: Claude1 test was during clear weather, still no drops
+
+### Gamerule Status
+- doMobLoot query sent via `/gamerule doMobLoot`
+- Server did NOT respond (concerning)
+- Auto-applied gamerules in bot-core.ts (lines 292-298) may not be working
+
+### Next Steps for Investigation
+1. Test if OTHER mob drops work (zombie → rotten_flesh, skeleton → bones)
+2. Check if this is enderman-specific or all mob drops broken
+3. Verify server-side gamerule configuration
+4. Check Minecraft server version compatibility
+
+### Workaround Options
+- None available - ender pearls ONLY drop from endermen
+- Cannot progress to Phase 7 (End Portal) without 12 ender pearls
+- May need human admin intervention to set gamerules or give pearls
+

@@ -283,3 +283,86 @@
 - [ ] minecraft_collect_itemsバグ: アイテムが実際にドロップされているか？
 - [ ] breadが別の座標にドロップされた可能性
 - [ ] bot.inventory.items()同期問題（reconnect推奨）
+
+## 2026-02-17 セッション1: 食料危機 - 全体的なアイテムドロップ&取得バグ
+
+**状況**:
+- 接続時: HP 20/20, 空腹 19/20（OK）
+- 初期タスク: Phase 6 enderman狩り（pearl目標2個）
+- 食料アイテム: bread未検出、wheat x1のみ（bread クラフトには x3必要）
+
+**発生したバグ**:
+
+### 1. **モブドロップが発生しない (ドロップバグ再発)**
+- **症状**: zombie x1, spider x1を倒しても、肉/糸 がドロップされない
+  - spider: string x2 はドロップされた（正常）
+  - zombie: rotting_flesh ドロップなし（異常）
+- **期待**: zombie倒す → rotting_flesh ドロップ → 食べて空腹回復
+- **実際**: zombie倒す → アイテムなし
+- **gamerule確認**: Claude6がgamerule doEntityDrops/doMobLoot=trueを設定済みのはず
+- **原因推測**:
+  - gamerule doMobLoot=false が有効？
+  - zombie肉だけが落ちない特殊なバグ？
+  - サーバー設定で肉類のドロップが無効？
+
+### 2. **wheat クラフト無効**
+- **症状**: インベントリに wheat x1 がある → eat() 実行 → タイムアウト
+  - equip(wheat) は成功
+  - eat() は "Promise timeout" エラー
+- **wheat to bread クラフト**: wheat x3必要だが x1のみ存在
+- **farm 探索失敗**: farm座標(31,100,6)にwheat ブロック未発見
+- **wheat_seeds**: インベントリにwheat_seeds x55があるが、これは実 wheat ではない
+
+### 3. **全体的な食料不足**
+- **チェスト状態**:
+  - メインチェスト(2,106,-1): ender_pearl x9のみ（食料なし）
+  - サブチェスト(-6,101,-14): 調査未完了
+- **Claude2の farm**: wheat未検出
+- **期待**: Phase 2で「bread x28+保管」とメモリ記載だが、現在ゼロ
+- **可能性**: bread消費済み or ストレージ場所不明 or inventory lost バグで喪失
+
+### 4. **respawn() が拒否**
+- **症状**: HP 4.39/20で「still survivable」と判定 → respawn 拒否
+- **条件**: HP ≤ 4.0(?) で respawn 可能？
+- **回避策**: HP をもっと下げるか、朝が来るまで待機
+- **時刻停止**: 夜間(15628)が進まない可能性
+
+**Claude7の対応**:
+- 敵倒して食肉確保試行 → 失敗（ドロップ無し）
+- farm探索 → wheat未発見
+- 高所pillar_up(Y:111)で待機中（朝待ち）
+- Claude1に食料確保方法を質問中
+
+**教訓**:
+- 敵倒しても食肉ドロップが保証されない（ゲーム設定？バグ？）
+- 事前に食料確保が絶対に必要（狩り中は食べられない）
+- respawn条件が不明（HP <4? <5?）
+
+**次セッション対応**:
+- [ ] MCPサーバー再起動でgamerule確認
+- [ ] doMobLoot=true確認 (zombie肉ドロップ)
+- [ ] wheat farm 位置特定
+- [ ] respawn条件明確化
+- [ ] 食料ストレージ全体マッピング
+
+## 2026-02-17 セッション2: CRITICAL - Ender Pearl ドロップバグ（Phase 6ブロッカー）
+
+**症状**: enderman撃破後、ender_pearl がドロップされない
+- **時刻**: 夜間(15628)、雨天
+- **実施**: Claude7がenderman(座標29.5, 93, -30.1)を3回攻撃で撃破
+- **期待**: ender_pearl x1がドロップされる
+- **実際**: minecraft_collect_items()で「No items nearby」を返す
+- **gamerule確認**: Claude1がgamerule doEntityDrops/doMobLoot=true実行済み
+
+**影響範囲**: Phase 6完了ブロッカー
+- 目標: ender_pearl 12個集めるがドロップなし
+- 進捗: 11/12 (1個足りない)
+- チーム全体が進捗停止
+
+**原因推測**:
+1. gamerule doMobLoot=false が実際には有効？
+2. endermanドロップだけが無効？
+3. ポータル転送/テレポート座標バグと同じ根本原因？
+4. Mineflayer collectItems() ロジック バグ
+
+**対応**: Claude1が調査中。サーバー設定またはMineflayerのドロップ/収集ロジックに重大バグが存在する可能性
