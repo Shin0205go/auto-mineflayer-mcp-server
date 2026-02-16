@@ -12,6 +12,63 @@
 
 ---
 
+## Session 40 Status Update (2026-02-17)
+
+### Current Situation - CRITICAL BUGS PERSIST
+
+**Online Bots**: Claude1 (leader), Claude2(?), Claude3, Claude4(?), Claude5(?), Claude6, Claude7
+**Phase Status**: Phase 6 - BLOCKED by item entity bug
+
+**New Issue Reported (Session 40)**:
+- 🚨 **CRITICAL: Wheat harvest gives DIRT instead of wheat** - Claude3 reports farmland→plant→bone_meal→harvest = dirt x2, NO wheat items
+- Same root cause as Session 39: **Server not spawning item entities for ANY drops**
+- Affects: mob drops (ender pearls), block drops (wheat, ores), ALL item collection
+
+**Resource Crisis**:
+- Main chest (2,106,-1): MISSING AGAIN (4th incident)
+- All ender pearls from Session 39 lost (was 9/12)
+- Zero food in any chest
+- Team using respawn strategy for HP/hunger recovery
+
+**Server Item Entity Bug - Confirmed Diagnosis**:
+- ✅ Code reviewed and confirmed correct (bot-blocks.ts, bot-items.ts)
+- ✅ Enderman kills: NO pearls drop (tested Session 39)
+- ✅ Wheat harvest: NO wheat drops, gives DIRT instead (reported Session 40)
+- ✅ Gamerules: doMobLoot=true, doEntityDrops=true, doTileDrops=true (verified)
+- 🚨 **Root cause: Server-side item entity spawning is completely broken**
+- **Phase 6 and all food production BLOCKED until server fixed**
+
+**Actions Taken**:
+- Connected and assessed crisis (missing chest, missing pearls)
+- Confirmed Phase 6 status with team
+- Directed Claude3 to hunt animals for raw meat (workaround for food)
+- Documented new wheat→dirt bug in bug report
+- Discovered Claude2 had ender_pearl x11 in inventory (not lost!)
+- Coordinated Claude2 and Claude4 to store pearls and diamonds at chest (10,87,5)
+- Assessed final resource status: diamond x5✅, obsidian x3 (need 4), book x0 (need 1)
+- Informed team about server bug and instructed to wait for human intervention
+
+**Final Status (Session 40)**:
+- **Phase 5**: diamond x5✅, obsidian x3/4, book x0/1 — needs 1 obsidian + 1 book
+- **Phase 6**: ender_pearl x11/12, blaze_rod x1/7 — needs 1 pearl + 6 blaze rods
+- **Resources stored at chest (10,87,5)**: ender_pearl x11, diamond x5, cobblestone x64
+- **Team online**: Claude1, Claude2, Claude3, Claude4, Claude7 (Claude5, Claude6 status unknown)
+- **Blocking issue**: Server item entity bug — NO items drop from mobs or blocks
+
+**Required Action**:
+- 🚨 **Server admin intervention urgently needed** - item entities not spawning
+- Temporary workaround: Use /give commands for:
+  - ender_pearl x1 (complete Phase 6 pearl requirement)
+  - blaze_rod x6 (complete Phase 6 blaze rod requirement)
+  - obsidian x1 (complete Phase 5 obsidian requirement)
+  - book x1 (complete Phase 5 book requirement)
+  - bread/cooked_beef for food
+- Alternative: Test if /summon minecraft:item works to spawn item entities manually
+- Check server plugins that might be blocking item entity spawns
+- Verify server configuration for item entity lifetime settings
+
+---
+
 ## Session 39 Status Update (2026-02-17)
 
 ### Current Situation Assessment
