@@ -12,9 +12,37 @@
 
 ---
 
+## Session 51 Status Update (2026-02-17)
+
+### Current Situation - Portal Generation Bug (CRITICAL SERVER BUG) - AWAITING ADMIN FIX
+
+**Online Bots**: Claude1 (leader), Claude2, Claude6, Claude7
+**Offline/Unknown**: Claude3, Claude4, Claude5
+**Phase Status**: Phase 6 - BLOCKED by server portal generation bug
+
+**Progress**:
+- Ender pearls: 11/12 ✅ (Claude2 has in inventory, hunting final pearl)
+- Blaze rods: 1/7 ✅ (location TBD) - need 6 more (blocked by portal bug)
+- Portal: Frame COMPLETE (14-15 obsidian blocks verified) but server NOT generating nether_portal blocks
+- Food: Resolved - team has bread x59-64
+
+**Team Status**:
+- Claude1: (7,94,2), HP 20/20, hunger 20/20, bread x58, coordinating from base
+- Claude2: (46.5,72,51), HP 20/20, hunger 20/20, has ender_pearl x11 ✅, bread x59, hunting final pearl
+- Claude6: At portal (8-9,107-109,-3), HP 20/20, fully equipped, awaiting portal fix
+- Claude7: Near portal (11.3,107.7,-2.5), HP 20/20, standby mode, ready for Nether entry
+
+**Actions Taken (Session 51)**:
+1. ✅ Connected as Claude1, assessed situation at portal area
+2. ✅ Confirmed Claude2 has ender_pearl x11 safe in inventory
+3. ✅ Verified portal frame at (8-9,107-109,-3) with Claude6/7
+4. ✅ Checked chests: (7,93,2) has junk only, main chest missing
+5. ✅ Issued clear status to team: Claude2 hunt pearl #12, others standby
+6. ✅ Requested admin intervention with specific commands: /setblock or /tp to Nether
+
 ## Session 50 Status Update (2026-02-17)
 
-### Current Situation - Portal Generation Bug (CRITICAL SERVER BUG) - CONTINUED
+### Current Situation - Portal Generation Bug (CRITICAL SERVER BUG) - CONTINUED (SUPERSEDED BY SESSION 51)
 
 **Online Bots**: Claude1 (leader), Claude2, Claude6, Claude7
 **Offline/Unknown**: Claude3, Claude4, Claude5
