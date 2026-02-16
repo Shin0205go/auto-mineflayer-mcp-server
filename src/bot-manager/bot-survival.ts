@@ -597,13 +597,13 @@ export async function fight(
     }
 
     console.error(`[Fight] Enderman at ${target!.position.distanceTo(bot.entity.position).toFixed(1)} blocks — provoking by staring at eyes...`);
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 50; i++) { // 50 * 300ms = 15s max wait
       await new Promise(r => setTimeout(r, 300));
       const currentTarget = Object.values(bot.entities).find(e => e.id === targetId);
       if (!currentTarget) break;
       await bot.lookAt(currentTarget.position.offset(0, currentTarget.height * 0.9, 0));
-      if (currentTarget.position.distanceTo(bot.entity.position) < 4) {
-        console.error(`[Fight] Enderman provoked, now close — attacking!`);
+      if (currentTarget.position.distanceTo(bot.entity.position) < 8) {
+        console.error(`[Fight] Enderman aggro'd, now close — attacking!`);
         break;
       }
     }
