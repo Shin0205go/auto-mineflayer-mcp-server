@@ -494,10 +494,13 @@ export class BotCore extends EventEmitter {
             addEvent("damaged", `Took damage! Health: ${bot.health?.toFixed(1)}/20`, {
               health: bot.health,
             });
-            // Emergency lava escape: if standing in lava, immediately jump and sprint away
+            // Emergency escape: if standing in lava or fire, immediately jump and sprint away
             const feetBlock = bot.blockAt(bot.entity.position.floored());
-            if (feetBlock?.name === "lava") {
-              console.error(`[AutoFlee] IN LAVA! Emergency escape, HP=${bot.health.toFixed(1)}`);
+            const feetBlockBelow = bot.blockAt(bot.entity.position.floored().offset(0, -1, 0));
+            const isInLava = feetBlock?.name === "lava";
+            const isInFire = feetBlock?.name === "fire" || feetBlock?.name === "soul_fire" || feetBlockBelow?.name === "magma_block";
+            if (isInLava || isInFire) {
+              console.error(`[AutoFlee] ${isInLava ? "IN LAVA" : "ON FIRE"}! Emergency escape, HP=${bot.health.toFixed(1)}`);
               bot.setControlState("jump", true);
               bot.setControlState("sprint", true);
               bot.setControlState("forward", true);
@@ -505,7 +508,14 @@ export class BotCore extends EventEmitter {
                 bot.setControlState("jump", false);
                 bot.setControlState("sprint", false);
                 bot.setControlState("forward", false);
-              }, 3000);
+              }, isInLava ? 3000 : 1500);
+              // Auto-eat while escaping fire/lava
+              const food = bot.inventory.items().find(i =>
+                ["bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "baked_potato", "cooked_mutton", "golden_apple"].includes(i.name)
+              );
+              if (food && bot.food < 20) {
+                bot.equip(food, "hand").then(() => bot.consume()).catch(() => {});
+              }
             }
             // Auto-flee when HP drops to 10 or below after taking damage
             else if (bot.health <= 10) {
