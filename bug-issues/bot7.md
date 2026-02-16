@@ -366,3 +366,40 @@
 4. Mineflayer collectItems() ロジック バグ
 
 **対応**: Claude1が調査中。サーバー設定またはMineflayerのドロップ/収集ロジックに重大バグが存在する可能性
+
+## 2026-02-17 セッション23: Pearl Drop Bug 再確認 + Code Analysis
+
+**状況**:
+- 接続時: HP 20/20, 空腹 20/20（リスポーン後）
+- タスク: enderman狩りで ender_pearl 回収
+- Phase 6進捗: pearl 11/12→0/12（前回11個消失）
+
+**再現**:
+- Claude7がenderman撃破 → pearl未ドロップ確認
+- gamerule doEntityDrops/doMobLoot=true（複数ボットが再確認済み）
+- 結果：No pearl obtained from 1x enderman kill
+
+**コード分析**:
+1. **Attack function** (`src/bot-manager/bot-survival.ts:414`):
+   - enderman撃破後、`collectNearbyItems(managed, { searchRadius: 16, waitRetries: 12 })`を呼び出す
+   - isEnderman=trueで広めの探索半径を指定
+
+2. **collectNearbyItems function** (`src/bot-manager/bot-items.ts:21-54`):
+   - 問題の根源：`entity.name === "item"` でのみitem entities を検出（line 43）
+   - items = `allEntities.filter()` で name==="item"のみをフィルター
+   - **もしperls/dropsが"item"以外の名称でスポーンしたら検出不可**
+   - console.error ログで詳細デバッグ出力あり（line 46, 52）
+
+**仮説**:
+1. **サーバー側**: dropが実際にスポーンしていない（gamerule が秘密裏にfalse？）
+2. **クライアント側**: dropはスポーンしているが`entity.name !== "item"`（別の名前で登録）
+3. **Mineflayer bug**: `bot.entities`にdrop entities が登録されていない
+
+**次のテスト手順**:
+1. console.error ログを確認して「Found item: name=XXX」の出力を見る
+2. もし「No items found after wait. Nearby entities: ...」ならXXX entityが何かを確認
+3. dropが何の名前でスポーンしているかを特定する
+
+**推奨対応**:
+- `collectNearbyItems`の検出ロジックを拡張（displayName, type等でもフィルター）
+- または Mineflayer の item entity detection API を確認
