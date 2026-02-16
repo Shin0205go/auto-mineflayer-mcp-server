@@ -743,6 +743,19 @@ export async function minecraft_explore_area(
         // Only count as found if NOT starting with "No" (avoid false positives)
         if (entityResult.includes(target) && !entityResult.startsWith("No")) {
           findings.push(`${target} entity at current location`);
+
+          // Auto-fight hostile mobs when found during exploration (especially enderman)
+          const combatTargets = ["enderman", "blaze", "zombie", "skeleton", "spider", "creeper"];
+          if (combatTargets.some(mob => target.toLowerCase().includes(mob))) {
+            console.error(`[ExploreArea] Found ${target} — auto-engaging in combat!`);
+            try {
+              const fightResult = await botManager.attack(username, target);
+              findings.push(`Combat: ${fightResult}`);
+            } catch (fightErr) {
+              console.error(`[ExploreArea] Combat failed: ${fightErr}`);
+              findings.push(`Combat attempted but failed: ${fightErr}`);
+            }
+          }
         }
       } else if (target === "passive") {
         // For passive mobs, filter out dropped items
