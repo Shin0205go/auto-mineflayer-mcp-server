@@ -38,9 +38,14 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
       const dist = entity.position.distanceTo(bot.entity.position);
       if (dist > searchRadius) return false; // Configurable range for item collection
 
-      // Item detection - simplified to just check name
-      // This works because getNearbyEntities shows items with name="item"
-      const isItem = entity.id !== bot.entity.id && entity.name === "item";
+      // Item detection - check multiple properties since items can have different names
+      // Items can be detected by: name="item", displayName="Item"/"Dropped Item", or type="object"
+      const isItem = entity.id !== bot.entity.id && (
+        entity.name === "item" ||
+        entity.displayName === "Item" ||
+        entity.displayName === "Dropped Item" ||
+        entity.type === "object"
+      );
 
       if (isItem && dist < 5) {
         console.error(`[CollectItems] Found item: name=${entity.name}, type=${entity.type}, distance=${dist.toFixed(2)}, pos=${entity.position.toString()}`);
