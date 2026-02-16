@@ -131,3 +131,47 @@
 - **ファイル**: N/A (サーバー側issue)
 - **関連報告**: Claude5, Claude4, Claude6が同じ現象を確認
 
+### [2026-02-16] use_item_on_block機能が動作しない (継続調査中)
+- **症状**:
+  - `minecraft_use_item_on_block(item_name="water_bucket", x=-48, y=100, z=-38)` で水を配置しても、黒曜石化しない
+  - `minecraft_use_item_on_block(item_name="bucket", x=-48, y=99, z=-38)` で溶岩をすくっても、lava_bucketが生成されない
+  - ツール出力では「Placed water at ...」と表示されるが、サーバー側の反応がない
+- **原因**:
+  - bot.activateItem() + bot.deactivateItem() の実装に問題がある可能性
+  - または Minecraft 1.21 のAPI変更に対応していない
+  - 過去のbot3.md [2026-02-15]でも同様のwater_bucketバグが報告されている
+- **再現手順**:
+  1. `minecraft_use_item_on_block(item_name="water_bucket", x=-48, y=100, z=-38)` 実行
+  2. ツール出力: 「Placed water at (-48, 100, -38)」
+  3. `minecraft_find_block("obsidian")` → 黒曜石なし
+  4. `minecraft_find_block("water")` → 水が見つからない（配置されていない）
+- **影響**: 黒曜石採掘ができない → ネザーポータル構築不可 → Phase 6が進行不可
+- **ファイル**: `src/bot-manager/bot-blocks.ts` の `useItemOnBlock` 関数
+- **対応**: Claude1がコード修正を開始（2026-02-16 16:48）
+- **ステータス**: 🔴 修正待機中
+
+### [2026-02-16] Nether内のmove_toが機能しない (Phase 6 阻止)
+- **症状**:
+  - Nether内安全プラットフォーム(1.5, 81, -0.5)から移動できない
+  - `minecraft_move_to(x=50, y=81, z=-0.5)` → 「Path blocked」エラー
+  - 方角を変えても「Cannot reach」が返される
+  - 周囲がすべて透過不可能ブロックで囲まれているような挙動
+- **原因**:
+  - Nether内のmapデータが正しく読み込まれていない可能性
+  - またはPathfinderがNetherの特殊な地形に対応していない
+  - プラットフォームが異次元に構成されている可能性
+- **再現手順**:
+  1. `minecraft_connect(username="Claude3")`
+  2. ネザーにテレポート後、安全プラットフォームに配置
+  3. `minecraft_move_to(x=10, y=81, z=-1)` → Reached (7.4, 81.0, -0.5) - 目標に到達できない
+  4. 他の座標へmove_to試行 → すべて「Path blocked」
+- **影響**: ネザー要塞探索ができない → ブレイズロッド確保不可 → Phase 6が進行不可
+- **試された対応**:
+  - 異なる座標への移動試行 → すべて失敗
+  - pillar_upでの上昇試行 → placement failedで失敗
+  - 小刻みな移動試行 → わずかに移動後、すぐに阻止される
+- **次のステップ**:
+  - Nether内の地形を直接確認する必要あり
+  - または安全プラットフォーム外への脱出ルートの構築
+  - Claude1の座標テレポート機能を活用
+
