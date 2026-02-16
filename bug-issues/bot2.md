@@ -143,3 +143,22 @@
   - ビルド成功
 - **ファイル**: `src/bot-manager/bot-blocks.ts`, `src/bot-manager/index.ts`, `src/tools/building.ts`
 
+---
+
+### [2026-02-16] crafting_table クラフト後にインベントリから消失
+- **症状**: `minecraft_craft(item_name="crafting_table")` 成功後、"Crafted 1x crafting_table"メッセージが表示されるが、その直後のインベントリには存在しない
+- **試行**:
+  - 1回目: クラフト成功 → `place_block(crafting_table)` で "No crafting_table in inventory" エラー
+  - 2回目: 再度クラフト成功 → またインベントリから消失
+- **影響**: 鉄ツール（iron_pickaxe等）が作成できず、石ブロックが掘れない。ネザーから脱出不可
+- **推定原因**:
+  1. `minecraft_craft` のインベントリ同期問題（アイテムが実際には追加されていない）
+  2. クラフト成功メッセージとインベントリ状態に乖離がある
+  3. `bot.inventory.items()` の取得タイミングが早すぎる
+- **次のアクション**:
+  1. `src/bot-manager/bot-crafting.ts` の `craft` 関数を調査
+  2. クラフト後の待機時間を追加
+  3. インベントリ同期を確認するデバッグログ追加
+- **ファイル**: `src/bot-manager/bot-crafting.ts`
+
+---
