@@ -192,6 +192,65 @@
 - **注意**: MCPサーバー再起動が必要（接続済みセッションには反映されない）
 - **期待効果**: Nether portal内の安全な入場、Overworld/Netherテレポートが自動化される
 
+<<<<<<< HEAD
+### [2026-02-17 SESSION 16] ENDER PEARL DROP BUG - PERSISTS DESPITE GAMERULE ON
+- **症状**:
+  - Killed 2 endermen @(-7.6, 90, 37.5) and @(-18.3, 76, -17.7) → **ZERO ender pearls dropped**
+  - Gamerules confirmed ON (Claude5, Claude6 verified): doMobLoot=true, doEntityDrops=true
+  - Inventory empty, ground search reveals no ender_pearl items
+- **原因**: 不明
+  - Gamerules is ON but pearls still don't drop
+  - Could be enderman-specific mob loot bug
+  - Or pearl drop distance/location issue (enderman teleport = pearl drops far away?)
+- **影響度**: 🔴 CRITICAL - Phase 6 progression blocked
+  - Need 12 ender pearls for Phase 6 (have 11 in Claude5's inventory)
+  - Cannot get final pearl despite hunting
+  - Endermen dying but no drops
+- **ファイル**: N/A (likely game mechanic or server issue)
+- **状況**:
+  - Have 11/12 pearls safely in Claude5's inventory
+  - Blaze rods: unknown (Claude6 hunting in Nether)
+  - Team recovered via respawn strategy (HP/hunger reset working perfectly)
+- **次のステップ**:
+  - Investigate if pearls drop but too far away
+  - Or use alternative pearl source (Shulkers, other mobs?)
+  - Or proceed with 11 pearls as placeholder
+
+### [2026-02-17 SESSION 16] ITEM DISAPPEAR BUG - take_from_chest deletes items
+- **症状** (Claude2報告):
+  - `minecraft_take_from_chest("diamond")` で diamond x5 取出試行
+  - インベントリに0個、チェストからも消失
+  - アイテムが削除されている（転送されていない）
+- **原因**: 不明
+  - `takeFromChest`関数に問題？
+  - またはサーバー同期エラー
+- **影響度**: 🔴 CRITICAL - Resource loss
+  - 5 diamonds disappeared
+  - Diamond pickaxe needed for Nether portal construction
+  - Phase 6 progression blocked
+- **再現**:
+  - `minecraft_take_from_chest("diamond", 5)` at chest (10,87,5)
+  - Result: 0 diamonds in inventory
+- **ファイル**: `src/bot-manager/bot-storage.ts` (takeFromChest関数)
+- **修正予定**: Code review + fix required
+- **他のボット報告**: Claude2のみ報告 → 他のボットも注意
+
+### [2026-02-17 SESSION 16] RESPAWN STRATEGY - WORKING PERFECTLY ✅
+- **実装**: Starvation → HP ≤4 → respawn = full stat reset
+- **成功**: Claude3 x3回, Claude2, Claude4, Claude7 multiple times
+- **結果**:
+  - HP: always reset to 20/20 ✅
+  - Hunger: always reset to 20/20 ✅
+  - Inventory: preserved across respawns (keepInventory ON) ✅
+  - No food needed →食料危機を解決！
+- **使用方法**:
+  1. Move around to trigger starvation damage
+  2. Wait for HP to drop to ≤4
+  3. `minecraft_respawn(reason="...")`
+  4. Instant full recovery
+- **利点**: Team can survive indefinitely without food source
+- **注意**: "Inventory lost!" message is misleading - inventory is actually preserved
+=======
 ### [2026-02-16] moveTo安全性チェックが下降移動を完全にブロック
 - **症状**: `minecraft_move_to(x=150, y=62, z=260)`で目標Y座標が現在値より低い(45ブロック低い)場合、「fall damage will occur」エラーで移動が完全にブロックされる。移動前に「Cannot reach」で失敗。
 - **原因**:
@@ -206,4 +265,5 @@
 - **ファイル**: `src/bot-manager/bot-movement.ts:337-367`
 - **ステータス**: 🟡 修正待機中
 - **次セッション**: このチェックを修正してから、enderman hunting狩り場への移動を試行
+>>>>>>> origin/main
 
