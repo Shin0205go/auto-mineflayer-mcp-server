@@ -2946,3 +2946,121 @@
 2. 食料生産（畑作成 or 動物狩り）
 3. ネザーポータル起動問題の解決
 4. Phase 6 再開
+
+---
+
+## Session 31 開始 (2026-02-17)
+
+### 初期状態
+- **Phase**: 6 継続中
+- **進捗**: ender_pearl 9/12（チェスト内）、blaze_rod 不明
+- **オンライン**: Claude1,4,7応答、他メンバー（2,3,5,6）未応答
+- **天候**: 雨天 — エンダーマン狩り困難
+- **時刻**: 夜 (15628)
+- **チェスト**: Main(2,106,-1): pearl 9個、Second(-6,101,-14): copper/sapling/arrow/lapis
+
+### 発行済み指示
+1. Claude1: チーム統括、状況確認、指示配信完了
+2. Claude4,7: 雨天中は鉄鉱石採掘→精錬指示
+3. Claude6: ネザー要塞blaze_rod進捗報告待ち
+4. Claude2,3,5: 応答待ち
+
+### 発見事項
+- ✅ Session 30の問題（pearl 6→9個）改善済み、doEntityDrops問題解決か？
+- ⚠️ 雨天でエンダーマン出現困難（explore_area に雨天チェックあり）
+- ⚠️ 複数メンバー未応答（オフラインorバグ?）
+
+### 次のステップ
+1. 雨天終了待ち→エンダーマン狩り再開（残り3個）
+2. Claude6のblaze_rod進捗確認
+3. 未応答メンバーの状態確認
+
+### Session 31 進行中の問題
+
+#### 応答状況（継続監視中）
+- ✅ 応答済み: Claude1, Claude2, Claude4, Claude6, Claude7
+- ⚠️ 未応答: Claude3, Claude5
+
+#### 新たな問題
+1. **食料危機再発**: Claude6報告、base chestに食料なし（wheat_seeds x5のみ）
+   - 対応指示: 動物狩り/釣り/小麦栽培の3案提示
+   - Claude6 HP 16.8/20（安全圏）、食料17/20
+
+2. **雨天継続**: エンダーマン狩り不可、時刻15628で固定？
+   - 対応: 鉄採掘などの代替作業指示済み
+
+3. **Claude6死亡**: スケルトンに撃たれてリスポーン
+   - keepInventory ONなのでアイテム保持のはず
+   - blaze_rod所持数未確認
+
+### 次のステップ（優先順）
+1. 食料確保体制確立（動物狩り or 畑作成）
+2. 雨天終了待ち→エンダーマン狩り再開（残り3個）
+3. Claude6のblaze_rod進捗確認
+4. Claude3,5の状態確認
+
+### 🔴🔴🔴 重大危機発生 (Session 31 継続中)
+
+#### 食料危機エスカレーション
+- **Claude7**: Hunger 3/20 — 生命危険水準、wheat x1所持
+- **Claude6**: 2回死亡（Skeleton→Zombie）、食料なし
+- **Claude2**: base到着、wheat x2所持（bread作成に1個不足）
+- **Claude4**: base待機、鉄採掘完了
+- **Base chest**: pearl x9、食料ゼロ確認済み
+- **問題**: 動物150block範囲内不在、farm未成熟
+
+#### 発行済み緊急指示
+1. Claude7: wheat即食、動物狩り最優先
+2. Claude2,4: wheat farm確認→bone meal加速→収穫→bread生産
+3. 全員: Phase 6中断、生存最優先、Hunger<10は即食料探索
+
+#### 根本原因
+- doMobSpawning true だが passive mob spawn していない（既知問題）
+- 雨天継続でエンダーマン狩り不可
+- 時刻15628固定（サーバー時間停止？）
+
+### 次のステップ（緊急）
+1. **即座**: Claude7生存確保（wheat食→動物狩り）
+2. **5分以内**: Base組でwheat収穫→bread生産開始
+3. **並行**: 他メンバー動物探索範囲拡大
+4. **人間プレイヤーへの依頼**: `/give bread`で緊急食料配布 or `/summon cow`で動物追加
+
+---
+
+### Session 31 経過まとめ（進行中）
+
+#### 危機からの回復
+- **食料危機**: Claude7 Hunger 0/20到達→death→respawn→HP/Hunger 20/20完全回復
+- **Multiple deaths**: Claude2,4,6も複数回死亡→respawn戦略確立
+- **Respawn戦略**: HP<10 or Hunger<5でrespawn推奨、keepInventory ONで安全回復
+- **Farm作戦**: wheat_seeds x50(C7) + bone_meal x11(C2:9, C3:2)でfarm(29,100,6)大量生産開始中
+
+#### 応答状況（最終）
+- ✅ 応答済み: Claude1, Claude2, Claude3, Claude4, Claude6, Claude7
+- ⚠️ 未応答: Claude5（全セッション通じて未応答）
+
+#### Phase 6 進捗状況
+- **ender_pearl**: 9/12（base chest確認済み）— あと3個
+- **blaze_rod**: 1/7（Claude6所持確認）— あと6本
+
+#### 現在実行中の作戦
+1. **farm(29,100,6)**: C7 seeds植え、C2,C3 bone_meal加速、C4監督→bread大量生産
+2. **雨天継続**: 時刻15628固定、エンダーマン狩り不可→雨停止待ち
+3. **次フェーズ準備**: 食料安定化→雨停止→pearl 3個収集＋blaze_rod 6本収集
+
+#### 発見・改善点
+- ✅ keepInventory ON確認（wheat_seeds保持確認）
+- ✅ Respawn戦略確立（緊急時HP/Hunger回復手段）
+- ✅ Gamerule設定完了（C3,C6が実行）
+- ✅ チーム連携改善（Claude2が状況集約提案、Claude4がfarm計画提案）
+
+#### 残課題
+1. Claude5の状況不明（オフライン？バグ？）
+2. 雨天継続・時刻固定問題（サーバー側？）
+3. Passive mob spawn未解決（既知問題）
+
+### 次のステップ（優先順）
+1. **進行中**: Farm bread大量生産完了
+2. **待機**: 雨天停止待ち
+3. **Phase 6完了**: pearl 3個 + blaze_rod 6本収集
+4. **Phase 7準備**: Stronghold (-736, ~, -1280) へ移動準備
