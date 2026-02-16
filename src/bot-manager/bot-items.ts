@@ -18,9 +18,11 @@ function delay(ms: number): Promise<void> {
 /**
  * Collect dropped items near the bot
  */
-export async function collectNearbyItems(managed: ManagedBot): Promise<string> {
+export async function collectNearbyItems(managed: ManagedBot, options?: { searchRadius?: number; waitRetries?: number }): Promise<string> {
   const bot = managed.bot;
-  console.error(`[CollectItems] Starting collection, bot at ${bot.entity.position.toString()}`);
+  const searchRadius = options?.searchRadius ?? 10;
+  const waitRetries = options?.waitRetries ?? 8;
+  console.error(`[CollectItems] Starting collection, bot at ${bot.entity.position.toString()}, searchRadius=${searchRadius}, waitRetries=${waitRetries}`);
   const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
 
   // Simplified and more reliable item detection
@@ -34,7 +36,7 @@ export async function collectNearbyItems(managed: ManagedBot): Promise<string> {
       }
 
       const dist = entity.position.distanceTo(bot.entity.position);
-      if (dist > 10) return false; // Reasonable range for item collection
+      if (dist > searchRadius) return false; // Configurable range for item collection
 
       // Item detection - simplified to just check name
       // This works because getNearbyEntities shows items with name="item"
@@ -47,7 +49,7 @@ export async function collectNearbyItems(managed: ManagedBot): Promise<string> {
       return isItem;
     });
 
-    console.error(`[CollectItems] findItems() found ${items.length} items within 10 blocks`);
+    console.error(`[CollectItems] findItems() found ${items.length} items within ${searchRadius} blocks`);
     return items;
   };
 
@@ -56,7 +58,7 @@ export async function collectNearbyItems(managed: ManagedBot): Promise<string> {
   let items = findItems();
 
   if (items.length === 0) {
-    for (let wait = 0; wait < 8; wait++) {
+    for (let wait = 0; wait < waitRetries; wait++) {
       await delay(500);
       items = findItems();
       if (items.length > 0) break;

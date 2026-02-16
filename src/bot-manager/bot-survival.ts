@@ -407,9 +407,11 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
             }, 200);
           });
         }
-        await delay(500);
+        // Endermen teleport before dying — use wider search and longer wait
+        const isEnderman = target.name === "enderman";
+        await delay(isEnderman ? 1000 : 500);
         try {
-          await collectNearbyItems(managed);
+          await collectNearbyItems(managed, isEnderman ? { searchRadius: 16, waitRetries: 12 } : undefined);
         } catch (_) { /* ignore collection errors */ }
         return `Killed ${target.name} after ${attacks} attacks`;
       }
@@ -639,9 +641,11 @@ export async function fight(
           }, 200);
         });
       }
-      await delay(500);
+      // Endermen teleport before dying — use wider search and longer wait
+      const isEnderman = targetName === "enderman";
+      await delay(isEnderman ? 1000 : 500);
       try {
-        await collectNearbyItems(managed);
+        await collectNearbyItems(managed, isEnderman ? { searchRadius: 16, waitRetries: 12 } : undefined);
       } catch (_) { /* ignore collection errors */ }
       return `${targetName} defeated! Attacked ${attackCount} times.` + getBriefStatus(bot);
     }
