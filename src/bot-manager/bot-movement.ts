@@ -1341,6 +1341,16 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
     throw new Error("No nether portal found within 10 blocks");
   }
 
+  console.error(`[Portal] Found portal at (${portalBlock.position.x}, ${portalBlock.position.y}, ${portalBlock.position.z}), bot at (${bot.entity.position.x.toFixed(1)}, ${bot.entity.position.y.toFixed(1)}, ${bot.entity.position.z.toFixed(1)})`);
+
+  // Check if bot is already inside the portal block
+  const botBlockPos = bot.entity.position.floored();
+  const blockAtFeet = bot.blockAt(botBlockPos);
+  const alreadyInPortal = blockAtFeet?.name === "nether_portal";
+  if (alreadyInPortal) {
+    console.error(`[Portal] Bot is already inside portal block, waiting for dimension change...`);
+  }
+
   // Temporarily allow stepping on portal blocks (normally avoided to prevent accidental teleport)
   const portalBlockId = bot.registry.blocksByName["nether_portal"]?.id;
 
@@ -1349,16 +1359,25 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
       bot.pathfinder.movements.blocksToAvoid.delete(portalBlockId);
     }
 
-    // Move to portal block center
-    const goals = new GoalBlock(portalBlock.position.x, portalBlock.position.y, portalBlock.position.z);
-    await bot.pathfinder.goto(goals);
+    if (!alreadyInPortal) {
+      // Move to portal block center
+      const goals = new GoalBlock(portalBlock.position.x, portalBlock.position.y, portalBlock.position.z);
+      await bot.pathfinder.goto(goals);
+
+      // Force walk into the portal block center (pathfinder may stop at edge)
+      const portalCenter = portalBlock.position.offset(0.5, 0, 0.5);
+      bot.lookAt(portalCenter);
+      bot.setControlState("forward", true);
+      await new Promise(r => setTimeout(r, 1000));
+      bot.setControlState("forward", false);
+    }
 
     // Wait for dimension change (teleport)
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         cleanup();
-        reject(new Error("Portal teleport timeout after 10 seconds"));
-      }, 10000);
+        reject(new Error("Portal teleport timeout after 15 seconds"));
+      }, 15000);
 
       const onSpawn = () => {
         const newDimension = bot.game.dimension;
