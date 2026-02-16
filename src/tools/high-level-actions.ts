@@ -631,13 +631,16 @@ export async function minecraft_explore_area(
 ): Promise<string> {
   console.error(`[ExploreArea] Radius: ${radius}, Target: ${target || "general"}`);
 
-  // Warn if searching for enderman during daytime (they only spawn at night)
+  // Warn if searching for enderman during daytime or rain (they only spawn at night, teleport away from rain)
   if (target?.toLowerCase() === "enderman") {
     const bot = botManager.getBot(username);
     if (bot) {
       const timeOfDay = bot.time?.timeOfDay ?? 0;
       if (timeOfDay < 12541 || timeOfDay > 23458) {
         return `Cannot find enderman during daytime (current time: ${timeOfDay}). Endermen only spawn at night (12541-23458). Wait for nightfall or do other tasks like mining iron for armor.`;
+      }
+      if (bot.isRaining) {
+        return `Cannot find enderman during rain (endermen teleport away from rain). Wait for rain to stop or do other tasks like mining iron.`;
       }
     }
   }
@@ -747,13 +750,16 @@ export async function minecraft_explore_area(
       // Small delay to prevent overwhelming the connection
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Abort enderman hunt if it becomes daytime (endermen despawn in sunlight)
+      // Abort enderman hunt if it becomes daytime or raining (endermen despawn in sunlight/rain)
       if (target?.toLowerCase() === "enderman") {
         const timeBot = botManager.getBot(username);
         if (timeBot) {
           const timeOfDay = timeBot.time?.timeOfDay ?? 0;
           if (timeOfDay < 12541 || timeOfDay > 23458) {
             return `Enderman hunt ended: daytime started (time: ${timeOfDay}). Explored ${visitedPoints} points. Findings: ${findings.length > 0 ? findings.join(", ") : "none"}. Wait for night or do other tasks.`;
+          }
+          if (timeBot.isRaining) {
+            return `Enderman hunt ended: raining (endermen teleport away from rain). Explored ${visitedPoints} points. Findings: ${findings.length > 0 ? findings.join(", ") : "none"}. Wait for rain to stop or do other tasks like mining iron.`;
           }
         }
       }
