@@ -1212,43 +1212,35 @@ export async function useItemOnBlock(
     await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // For buckets on liquid blocks, use activateItem instead of activateBlock
-    // This is the correct way to collect water/lava with buckets in Mineflayer
-    if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
-      const initialItem = bot.heldItem?.name;
-      console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
-      bot.activateItem();
-      bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
+    // Use activateBlock for bucket interaction with water/lava blocks
+    // activateBlock ensures the block is properly targeted
+    await bot.activateBlock(block);
 
-      // Poll inventory until it updates (or timeout after 3 seconds)
-      const startTime = Date.now();
-      let pollCount = 0;
-      while (Date.now() - startTime < 3000) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        const currentItem = bot.heldItem?.name;
-        pollCount++;
-        console.log(`[DEBUG Poll ${pollCount}] Current item: ${currentItem}`);
-        if (currentItem !== initialItem && (currentItem === "water_bucket" || currentItem === "lava_bucket")) {
-          console.log(`[DEBUG] Success! Bucket changed to ${currentItem}`);
-          break;
-        }
-      }
-    } else {
-      // For other items (water_bucket placing, flint_and_steel, etc.), use activateBlock
-      await bot.activateBlock(block);
-    }
+    // Wait longer for inventory to update properly
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Check what happened (e.g., bucket → water_bucket)
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // Force inventory update by checking actual inventory, not just heldItem
+    bot.updateHeldItem();
     const heldAfter = bot.heldItem;
     const heldName = heldAfter?.name || "nothing";
-    console.log(`[DEBUG] Final held item: ${heldName}`);
 
     // Detect what happened based on item type
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water")) {
-      return `Collected water with bucket → now holding ${heldName}. Block at (${x}, ${y}, ${z}) cleared.`;
+      // Verify we actually got water_bucket
+      const waterBucket = bot.inventory.items().find(i => i.name === "water_bucket");
+      if (waterBucket) {
+        return `✅ Collected water with bucket → now have water_bucket. Block at (${x}, ${y}, ${z}) cleared.`;
+      } else {
+        return `⚠️ Used bucket on water but water_bucket not found in inventory. Holding: ${heldName}`;
+      }
     } else if (itemName === "bucket" && (block.name === "lava" || block.name === "flowing_lava")) {
-      return `Collected lava with bucket → now holding ${heldName}. Block at (${x}, ${y}, ${z}) cleared.`;
+      // Verify we actually got lava_bucket
+      const lavaBucket = bot.inventory.items().find(i => i.name === "lava_bucket");
+      if (lavaBucket) {
+        return `✅ Collected lava with bucket → now have lava_bucket. Block at (${x}, ${y}, ${z}) cleared.`;
+      } else {
+        return `⚠️ Used bucket on lava but lava_bucket not found in inventory. Holding: ${heldName}`;
+      }
     } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
       return `Placed ${itemName.replace("_bucket", "")} at (${x}, ${y}, ${z}). Now holding ${heldName}.`;
     } else {
