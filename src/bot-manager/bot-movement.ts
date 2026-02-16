@@ -344,28 +344,17 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     console.error(`[Move] No standable candidate succeeded, falling through to pathfinder for (${x}, ${y}, ${z})`);
   }
 
-<<<<<<< HEAD
-  // SAFETY CHECK: If target is significantly lower, check if it's a safe descent
-  // Allow falling to ground level positions even if high, since pathfinder will handle safe descent
-  // Only warn if falling INTO solid blocks or very high distances
-=======
   // SAFETY CHECK: If target is significantly lower, prevent fall damage
   // Pathfinder handles moderate height changes with digging/towers (maxDropDown=4)
   // Only block extreme drops (>50 blocks) where pathfinder would likely fail or time out
   // EXCEPTION: Allow if target is water (no fall damage in water)
->>>>>>> origin/main
   const currentY = bot.entity.position.y;
   const targetY = y;
   const fallDistance = currentY - targetY;
 
-<<<<<<< HEAD
-  if (fallDistance > 10) {
-    // Check if target block is passable (ground level) or water
-    const targetBlock = bot.blockAt(targetPos);
-=======
   if (fallDistance > 20) {
     // Check if target or nearby blocks are water
->>>>>>> origin/main
+    const targetBlock = bot.blockAt(targetPos);
     const isWaterNearby = () => {
       for (let dx = -1; dx <= 1; dx++) {
         for (let dy = -1; dy <= 1; dy++) {

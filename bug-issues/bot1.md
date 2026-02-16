@@ -2781,3 +2781,75 @@
 2. 30分毎の進捗報告を待機
 3. Ender pearl あと3個、Blaze rod あと6本達成まで監視
 4. バグ報告があれば即座に対応
+
+---
+
+## Session 29 継続 (2026-02-17)
+
+### 状況更新
+- **Phase 6 進捗**: エンダーパール 9/12 (あと3個！), ブレイズロッド 1/7
+- **緊急事態**: Phantom出現 - 3日以上睡眠なしの警告
+- **チーム状況**:
+  - Claude1: リーダー、base待機、指示出し
+  - Claude2: 回復完了、base帰還中
+  - Claude3: SE quadrant エンダーマン狩り
+  - Claude4: オンライン確認、base帰還指示
+  - Claude5: base経由でエンダーマン狩り開始
+  - Claude6: Phantom討伐→ベッド確保・Phantom対策実行中
+  - Claude7: Zombie討伐→リスポーン、装備確認中
+
+### 発行した指示
+1. **Phantom対策**: Claude6にベッド確保指示、全員に早期就寝推奨
+2. **タスク割り振り**: Claude3,5,7エンダーマン狩り、Claude4補給、Claude6ベッド、Claude2回復
+3. **進捗目標**: 今夜中にエンダーパール3個追加で Phase 6 完了
+
+### 観察事項
+- keepInventory ONで死亡時のアイテムロストなし（正常動作）
+- Phantom出現 = 長期間睡眠なし（ベッド不足が原因）
+- 夜間 (15628) = エンダーマン狩り最適時間
+
+### バグ修正
+
+#### [2026-02-17 Session 29] Merge conflict in bot-movement.ts (✅ FIXED)
+- **症状**: TypeScript typecheck失敗。bot-movement.ts:347-368に未解決のgit merge conflictマーカー
+- **原因**: bot1ブランチとorigin/mainの間でmoveTo()のfallDistance閾値が競合
+  - HEAD (bot1): `fallDistance > 10`
+  - origin/main: `fallDistance > 20`
+- **修正内容**: origin/main版を採用（fallDistance > 20）
+  - 理由: より保守的な閾値。20ブロック以上の落下でのみ警告
+  - pathfinderはmaxDropDown=4で中程度の高低差を処理可能
+  - 水中への落下は例外として許可
+- **効果**: ビルドエラー解消、TypeScript型チェック通過
+- **ファイル**: `src/bot-manager/bot-movement.ts` lines 347-368
+- **ステータス**: ✅ 修正完了
+
+### チーム活動ログ
+
+**Phase 6 目標**: エンダーパール 9/12 → 12/12 (あと3個), ブレイズロッド 1/7
+
+**現在の状況**:
+- **Claude1**: リーダー、base待機、指示出し＋バグ修正完了
+- **Claude2**: 回復完了、base帰還中
+- **Claude3**: NW地域でエンダーマン探索中（未発見）
+- **Claude4**: 接続完了、補給中
+- **Claude5**: 緊急事態 HP 2.3/20、base帰還中
+- **Claude6**: 安全確保完了、地下バンカー待機、朝にベッド作成予定
+- **Claude7**: NE地域でエンダーマン探索中（未発見）
+
+**発行した指示**:
+1. エンダーマン狩り座標分散: Claude3→NW, Claude5→SE, Claude7→NE, Claude4→SW
+2. Phantom対策: Claude6にベッド作成指示（朝に実行）
+3. 夜間安全戦術: HP<12で逃走、エンダーマン以外無視
+4. Claude5緊急帰還: base(-6,101,-14)チェストに食料44個
+
+**観察事項**:
+- Phantom出現 → 長期間睡眠なし、ベッド必須
+- Claude6が夜間に繰り返し死亡（Zombie/Spider/Phantom）→ 安全な場所へ誘導
+- エンダーマン発見率低い（Claude3, Claude7とも未発見）
+- 夜間の危険度が高い（複数ボットが低HP）
+
+### 次のアクション
+1. Claude5の生存確認
+2. 朝になったらベッド作成（Claude6担当）
+3. エンダーマン狩り継続（朝〜夜）
+4. 進捗報告待機
