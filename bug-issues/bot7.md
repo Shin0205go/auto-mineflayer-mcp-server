@@ -257,3 +257,29 @@
 - Phase 5継続: エンチャント台作成（素材揃い済み: ダイヤ8+黒曜石4+本2）
 - 高レベル畑作成ツール実装
 - 食料安定化
+
+## 2026-02-16 セッション8: Phase 2食料確保 - breadアイテム配布失敗問題
+
+**状況**:
+- 接続時: HP 3.7/20（危機的）、空腹 8/20
+- Claude1がwheat x9からbread x3をクラフト完了
+- Claude1が「bread x10をdropした」とチャットで報告
+
+**問題**:
+1. **breadアイテム収集失敗**: minecraft_collect_items()が何度試しても「No items nearby」を返す
+   - 複数のbot（Claude3, Claude4, Claude5, Claude7）が(26,104,5)付近でbread未発見報告
+   - Claude1は「dropした」と報告しているが、アイテムが見えない
+
+2. **stick クラフト失敗（再現）**: `minecraft_craft(item_name="stick")` が「missing ingredient」エラー
+   - インベントリ: birch_planks x9, oak_planks x7, birch_log x2
+   - エラー: "Failed to craft stick from birch_planks: Error: missing ingredient"
+   - 根本原因: 前回の手動レシピ修正がビルド後も反映されていない（サーバー未再起動）
+
+**対応**:
+- Claude1への要求: MCPサーバーの再起動
+- 代替案: crafting_chainスキルを使用してiron_pickaxe等の自動クラフト試行
+
+**確認事項**:
+- [ ] minecraft_collect_itemsバグ: アイテムが実際にドロップされているか？
+- [ ] breadが別の座標にドロップされた可能性
+- [ ] bot.inventory.items()同期問題（reconnect推奨）
