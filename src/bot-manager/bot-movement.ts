@@ -345,13 +345,14 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   }
 
   // SAFETY CHECK: If target is significantly lower, prevent fall damage
-  // by refusing to path there if it would require falling more than 3 blocks
+  // Pathfinder handles moderate height changes with digging/towers (maxDropDown=4)
+  // Only block extreme drops (>50 blocks) where pathfinder would likely fail or time out
   // EXCEPTION: Allow if target is water (no fall damage in water)
   const currentY = bot.entity.position.y;
   const targetY = y;
   const fallDistance = currentY - targetY;
 
-  if (fallDistance > 3) {
+  if (fallDistance > 20) {
     // Check if target or nearby blocks are water
     const isWaterNearby = () => {
       for (let dx = -1; dx <= 1; dx++) {
