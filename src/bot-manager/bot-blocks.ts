@@ -142,17 +142,30 @@ export async function placeBlock(
     }
   }
 
+  // Seed items place as crop blocks with different names
+  const seedToCropMap: Record<string, string> = {
+    "wheat_seeds": "wheat",
+    "beetroot_seeds": "beetroots",
+    "melon_seeds": "melon_stem",
+    "pumpkin_seeds": "pumpkin_stem",
+  };
+  const expectedBlockName = seedToCropMap[blockType] || blockType.replace("minecraft:", "");
+
   // Wait longer and verify placement multiple times
   await new Promise(resolve => setTimeout(resolve, 500));
   for (let i = 0; i < 3; i++) {
     const placedBlock = bot.blockAt(targetPos);
-    if (placedBlock && (placedBlock.name === blockType || placedBlock.name === blockType.replace("minecraft:", ""))) {
+    if (placedBlock && (placedBlock.name === blockType || placedBlock.name === blockType.replace("minecraft:", "") || placedBlock.name === expectedBlockName)) {
       return { success: true, message: `Placed ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)})` };
     }
     await new Promise(resolve => setTimeout(resolve, 200));
   }
 
   const finalBlock = bot.blockAt(targetPos);
+  // Check if the block placed is actually a crop from seeds
+  if (finalBlock && finalBlock.name === expectedBlockName) {
+    return { success: true, message: `Planted ${blockType} at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}) → ${finalBlock.name} (age 0)` };
+  }
   return { success: false, message: `Block not placed at (${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}). Current block: ${finalBlock?.name || "unknown"}` };
 }
 
