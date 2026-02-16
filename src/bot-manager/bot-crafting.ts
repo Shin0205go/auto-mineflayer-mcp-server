@@ -534,6 +534,88 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       }
     }
 
+    // Manual recipe fallback for tools when recipesAll returns nothing (Mineflayer version bug)
+    // Pattern: material + stick in standard tool shapes
+    if (allRecipes.length === 0) {
+      const toolRecipes: Record<string, { material: string; shape: number[][]; sticks: number; materialCount: number }> = {
+        // Pickaxes: 3 material on top, 2 sticks below center
+        "stone_pickaxe": { material: "cobblestone", shape: [[1,1,1],[0,2,0],[0,2,0]], sticks: 2, materialCount: 3 },
+        "iron_pickaxe": { material: "iron_ingot", shape: [[1,1,1],[0,2,0],[0,2,0]], sticks: 2, materialCount: 3 },
+        "golden_pickaxe": { material: "gold_ingot", shape: [[1,1,1],[0,2,0],[0,2,0]], sticks: 2, materialCount: 3 },
+        "diamond_pickaxe": { material: "diamond", shape: [[1,1,1],[0,2,0],[0,2,0]], sticks: 2, materialCount: 3 },
+        // Axes: 2 material top-left + 1 mid-left, 2 sticks right
+        "stone_axe": { material: "cobblestone", shape: [[1,1],[1,2],[0,2]], sticks: 2, materialCount: 3 },
+        "iron_axe": { material: "iron_ingot", shape: [[1,1],[1,2],[0,2]], sticks: 2, materialCount: 3 },
+        "diamond_axe": { material: "diamond", shape: [[1,1],[1,2],[0,2]], sticks: 2, materialCount: 3 },
+        // Swords: 2 material top, 1 stick bottom
+        "stone_sword": { material: "cobblestone", shape: [[1],[1],[2]], sticks: 1, materialCount: 2 },
+        "iron_sword": { material: "iron_ingot", shape: [[1],[1],[2]], sticks: 1, materialCount: 2 },
+        "diamond_sword": { material: "diamond", shape: [[1],[1],[2]], sticks: 1, materialCount: 2 },
+        // Shovels: 1 material top, 2 sticks below
+        "stone_shovel": { material: "cobblestone", shape: [[1],[2],[2]], sticks: 2, materialCount: 1 },
+        "iron_shovel": { material: "iron_ingot", shape: [[1],[2],[2]], sticks: 2, materialCount: 1 },
+        "diamond_shovel": { material: "diamond", shape: [[1],[2],[2]], sticks: 2, materialCount: 1 },
+        // Hoes: 2 material top, 2 sticks below
+        "stone_hoe": { material: "cobblestone", shape: [[1,1],[0,2],[0,2]], sticks: 2, materialCount: 2 },
+        "iron_hoe": { material: "iron_ingot", shape: [[1,1],[0,2],[0,2]], sticks: 2, materialCount: 2 },
+        "diamond_hoe": { material: "diamond", shape: [[1,1],[0,2],[0,2]], sticks: 2, materialCount: 2 },
+        // Furnace
+        "furnace": { material: "cobblestone", shape: [[1,1,1],[1,0,1],[1,1,1]], sticks: 0, materialCount: 8 },
+      };
+
+      const toolRecipe = toolRecipes[itemName];
+      if (toolRecipe) {
+        // Find material (check compatible substitutes too)
+        let materialName = toolRecipe.material;
+        let materialItem = mcData.itemsByName[materialName];
+        const materialInv = inventoryItems.filter(i => i.name === materialName).reduce((s, i) => s + i.count, 0);
+
+        // Check cobbled_deepslate as substitute for cobblestone
+        if (materialInv < toolRecipe.materialCount && materialName === "cobblestone") {
+          const deepslateInv = inventoryItems.filter(i => i.name === "cobbled_deepslate").reduce((s, i) => s + i.count, 0);
+          if (deepslateInv >= toolRecipe.materialCount) {
+            materialName = "cobbled_deepslate";
+            materialItem = mcData.itemsByName[materialName];
+          }
+        }
+
+        const finalMaterialInv = inventoryItems.filter(i => i.name === materialName).reduce((s, i) => s + i.count, 0);
+        if (!materialItem) throw new Error(`Cannot find item data for ${materialName}`);
+        if (finalMaterialInv < toolRecipe.materialCount) throw new Error(`Cannot craft ${itemName}: Need ${toolRecipe.materialCount} ${materialName}, have ${finalMaterialInv}`);
+
+        const stickItem = mcData.itemsByName["stick"];
+        if (toolRecipe.sticks > 0) {
+          const stickInv = inventoryItems.filter(i => i.name === "stick").reduce((s, i) => s + i.count, 0);
+          if (stickInv < toolRecipe.sticks) throw new Error(`Cannot craft ${itemName}: Need ${toolRecipe.sticks} stick, have ${stickInv}`);
+        }
+
+        // Build inShape from pattern (1=material, 2=stick, 0=empty)
+        const inShape = toolRecipe.shape.map(row =>
+          row.map(cell => cell === 1 ? materialItem!.id : cell === 2 ? stickItem!.id : 0)
+        );
+        const ingredients = inShape.flat().filter(id => id !== 0);
+
+        const delta: Array<{ id: number; count: number }> = [
+          { id: item.id, count: 1 },
+          { id: materialItem.id, count: -toolRecipe.materialCount },
+        ];
+        if (toolRecipe.sticks > 0 && stickItem) {
+          delta.push({ id: stickItem.id, count: -toolRecipe.sticks });
+        }
+
+        const manualRecipe = {
+          result: { id: item.id, count: 1 },
+          inShape,
+          ingredients,
+          delta,
+          requiresTable: true
+        };
+
+        console.error(`[Craft] Manual recipe created for ${itemName} using ${materialName}`);
+        allRecipes = [manualRecipe as any];
+      }
+    }
+
     // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
     // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
     const compatibleRecipe = allRecipes.find(recipe => {
