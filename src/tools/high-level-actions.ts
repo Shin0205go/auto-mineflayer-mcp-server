@@ -843,16 +843,16 @@ export async function minecraft_explore_area(
         }
 
         if (botObj.health < 18) {
-          // Flee from nearby creepers first
-          const nearCreeper = Object.values(botObj.entities)
-            .find(e => e !== botObj.entity && e.name === "creeper" && e.position.distanceTo(botObj.entity.position) < 8);
-          if (nearCreeper) {
-            console.error(`[ExploreArea] Creeper nearby at ${nearCreeper.position.distanceTo(botObj.entity.position).toFixed(1)} blocks — fleeing!`);
+          // Flee from nearby creepers and ghasts (don't try to melee these)
+          const fleeTarget = Object.values(botObj.entities)
+            .find(e => e !== botObj.entity && (e.name === "creeper" || e.name === "ghast") && e.position.distanceTo(botObj.entity.position) < 12);
+          if (fleeTarget) {
+            console.error(`[ExploreArea] ${fleeTarget.name} nearby at ${fleeTarget.position.distanceTo(botObj.entity.position).toFixed(1)} blocks — fleeing!`);
             try { await botManager.flee(username, 15); } catch (_) {}
           } else {
             const nearHostile = Object.values(botObj.entities)
               .filter(e => e !== botObj.entity && e.name && e.position.distanceTo(botObj.entity.position) < 8)
-              .filter(e => ["zombie", "skeleton", "spider", "drowned", "husk", "stray", "wither_skeleton", "piglin_brute"].includes(e.name || ""))
+              .filter(e => ["zombie", "skeleton", "spider", "drowned", "husk", "stray", "wither_skeleton", "piglin_brute", "blaze", "magma_cube", "hoglin"].includes(e.name || ""))
               .sort((a, b) => a.position.distanceTo(botObj.entity.position) - b.position.distanceTo(botObj.entity.position))[0];
             if (nearHostile) {
               console.error(`[ExploreArea] Defensive: ${nearHostile.name} at ${nearHostile.position.distanceTo(botObj.entity.position).toFixed(1)} blocks, fighting back!`);
