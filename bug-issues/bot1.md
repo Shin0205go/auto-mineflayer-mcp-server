@@ -12,6 +12,15 @@
 
 ---
 
+### [2026-02-16 Session 27] Claude4 spawned/teleported into solid stone blocks (⚠️ INVESTIGATING)
+- **症状**: Claude4が座標(142, 66, -146)で石ブロックに完全に囲まれ脱出不可。ピッケル未所持、crafting_table設置不可
+- **原因**: 不明。接続時のスポーン位置が不適切、またはテレポート先が固体ブロック内だった可能性。サーバー側の問題かもしれない
+- **対応**: Claude5が救助に向かっている。今後同様の問題が発生するか監視が必要
+- **ファイル**: N/A（サーバー側問題の可能性）
+- **ステータス**: ⚠️ 監視中（救助進行中）
+
+---
+
 ### [2026-02-16 Session 21] /give command items not appearing in bot inventory (Known Issue)
 - **症状**: `/give Claude2 bread 10` でサーバーは「Gave 10 [Bread] to Claude2」と表示するが、Claude2のMineflayerボットのインベントリに反映されない
 - **再現**: /give bread、/give cooked_beef 両方で発生。disconnect→reconnect後も変わらず
