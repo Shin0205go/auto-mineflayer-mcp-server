@@ -1004,8 +1004,51 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
       for (const tryRecipe of craftableRecipes) {
         try {
-          // Debug: Log recipe details before attempting craft
+          // CRITICAL FIX: Substitute recipe ingredient IDs with items we actually have
+          // Mineflayer's bot.craft() does strict ID matching - if recipe requires oak_planks
+          // but we have birch_planks, it fails with "missing ingredient" even though they're compatible.
           const recipeDelta = tryRecipe.delta as Array<{ id: number; count: number }>;
+          for (const d of recipeDelta) {
+            if (d.count >= 0) continue; // Skip output items
+            const ingredientItem = mcData.items[d.id];
+            if (!ingredientItem) continue;
+
+            // Check if we have this exact ingredient
+            const exactMatch = inventoryItems.find(i => i.name === ingredientItem.name);
+            if (exactMatch) continue; // We have it, no substitution needed
+
+            // We don't have the exact ingredient - find a compatible substitute
+            const substitute = findCompatibleItem(ingredientItem.name);
+            if (substitute && substitute.name !== ingredientItem.name) {
+              const substituteItemData = mcData.itemsByName[substitute.name];
+              if (substituteItemData) {
+                const oldId = d.id;
+                console.error(`[Craft] Substituting ${ingredientItem.name} (ID ${oldId}) with ${substitute.name} (ID ${substituteItemData.id})`);
+                // Replace in delta
+                for (const dd of recipeDelta) {
+                  if (dd.id === oldId) dd.id = substituteItemData.id;
+                }
+                // Replace in inShape if present
+                if ((tryRecipe as any).inShape) {
+                  const shape = (tryRecipe as any).inShape as number[][];
+                  for (let row = 0; row < shape.length; row++) {
+                    for (let col = 0; col < shape[row].length; col++) {
+                      if (shape[row][col] === oldId) shape[row][col] = substituteItemData.id;
+                    }
+                  }
+                }
+                // Replace in ingredients if present
+                if ((tryRecipe as any).ingredients) {
+                  const ingredients = (tryRecipe as any).ingredients as number[];
+                  for (let idx = 0; idx < ingredients.length; idx++) {
+                    if (ingredients[idx] === oldId) ingredients[idx] = substituteItemData.id;
+                  }
+                }
+              }
+            }
+          }
+
+          // Debug: Log recipe details before attempting craft
           const recipeIngredients = recipeDelta
             .filter(d => d.count < 0)
             .map(d => {
