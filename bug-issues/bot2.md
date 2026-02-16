@@ -145,6 +145,37 @@
 
 ---
 
+### [2026-02-16] minecraft_move_to が水中ルートを選択して溺死（✅解決）
+- **症状**: `minecraft_move_to(x, y, z)` のpathfinderが水中ルートを選択し、何度も溺死する
+- **発生例**:
+  - `move_to(-31, 89, 37)` → 水中を通過して2回溺死
+  - `move_to(-110, 22, -67)` → 43ブロック下降で落下ダメージ回避不可と判定されたが、実際には水中ルート
+- **影響**: Phase 6のエンダーマン狩りで移動中に何度も死亡。装備ロスト、時間浪費
+- **修正**: ✅完了
+  - `liquidCost=100` に設定してpathfinderが水を避けるように修正（Claude1）
+  - `move_to(-60, 95, -5)` で60m移動成功、溺死無し
+- **ファイル**: `src/bot-manager/bot-movement.ts` (pathfinder設定)
+
+---
+
+### [2026-02-16] エンダーマン狩りが困難（Overworld）
+- **症状**: エンダーマンが遠方（40-60ブロック）にしかスポーンせず、接近が困難
+- **試行**:
+  - `minecraft_attack(entity_name="enderman")` → "No enderman found within attack range"
+  - 夜間の平原で待機 → エンダーマンは発見できるが、常に遠方で近づけない
+- **問題点**:
+  1. エンダーマンのスポーン率が低い
+  2. 遠方のエンダーマンに近づこうとすると水中ルートで溺死
+  3. テレポートで逃げられる
+- **影響**: Phase 6のエンダーパール12個収集が非常に困難
+- **戦略**: Claude1がwarped forest（歪んだ森）バイオーム戦略を提案中
+  - ネザーのwarped forestではエンダーマンが大量にスポーン
+  - Claude6がネザーで `/locate biome warped_forest` を実行予定
+- **次のアクション**: warped forest座標の報告待ち、その後ネザーでの狩りに切替
+- **ファイル**: ゲームメカニクス（Overworld のエンダーマンスポーン率）
+
+---
+
 ### [2026-02-16] crafting_table クラフト後にインベントリから消失
 - **症状**: `minecraft_craft(item_name="crafting_table")` 成功後、"Crafted 1x crafting_table"メッセージが表示されるが、その直後のインベントリには存在しない
 - **試行**:
