@@ -466,8 +466,8 @@ export class BotCore extends EventEmitter {
               oxygenLevel: oxygen,
             });
           }
-          // Auto swim up when oxygen is getting low
-          if (oxygen < 10 && oxygen < lastOxygenLevel) {
+          // Auto swim up when oxygen is getting low (trigger early at 15 to prevent drowning)
+          if (oxygen < 15 && oxygen < lastOxygenLevel) {
             const feetBlock = bot.blockAt(bot.entity.position.floored());
             if (feetBlock?.name === "water") {
               console.error(`[AutoSwim] Low oxygen (${oxygen}/20), swimming up!`);
