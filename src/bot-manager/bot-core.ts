@@ -340,6 +340,26 @@ export class BotCore extends EventEmitter {
           addEvent("chat", `${username}: ${message}`, { username, message });
         });
 
+        // System/command messages (e.g., /locate results, gamerule confirmations)
+        bot.on("messagestr", (message: string, messagePosition: string) => {
+          // Skip chat messages that are already handled by "chat" event
+          // Chat event handles player messages like "<Player> message"
+          if (messagePosition === "chat" && message.match(/^<\w+>/)) return;
+
+          // Skip noisy messages
+          if (message.includes("Gamerule") || message.includes("gamerule")) return;
+          if (message.includes("Set the time to")) return;
+          if (message.includes("joined the game")) return;
+          if (message.includes("left the game")) return;
+
+          managedBot.chatMessages.push({
+            username: "[Server]",
+            message: message,
+            timestamp: Date.now(),
+          });
+          console.error(`[System/${messagePosition}] ${message}`);
+        });
+
         // Item collected
         bot.on("playerCollect", (collector, collected) => {
           if (collector.username === config.username) {
