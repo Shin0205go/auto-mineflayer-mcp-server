@@ -107,6 +107,11 @@ export async function handleMovementTool(
       return `Sent message: ${message}`;
     }
 
+    case "minecraft_enter_portal": {
+      const result = await botManager.enterPortal(username);
+      return result;
+    }
+
     default:
       throw new Error(`Unknown movement tool: ${name}`);
   }
