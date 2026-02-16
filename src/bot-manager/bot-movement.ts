@@ -269,8 +269,17 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
 
   console.error(`[Move] From (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)}) to (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
 
-  // Check if target position is inside a solid block
+  // Check if target position is a portal block — delegate to enterPortal()
   const targetBlock = bot.blockAt(targetPos);
+  if (targetBlock && (targetBlock.name === "nether_portal" || targetBlock.name === "end_portal")) {
+    console.error(`[Move] Target is a ${targetBlock.name}, delegating to enterPortal()...`);
+    try {
+      return await enterPortal(managed);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return `Failed to enter portal at (${x}, ${y}, ${z}): ${errMsg}` + getBriefStatus(managed);
+    }
+  }
   const isPassableBlock = (name: string) => {
     if (!name) return false;
     const passable = ["air", "cave_air", "void_air", "water", "lava",
