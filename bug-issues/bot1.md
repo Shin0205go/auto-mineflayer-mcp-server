@@ -12,6 +12,50 @@
 
 ---
 
+## Session 35 Status Update (2026-02-17)
+
+### 🚨 CRITICAL INCIDENT: Chest Vanished - 10 Pearls Lost
+
+**What Happened**:
+- Main chest at (2,106,-1) completely vanished - block is now air
+- 10 ender pearls were inside - all lost
+- Second chest also missing
+- No items found on ground (despawned or never dropped)
+- Chest was confirmed present at session start
+
+**Investigation Needed**:
+- Possible causes:
+  1. Explosion (creeper/TNT) - but no crater observed
+  2. Player broke chest without realizing
+  3. Server rollback or world corruption
+  4. Command executed accidentally (/setblock, /fill)
+- Check server logs for chest break events
+- Review if any bot has chest in inventory
+
+**Recovery Actions**:
+- ✅ PEARLS NOT LOST! Claude6 has all 10 pearls in inventory
+- Phase 6 status: 10/12 pearls (Claude6 holding), need 2 more
+- Team deployed to hunt endermen at 100m range
+- Claude6 to bring pearls to base once new chest is placed
+- Multiple bots at low HP - respawn strategy continuing
+
+**Place Block Bug**:
+- Cannot place chest at (2,106,-1) even with adjacent blocks
+- Tool suggests locations but placement fails: "Block not placed, current block: air"
+- Workaround: Inventory sync issues prevent dropping items too
+- Solution: Have team members hold pearls in inventory until chest placement works
+
+### Previous Status
+- **Phase 6 Progress**:
+  - Ender Pearls: 10/12 in main chest (need 2 more!) ✅ Almost complete → **NOW 0/12 - LOST**
+  - Blaze Rods: 1/7 (need 6 more - Claude6 assigned, currently HP crisis)
+- **Time**: Fixed at 15628 (night) - server time still stuck
+- **Team Status**: All bots online (Claude1-7)
+  - Claude6 at HP 7.8/20 in Nether, returning to base for respawn
+  - Claude4 just died to creeper, respawning
+  - Claude2, Claude7 at base ready for enderman hunting
+- **Food Crisis**: Still no food in chests, respawn strategy continuing
+
 ## Session 34 Status Update (2026-02-17)
 
 ### Current Situation Assessment
@@ -3217,3 +3261,50 @@ Multiple team members died repeatedly during rain + night:
 3. Address blaze rod shortage (need 6 more - Claude6 task when safe)
 4. Food production when conditions improve
 
+
+
+---
+
+## Session 34 Status Update (2026-02-17)
+
+### Current Situation
+- **Time**: Fixed at 15628 (night) - server time still stuck
+- **Location**: Base (2,107,0) crafting table area
+- **Phase 6 Progress**:
+  - Ender Pearls: **8/12** (need 4 more)
+  - Blaze Rods: 1/7 (need 6 more)
+
+### Team Status
+- **Claude1** (Leader): Base position (2,107,0), HP 12.2/20, hunger 14/20, no armor
+- **6 players visible** within 100 blocks of base
+  - 2 players very close (3.7m, 6.0m) - likely at base
+  - 2 players mid-range (16.9m, 21.2m)
+  - 1 player underground (35m away, y=73)
+  - 1 player disappeared between checks (was at -2,106,8.4)
+
+### Orders Issued
+1. **Area assignments**: C2=NE, C3=SE, C4=NW, C5=West, C7=SW (100 block radius)
+2. **Claude6**: Nether fortress (-570,78,-715) for 6 more blaze rods
+3. **Goal**: Collect 4 more ender pearls to reach 12/12
+4. **Respawn strategy**: Authorized for HP/hunger recovery (keepInventory ON)
+5. **Reporting**: Store pearls in chest (2,106,-1) and report in chat
+
+### Observations
+- **No chat responses**: Team members not responding to status check requests
+- **Minimal movement**: Most players stationary at base, one underground player moving slightly
+- **Pearl count unchanged**: Still 8 pearls in chest after ~15 seconds
+- **Food crisis ongoing**: No food in chest, respawn strategy authorized
+
+### No New Bugs Detected
+- TypeScript compilation: ✅ Clean (no errors)
+- All previous fixes operational:
+  - Auto-flee fall damage fix (Session 32)
+  - Auto-swim persistent (Session 27)
+  - Combat systems working
+- No error reports from team members
+
+### Next Actions
+1. Continue monitoring chat for team reports
+2. Track pearl count changes in chest
+3. Verify blaze rod collection by Claude6
+4. Address any bug reports from team members
