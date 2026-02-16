@@ -265,6 +265,22 @@ export async function digBlock(
 
   const blockName = block.name;
 
+  // Check crop maturity before harvesting - immature crops only drop seeds, not the crop item
+  const cropBlocks = ["wheat", "beetroots", "carrots", "potatoes"];
+  if (cropBlocks.includes(blockName)) {
+    try {
+      const props = block.getProperties();
+      const age = props?.age;
+      const maxAge = blockName === "beetroots" ? 3 : 7; // beetroots max age is 3, others are 7
+      if (age !== undefined && Number(age) < maxAge) {
+        return `⚠️ ${blockName} is NOT mature (age=${age}/${maxAge}). Harvesting now will only give seeds, NOT the crop item. Wait for it to fully grow (age=${maxAge}) or apply bone_meal to speed up growth. Use minecraft_use_item_on_block with bone_meal on this block.`;
+      }
+    } catch (e) {
+      // getProperties may fail on some versions, continue with dig
+      console.error(`[Dig] Could not check crop maturity: ${e}`);
+    }
+  }
+
   // Check for lava in adjacent blocks before digging (unless force=true)
   if (!force) {
     const adjacentPositions = [
@@ -922,9 +938,9 @@ export async function digBlock(
       if (nearbyItems) {
         const itemPos = nearbyItems.position ? nearbyItems.position.toString() : 'unknown';
         const itemDist = nearbyItems.position ? nearbyItems.position.distanceTo(bot.entity.position).toFixed(2) : '?';
-        console.error(`[Dig] ⚠️ Server config issue: items spawn but can't be collected (at ${itemPos}, ${itemDist}m)`);
+        console.error(`[Dig] ⚠️ Items spawned but not auto-collected (at ${itemPos}, ${itemDist}m) - may have been picked up by another bot or need manual collection`);
         // Return success message since block was actually mined successfully
-        return `✅ Dug ${blockName} with ${heldItem}. ⚠️ NOTE: Items dropped at ${itemPos} but server has item pickup disabled. Block mining works but resource collection impossible due to server configuration.` + getBriefStatus(username);
+        return `✅ Dug ${blockName} with ${heldItem}. ⚠️ NOTE: Items dropped at ${itemPos} (${itemDist}m away) but weren't auto-collected. Try minecraft_collect_items() or move closer.` + getBriefStatus(username);
       }
 
       // No item entities found - server configuration issue

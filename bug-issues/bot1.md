@@ -12,6 +12,32 @@
 
 ---
 
+### [2026-02-16 Session 11] serverHasItemPickupDisabled false positive blocking crafting (✅ FIXED)
+
+- **症状**: Bot6,Bot7等でクラフトが全て「Server has item pickup disabled」で拒否される。実際にはアイテムピックアップは正常動作中
+- **報告**: Bot6 (Session 10), Bot4, Bot7
+- **原因**: `collectNearbyItems()`が他のボットがアイテムを先に拾った場合に「pickup disabled」と誤検知。マルチボット環境では、あるボットが掘ったアイテムを別の近くのボットが拾うことが頻繁に発生。この誤検知が`serverHasItemPickupDisabled`フラグを設定し、そのボットの全クラフトを1分間ブロック
+- **修正**:
+  - `bot-items.ts`: `collectNearbyItems()`からフラグ設定ロジックを完全削除
+  - `bot-crafting.ts`: クラフト前のフラグチェック2箇所を削除、ポストクラフト検証のフラグ設定2箇所を削除
+  - `bot-blocks.ts`: dig後の「server has item pickup disabled」メッセージを適切な表現に変更
+  - `bot-crafting.ts`: smelt後の同様のメッセージを修正
+- **ファイル**: `src/bot-manager/bot-items.ts`, `src/bot-manager/bot-crafting.ts`, `src/bot-manager/bot-blocks.ts`
+- **ステータス**: ✅ 修正完了
+
+---
+
+### [2026-02-16 Session 11] Immature wheat harvesting gives only seeds (✅ FIXED)
+
+- **症状**: wheatをdigしてもwheat itemが出ず、seedsのみ。チーム全員が「sync bug」と誤解
+- **報告**: Bot2, Bot4, Bot5, Bot6, Bot7 (Session 10-11)
+- **原因**: wheatは成熟(age=7)でないとwheat itemをドロップしない。未成熟(age<7)ではwheat_seedsのみ。ボットたちがbone_mealを1-2回しか使わず未成熟のまま収穫していた
+- **修正**: `bot-blocks.ts`の`digBlock()`にcrop maturityチェックを追加。wheat/beetroots/carrots/potatoesブロックの`getProperties().age`を確認し、最大age未満の場合は収穫をブロックして警告メッセージを返す
+- **ファイル**: `src/bot-manager/bot-blocks.ts`
+- **ステータス**: ✅ 修正完了
+
+---
+
 ### [2026-02-16 Session 8] Inventory slot range bug - false "inventory full" (✅ FIXED)
 
 - **症状**: `minecraft_dig_block`と`minecraft_take_from_chest`がインベントリに空きがあるのに"inventory is full"と報告

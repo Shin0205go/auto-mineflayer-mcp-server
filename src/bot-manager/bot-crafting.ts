@@ -252,23 +252,6 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     throw new Error("Bot is not connected to the server. Please reconnect.");
   }
 
-  // CRITICAL: Check if server has item pickup disabled
-  // This prevents wasting materials on crafting when items can't be collected
-  // Auto-clear flag after 5 minutes to allow retry (may have been temporary network issue)
-  if (managed.serverHasItemPickupDisabled === true && managed.serverHasItemPickupDisabledTimestamp) {
-    const timeSinceSet = Date.now() - managed.serverHasItemPickupDisabledTimestamp;
-    const ONE_MINUTE = 60 * 1000;
-
-    if (timeSinceSet < ONE_MINUTE) {
-      throw new Error(`Cannot craft ${itemName}: Server item pickup recently failed (${Math.floor(timeSinceSet / 1000)}s ago). Wait or disconnect/reconnect to reset. This prevents wasting materials if pickup is truly broken.`);
-    } else {
-      // Auto-clear after 5 minutes to allow retry
-      console.error(`[Craft] Clearing serverHasItemPickupDisabled flag after ${Math.floor(timeSinceSet / 1000)}s`);
-      managed.serverHasItemPickupDisabled = false;
-      managed.serverHasItemPickupDisabledTimestamp = undefined;
-    }
-  }
-
   // Dynamic import of minecraft-data
   const minecraftData = await import("minecraft-data");
   const mcData = minecraftData.default(bot.version);
@@ -1053,28 +1036,6 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     throw new Error(`${itemName} requires a crafting table nearby (within 4 blocks). Inventory: ${inventory}`);
   }
 
-  // Check for server item pickup disabled BEFORE consuming materials
-  // Auto-clear after 1 minute to allow retry (gamerules may have been fixed)
-  if (managed.serverHasItemPickupDisabled === true) {
-    const timeSinceSet = managed.serverHasItemPickupDisabledTimestamp ? Date.now() - managed.serverHasItemPickupDisabledTimestamp : 0;
-    const timeSince = Math.floor(timeSinceSet / 1000);
-    const ONE_MINUTE = 60 * 1000;
-
-    if (timeSinceSet > ONE_MINUTE) {
-      console.error(`[Craft] Clearing serverHasItemPickupDisabled flag after ${timeSince}s (auto-expire)`);
-      managed.serverHasItemPickupDisabled = false;
-      managed.serverHasItemPickupDisabledTimestamp = undefined;
-    } else {
-    throw new Error(
-      `Cannot craft ${itemName}: Server has item pickup disabled (detected ${timeSince}s ago). ` +
-      `Crafted items will drop on ground and be permanently lost. ` +
-      `This is a server configuration issue that requires admin intervention. ` +
-      `Disconnect and reconnect to reset this flag if server config was fixed. ` +
-      `Inventory: ${inventory}`
-    );
-    }
-  }
-
   try {
     // Before crafting, ensure we have the exact items needed
     // Sometimes the bot needs specific item types even if we have compatible ones
@@ -1212,15 +1173,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 // Debug: Show all inventory items to see what we actually have
                 const inventoryNames = bot.inventory.items().map(i => i.name).join(", ");
                 console.error(`[Craft] Expected ${itemName}, but inventory has: ${inventoryNames}`);
-                console.error(`[Craft] CRITICAL: Item pickup disabled on server - crafted item lost permanently`);
+                console.error(`[Craft] WARNING: Crafted item not found in inventory - may have been picked up by another bot or despawned`);
 
-                // Set flag to prevent future crafting attempts (with timestamp for expiry)
-                managed.serverHasItemPickupDisabled = true;
-                managed.serverHasItemPickupDisabledTimestamp = Date.now();
-
-                // CRITICAL BUG FIX: Throw error to prevent resource waste
-                // Ingredients were consumed but output is lost - this is a failure, not success
-                throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
+                throw new Error(`Failed to craft ${itemName}: Item not found in inventory after crafting. It may have been collected by another nearby bot or despawned. Inventory: ${inventoryNames}`);
               }
             } else {
               throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting and no dropped items found nearby. This indicates a server configuration issue or the crafting operation did not complete successfully.`);
@@ -1245,15 +1200,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
 
     if (!craftedItem) {
-      // Item not in inventory - might have been dropped due to server config
-      console.error(`[Craft] ERROR: ${itemName} not found in inventory after crafting - server has item pickup disabled`);
-
-      // Set flag to prevent future crafting attempts (with timestamp for expiry)
-      managed.serverHasItemPickupDisabled = true;
-      managed.serverHasItemPickupDisabledTimestamp = Date.now();
-
-      // THROW ERROR instead of returning success - this prevents wasting materials
-      throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
+      // Item not in inventory after crafting - may have been picked up by another bot nearby
+      console.error(`[Craft] ERROR: ${itemName} not found in inventory after crafting`);
+      throw new Error(`Failed to craft ${itemName}: Item not found in inventory after crafting. It may have been collected by another nearby bot or despawned. Try again.`);
     }
 
     // Success - item is in inventory
@@ -1463,8 +1412,8 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
 
       if (actualGained === 0 && totalGained > 0) {
         // Items were smelted but didn't enter inventory - they must have dropped or there's a transfer issue
-        console.error(`[Smelt] WARNING: ${expectedOutputName} not transferred to inventory after smelting - may have dropped due to server settings`);
-        return `Smelted ${smeltCount}x ${itemName} (WARNING: ${totalGained}x ${expectedOutputName} may have dropped - server has item pickup disabled). Inventory: ${newInventory}${debugInfo}`;
+        console.error(`[Smelt] WARNING: ${expectedOutputName} not transferred to inventory after smelting - may need manual collection`);
+        return `Smelted ${smeltCount}x ${itemName} (WARNING: ${totalGained}x ${expectedOutputName} may not have entered inventory - try minecraft_collect_items()). Inventory: ${newInventory}${debugInfo}`;
       }
     }
 
