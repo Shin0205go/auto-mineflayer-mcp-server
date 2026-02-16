@@ -280,6 +280,38 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
       return `Failed to enter portal at (${x}, ${y}, ${z}): ${errMsg}` + getBriefStatus(managed);
     }
   }
+
+  // FALLBACK: Check if target is near obsidian frame (portal structure)
+  // This handles cases where portal blocks aren't detected but user wants to enter portal
+  if (distance < 20) {
+    const nearbyObsidian = bot.findBlocks({
+      matching: bot.registry.blocksByName["obsidian"]?.id,
+      maxDistance: 5,
+      count: 10,
+    });
+    if (nearbyObsidian.length >= 4) {
+      // Check for vertical obsidian pattern (portal frame)
+      let portalFrameDetected = false;
+      for (const pos of nearbyObsidian) {
+        const above1 = bot.blockAt(pos.offset(0, 1, 0));
+        const above2 = bot.blockAt(pos.offset(0, 2, 0));
+        const above3 = bot.blockAt(pos.offset(0, 3, 0));
+        if (above1?.name === "obsidian" && above2?.name === "obsidian" && above3?.name === "obsidian") {
+          portalFrameDetected = true;
+          break;
+        }
+      }
+      if (portalFrameDetected) {
+        console.error(`[Move] Obsidian portal frame detected near target, attempting enterPortal()...`);
+        try {
+          return await enterPortal(managed);
+        } catch (err) {
+          console.error(`[Move] enterPortal() failed near obsidian frame: ${err}`);
+          // Continue with normal pathfinding if portal entry fails
+        }
+      }
+    }
+  }
   const isPassableBlock = (name: string) => {
     if (!name) return false;
     const passable = ["air", "cave_air", "void_air", "water",
@@ -1336,13 +1368,60 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
   const startDimension = bot.game.dimension;
 
   // Find nearest nether_portal block
-  const portalBlock = bot.findBlock({
+  let portalBlock = bot.findBlock({
     matching: (block) => block.name === "nether_portal",
     maxDistance: 10,
   });
 
+  // FALLBACK: If portal blocks not detected, search for obsidian frame pattern
   if (!portalBlock) {
-    throw new Error("No nether portal found within 10 blocks");
+    console.error(`[Portal] nether_portal blocks not detected, searching for obsidian frame...`);
+    const obsidianBlocks = bot.findBlocks({
+      matching: bot.registry.blocksByName["obsidian"]?.id,
+      maxDistance: 15,
+      count: 50,
+    });
+
+    // Look for vertical obsidian columns (portal frame pattern)
+    for (const pos of obsidianBlocks) {
+      const block = bot.blockAt(pos);
+      if (!block) continue;
+
+      // Check if there are 3+ obsidian blocks vertically stacked (portal frame side)
+      let verticalCount = 1;
+      for (let dy = 1; dy <= 4; dy++) {
+        const above = bot.blockAt(pos.offset(0, dy, 0));
+        if (above?.name === "obsidian") verticalCount++;
+        else break;
+      }
+
+      if (verticalCount >= 3) {
+        // Found a portal frame! Look for the air space inside (where portal blocks should be)
+        // Portal blocks are typically 1 block in from the frame
+        const airOffsets = [
+          new Vec3(1, 1, 0),  // east
+          new Vec3(-1, 1, 0), // west
+          new Vec3(0, 1, 1),  // south
+          new Vec3(0, 1, -1), // north
+        ];
+
+        for (const offset of airOffsets) {
+          const portalPos = pos.plus(offset);
+          const innerBlock = bot.blockAt(portalPos);
+          // Accept both nether_portal (active) or air (frame present but not lit)
+          if (innerBlock && (innerBlock.name === "nether_portal" || innerBlock.name === "air")) {
+            console.error(`[Portal] Found portal frame, targeting position inside: (${portalPos.x}, ${portalPos.y}, ${portalPos.z})`);
+            portalBlock = innerBlock;
+            break;
+          }
+        }
+        if (portalBlock) break;
+      }
+    }
+
+    if (!portalBlock) {
+      throw new Error("No nether portal or obsidian frame found within 15 blocks");
+    }
   }
 
   // Find the lowest portal block in this portal (bottom of the portal opening)

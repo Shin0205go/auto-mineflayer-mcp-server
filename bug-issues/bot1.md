@@ -12,9 +12,108 @@
 
 ---
 
+## Session 48 Status Update (2026-02-17)
+
+### Current Situation - Portal Detection Bug, Phase 6 Resuming
+
+**Online Bots**: Claude1 (leader), Claude2, Claude3, Claude5 (respawned from fall), Claude6 (reconnected)
+**Offline/Unknown**: Claude4, Claude7
+**Phase Status**: Phase 6 - Active, portal ignition successful but entry blocked by bug
+
+**Progress**:
+- Ender pearls: 11/12 ✅ (stored in chest 7,93,2) - need 1 more
+- Blaze rods: 1/7 ✅ (stored in chest 7,93,2) - need 6 more
+- Portal: Successfully ignited at (7-10,107-111,-3), but bots cannot enter due to nether_portal block detection bug
+- Food: Crisis continues - team using respawn strategy (keepInventory ON)
+
+**Team Status**:
+- Claude1: (-6,112,14), HP 20/20, hunger 20/20 (respawned from fall), coordinating
+- Claude2: at base, HP 20/20, standby mode
+- Claude3: status unknown, no response
+- Claude4: offline/no response
+- Claude5: HP 15/20, heading SE for enderman hunting (died once from fall this session)
+- Claude6: reconnected, at portal area, reporting portal entry bug
+- Claude7: offline/no response
+
+**Critical Bug Identified (Session 48)**:
+
+### 🚨 CRITICAL: Nether Portal Entry Blocked - bot.blockAt() Not Detecting nether_portal
+
+**Symptom**:
+- Portal successfully ignited at (7,108,-3) using flint_and_steel
+- Claude5 and Claude6 confirm portal frame is visible and active
+- `find_block("nether_portal")` returns "No nether_portal found within N blocks"
+- `move_to(8,108,-3)` pathfinding fails to reach portal coordinates
+- Bot cannot enter portal despite being right next to it
+
+**Code Investigation**:
+- bot-movement.ts line 274: `move_to()` checks `bot.blockAt(targetPos)` for nether_portal/end_portal
+- If detected, delegates to `enterPortal()` for proper entry
+- **Issue**: `bot.blockAt()` is NOT detecting the nether_portal block after ignition
+- Possible causes:
+  1. Nether portal blocks are special "air-like" blocks that don't register in blockAt()
+  2. Portal block state/metadata not matching registry definition
+  3. Mineflayer version compatibility issue with portal block detection
+  4. Portal blocks only detectable when bot is inside the portal hitbox
+
+**Impact**:
+- **BLOCKS Phase 6 Nether access** - Cannot collect blaze rods without entering Nether
+- Claude6 stuck at portal, unable to proceed to fortress (-570,78,-715)
+- Phase 6 completion impossible without Nether access
+
+**Temporary Workaround Attempts**:
+1. ❌ `find_block("nether_portal")` - not detected
+2. ❌ `move_to(8,108,-3)` - pathfinding fails, doesn't reach portal
+3. ⏳ Manual positioning - Claude6 attempting to walk into portal frame manually
+
+**Fix Implemented (Session 48)**:
+✅ Added fallback to enterPortal() function (bot-movement.ts lines 1338-1395):
+- When bot.findBlock() fails to detect nether_portal blocks
+- Search for obsidian blocks within 15 blocks
+- Detect vertical obsidian columns (3+ blocks = portal frame side)
+- Search for air/portal space 1 block inside the frame (4 directions)
+- Use detected inner position for portal entry
+- Build completed successfully
+
+**Testing Status**:
+- ⏳ Claude2 and Claude6 reconnected with new code
+- ⏳ Awaiting portal entry test results
+- Code deployed, awaiting field confirmation
+
+**Root Cause Identified (Session 48 - Claude2 Diagnostic)**:
+❌ **Portal frame is incomplete** - NOT a code bug!
+- Current frame: 9 obsidian blocks (incomplete)
+- Required frame: 10 obsidian blocks minimum (4 bottom + 2 sides + 4 top, OR corners optional)
+- Missing blocks: x=8 on bottom edge (y=107), and several top/side positions
+- Incorrect placement: (8,103,-2) is below the frame (y=103 instead of y=107)
+- Result: Flint and steel ignition doesn't create portal blocks because frame is invalid
+
+**Resolution Required**:
+1. Mine all existing misplaced obsidian
+2. Rebuild frame with correct coordinates:
+   - Bottom edge: (7,107,-3), (8,107,-3), (9,107,-3), (10,107,-3)
+   - Left side: (7,108,-3), (7,109,-3), (7,110,-3)
+   - Right side: (10,108,-3), (10,109,-3), (10,110,-3)
+   - Top edge: (7,111,-3), (8,111,-3), (9,111,-3), (10,111,-3)
+   - Interior: (8,108-110,-3) and (9,108-110,-3) must be AIR
+3. Use flint_and_steel on any bottom interior block: (8,107,-3) or (9,107,-3)
+4. Portal blocks should spawn and fill the 2x3 interior space
+
+**Assignment**: Claude2 to rebuild portal after respawn
+
+**Session 48 Final Status**:
+- ✅ Portal bug diagnosis complete - NOT a code bug, portal frame was incomplete
+- ✅ Code improvements made: enterPortal() and move_to() now have obsidian frame fallback detection
+- ✅ Claude5 providing diamond_pickaxe x1 + diamond x3 for portal reconstruction
+- ⏳ Claude2 assigned to rebuild portal frame with correct dimensions
+- ⏳ Claude3/4/5 hunting final ender pearl (11/12 complete)
+- Team coordination excellent - multiple bots working efficiently
+
+---
+
 ## Session 47 Status Update (2026-02-17)
 
-### Current Situation - Portal Reconstruction In Progress
+### Current Situation - Portal Reconstruction In Progress (SUPERSEDED BY SESSION 48)
 
 **Online Bots**: Claude1 (leader), Claude2, Claude3, Claude4, Claude5 (slow response), Claude6
 **Phase Status**: Phase 6 - Blocked by Nether portal ignition issue
