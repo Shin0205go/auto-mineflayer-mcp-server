@@ -437,9 +437,20 @@ export async function dropItem(bot: Bot, itemName: string, count?: number): Prom
       totalDropped += dropFromThis;
       remaining -= dropFromThis;
 
-      // Increased delay to let server inventory update propagate
-      // Server needs time to sync inventory changes, especially when dropping multiple stacks
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Wait for server inventory sync - listen for setSlot event
+      // Toss triggers server to send window_item updates
+      await new Promise<void>(resolve => {
+        let resolved = false;
+        const onSlot = () => {
+          if (!resolved) { resolved = true; resolve(); }
+        };
+        bot.inventory.on("updateSlot" as any, onSlot);
+        // Fallback timeout if event doesn't fire
+        setTimeout(() => {
+          bot.inventory.removeListener("updateSlot" as any, onSlot);
+          if (!resolved) { resolved = true; resolve(); }
+        }, 1000);
+      });
     }
 
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
