@@ -631,13 +631,16 @@ export async function minecraft_explore_area(
 ): Promise<string> {
   console.error(`[ExploreArea] Radius: ${radius}, Target: ${target || "general"}`);
 
-  // Warn if searching for enderman during daytime (they only spawn at night)
+  // Warn if searching for enderman during daytime or rain (they only spawn at night, teleport away from rain)
   if (target?.toLowerCase() === "enderman") {
     const bot = botManager.getBot(username);
     if (bot) {
       const timeOfDay = bot.time?.timeOfDay ?? 0;
       if (timeOfDay < 12541 || timeOfDay > 23458) {
         return `Cannot find enderman during daytime (current time: ${timeOfDay}). Endermen only spawn at night (12541-23458). Wait for nightfall or do other tasks like mining iron for armor.`;
+      }
+      if (bot.isRaining) {
+        return `Cannot find enderman during rain (endermen teleport away from rain). Wait for rain to stop or do other tasks like mining iron.`;
       }
     }
   }
@@ -656,7 +659,7 @@ export async function minecraft_explore_area(
   const knownEntitiesForStep = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "cat", "ocelot", "parrot", "wolf", "llama", "turtle", "panda", "fox", "bee", "axolotl", "frog", "goat", "zombie", "skeleton", "spider", "creeper", "enderman", "blaze"];
   const isEntityHunt = target && knownEntitiesForStep.some(e => target.toLowerCase().includes(e));
   const stepSize = isEntityHunt ? 20 : 5; // Larger steps for entity hunting (32-block detection range)
-  const maxVisitedPoints = Math.min(50, Math.floor(radius / stepSize)); // Limit exploration points
+  const maxVisitedPoints = Math.min(50, Math.ceil((radius * 2 / stepSize) ** 2 / 4)); // Cover area proportional to radius
   const startTime = Date.now();
   const maxDuration = 120000; // 2 minutes max
 
@@ -702,8 +705,10 @@ export async function minecraft_explore_area(
         } catch (_) { /* no food available */ }
       }
 
-      // Abort if HP is critically low
-      if (hp <= 6) {
+      // Abort if HP is critically low (raised from 6 to 10 — enderman hits for 4.5-7.5 damage)
+      if (hp <= 10) {
+        // Try to eat before aborting
+        try { await botManager.eat(username); } catch (_) {}
         return `Exploration aborted at ${visitedPoints} points due to critical HP (${hp}/20). Flee and recover! Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
       }
 
@@ -747,6 +752,20 @@ export async function minecraft_explore_area(
       // Small delay to prevent overwhelming the connection
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      // Abort enderman hunt if it becomes daytime or raining (endermen despawn in sunlight/rain)
+      if (target?.toLowerCase() === "enderman") {
+        const timeBot = botManager.getBot(username);
+        if (timeBot) {
+          const timeOfDay = timeBot.time?.timeOfDay ?? 0;
+          if (timeOfDay < 12541 || timeOfDay > 23458) {
+            return `Enderman hunt ended: daytime started (time: ${timeOfDay}). Explored ${visitedPoints} points. Findings: ${findings.length > 0 ? findings.join(", ") : "none"}. Wait for night or do other tasks.`;
+          }
+          if (timeBot.isRaining) {
+            return `Enderman hunt ended: raining (endermen teleport away from rain). Explored ${visitedPoints} points. Findings: ${findings.length > 0 ? findings.join(", ") : "none"}. Wait for rain to stop or do other tasks like mining iron.`;
+          }
+        }
+      }
+
       // Categorize target type to avoid false matches
       const knownBiomes = ["plains", "forest", "taiga", "desert", "savanna", "jungle", "swamp", "mountains", "ocean", "river", "beach", "snowy", "ice", "mushroom", "nether", "end"];
       const knownEntities = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "cat", "ocelot", "parrot", "wolf", "llama", "turtle", "panda", "fox", "bee", "axolotl", "frog", "goat", "zombie", "skeleton", "spider", "creeper", "enderman"];
@@ -771,8 +790,10 @@ export async function minecraft_explore_area(
       }
 
       // Check for target entity (skip "passive" keyword as it matches items too)
+      // Use wider range (48) for entity detection to spot endermen from further away
+      const entitySearchRange = 48;
       if (target && target !== "passive" && target !== "hostile" && target !== "all") {
-        const entityResult = botManager.findEntities(username, target, 32);
+        const entityResult = botManager.findEntities(username, target, entitySearchRange);
         // Only count as found if NOT starting with "No" (avoid false positives)
         if (entityResult.includes(target) && !entityResult.startsWith("No")) {
           findings.push(`${target} entity at current location`);
@@ -784,7 +805,7 @@ export async function minecraft_explore_area(
             let fightCount = 0;
             const maxFights = 5; // Safety limit per exploration step
             while (fightCount < maxFights) {
-              const checkResult = botManager.findEntities(username, target, 32);
+              const checkResult = botManager.findEntities(username, target, entitySearchRange);
               if (!checkResult.includes(target) || checkResult.startsWith("No")) break;
 
               console.error(`[ExploreArea] Found ${target} (#${fightCount + 1}) — auto-engaging in combat!`);
@@ -796,15 +817,19 @@ export async function minecraft_explore_area(
                 const botAfterFight = botManager.getBot(username);
                 if (botAfterFight) {
                   const botHealth = botAfterFight.health ?? 20;
-                  if (botHealth <= 12) {
-                    console.error(`[ExploreArea] HP low after combat, stopping fight chain`);
-                    break;
-                  }
+                  // Eat between fights if HP or hunger is not full
                   if (botHealth < 18 && botAfterFight.food < 20) {
                     try {
                       await botManager.eat(username);
                       console.error(`[ExploreArea] Ate food between fights (HP: ${botHealth})`);
                     } catch (_) { /* no food available */ }
+                  }
+                  // After eating, check if HP is still dangerously low — abort exploration entirely
+                  const hpAfterEat = botAfterFight.health ?? 20;
+                  if (hpAfterEat <= 12) {
+                    console.error(`[ExploreArea] HP still low after combat+eating (${hpAfterEat}), aborting exploration`);
+                    try { await botManager.flee(username, 20); } catch (_) {}
+                    return `Exploration aborted after ${fightCount} fights due to low HP (${hpAfterEat}/20). Flee and recover! Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
                   }
                 }
               } catch (fightErr) {
@@ -843,16 +868,16 @@ export async function minecraft_explore_area(
         }
 
         if (botObj.health < 18) {
-          // Flee from nearby creepers first
-          const nearCreeper = Object.values(botObj.entities)
-            .find(e => e !== botObj.entity && e.name === "creeper" && e.position.distanceTo(botObj.entity.position) < 8);
-          if (nearCreeper) {
-            console.error(`[ExploreArea] Creeper nearby at ${nearCreeper.position.distanceTo(botObj.entity.position).toFixed(1)} blocks — fleeing!`);
+          // Flee from nearby creepers and ghasts (don't try to melee these)
+          const fleeTarget = Object.values(botObj.entities)
+            .find(e => e !== botObj.entity && (e.name === "creeper" || e.name === "ghast") && e.position.distanceTo(botObj.entity.position) < 12);
+          if (fleeTarget) {
+            console.error(`[ExploreArea] ${fleeTarget.name} nearby at ${fleeTarget.position.distanceTo(botObj.entity.position).toFixed(1)} blocks — fleeing!`);
             try { await botManager.flee(username, 15); } catch (_) {}
           } else {
             const nearHostile = Object.values(botObj.entities)
               .filter(e => e !== botObj.entity && e.name && e.position.distanceTo(botObj.entity.position) < 8)
-              .filter(e => ["zombie", "skeleton", "spider", "drowned", "husk", "stray", "wither_skeleton", "piglin_brute"].includes(e.name || ""))
+              .filter(e => ["zombie", "skeleton", "spider", "drowned", "husk", "stray", "wither_skeleton", "piglin_brute", "blaze", "magma_cube", "hoglin"].includes(e.name || ""))
               .sort((a, b) => a.position.distanceTo(botObj.entity.position) - b.position.distanceTo(botObj.entity.position))[0];
             if (nearHostile) {
               console.error(`[ExploreArea] Defensive: ${nearHostile.name} at ${nearHostile.position.distanceTo(botObj.entity.position).toFixed(1)} blocks, fighting back!`);

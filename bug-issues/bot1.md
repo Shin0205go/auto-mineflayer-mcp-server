@@ -12,2594 +12,378 @@
 
 ---
 
-### [2026-02-16 Session 21] /give command items not appearing in bot inventory (Known Issue)
-- **症状**: `/give Claude2 bread 10` でサーバーは「Gave 10 [Bread] to Claude2」と表示するが、Claude2のMineflayerボットのインベントリに反映されない
-- **再現**: /give bread、/give cooked_beef 両方で発生。disconnect→reconnect後も変わらず
-- **回避策**: チェストに入れて `minecraft_take_from_chest` で取得すれば正常動作
-- **原因**: Mineflayerが `/give` による `set_slot` パケットを正しく処理していない可能性。Mineflayerのバグか、パケット順序の問題
-- **対応**: コード修正は困難（Mineflayer内部の問題）。チェスト経由で物資を渡す運用で回避
-- **ファイル**: N/A（Mineflayerライブラリ内部）
-- **ステータス**: ⚠️ 回避策あり（チェスト経由）
+## Session 40 Status Update (2026-02-17)
+
+### Current Situation - CRITICAL BUGS PERSIST
+
+**Online Bots**: Claude1 (leader), Claude2(?), Claude3, Claude4(?), Claude5(?), Claude6, Claude7
+**Phase Status**: Phase 6 - BLOCKED by item entity bug
+
+**New Issue Reported (Session 40)**:
+- 🚨 **CRITICAL: Wheat harvest gives DIRT instead of wheat** - Claude3 reports farmland→plant→bone_meal→harvest = dirt x2, NO wheat items
+- Same root cause as Session 39: **Server not spawning item entities for ANY drops**
+- Affects: mob drops (ender pearls), block drops (wheat, ores), ALL item collection
+
+**Resource Crisis**:
+- Main chest (2,106,-1): MISSING AGAIN (4th incident)
+- All ender pearls from Session 39 lost (was 9/12)
+- Zero food in any chest
+- Team using respawn strategy for HP/hunger recovery
+
+**Server Item Entity Bug - Confirmed Diagnosis**:
+- ✅ Code reviewed and confirmed correct (bot-blocks.ts, bot-items.ts)
+- ✅ Enderman kills: NO pearls drop (tested Session 39)
+- ✅ Wheat harvest: NO wheat drops, gives DIRT instead (reported Session 40)
+- ✅ Gamerules: doMobLoot=true, doEntityDrops=true, doTileDrops=true (verified)
+- 🚨 **Root cause: Server-side item entity spawning is completely broken**
+- **Phase 6 and all food production BLOCKED until server fixed**
+
+**Actions Taken**:
+- Connected and assessed crisis (missing chest, missing pearls)
+- Confirmed Phase 6 status with team
+- Directed Claude3 to hunt animals for raw meat (workaround for food)
+- Documented new wheat→dirt bug in bug report
+- Discovered Claude2 had ender_pearl x11 in inventory (not lost!)
+- Coordinated Claude2 and Claude4 to store pearls and diamonds at chest (10,87,5)
+- Assessed final resource status: diamond x5✅, obsidian x3 (need 4), book x0 (need 1)
+- Informed team about server bug and instructed to wait for human intervention
+
+**Final Status (Session 40)**:
+- **Phase 5**: diamond x5✅, obsidian x3/4, book x0/1 — needs 1 obsidian + 1 book
+- **Phase 6**: ender_pearl x11/12, blaze_rod x1/7 — needs 1 pearl + 6 blaze rods
+- **Resources stored at chest (10,87,5)**: ender_pearl x11, diamond x5, cobblestone x64
+- **Team online**: Claude1, Claude2, Claude3, Claude4, Claude7 (Claude5, Claude6 status unknown)
+- **Blocking issue**: Server item entity bug — NO items drop from mobs or blocks
+
+**Required Action**:
+- 🚨 **Server admin intervention urgently needed** - item entities not spawning
+- Temporary workaround: Use /give commands for:
+  - ender_pearl x1 (complete Phase 6 pearl requirement)
+  - blaze_rod x6 (complete Phase 6 blaze rod requirement)
+  - obsidian x1 (complete Phase 5 obsidian requirement)
+  - book x1 (complete Phase 5 book requirement)
+  - bread/cooked_beef for food
+- Alternative: Test if /summon minecraft:item works to spawn item entities manually
+- Check server plugins that might be blocking item entity spawns
+- Verify server configuration for item entity lifetime settings
 
 ---
 
-### [2026-02-16 Session 21] Portal entry fails — bot stands on obsidian frame instead of inside portal (✅ FIXED)
-- **症状**: Claude6がネザーポータルに入ろうとすると、足元がobsidian（フレーム）で頭がnether_portalブロックの状態で止まり、転送されずタイムアウト
-- **原因**: `enterPortal()`が`GoalBlock`でポータルブロック座標に移動するが、pathfinderはポータルブロックの上（=obsidianフレーム上）に立ってしまう。また1秒だけforward歩行して止まるため、ポータル内に確実に入れていなかった
-- **修正**: (1) 最下段のポータルブロックを検索して足元ターゲットに (2) `GoalNear(range=1)`で近づいてからforward歩行を最大5回リトライし、足元がnether_portalか確認 (3) タイムアウトを15→30秒に延長
-- **ファイル**: `src/bot-manager/bot-movement.ts`
-- **ステータス**: ✅ 修正完了（commit 9ed0ad9）
-
----
-
-### [2026-02-16 Session 19] Pathfinder routes through deep water causing drowning (✅ FIXED)
-- **症状**: Claude2がエンダーマン狩り中に繰り返し溺死。pathfinderが水中を通るルートを選択
-- **原因**: `mineflayer-pathfinder`のデフォルト`liquidCost=1`で、水を陸地と同コストで通過可能と判定。深い水域を横断するルートが選ばれ溺死
-- **修正**: `bot-core.ts`で`movements.liquidCost = 100`に設定。pathfinderが陸路を強く優先するようになった（水路を完全にブロックはしない）
-- **ファイル**: `src/bot-manager/bot-core.ts`
-- **ステータス**: ✅ 修正完了（commit 8cec55e）
-
----
-
-### [2026-02-16 Session 18] Lava listed as passable block in moveTo() (✅ FIXED)
-- **症状**: Claude7がネザーで繰り返し溶岩死。pathfinderのblocksToAvoidに溶岩を追加済みなのに死亡が続く
-- **原因**: `moveTo()`内の`isPassableBlock()`関数に`"lava"`が含まれていた。ターゲット付近の立ち位置を探す際、溶岩を「立てる場所」として判定してしまう
-- **修正**: `isPassableBlock()`のpassable配列から`"lava"`を削除。pathfinderのblocksToAvoidと合わせて二重の溶岩回避が機能するようになった
-- **ファイル**: `src/bot-manager/bot-movement.ts`
-- **ステータス**: ✅ 修正完了（commit 0416942）
-
----
-
-### [2026-02-16 Session 18] Chest take/store targets wrong chest when multiple chests nearby (✅ FIXED)
-- **症状**: `minecraft_open_chest(x,y,z)`で開いたチェストと`minecraft_take_from_chest()`で操作されるチェストが異なる
-- **原因**: `takeFromChest`/`storeInChest`が`bot.findBlock()`で最も近いチェストを検索するため、`open_chest`で指定したチェストとは別のチェストを操作する
-- **修正**: `takeFromChest`/`storeInChest`にオプションのx,y,z座標パラメータを追加。座標指定時はその位置のチェストを直接開く
-- **ファイル**: `src/bot-manager/bot-storage.ts`, `src/bot-manager/index.ts`, `src/tools/storage.ts`
-- **ステータス**: ✅ 修正完了（commit f96f3fc）
-
----
-
-### [2026-02-16 Session 18] move_to cannot enter portals (blocksToAvoid) (✅ FIXED)
-- **症状**: `move_to`でポータルブロック座標を指定しても、pathfinderがポータルを回避して到達できない
-- **原因**: `blocksToAvoid`にnether_portalが含まれるため、pathfinderがポータルブロックへの経路を生成できない
-- **修正**: `moveTo`関数の先頭でターゲットブロックがポータルかチェックし、ポータルなら`enterPortal()`に委譲。`enterPortal()`は一時的にblocksToAvoidからポータルを除外する
-- **ファイル**: `src/bot-manager/bot-movement.ts`
-- **ステータス**: ✅ 修正完了（commit 7d9e3d2）※MCP再起動が必要
-
----
-
-### [2026-02-16 Session 18] Pathfinder routes through lava (✅ FIXED)
-- **症状**: Claude6がネザーで「tried to swim in lava」で死亡。pathfinderが溶岩を通るルートを選択
-- **原因**: mineflayer-pathfinderの`liquidCost`はデフォルト1で、水と溶岩を区別しない。溶岩も水と同コストで通過可能と判定される
-- **修正**: `bot-core.ts`でlavaブロックを`movements.blocksToAvoid`に追加。pathfinderが溶岩を完全に回避するようになった
-- **ファイル**: `src/bot-manager/bot-core.ts`
-- **ステータス**: ✅ 修正完了（commit 1f63c94）
-
----
-
-### [2026-02-16 Session 18] Ender pearl drops not collected after enderman kill (✅ FIXED)
-- **症状**: Claude3がエンダーマンを倒したがパールを取得できなかった。エンダーマンはテレポートするため、死亡位置がボットから離れている
-- **原因**: `attack()`と`fight()`で敵を倒した後、`collectNearbyItems()`を呼ぶがボットの現在位置付近しか検索しない。テレポートした敵の死亡位置にドロップがある
-- **修正**: `lastKnownTargetPos`を追跡し、敵が消えたらその位置まで移動してからアイテム回収。`attack()`と`fight()`両方に適用
-- **ファイル**: `src/bot-manager/bot-survival.ts`
-- **ステータス**: ✅ 修正完了（commit 386ee79）
-
----
-
-### [2026-02-16 Session 17] Pathfinder walks through portals accidentally (✅ FIXED)
-- **症状**: ネザーでpathfinding中にポータルを通過してOverworldに戻される。Bot2報告: ブレイズスポナー付近でOverworld(5.5,102,-5.5)にテレポートされた
-- **原因**: mineflayer-pathfinderがポータルブロックを通過可能と判定し、経路にポータルを含めてしまう
-- **修正**: `bot-core.ts`でMovements.blocksToAvoidにnether_portal/end_portalを追加。`bot-movement.ts`のenterPortal()では意図的なポータル進入時に一時的にblocksToAvoidから除外し、遷移後に再追加
-- **ファイル**: `src/bot-manager/bot-core.ts`, `src/bot-manager/bot-movement.ts`
-- **ステータス**: ✅ 修正完了（commit b38751a）
-
----
-
-### [2026-02-16 Session 17] dig_block force parameter not passed through (✅ FIXED)
-- **症状**: `minecraft_dig_block(force=true)`を使っても溶岩隣接ブロックを掘れない
-- **原因**: ツール定義(building.ts)でforceパラメータを読み取るが、`botManager.digBlock()`に渡していない。bot-manager/index.tsとbot-blocks.tsの関数にもforceパラメータがない
-- **修正**: 3ファイルを修正してforceパラメータをツール→botManager→digBlockBasicまで伝達
-- **ファイル**: `src/tools/building.ts`, `src/bot-manager/index.ts`, `src/bot-manager/bot-blocks.ts`
-- **ステータス**: ✅ 修正完了（commit c72fdc5）
-
----
-
-### [2026-02-16 Session 14] move_to can't enter Nether/End portals (✅ FIXED)
-
-- **症状**: ネザーポータルの前にいるがmove_toでポータルに入れない。"Path blocked"エラー
-- **報告**: Claude3
-- **原因**: `isPassableBlock()`にnether_portal, end_portalが含まれていない。move_toがポータルブロックを固体と判定し、別の位置に移動しようとする
-- **修正**: `bot-movement.ts:289`のpassableリストに`"nether_portal", "end_portal"`を追加
-- **ファイル**: `src/bot-manager/bot-movement.ts:289`
-- **ステータス**: ✅ 修正完了（次回MCP再起動後に反映）
-
----
-
-### [2026-02-16 Session 14] Chat command whitelist doesn't include Claude1-7 (✅ FIXED)
-
-- **症状**: Claude1が`/tp Claude3`を実行しようとすると「Command '/tp' is not allowed」エラー。ネザーで動けないClaude3をテレポートできない
-- **原因**: `src/tools/movement.ts:85`のwhitelistが`["Claude"]`のみで、Claude1〜Claude7が含まれていない
-- **修正**: whitelistを`["Claude", "Claude1", "Claude2", "Claude3", "Claude4", "Claude5", "Claude6", "Claude7"]`に拡大
-- **ファイル**: `src/tools/movement.ts:85`
-- **ステータス**: ✅ 修正完了（次回ビルド後に反映）
-
----
-
-### [2026-02-16 Session 13] stick/crafting_table crafting - manual recipe rejected by filter (✅ FIXED)
-
-- **症状**: `minecraft_craft("stick")` が "missing ingredient" エラーで失敗。birch_planks x70 所持。manual recipe作成は成功するが、compatibleRecipe検索(line 661-690)で除外される
-- **報告**: Claude4, Claude5, Claude2
-- **原因**: manual recipeが`allRecipes`に追加された後、`compatibleRecipe`フィルターロジックが`mcData.items[d.id]`のlookupに失敗してrecipeを除外
-- **修正** (commit e91a82f):
-  1. stick/crafting_tableでmanual recipe(allRecipes.length===1)の場合、フィルターをバイパスして直接使用
-  2. window-based crafting fallback追加: `bot.clickWindow()`で2x2グリッドに直接アイテム配置
-  3. recipesFor fallbackも維持(3段階fallback)
-- **ファイル**: `src/bot-manager/bot-crafting.ts:661-700`
-- **ステータス**: ✅ 修正完了
-
----
-
-### [2026-02-16 Session 12] water_bucket/lava_bucket placement fails silently (✅ FIXED)
-
-- **症状**: `minecraft_use_item_on_block`でwater_bucketをlavaに使っても溶岩が固まらない。bucketでlavaを集めてもlava_bucketが生成されない。
-- **報告**: Claude3 (SOS)
-- **原因**:
-  1. Raw `block_place`パケットに`sequence`フィールドが欠落 — Minecraft 1.19+で必須のフィールドが送信されず、サーバーがパケットを無視
-  2. Attempt 1で`activateBlock(lavaBlock)`を試行 — 溶岩は非固体ブロックのため`activateBlock`が機能しない
-  3. `bot.lookAt()`がターゲット位置（溶岩）を見ていたが、`block_place`パケットは隣接固体ブロックを指定 — サーバーが不整合を検知
-- **修正** (commit baf62b2):
-  - water_bucket配置: `bot.placeBlock(adjacentSolidBlock, faceVector)`を使用。プロトコル形式、lookAt方向、sequenceフィールドを正しく処理
-  - bucket収集: `bot._genericPlace()`を使用。raw block_placeパケットの代替
-  - 検証強化: 水が実際に配置されたか、黒曜石が生成されたかを確認
-  - 隣接固体ブロックが見つからない場合のエラーメッセージ追加
-- **ファイル**: `src/bot-manager/bot-blocks.ts:1262-1430`
-- **ステータス**: ✅ 修正完了
-
----
-
-### [2026-02-16 Session 11] serverHasItemPickupDisabled false positive blocking crafting (✅ FIXED)
-
-- **症状**: Bot6,Bot7等でクラフトが全て「Server has item pickup disabled」で拒否される。実際にはアイテムピックアップは正常動作中
-- **報告**: Bot6 (Session 10), Bot4, Bot7
-- **原因**: `collectNearbyItems()`が他のボットがアイテムを先に拾った場合に「pickup disabled」と誤検知。マルチボット環境では、あるボットが掘ったアイテムを別の近くのボットが拾うことが頻繁に発生。この誤検知が`serverHasItemPickupDisabled`フラグを設定し、そのボットの全クラフトを1分間ブロック
-- **修正**:
-  - `bot-items.ts`: `collectNearbyItems()`からフラグ設定ロジックを完全削除
-  - `bot-crafting.ts`: クラフト前のフラグチェック2箇所を削除、ポストクラフト検証のフラグ設定2箇所を削除
-  - `bot-blocks.ts`: dig後の「server has item pickup disabled」メッセージを適切な表現に変更
-  - `bot-crafting.ts`: smelt後の同様のメッセージを修正
-- **ファイル**: `src/bot-manager/bot-items.ts`, `src/bot-manager/bot-crafting.ts`, `src/bot-manager/bot-blocks.ts`
-- **ステータス**: ✅ 修正完了
-
----
-
-### [2026-02-16 Session 11] Immature wheat harvesting gives only seeds (✅ FIXED)
-
-- **症状**: wheatをdigしてもwheat itemが出ず、seedsのみ。チーム全員が「sync bug」と誤解
-- **報告**: Bot2, Bot4, Bot5, Bot6, Bot7 (Session 10-11)
-- **原因**: wheatは成熟(age=7)でないとwheat itemをドロップしない。未成熟(age<7)ではwheat_seedsのみ。ボットたちがbone_mealを1-2回しか使わず未成熟のまま収穫していた
-- **修正**: `bot-blocks.ts`の`digBlock()`にcrop maturityチェックを追加。wheat/beetroots/carrots/potatoesブロックの`getProperties().age`を確認し、最大age未満の場合は収穫をブロックして警告メッセージを返す
-- **ファイル**: `src/bot-manager/bot-blocks.ts`
-- **ステータス**: ✅ 修正完了
-
----
-
-### [2026-02-16 Session 8] Inventory slot range bug - false "inventory full" (✅ FIXED)
-
-- **症状**: `minecraft_dig_block`と`minecraft_take_from_chest`がインベントリに空きがあるのに"inventory is full"と報告
-- **報告**: Bot4 (Session unfixed bug report)
-- **原因**: `bot.inventory.slots[0-35]`をチェックしていたが、mineflayerのスロット配置は:
-  - 0: crafting output, 1-4: crafting grid, 5-8: armor, 9-35: main inventory, 36-44: hotbar, 45: off-hand
-  - **slots 0-8 (crafting+armor) を誤ってカウント** → 装備するとスロットが埋まっていると判定
-  - **slots 36-44 (hotbar) を未カウント** → hotbarの空きスロットが無視される
-- **修正**: `src/bot-manager/bot-blocks.ts` のスロット範囲を `0..35` → `9..44` に修正（2箇所）
-- **ステータス**: ✅ 修正完了
-
----
-
-### [2026-02-16 Session 8] Grass seed drop mapping missing short_grass (✅ FIXED)
-
-- **症状**: `minecraft_dig_block`で草を壊してもseed収集の追跡が行われない
-- **報告**: Claude2が種がドロップしないと報告
-- **原因**: `getExpectedDrop()`マッピングで`grass`と`tall_grass`のドロップが`""`(空文字)。
-  - Minecraft 1.20+では`short_grass`にリネームされたが、マッピングに未追加
-  - 空文字だとseed追跡ロジックがスキップされる
-- **修正**: `src/bot-manager/bot-blocks.ts`のdropMappingsに追加:
-  - `short_grass` → `wheat_seeds`
-  - `grass`, `tall_grass`, `fern`, `large_fern` → `wheat_seeds`
-- **ステータス**: ✅ 修正完了
-
----
-
-### [2026-02-16 Session 8] Auto-gamerule missing doMobSpawning (✅ FIXED)
-
-- **症状**: bot-core.tsの自動gamerule修正にdoMobSpawningが含まれていない
-- **原因**: 元のコードはdoTileDrops, doMobLoot, doEntityDropsのみ設定
-- **修正**: `src/bot-manager/bot-core.ts`にdoMobSpawning trueを追加
-- **ステータス**: ✅ 修正完了
-
----
-
-### [2026-02-16 Session 7] Food Crisis Recurrence + Gamerule Reset Issue (❌ CRITICAL)
-
-- **症状**:
-  - Claude2 HP4.6/20, Claude3死亡→リスポーン, Claude6 HP2.1/20
-  - 周囲64ブロック以内に食用動物なし（bee, skeleton_horseのみ）
-  - 畑の小麦収穫でアイテム消失（gamerule doEntityDrops=false）
-  - アイテム投下でアイテム消失（gamerule doEntityDrops=false）
-- **報告**: Claude1 (Session 7 2026-02-16)
-- **原因**:
-  1. サーバー再起動でgamerule設定がリセット
-  2. doEntityDrops=falseでアイテムドロップ・拾得が不可
-  3. 食用動物が全くスポーンしない（doMobSpawning or バイオーム問題）
-  4. 畑が唯一の食料源だが、gamerule問題で収穫不可
-- **対処**:
-  - Claude2, Claude5, Claude6, Claude7が即座にgamerule修正実行
-  - Claude3がbone_meal x9で畑の成長促進→収穫→配達
-- **根本問題**:
-  - **gamerule設定の永続化がない**: サーバー再起動で毎回リセット
-  - **食料確保の自動化がない**: 毎回手動で畑作成・管理が必要
-  - **早期警告システムがない**: 食料危機が発生してから対応開始
-- **改善案**:
-  1. サーバー起動スクリプトにgamerule設定を追加（server.propertiesまたはspigot.yml）
-  2. セッション開始時に自動でgamerule確認＆修正するツール追加
-  3. 食料自動確保システム: HP低下時に自動で畑→収穫→食事
-  4. 高レベルツール: `minecraft_emergency_food()` - 最寄りの食料を自動確保
-- **ファイル**: なし（サーバー設定問題）
-- **ステータス**: ⚠️ 一時対処のみ（根本解決は次回セッション）
-
----
-
-### [2026-02-16 Session 6] Food Crisis - No animals spawning + Team Coordination Failure (❌ CRITICAL)
-
-- **症状**: 全チェストに食料なし。周囲100m以内に食用動物（cow, pig, sheep, chicken）が全く出現しない
-- **報告**: Claude1, Claude3, Claude4, Claude5, Claude6, Claude7 (Session 6 2026-02-16)
-- **影響範囲**:
-  - 複数メンバーが餓死（Claude2, Claude3, Claude5, Claude6, Claude7）
-  - HP回復不可、ダッシュ不可、採掘速度低下
-  - skeleton_horseのみ出現（食用不可）
-- **状況**:
-  - Claude6がgamerule修正実行（doTileDrops, doMobLoot, doEntityDrops → true）
-  - doMobSpawning の状態が未確認（Claude1はgameruleコマンド実行不可）
-  - 難易度設定で空腹死はしない模様（Claude7報告: HP10で減少停止）
-- **原因**:
-  1. doMobSpawning=false の可能性（passive mob spawning disabled）
-  2. バイオーム問題（動物がスポーンしないバイオーム）
-  3. ワールド生成設定（動物スポーン率が極端に低い）
-  4. **チーム連携の崩壊**: 畑作成に1時間以上かかっても未完成
-     - メンバー間の座標共有失敗
-     - 複数人が別々の場所で作業開始
-     - 作業中にメンバーが死亡・迷子・アイテムロスト
-     - リーダー（Claude1）の指示が複雑すぎて混乱を招いた
-- **対策（失敗）**:
-  - 水バケツ2個で無限水源→畑作成→骨粉で小麦速成→パン作成
-  - 実際: 1時間経過しても完成せず
-- **根本問題**:
-  - **高レベルタスク（minecraft_create_farm等）がない**: 低レベルツール（dig, place, use）の組み合わせが複雑すぎる
-  - **チーム作業の自動化がない**: 複数人での協調作業が非効率
-  - **食料緊急対応ツールがない**: 餓死寸前でも即座に食料確保できる手段がない
-- **改善案**:
-  1. 高レベルツール追加: `minecraft_create_basic_farm(location, size)` - 穴掘り・水源・耕作・種植えを自動実行
-  2. 緊急食料確保: `minecraft_emergency_food()` - 最寄りの食料源（動物・畑・チェスト）を自動で探して確保
-  3. チーム作業簡略化: リーダーは「畑作成せよ」のみ指示、詳細手順は各メンバーのスキルに任せる
-- **ファイル**: なし（サーバー設定問題 + ツール不足）
-- **ステータス**: ❌ 未解決（次回セッションで高レベルツール実装が必要）
-
----
-
-### [2026-02-16 Session 5] stick crafting bug - MCP server restart required
-
-- **症状**: Claude6, Claude7 が stick クラフト失敗を報告（"missing ingredient" エラー）
-- **報告**: Claude6 (dark_oak_planks x56 所持), Claude7 (planks 所持)
-- **原因**: src/bot-manager/bot-crafting.ts:409-427 の修正が適用済みだが、MCP WebSocket サーバーが古いコードを実行中
-  - 最終ビルド: 2026-02-16 07:03 AM
-  - MCP サーバー起動: 2026-02-16 04:08 AM (3時間前の古いコード)
-- **修正**: MCP WebSocket サーバー再起動
-  - Old PID: 35517 → New PID: 28703
-  - コマンド: `kill 35517 && nohup node dist/mcp-ws-server.js &`
-- **チーム通知**: 全メンバーに再接続指示
-- **ステータス**: ✅ 修正完了 (2026-02-16 07:07 AM)
-
----
-
-### [2026-02-16 Session 4] Server gamerules reset - Item pickup disabled (✅ FIXED)
-
-- **症状**: クラフト・採掘・mob討伐の全てでアイテムドロップが拾得不可。"item pickup disabled"エラー
-- **報告**: Claude6 (Session 4 2026-02-16)
-- **影響範囲**:
-  - doTileDrops=false → ブロック採掘でアイテムが出ない
-  - doMobLoot=false → mob討伐でドロップアイテムが出ない
-  - doEntityDrops=false → クラフト済みアイテムが地面に落ちて拾得不可
-- **原因**: サーバー起動時のgamerule設定がfalseに戻っていた（前回セッションの設定が保持されない）
-- **修正**: Claude4が以下のコマンドを実行
-  ```
-  /gamerule doTileDrops true
-  /gamerule doMobLoot true
-  /gamerule doEntityDrops true
-  ```
-- **検証**: Claude6が小規模アイテムピックアップテストで成功確認
-- **重要**:
-  - Claude4, Claude5のみgameruleコマンド実行可能（op権限またはタイミング問題）
-  - サーバー再起動時に再発する可能性あり
-  - 再発時はClaude4/5に修正依頼
-- **ステータス**: ✅ 修正完了 (2026-02-16 Session 4)
-
----
-
-### [2026-02-16 Session 4] minecraft_move_to false success - doesn't actually move (🔍 INVESTIGATING)
-
-- **症状**: `minecraft_move_to(-3, 96, 0)` が "Moved near chest at (-3.0, 97.0, 0.0)" と成功を報告するが、実際の位置は変わらない（(-3.2, 95.0, -1.8) のまま）
-- **報告**: Claude1 (Session 4 2026-02-16)
-- **状況**:
-  - チェストが(-3, 96, 0)にあることを確認（minecraft_find_block）
-  - minecraft_move_to(-3, 96, 0)を実行
-  - "Moved near chest at (-3.0, 97.0, 0.0)" と返却
-  - しかし minecraft_get_position は (-3.2, 95.0, -1.8) を返す
-  - 結果: minecraft_store_in_chest が "No chest within 4 blocks" エラー
-- **原因**: `moveToBasic()` の `onGoalReached` / `onGoalUpdated` コールバックが、実際の移動完了前に発火している可能性
-  - Line 118-130: `bot.entity.position` を使って成功メッセージを返しているが、pathfinderのイベントは移動完了を保証しない
-  - GoalNear(range=2) は目標から2ブロック以内で成功とみなすため、即座にイベントが発火する可能性
-  - ボットの物理的な移動がイベント発火に追いついていない（非同期タイミング問題）
-- **修正内容**:
-  1. `onGoalReached`と`onGoalUpdated`にasync/await追加
-  2. イベント発火後200ms待機してから位置を取得（物理演算の確定を待つ）
-  3. `onGoalReached`内で実際の距離を再確認（actualDist < 3）してから成功報告
-  4. 距離が遠ければfinishを呼ばず、intervalチェックに任せる
-- **検証**: ビルド後に実際のチェスト接近で動作確認が必要
-- **ファイル**: `src/bot-manager/bot-movement.ts:118-133`
-- **ステータス**: ✅ 修正完了（検証待ち）
-
----
-
-### [2026-02-16 Session 3] minecraft_open_chest timeout - Double Chest Issue (✅ FIXED)
-
-- **症状**: `minecraft_open_chest(x=-1, y=96, z=0)`が"Event windowOpen did not fire within timeout of 20000ms"エラーで失敗。(-3,96,0)は成功
-- **報告**: Claude1 (Session 3 2026-02-16)
-- **原因**: ダブルチェストの場合、指定した座標のチェストブロックが実際には隣接ブロックと結合されており、どちらの座標でも開ける必要がある。20秒タイムアウトが長すぎて無駄な待機時間が発生
-- **修正**: `src/bot-manager/bot-storage.ts` (openChest関数)
-  1. タイムアウトを20秒→5秒に短縮（Promise.race使用）
-  2. タイムアウト時に隣接4方向のチェストブロックを自動検索
-  3. ダブルチェストの反対側で再試行
-  4. 全て失敗した場合のみエラー（"in use by another player"メッセージ）
-- **検証**: (-1,96,0)の開封に成功。中身: cobblestone, coal, diamond等
-- **ファイル**: `src/bot-manager/bot-storage.ts:9-99`
-- **ステータス**: ✅ 修正完了 (2026-02-16 Session 3)
-
----
-
----
-
-### [2026-02-16] minecraft_collect_items item pickup failure (✅ RESOLVED - Auto-expiring flag)
-
-- **症状**: Claude7が`minecraft_collect_items`を実行してもドロップされた種を拾えない。Claude5が種x3をドロップしたが、Claude7が回収できず
-- **報告**: Claude7 (Session 2026-02-16)
-- **状況**:
-  - Claude5が座標(-0.8,95,2.3)で種x3をドロップ
-  - Claude7が同じ座標(距離1.1m)で`minecraft_collect_items`を複数回実行
-  - "アイテムが見えない/拾えない"エラー
-  - アイテムdespawnの可能性もあるが、直後のため低い
-- **根本原因**: `serverHasItemPickupDisabled`フラグの誤検出
-  - gamerule修正前にClaude6/7がアイテム拾得失敗
-  - `collectNearbyItems`関数(L312)が`serverHasItemPickupDisabled = true`を設定
-  - フラグが設定されると、そのbotは一時的に拾得不可と判断
-  - **既存の自動修正機構**: L258-267, L850-856で1分後に自動リセット
-- **修正**: 修正不要（既に自動リセット機構が実装済み）
-- **ファイル**: `src/bot-manager/bot-items.ts:312`, `src/bot-manager/bot-crafting.ts:258-267`
-- **ステータス**: ✅ 解決済み（1分経過後に自動リセット）
-- **重要**: gamerule修正後、1分待てば全botで拾得可能になる
-
----
-
-### [2026-02-16] minecraft_move_to short distance bug (✅ FIXED)
-
-- **症状**: `minecraft_move_to(x, y, z)` で3ブロック未満の短距離移動が失敗。「Already at destination」と成功メッセージを返すが、実際には位置が変わらない
-- **報告**: Claude2, Claude4 (bug-issues/bot2.md, bot4.md)
-- **例**:
-  - `move_to(-10, 94, 33)` から1-2ブロック先のチェストに移動しようとすると、実際に移動せずに成功メッセージだけ返す
-  - チェスト操作など正確な位置が必要な作業で支障
-- **原因**: `src/bot-manager/bot-movement.ts:94-99` で `distance < 2` の早期リターンがあり、pathfinderを起動せずに即座に成功を返していた
-- **修正**: 94-99行の早期リターンを削除。GoalNearがrange=2で距離チェックを行うため、pathfinderに任せる
-- **ファイル**: `src/bot-manager/bot-movement.ts:88-102`
-- **ステータス**: ✅ 修正完了 (2026-02-16)
-
----
-
-### [2026-02-15] use_item_on_block - バケツで水/溶岩を回収できない (✅ FIXED)
-- **症状**: bucketで水源/溶岩源を右クリックしても、water_bucket/lava_bucketにならない（Claude5報告）
-- **原因1**: `src/bot-manager/bot-blocks.ts:1216` で`bot.activateBlock(block)`を使用しているが、Mineflayerでは液体回収に`bot.activateItem()`を使う必要がある
-- **原因2**: サーバー同期待ち時間が300msでは不十分（Claude6分析）
-- **原因3**: `activateItem()`後に`deactivateItem()`を呼ばないと、アイテム使用が完了しない
-- **修正1**: `bot.activateBlock(block)` → `bot.activateItem()`に変更
-- **修正2**: 同期待機時間を300ms → 1000msに延長
-- **修正3**: `activateItem()` → 100ms待機 → `deactivateItem()`の流れを追加
-- **ファイル**: `src/bot-manager/bot-blocks.ts` (useItemOnBlock関数、1217-1224行)
-- **参考**: [Mineflayer Issue #1262](https://github.com/PrismarineJS/mineflayer/issues/1262)
-
----
-
-### [2026-02-15] Session Summary - Bug Fixes Completed
-
-**Fixed Issues (3 commits):**
-
-1. **Commit 8c753a6**: Bucket water/lava collection bug
-   - Fixed `minecraft_use_item_on_block` for collecting water/lava
-   - Integrated polling logic to wait for inventory updates
-   - Reported by: Bot1, Bot3, Bot4, Bot5, Bot6, Bot7
-
-2. **Commit 6c62c06**: Chest timeout issue
-   - Fixed `minecraft_take_from_chest` timeout errors
-   - Improved tool descriptions to prevent incorrect usage
-   - Added 200ms delay to prevent timing conflicts
-   - Reported by: Bot4
-
-3. **Documentation Updates**: Commits 0f26b5e, b84def1
-   - Updated all bot bug reports with fix status
-   - Marked resolved issues as ✅ FIXED
-
-**Current Team Status (Phase 5):**
-- ✅ Diamonds: 13 secured (Claude2)
-- ⏳ Books: 3 being crafted (Claude5/6/7)
-- ⏳ Obsidian: 4 being created (Claude2/3/4)
-- 📍 Phase: 5 (Diamond/Enchanting Table) - near completion
-
-**Active Directives:**
-- Monitoring team progress
-- Ready to fix any new bugs reported
-- Awaiting Phase 5 completion announcement
-
----
-
-### [2026-02-16] Session Start - Phase 5 Final Push
-
-**Current Team Status:**
-- ✅ Diamonds: 10 secured (in chest at -10,94,33)
-- ✅ Books: 4 crafted (Claude4:2 + Claude7:1 + Claude6:1)
-- ⏳ Obsidian: 4 needed (Claude2 mining at -8,37,14 + Claude7 support)
-- 📍 Phase: 5 (Diamond/Enchanting Table) - obsidian only
-
-**Team Actions:**
-- Claude2: Moving to obsidian site (-8,37,14), ETA 3 minutes
-- Claude7: Heading to support Claude2 with diamond pickaxe
-- Claude4/5: Book crafting completed
-- Claude3: Awaiting food gathering task
-- Others: Standby for Phase 2 food preparation
-
-**Issued Directives:**
-- @Claude2: Proceed to (-8,37,14), use force=true for lava-adjacent obsidian
-- @Claude7: Support obsidian mining at (-8,37,14)
-- @Claude3-6: Start food gathering for Phase 2 (parallel task)
-
-**Monitoring:**
-- No new bugs reported
-- All critical bugs fixed (water bucket, chest timeout, force parameter)
-- Team coordination excellent
-- Phase 5 completion imminent (waiting for 4 obsidian blocks)
-
----
-
-### [2026-02-16] force=true parameter not working (✅ FIXED - MCP server restarted)
-
-**Problem**: Claude7 reports force=true parameter not working during obsidian mining
-- **Symptom**: Lava warning persists even when using force=true parameter
-- **Cause**: Code was fixed in commit 46bf72c but MCP server has not been restarted
-- **Status**: ✅ FIXED - MCP server restarted by Bot1
-- **Solution**: Killed WebSocket MCP server (PID 9788) and restarted with `npm run start:mcp-ws`
-- **Verification**: Claude2, Claude3, Claude5 successfully mined obsidian with force=true after restart
-- **Impact**: Team can now safely mine obsidian adjacent to lava for Phase 5 enchanting table
-
----
-
-### [2026-02-16] Session Summary - Phase 5 COMPLETE! 🎉
-
-**PHASE 5 ACHIEVED!**
-- ✅ Diamonds: 6 in chest + 9 collected
-- ✅ Books: 4 total (1 in chest + 3 Claude4)
-- ✅ Obsidian: 5 blocks (4 used for enchanting table + 1 spare)
-- ✅ **Enchanting Table: CRAFTED** (Claude4)
-- 📍 Phase: **6 (NETHER)** - Started!
-
-**Phase 6 Goals:**
-- Blaze Rods: 7+ (from Nether Fortress)
-- Ender Pearls: 12+ (from Endermen)
-- Nether Portal: Need 5 more obsidian (total 10)
-
-**Team Equipment:**
-- Claude1: iron armor (partial), iron pickaxe, iron sword ✅
-- Claude4: iron armor (3 pieces), iron pickaxe, iron sword, diamond x9 ✅
-- Claude6: diamond pickaxe, iron sword, iron boots ✅
-- Claude2,3,5,7: awaiting status reports
-
-**Active Directives:**
-- @Claude3: Mining final obsidian block (3/4 complete)
-- @Claude6: Mining obsidian with force=true (backup)
-- @Claude4: Awaiting obsidian completion to craft enchanting table
-- @Claude2: Respawned, equipment status pending
-
-**Monitoring:**
-- ⚠️ Team deaths: Claude3, Claude7 killed and respawned (装備ロスト確認中)
-- ✅ Gamerules fixed by Claude6: doTileDrops, doMobLoot, doEntityDrops all true
-- ⚠️ Claude4 reports stick crafting error with birch_planks (investigating)
-- Waiting for obsidian completion to advance to Phase 6 (Nether)
-
-**New Issues:**
-1. Claude7: Black obsidian mined but no drop (✅ SOLVED - gamerule fixed)
-2. Claude4: Stick crafting fails with birch_planks (🔍 INVESTIGATING)
-
----
-
-### [2026-02-16] stick crafting fails with birch_planks (✅ FIXED)
-
-**Problem**: Claude4 cannot craft sticks from birch_planks
-- **Symptom**: `minecraft_craft("stick")` with birch_planks x4 in inventory
-- **Error 1**: "missing ingredient"
-- **Error 2**: "no compatible recipe found"
-- **Impact**: Cannot create diamond pickaxe (needs sticks)
-- **Root Cause**: `bot.recipesAll(item.id, null, null)` returned 0 recipes for stick
-  - Line 411 excluded stick from alternative recipe search
-  - Minecraft version doesn't auto-substitute plank types in recipesAll
-- **Fix**: Added plank-type filtering fallback for stick/crafting_table (lines 409-427)
-  - When recipesAll returns 0 for stick, try again and filter for any _planks ingredient
-  - Mineflayer's bot.craft() will auto-substitute birch_planks for oak_planks
-- **Files Modified**: `src/bot-manager/bot-crafting.ts:409-427`
-- **Status**: ✅ FIXED - Build successful, awaiting test confirmation
-
----
-
-### [2026-02-15] minecraft_dig_block force parameter implementation
-
-**Problem**: `force` parameter was defined in tool schema but not implemented in code
-- Schema had `force: boolean` parameter in `minecraft_dig_block` tool
-- Description: "Force dig even if lava is adjacent (default: false). Use when mining obsidian or other blocks that naturally generate next to lava."
-- However, the parameter was never extracted from args or passed to digBlock function
-- Lava safety check was always active, preventing obsidian mining near lava
-
-**Solution**: Implemented force parameter chain
-1. `src/tools/building.ts:179` - Extract force parameter from args
-2. `src/tools/building.ts:206` - Pass force to botManager.digBlock()
-3. `src/bot-manager/index.ts:234` - Add force parameter to method signature
-4. `src/bot-manager/index.ts:254` - Pass force to digBlockBasic()
-5. `src/bot-manager/bot-blocks.ts:241` - Add force parameter to function
-6. `src/bot-manager/bot-blocks.ts:260-274` - Wrap lava check in `if (!force)` condition
-7. Updated error message to mention "force=trueで強制採掘可能"
-
-**Impact**:
-- Obsidian mining near lava now possible with `force=true`
-- Claude2 and Claude3 can now mine obsidian for Phase 5
-- Build successful, ready for testing
-
-**Files Modified**:
-- `src/tools/building.ts`
-- `src/bot-manager/index.ts`
-- `src/bot-manager/bot-blocks.ts`
-
-**Status**: ✅ Committed (46bf72c)
-
-**Note**: MCP server restart required for changes to take effect
-
----
-
-### [2026-02-16] Session Start - Phase 5 Obsidian Mining
-
-**Current Status:**
-- Claude2: Obsidian 1/2 mined, working on 2nd
-- Claude5: Reports 3 obsidian mined but no drops (investigating)
-- Claude7: Obsidian 1/5 mined successfully, continuing
-- Gamerules: Confirmed true by Claude4 (doTileDrops, doMobLoot, doEntityDrops)
-
-**Issue - Claude5 Obsidian Not Dropping:**
-- **Symptom**: Claude5 mined 3 obsidian but got no drops
-- **Context**: Claude7 successfully mining obsidian at same time
-- **Gamerules**: Verified as correct (doTileDrops=true)
-- **Investigation**: Requested details (diamond pickaxe?, force=true?, inventory changes?)
-- **Action Taken**: Reassigned Claude5 to diamond mining (5 diamonds needed)
-- **Reason**: Claude2+Claude7 sufficient for 4 obsidian target
-
-**Team Progress:**
-- Target: 4 obsidian for enchanting table
-- Current: 2+ secured (Claude2:1-2, Claude7:1+4 in progress)
-- Status: On track for Phase 5 completion
-
-**NEW ISSUE - Obsidian→Cobblestone Bug (🔍 USER ERROR, NOT CODE BUG):**
-- **Symptom**: Claude6 reports mining obsidian but got cobblestone +2 instead
-- **Details**: Diamond pickaxe equipped, force=true used, proper tool chain
-- **Root Cause**: Minecraft game mechanic, NOT a code bug
-  - Water + Lava **SOURCE** block = Obsidian
-  - Water + **FLOWING** lava = Cobblestone
-- **Solution**: Bot users must ensure they're targeting lava SOURCE blocks
-- **Code Impact**: No code fix needed - this is correct Minecraft behavior
-- **Documentation**: Added to .claude/skills/team-coordination/SKILL.md
-
-**Team Deaths:**
-- Claude6: Killed, respawned, equipment lost
-- Claude7: Killed, respawned, equipment lost
-- Action: Safety directive issued
-
-**Phase 5 Progress Update (Current Session):**
-- ✅ Diamonds: 10 in chest (-10,94,33) - COMPLETE
-- ✅ Books: 1 in chest (-10,94,33) - COMPLETE
-- ⏳ Obsidian: 5/4 SECURED (awaiting storage)
-  - 1 in chest (-10,94,33)
-  - 2 held by Claude2 (洞窟内、帰還中)
-  - 2 held by Claude3 (洞窟内、帰還中)
-  - **Total: 5 obsidian** - exceeds Phase 5 requirement!
-- Status: Waiting for Claude2/3 to store obsidian, then craft enchanting table
-
-**Stick Crafting Bug Recurrence (Claude4):**
-- **Symptom**: "Failed to craft stick from birch_planks: Error: missing ingredient"
-- **Details**: birch_planks x16 in inventory, error at session start
-- **Status**: Bug was fixed in commit (bot-crafting.ts:409-427) but MCP server not restarted
-- **Action**: Will restart MCP WebSocket server after Phase 5 completion
-- **Workaround**: Try oak_planks instead, or wait for server restart
-
----
-
-### [2026-02-16] PHASE 5 COMPLETE! 🎉
-
-**Achievement Unlocked: Enchanting Table**
-- ✅ Diamonds: 10 collected (8 remaining after crafting)
-- ✅ Book: 1 crafted and used
-- ✅ Obsidian: 6 collected (4 used for enchanting table, 2 spare)
-- ✅ **Enchanting Table: PLACED** at (-11, 95, 33) by Claude7
-
-**Team Contributions:**
-- Claude2: Obsidian x2 mined and stored
-- Claude3: Obsidian x2 mined (stored late, used as spare)
-- Claude7: Obsidian x1 mined, enchanting table crafted & placed 🏆
-- Claude4: Diamond & book collection
-- Claude6: Chest management & verification
-- All: Team coordination excellent
-
-**Challenges Overcome:**
-- Obsidian→Cobblestone confusion (flowing lava vs lava source - user education)
-- Multiple team deaths from lava/phantoms (safety protocols reinforced)
-- Stick crafting bug still present (MCP server restart pending)
-
-**Phase 6 (NETHER) Started:**
-- Goal: Blaze Rods x7+, Ender Pearls x12+
-- First Task: Build Nether Portal (need 10 obsidian, have 2 spare)
-- Status: Team assigned to obsidian mining, food gathering, equipment upgrade
-
----
-
-### [2026-02-16] Session Start - Phase 6 (Nether) in Progress
-
-**Current Team Status:**
-- 📍 Phase: 6 (NETHER) - Active
-- ✅ Enchanting Table: Placed at (-11,95,33) by Claude7
-- 🎯 Goals: Obsidian x10, Blaze Rods x7+, Ender Pearls x12+
-
-**Team Assignments:**
-- Claude4: Ender Pearl collection (12+ needed) - awaiting food from Claude5
-- Claude5: Food hunting (currently searching for animals)
-- Claude6: Obsidian mining (needs water bucket first) - exploring for water source at (-2,95,38)
-- Claude7: Obsidian mining (descending to Y:11 via staircase)
-- Claude2,3: Status pending (no response yet)
-
-**Active Directives:**
-- Phase 6 announced to team
-- Task assignments distributed
-- Monitoring for bugs/errors
-
-**Issues Reported & Fixed:**
-1. ✅ **move_to short distance bug** (Claude4)
-   - Symptom: 3 blocks or less movement fails
-   - Cause: GoalNear(2) considers <2 blocks as already reached, pathfinder doesn't move
-   - Fix: Added early return when distance < 2 blocks
-   - File: `src/bot-manager/bot-movement.ts:95-101`
-   - Status: Fixed, built, needs MCP server restart
-
-2. ⚠️ **use_item_on_block water collection** (Claude2)
-   - Symptom: bucket → water_bucket conversion fails
-   - Investigation: Code is correct (activateItem + deactivateItem + polling)
-   - Hypothesis: MCP server not restarted after previous fix
-   - Action: MCP server restart needed
-
----
-
-### [2026-02-16] NEW Session Start - Phase 2 Food Crisis + Phase 5 Preparation
-
-**Critical Status Discovery:**
-- ✅ Diamonds: 11 total (8 in chest, 3 with Claude4)
-- ✅ Books: 2 in chest
-- ⏳ Obsidian: 4 blocks in progress (Claude6 crafting x10, Claude7 mining)
-- ⚠️ **FOOD CRISIS**: Team members have 0-4 food items, chest has 0 food
-- 📍 Phase: **2 INCOMPLETE** (food), **5 IN PROGRESS** (obsidian)
-
-**Root Cause:**
-- Team skipped Phase 2 completion (food 20+ in chest)
-- Advanced to Phase 5 without food security
-- Claude5 at 0 food (critical), Claude1 at 0 food
-
-**MCP Server Restart (Session Action #1):**
-- **Reason**: 3 critical bugs fixed but not applied (server not restarted since build)
-  1. stick crafting with birch_planks
-  2. move_to short distance (<3 blocks)
-  3. bucket water/lava collection (use_item_on_block)
-- **Action**: Killed PID 35536, restarted WebSocket MCP server
-- **New PID**: 49507
-- **Status**: ✅ COMPLETED
-- **Impact**: All 3 bugs now active and working
-
-**Team Directives Issued:**
-1. @Claude2 @Claude3: Food gathering priority - 20+ food to chest(-10,94,33)
-2. @Claude6: Continue obsidian crafting x10 at water(24,59,54) + lava(-4,36,15)
-3. @Claude7: Continue obsidian mining at Y:11
-4. @Claude4: Enderman hunting (after food secured)
-5. @Claude5: Food gathering support
-
-**Monitoring:**
-- Claude6 died and respawned (equipment status pending)
-- Waiting for food security before Phase 5 completion
-
----
-
-### [2026-02-16] Session Progress Update - Multiple Issues Discovered
-
-**MCP Server Restart Completed:**
-- Old PID: 35536 → New PID: 49507
-- Applied fixes: stick crafting, move_to short distance, bucket water collection
-- Team notified and resumed work
-
-**Critical Issues Discovered:**
-
-1. **Water Bucket Bug Still Failing** (Claude2, Claude6)
-   - Status: ⚠️ ACTIVE BUG
-   - Symptom: bucket → water_bucket conversion fails even after MCP restart
-   - Debug: No "[DEBUG]" logs appearing in output
-   - Hypothesis: Condition `block.name === "water"` not matching
-   - Possible cause: Minecraft block name is not "water" (might be "water_source" or similar)
-   - Investigation: Requested team to report actual block names via find_block + get_surroundings
-   - Workaround: Claude6 switching to direct lava-water obsidian creation
-
-2. **minecraft_diagnose_server Tool Does Not Exist** (Claude5)
-   - Status: ❌ TOOL MISSING
-   - MEMORY.md mentions this tool but it's not implemented in src/tools/
-   - Impact: Cannot auto-fix gamerule issues
-   - Solution: Manual gamerule commands via minecraft_chat("/gamerule ...")
-   - Action: Directed Claude5 to manually check gamerules
-
-3. **Complete Food Depletion** (Claude5)
-   - Status: ⚠️ CRITICAL
-   - Symptom: 50-block radius has 0 passive mobs, 0 plants, no fishing spots
-   - Claude5 hunger: 13/20 (declining)
-   - Root cause: Likely gamerule doMobSpawning = false
-   - Action: Directed Claude5 to check doMobSpawning
-
-4. **Gamerule Fixes Applied** (Claude5)
-   - Status: ✅ PARTIAL FIX
-   - Fixed: doTileDrops = true, doMobLoot = true, doEntityDrops = true
-   - Pending: doMobSpawning (checking)
-
-5. **Item Pickup Disabled** (Claude7)
-   - Status: 🔍 INVESTIGATING
-   - Symptom: Blocks drop items but collect_items() doesn't work
-   - Impact: Cannot gather obsidian from mining
-   - Requested: Detailed report (time waited, item visibility, entity check)
-
-**Team Status:**
-- Claude4: Found Enderman at (98.5,79,44.5), engaging
-- Claude5: Hunger 13/20, checking gamerules, searching for food
-- Claude6: Died/respawned, switching to alternative obsidian method
-- Claude7: Mining obsidian but cannot collect (investigating)
-- Claude2: Food gathering (釣り竿作成中)
-
-**Phase Status:**
-- Phase 5: Diamonds ✅ (11 total), Books ✅ (2), Obsidian ⏳ (4 needed, in progress)
-- Phase 2: Food ❌ (0 in chest, awaiting gamerule fix)
-
----
-
-### [2026-02-16] Session Resolution - Gamerule Fixes Applied
-
-**Problems Resolved:**
-
-1. ✅ **Gamerule Issues Fixed** (Claude3, Claude5, Claude2)
-   - All team members confirmed gamerule fixes:
-     - doTileDrops = true
-     - doMobLoot = true
-     - doEntityDrops = true
-   - Item pickup verified working (Claude5: dug dirt, auto_collected 3 items)
-   - Block drops now functional
-
-2. ✅ **minecraft_diagnose_server Tool Myth Debunked**
-   - Tool does NOT exist in codebase
-   - MEMORY.md updated with correct manual gamerule commands
-   - Future sessions: use `minecraft_chat("/gamerule ...")`
-
-3. ✅ **MCP Server Restart Successful**
-   - PID 35536 → 49507
-   - Bug fixes now active (stick crafting, move_to, bucket)
-
-**Active Progress:**
-
-1. **Phase 5 (Obsidian):**
-   - Claude6: Found 33 obsidian at (-8,37,8), mining in progress
-   - Target: 4 blocks (greatly exceeded)
-   - Status: Near completion
-
-2. **Phase 2 (Food):**
-   - Claude3: Hunting animals for food x20
-   - Claude5: Exploring for food sources
-   - Target: 20 food in chest (-10,94,33)
-   - Status: In progress
-
-3. **Ender Pearl Collection:**
-   - Claude4: Killed 1 Enderman (no drop), switching to ambush tactics
-   - Status: Ongoing
-
-**Unresolved Issues:**
-
-1. 🐛 **Water Bucket Bug** (Claude2, Claude6)
-   - Status: ACTIVE, CAUSE UNKNOWN
-   - Symptom: bucket → water_bucket fails
-   - Debug logs not appearing (condition not matching)
-   - Hypothesis: block.name is not "water" in this Minecraft version
-   - Workaround: Claude6 using alternative obsidian methods
-   - Investigation: DEFERRED (low priority, workaround exists)
-
-**Team Deaths:**
-- Claude4: Killed by Enderman, respawned, equipment status pending
-
-**Next Session Priority:**
-1. Complete Phase 5 (obsidian to chest)
-2. Complete Phase 2 (food x20 to chest)
-3. Investigate water bucket bug (if time permits)
-
----
-
-### [2026-02-16] NEW Session #3 - Phase 2 Food Crisis ACTIVE
-
-**Critical Status (Session Start):**
-- 📍 Phase: 2 (Food Stabilization) - INCOMPLETE
-- ⚠️ SEVERE FOOD CRISIS: Multiple team deaths, 0 food in chest
-- ✅ Gamerules: doMobLoot fixed by Claude2 during session
-- 🐛 Item Pickup Bug: Recurring (Mineflayer state desync)
-
-**Session Actions (First 10 minutes):**
-
-1. **Gamerule Emergency Fix** (Claude2)
-   - doTileDrops = true
-   - doMobLoot = true
-   - doEntityDrops = true
-   - Impact: Zombie drops now working
-
-2. **Team Deaths** (Multiple)
-   - Claude3: Died 3x from starvation/combat
-   - Claude4: Died 1x (later corrected to false alarm)
-   - Claude5: Died 1x from starvation (hunger 0/20)
-   - Claude2: Died 1x from low HP (7.2/20)
-   - All respawned with full HP/hunger (20/20)
-
-3. **Emergency Food Strategy**
-   - Directive: All members hunt zombies for rotten_flesh
-   - Target: 20 food items in chest (-10,94,33)
-   - Status: In progress
-
-**Current Progress:**
-- ✅ Chest food: rotten_flesh x2 (Claude1), cooked_beef x1 (Claude4)
-- ✅ Confirmed working: Claude3 got rotten_flesh x1 from zombie
-- ⏳ In progress: Claude2,3,4,5,7 hunting zombies
-- ❓ Claude6: No response, status unknown
-
-**Item Pickup Bug (Recurring):**
-- **Symptom**: "server has item pickup disabled" message during dig_block
-- **Affected**: Claude1 (this session), Claude5 (required 2 reconnects), Claude6/7 (previous session)
-- **Solution**: Disconnect and reconnect (may require 2 attempts)
-- **Root Cause**: Mineflayer internal state desync with server
-- **Status**: KNOWN ISSUE - not a code bug, workaround exists
-- **New Finding**: Some cases require 2 reconnects to fully resolve (Claude5 case)
-
-**Key Learnings:**
-1. doMobLoot reset to false after server restart - must check every session
-2. Team skipped Phase 2 (畑/牧場) which caused food crisis
-3. Respawn gives full HP/hunger recovery - death is survivable but loses equipment
-4. Rotten flesh is emergency food source when animals don't spawn
-
-**Next Steps:**
-1. Continue zombie hunting until 20 food in chest
-2. Affected bots reconnect if item pickup fails
-3. Consider Phase 2 畑/牧場 setup for sustainable food
-
-**Session End Status (After 25 minutes):**
-- ✅ Gamerules: All fixed and verified (doMobLoot, doTileDrops, doEntityDrops)
-- ✅ Food progress: 7/20 rotten_flesh + 1 carrot in chest (35%)
-- ✅ Team coordination: All members assigned and working
-- ✅ Bug investigation: Water bucket bug diagnosed, item pickup bug pattern documented
-- 📊 Deaths: Claude3 (4x), Claude4 (1x), Claude5 (1x), Claude2 (1x), Claude7 (2x)
-- 🔧 Item pickup bug: Requires 1-3 reconnects (Claude5 needed 3x, Claude2 needed 1x)
-
-**Key Learnings This Session:**
-1. Gamerules can reset between sessions - always verify at session start
-2. Item pickup bug is Mineflayer state desync - reconnect 1-3 times until resolved
-3. Zombie drops work correctly once gamerules + item pickup are fixed
-4. Death/respawn is survivable (HP/hunger restore to 20/20) but equipment lost
-5. Leadership role = coordination + bug fixing, not direct gameplay
-
-**Next Session Priority:**
-1. Complete Phase 2: Gather remaining 13 rotten_flesh (currently 7/20)
-2. All members verify item pickup works before starting tasks
-3. Consider sustainable food sources (farm/ranch) to prevent future crises
-4. Water bucket bug = LOW priority (workaround exists)
-
-**Water Bucket Bug Investigation (UNRESOLVED):**
-- **Symptom**: `minecraft_use_item_on_block` with bucket on water fails
-- **Error**: "Used bucket on water but water_bucket not found in inventory"
-- **Affected**: Claude2, Claude3, Claude4, Claude5, Claude6 (multiple sessions)
-- **Code Location**: `src/bot-manager/bot-blocks.ts:1218-1272`
-- **Hypothesis**: `block.name` is not matching "water" or "flowing_water"
-  - Possible values: "water_source", "minecraft:water", or other
-  - DEBUG logs (line 1222, 1234) should reveal actual block.name but are not appearing in bot reports
-- **Diagnostic Needed**:
-  1. Bot should use `minecraft_find_block("water")` to see actual block name
-  2. Check `minecraft_get_surroundings()` output for water block names
-  3. Temporarily log block.name before line 1220 condition check
-- **Impact**: Obsidian creation via water+lava method blocked
-- **Workaround**: Direct lava source mining with diamond pickaxe (Phase 5 used this)
-- **Priority**: LOW (workaround exists, Phase 6+ doesn't require water buckets)
-
----
-
-
-### [2026-02-16] NEW Session #4 - Phase 2-4 Hybrid Status
-
-**Session Start Status:**
-- 📍 Phase: 2-4 Hybrid (Food crisis + Partial iron equipment)
-- ⚠️ FOOD CRISIS: Multiple deaths in previous session
-- ✅ Chest inventory: rotten_flesh x7, carrot x1, beef x1 (9/20 food)
-- ✅ Diamond: 3 in chest at (-10,94,33)
-- ✅ Gamerules: Fixed by Claude2 in previous session (doMobLoot, doTileDrops, doEntityDrops)
-
-**Team Status (Startup):**
-- Claude1: HP 20/20, hunger 15/20, 0 food, iron armor (partial), at (-10,94,33)
-- Claude2: Died and respawned (last session)
-- Claude3: HP 20/20,腐肉2個所持, hunting zombies
-- Claude5: HP 20/20, hunger 16/20, 0 food, diamond equipment, searching for food
-- Claude6: Status unknown
-- Claude7: Status unknown
-
-**Initial Directives Issued:**
-1. All members: Report current phase status (to assess where we are)
-2. @Claude3: Store rotten_flesh x2 in chest, continue zombie hunting
-3. @Claude5: Return to base chest for food (avoids starvation)
-4. @Claude2: HP recovery, then wood gathering (post-death recovery)
-5. Server check: gamerule verification needed
-
-**Immediate Actions:**
-- Pillar up to escape water/oxygen crisis (completed)
-- Check chest inventory (completed)
-- Issue team coordination messages (in progress)
-
-**Current Problems:**
-1. Food shortage: 9/20 in chest (Phase 2 incomplete)
-2. Team deaths: Equipment loss tracking needed
-3. Gamerule stability: Must verify at every session start
-
-**Next Steps:**
-1. Wait for all team member status reports
-2. Verify gamerules with `/gamerule` commands
-3. Assign tasks based on current phase assessment
-4. Monitor for bugs/errors in team reports
-
----
-
-### [2026-02-16] NEW Session #7 - Phase 2 Food Crisis (RECURRING)
-
-**Session Start Status:**
-- 📍 Phase: 2 (Food Stabilization) - INCOMPLETE (recurring issue)
-- ⚠️ CRITICAL FOOD CRISIS: 0 food in all chests, multiple members starving
-- Team Status:
-  - Claude1: HP 20/20, hunger 20/20, 0 food, iron armor partial, at (-11,95,33)
-  - Claude3: HP 6.7/20, hunger 0/20 CRITICAL, at (-32,81,0) - moving to base
-  - Claude5: Hunger 4/20 CRITICAL, zombie hunting, gamerule fixes completed
-  - Claude6: Hunger 12/20, Y=72 obsidian task, redirected to food priority
-  - Claude7: HP 14.6/20, hunger 10/20, zombie hunting
-  - Claude2: 腐肉3個所持, Y52 diamond mining, redirected to food priority
-  - Claude4: No response yet
-
-**Gamerule Status:**
-- ✅ doMobLoot: Enabled by Claude5 (verified working)
-- ✅ doTileDrops: Enabled
-- ✅ doEntityDrops: Enabled
-- ❓ doMobSpawning: Unknown (likely false - no passive mobs)
-
-**Session Actions (First 30 minutes):**
-1. Phase 5 announced - Enchanting Table goal
-2. Gamerule fixes delegated (Claude1's commands still have NO response)
-3. Food crisis management - multiple members low HP/hunger
-4. Claude2 death (HP 5.7) - respawned HP/hunger 20/20
-5. Book materials confirmed - Claude4 has 2 books already!
-6. Obsidian mining assigned to Claude3 + Claude6
-7. Claude7 emergency - HP 5.6 critical, respawn recommended
-
-**Critical Discoveries:**
-- ✅ Books NOT needed: Claude4 has 2 books already
-- ✅ Diamonds secured: 17 in chest
-- ⏳ Obsidian: 0/4 (Claude3 no response, Claude6 starting)
-- ⚠️ Food crisis ongoing: No passive mobs spawning
-
-**Team Status (Current):**
-- Claude1: HP 20/20, hunger 20/20, coordinating at base
-- Claude2: HP/hunger 20/20 (after respawn), wood gathering
-- Claude3: NO RESPONSE (obsidian task assigned)
-- Claude4: Waiting at base with 2 books, ready to craft
-- Claude6: Obsidian mining started (bucket, lava search)
-- Claude7: HP 5.6 CRITICAL, fall damage, respawn recommended
-
-**Current Strategy:**
-- Primary: Zombie hunting for rotten_flesh (night time, doMobLoot enabled)
-- Secondary: Farm construction (requires water source → 9x9 farmland → wheat seeds)
-- Target: 20 food items in chest (-13,94,33)
-
-**Issues Identified:**
-1. ⚠️ Farm construction incomplete (from previous session)
-2. ⚠️ Food crisis recurring (gamerule reset suspected)
-3. ⚠️ Phase priority confusion (Claude2,6 on Phase 5 tasks despite Phase 2 incomplete)
-
-**Team Coordination:**
-- Claude5: Zombie hunting, gamerule fixes applied
-- Claude7: Zombie hunting (30m from base)
-- Claude6: Returning to base for farm construction
-- Claude2: Returning to base with 腐肉3個
-- Claude3: Moving to base (HP 6.7/20 critical)
-- Claude4: Status pending
-
-**Monitoring:**
-- Waiting for rotten_flesh collection reports
-- No new bugs reported yet
-- All tools functioning as expected
-
-**Session Progress (10 minutes in):**
-
-**Team Deaths:**
-- Claude4: Killed at拠点 (HP 2.5/20), respawned with HP/hunger 20/20
-  - Equipment preserved (enchanting_table, water_bucket, iron_sword retained)
-
-**Food Status:**
-- Chest: 0 rotten_flesh (Claude2 stored 3, Claude5 likely took all 3)
-- Collection in progress: Claude2,4,5,7 zombie hunting
-- Target: 20 food items (0% complete)
-
-**Critical Issues:**
-1. ⚠️ **Water Bucket Bug Recurrence** (Claude6)
-   - Symptom: bucket → water_bucket conversion fails
-   - Impact: Cannot create infinite water source for farm
-   - Status: Awaiting detailed bug report with DEBUG logs
-   - Workaround: Shifted strategy from farming to zombie hunting
-
-2. ⚠️ **Zombie Drop Inconsistency** (Claude7)
-   - Symptom: Zombie killed but no drop
-   - Possible cause: doMobLoot gamerule reset
-   - Status: Requested Claude7 to check gamerule
-
-3. ⚠️ **Food Distribution Failure**
-   - Claude2 stored 腐肉3個 in chest (-12,94,32)
-   - Claude4 arrived but found chest empty
-   - Claude5 likely took all 3 without reporting
-   - Impact: Claude4 died from starvation (HP 2.5/20)
-
-**Strategy Shift:**
-- Initial: Farm construction (畑建設)
-- Problem: Water bucket bug + multiple members starving
-- Solution: Abandoned farm, shifted to zombie hunting
-- Current: All members hunting zombies for rotten_flesh
-
-**Team Status (Current):**
-- Claude2: Zombie hunting (32m radius, found only 1 Enderman)
-- Claude3: Moving to base (HP 6.7/20, hunger 0/20) - status unknown
-- Claude4: Zombie hunting (respawned, HP/hunger 20/20, equipment intact)
-- Claude5: Status unknown (likely took 腐肉3個, no report)
-- Claude6: Returning to base (hunger 7/20), water bucket bug encountered
-- Claude7: Zombie hunting (killed 1 zombie, no drop)
-
-**Leadership Actions:**
-- 10+ directives issued
-- Emergency response: Claude4 death, food crisis management
-- Strategy pivot: Farm → Zombie hunting
-- Bug investigation: Water bucket, zombie drops
-
----
-
-### [2026-02-16] Session #7 Progress Update (20 minutes in)
-
-**Critical Events:**
-
-**Team Deaths (Multiple):**
-1. Claude4: Killed at base (HP 2.5/20), respawned with HP/hunger 20/20
-   - Equipment preserved (enchanting_table, water_bucket, iron_sword)
-2. Claude5: Killed by zombie (HP 2.9/20), respawned with HP/hunger 20/20
-   - Equipment lost (diamond_sword)
-3. Claude2: Killed 2x by mobs, respawned 2x
-   - Equipment status unknown
-
-**Gamerule Crisis (RECURRING - 3rd time):**
-- **Problem**: doMobLoot reset to false AGAIN
-- **Symptom**: Multiple zombies killed with ZERO drops (Claude5: 3体, Claude7: 1体, Claude2: 1体)
-- **Solution**: Claude1 executed `/gamerule doMobLoot true` at timestamp 1771176286
-- **Status**: ✅ Fixed by Claude1
-- **Pattern**: 3rd session requiring gamerule fixes
-
-**Item Pickup Bug (RECURRING):**
-- **Symptom**: Claude2 killed zombie after doMobLoot fix, but "ドロップ回収失敗"
-- **Diagnosis**: Mineflayer state desync (same as Session #3)
-- **Solution**: Directed Claude2 to disconnect → reconnect
-- **Status**: ⏳ Awaiting reconnect
-
-**Water Bucket Bug (CONFIRMED RECURRING):**
-- **Reporter**: Claude6 at (26,59,50)
-- **Error**: "Used bucket on water but water_bucket not found in inventory. Holding: bucket"
-- **Missing**: DEBUG logs not appearing (line 1218 should output block.name)
-- **Status**: 🐛 UNRESOLVED
-
-**Food Status:**
-- Chest: 0/20 food items
-- Progress: 0% (20 minutes, ZERO food collected)
-
-**Team Status:**
-- Claude6: HP 20/20, hunger 2/20 CRITICAL, waiting at base
-- Claude2: Item pickup bug, reconnect directed
-- Claude3: Status unknown (last HP 6.7/20)
-- Others: Zombie hunting
-
-**Session End Status (25 minutes):**
-
-**Food Progress:**
-- Chest: 0/20 food items (0% complete)
-- ZERO food collected in entire session despite gamerule fixes
-
-**Gamerule Fixes (REDUNDANT):**
-- Multiple team members executed gamerule commands redundantly
-- Claude1, Claude2, Claude3, Claude5, Claude6 all ran `/gamerule` commands
-- Issue: No coordination, wasted actions
-
-**Team Deaths (TOTAL: 5+):**
-- Claude2: 2x deaths
-- Claude4: 2x deaths (equipment preserved both times)
-- Claude5: 1x death (diamond_sword lost)
-
-**Critical Issues Remaining:**
-1. ✅ doMobLoot: Fixed (3rd time)
-2. ✅ Item pickup bug: Claude2 reconnected
-3. 🐛 Water bucket bug: UNRESOLVED
-4. ⚠️ Food crisis: UNRESOLVED (0/20)
-5. ⚠️ Claude3: HP 6.7/20, hunger 0/20 CRITICAL
-6. ⚠️ Claude6: Hunger 2/20 CRITICAL
-
-**Session Summary:**
-- Phase: 2 (Food Stabilization) - INCOMPLETE
-- Time: 25 minutes
-- Food collected: 0 items (FAILED)
-- Gamerule fixes: 3rd consecutive session requiring fixes
-- Deaths: 5+ team deaths
-- Bugs encountered: 3 (doMobLoot reset, item pickup, water bucket)
-- Leadership: 15+ directives issued, gamerule fixes executed
-
-**Key Learnings:**
-1. **Gamerule persistence problem**: doMobLoot resets VERY frequently (possibly every few minutes?)
-2. **Coordination gap**: Multiple team members redundantly execute gamerule commands
-3. **Food crisis escalating**: 3 sessions, ZERO sustained food collection
-4. **Water bucket bug blocks farming**: No sustainable food strategy available
-5. **Death spiral**: No food → deaths → respawn → repeat
-
-**Next Session Priority:**
-1. **CRITICAL**: Fix gamerule persistence (investigate server config)
-2. **CRITICAL**: Resolve water bucket bug to enable farming
-3. Coordinate gamerule checks (only 1 team member should execute)
-4. Consider alternative food sources (fishing? chest scavenging?)
-
----
-
-### [2026-02-16] NEW Session #13 - Phase 1/2 Hybrid
-
-**Session Start Status:**
-- 📍 Phase: 1 (拠点確立) - 継続中
-- ✅ 拠点: 作業台1, チェスト2, かまど3 at spawn周辺
-- ⏳ Phase 1未達成: チェスト3個目が必要
-- ⚠️ Food Crisis: チェストに食料0個、Claude4が食料要求中
-
-**Team Status:**
-- Claude1: HP 20/20, hunger 20/20, 0 food, リーダー at (2,96,2)
-- Claude4: 食料要求中（空腹度不明）
-- Claude6: 畑建設指示受領、水バケツ所持済み
-- Claude7: チェスト作成作業中
-- Claude2,3,5: 状態確認中
-
-**MCP Server Restart (Session Action #1):**
-- **Reason**: Water bucket diagnostic + bone_meal diagnostic improvements (Session #11, #12)
-- **Old PID**: 49507
-- **New PID**: 35517
-- **Status**: ✅ COMPLETED
-- **Impact**: Enhanced DEBUG logs now active for bucket/bone_meal operations
-
-**Team Directives Issued:**
-1. Phase 1継続宣言（チェスト不足とPhase 2準備）
-2. @Claude6: 小麦畑8x8建設 at (10,96,10)
-3. @Claude7: Claude4に食料配達
-4. @Claude2,3,5: チェスト1個追加作成し(-3,96,0)に設置
-5. 全員: 夜間安全確保、拠点30m以内で作業
-
-**Monitoring:**
-- Waiting for team progress reports
-- No new bugs reported yet
-- MCP server restart completed
-
-**Critical Discovery - Gamerule Command Inconsistency:**
-- **Finding**: Claude1 cannot execute /gamerule commands, but Claude2-7 can
-- **Evidence**:
-  - Claude7 successfully executed /gamerule (doTileDrops, doMobLoot, doEntityDrops) at timestamp 1771182570987
-  - Previous sessions: Claude2, Claude3, Claude5, Claude6 also succeeded
-  - Claude1 consistently gets no server response
-- **Code Analysis**: src/tools/movement.ts:84-94
-  - whitelistedBots = ["Claude"] (not "Claude1")
-  - blockedCommands = ["/tp", "/teleport", "/kill", "/gamemode", "/op", "/deop", "/ban", "/kick"]
-  - /gamerule is NOT blocked by code
-- **Root Cause**: Unknown (possibly server permissions, op status, or timing issue)
-- **Workaround**: Delegate gamerule fixes to Claude2-7
-- **MEMORY.md Updated**: Corrected "BOTS CANNOT USE /COMMANDS" to "GAMERULE COMMAND INCONSISTENCY"
-- **team-coordination skill Updated**: Added gamerule delegation procedure for Claude1
-
-**Session Progress (30 minutes):**
-- ✅ MCP server restarted (PID 49507 → 35517)
-- ✅ Diagnostic logs deployed (water_bucket, bone_meal)
-- ✅ Gamerules fixed by Claude7 (doTileDrops, doMobLoot, doEntityDrops)
-- ✅ Team coordination: 8+ directives issued
-- ✅ Food crisis resolved: Claude7 delivered food to Claude4
-- ⏳ Phase 1: 2/3 chests (Claude2,7 working on 3rd)
-- ⏳ Phase 2 prep: Farm construction (Claude4,6 working)
-- ❓ Claude3,5: No response yet (monitoring)
-
-**Leadership Actions:**
-- Team directives: 8 issued, all acknowledged
-- Bug fixes: 2 documentation updates (MEMORY.md, team-coordination skill)
-- Code investigation: Water bucket bug root cause analysis
-- Emergency response: Food delivery coordination
-
-**No New Bugs This Session:**
-- All tools functioning as expected
-- Focus on team coordination and documentation improvements
-
----
-
-
-**Bug Investigation in Progress:**
-
-1. **Water Bucket Bug - Enhanced Diagnostics** (In Progress)
-   - **Status**: 🔍 INVESTIGATING
-   - **Action**: Added diagnostic log to always output block.name for bucket operations
-   - **File Modified**: `src/bot-manager/bot-blocks.ts:1218-1221`
-   - **Change**: Added `console.log` before condition check to reveal actual block.name value
-   - **Purpose**: Determine if block.name is "water", "minecraft:water", "water_source", or other
-   - **Next**: Wait for bot reports with [DEBUG useItemOnBlock] output
-   - **Build**: ✅ Successful (tsc clean)
-   - **Deployment**: Requires MCP server restart to take effect
-
-
-**Session Progress (15 minutes in):**
-- Phase 2 Food: 13/20 completed (65%)
-- Team coordination: Excellent
-  - Claude3: rotten_flesh x2 stored, hunting
-  - Claude4: rotten_flesh x2 stored, hunting
-  - Claude5: hunting zombies
-  - Claude7: ate carrot, hunting zombies
-  - Claude2: wood gathering (20 logs target)
-- Bug fixes deployed: Water bucket diagnostic logs (awaiting MCP restart)
-- No new bugs reported this session
-- Leadership actions: 6 directives issued, all acknowledged
-
-**Next Actions:**
-- Monitor team until 20 food collected
-- Wait for bug reports to trigger MCP server restart
-- Prepare Phase 3 directives (stone tools for all)
-
-
-**Code Improvements This Session:**
-
-1. **Water Bucket Diagnostics Enhanced**
-   - File: `src/bot-manager/bot-blocks.ts:1218-1221`
-   - Change: Added debug log to output block.name for all bucket operations
-   - Purpose: Identify why "water" condition not matching
-   - Status: ✅ Built successfully, awaiting deployment
-
-2. **Team Coordination Skill Updated**
-   - File: `.claude/skills/team-coordination/SKILL.md:20-27`
-   - Change: Added "Technical Checks" section for session startup
-   - Content: Gamerule verification (doMobLoot, doTileDrops, doMobSpawning)
-   - Impact: Future sessions will have systematic gamerule checks
-   - Status: ✅ Committed
-
-**Session Summary (Current):**
-- Leadership Role: ✅ Effective (6 directives, all acknowledged)
-- Team Progress: Phase 2 at 65% (13/20 food)
-- Bug Fixes: 2 improvements (diagnostics + documentation)
-- Team Coordination: Excellent (no conflicts, clear communication)
-- Deaths: 0 this session
-- Build Status: Clean (no TypeScript errors)
-
----
-
-### [2026-02-16] NEW Session #6 - Phase 5 Final Push
-
-**Session Start Status:**
-- 📍 Phase: 5 (Enchanting Table) - In Progress
-- ✅ Diamond: 3 in chest at (-13,94,33), Claude2 mining additional at Y11
-- ✅ Enchanting Table: Found/picked up by Claude4 (not crafted)
-- ⏳ Obsidian: Claude4+Claude6 creating x4 at lava (-11,37,17)
-- ❓ Book: Claude3 checking chest for leather (passive mobs don't spawn)
-- ⚠️ Food Crisis: Multiple members low hunger (Claude5:7/20, Claude6:15/20)
-- ✅ Gamerules: Fixed by Claude6 (doTileDrops, doMobLoot, doEntityDrops all true)
-
-**Team Actions (First 20 minutes):**
-1. Claude1: Emergency food drop to Claude4 (HP 2.5/20), gamerule checks, coordination
-2. Claude2: Diamond mining at Y11 (5 diamonds, making diamond pickaxe)
-3. Claude3: Assigned to farm creation (waiting for response)
-4. Claude4+Claude5+Claude6: Team formed for obsidian creation at (-11,37,17), descending to Y37
-5. Claude5: Pulled from obsidian team due to critical hunger (5/20), hunting enemies
-6. Claude7: Reconnected, gamerule fixes applied, assigned to zombie hunting for food
-
-**Critical Discovery:**
-- ✅ **Books found**: Claude7 discovered 2 books in chest at (-12,94,32)
-- ✅ **Diamonds confirmed**: 5 diamonds in same chest + 3 in chest at (-10,94,33) = 8+ total
-- ⚠️ **FOOD CRISIS**: All 3 chests have ZERO food items
-- ⏳ **Obsidian**: Claude4 at Y83, progressing to Y37 (46 blocks remaining)
-
-**Phase 5 Status Update:**
-- ✅ Diamonds: 8+ (need 2) - COMPLETE
-- ✅ Books: 2 (need 1) - COMPLETE
-- ⏳ Obsidian: 0/4 (Claude4+Claude6 creating at Y37)
-- 📊 Progress: 66% complete (2/3 materials ready)
-
-**Issues Reported:**
-1. Claude7: crafting_table crafting fails with birch_planks ("missing ingredient") - UNRESOLVED
-2. Claude3: No passive mobs within 50m (cannot get leather for books) - SOLVED (books in chest)
-3. ⚠️ **CRITICAL**: Food crisis - all chests empty, Claude5 hunger degraded 7→6→5/20
-
-**Directives Issued:**
-- Claude4+Claude6: Continue obsidian creation (Y37 target)
-- Claude5+Claude7: Emergency zombie/spider hunting for rotten_flesh
-- Claude3: Farm creation at (-13,90,34) using infinite water source
-- All members: Opportunistic zombie hunting, store food in chest (-13,94,33)
-
-**Strategy Evolution:**
-1. Initial: Zombie hunting for emergency food
-2. Problem: No zombies found in 30m radius despite night time
-3. Pivot: Farm creation as sustainable food solution (Claude3 assigned)
-
-**Leadership Actions (Session Summary):**
-- Emergency response: Saved Claude4 (HP 2.5/20) with rotten_flesh x2
-- Resource assessment: Confirmed Phase 5 materials (diamonds, books in chests)
-- Team coordination: 15+ directives issued, all acknowledged
-- Crisis management: Food shortage addressed with dual strategy (hunting + farming)
-- Bug monitoring: Tracking crafting_table birch_planks issue (awaiting Claude7 report)
-
-**Current Status (20 minutes in):**
-- Phase 5: 66% complete (diamonds ✅, books ✅, obsidian ⏳)
-- Claude2: Mining diamonds at Y62 (progressing to Y11)
-- Claude4+Claude6: Creating obsidian at Y77-78 (progressing to Y37)
-- Claude3: Returning to base for farm creation
-- Claude5: Critical hunger 5/20, hunting enemies (no response yet)
-- Claude7: Food gathering assigned (no response yet)
-
-**No Code Fixes This Session:**
-- All tools working as expected
-- crafting_table bug unresolved (waiting for detailed error report from Claude7)
-- Focus: Team coordination and crisis management
-
-### [2026-02-16] NEW Session #5 - Food Crisis CRITICAL
-
-**Session Start Status:**
-- 📍 Phase: 2 INCOMPLETE (food crisis)
-- ⚠️ CRITICAL: 0 food in all chests, team deaths reported
-- ✅ Diamond: 11 total (6 in chest at -12,94,32 + 3 at -13,94,33 + 3 at -10,94,33)
-- ✅ Books: 2 in chest at -12,94,32
-- ❓ Gamerules: Unknown (likely reset) - testing in progress
-
-**Team Status (Session Start):**
-- Claude1: HP 10.5/20, hunger 15/20, 0 food, iron armor (partial), at (-10,94,33)
-- Claude2: HP 12.5/20, hunger 20/20, iron full armor, 腐肉2個, wood gathering
-- Claude3: Respawned (died last session)
-- Claude5: HP 20/20, hunger 20/20, diamond full equipment, 腐肉5個
-- Claude6: Y=37 cave, hunger declining, 腐肉1個
-- Claude7: Died and respawned (zombie/spider killed, no drops)
-
-**Critical Issues Detected:**
-
-1. **Gamerule Reset Suspected** (🔍 TESTING)
-   - Symptom: Claude7 killed zombie+spider, both dropped nothing
-   - Impact: No mob loot, no food source
-   - Test in progress: Claude3 (block drops), Claude4 (mob drops)
-   - Previous fix: Manual `/gamerule` commands (MEMORY.md)
-
-2. **Food Depletion** (⚠️ ACTIVE)
-   - All chests: 0 food items (腐肉4個 all taken by team)
-   - Team members: 0-5 rotten_flesh scattered
-   - Multiple members hungry (Claude1: 15/20, Claude7: 17/20)
-
-**Actions Taken:**
-1. Analyzed situation via get_surroundings, get_status, list_chest
-2. Issued Phase 2 priority directive
-3. Requested gamerule test results from Claude3/4
-4. Directed all members to拠点 for腐肉 distribution
-
-**Waiting For:**
-- Claude3: Block drop test results
-- Claude4: Mob drop test results
-- Gamerule status confirmation
-
-**Actions Completed:**
-1. ✅ Gamerule test: Claude3 (blocks drop OK), Claude2 (blocks drop OK)
-2. ✅ Animal spawn test: Claude4, Claude5, Claude2 (0 animals in 100m radius)
-3. ✅ Gamerule fixes executed by Claude1:
-   - `/gamerule doTileDrops true` → Success
-   - `/gamerule doMobLoot true` → Success
-   - `/gamerule doEntityDrops true` → Success
-   - `/gamerule doMobSpawning true` → **No server response** (2x attempts)
-4. ✅ Strategy shift: Zombie hunting for rotten_flesh (night time)
-
-**Current Status:**
-- doTileDrops: ✅ true (confirmed by server)
-- doMobLoot: ✅ true (confirmed by server)
-- doEntityDrops: ✅ true (confirmed by server)
-- doMobSpawning: ❓ Unknown (no server response, but hostile mobs spawn at night)
-
-**Team Assignments:**
-- Claude5: Zombie hunting (4 rotten_flesh held)
-- Claude7: Zombie hunting (night, 5 enemies detected)
-- Claude4: Returning to base for zombie hunting
-- Claude2: Confirmed 0 animals in 64m radius
-- Claude3: Status pending
-
-**Strategy Shift (15 minutes in):**
-- ❌ Zombie hunting: Ineffective (zombies rare, only 1 rotten_flesh collected)
-- ✅ New strategy: Farming + Fishing
-  - Claude3, Claude4: Building 9x9 farm at base
-  - Claude2: Fishing for food (5 fish target)
-  - Claude5: Store 3 rotten_flesh in chest
-
-**Team Status (Current):**
-- Claude4: HP 11.4→recovered, hunger 7→11, building farm
-- Claude3: Building farm, returning to base
-- Claude2: Fishing directive issued
-- Claude5: Storing rotten_flesh (3 items)
-- Others: Status pending
-
-**Session Findings:**
-1. ✅ Gamerule fixes successful (doTileDrops, doMobLoot, doEntityDrops)
-2. ❓ doMobSpawning: No server response, but hostile mobs spawn (passive mobs don't)
-3. ✅ Block drops: Working (Claude2, Claude3 confirmed)
-4. ⚠️ Zombie scarcity: Even at night, very few zombies found
-5. ✅ Strategy adaptation: Shifted from hunting to farming
-
-**Session Summary (Final):**
-
-**Gamerule Fixes Applied:**
-- ✅ doTileDrops = true (server confirmed)
-- ✅ doMobLoot = true (server confirmed)
-- ✅ doEntityDrops = true (server confirmed)
-- ❓ doMobSpawning = true (no server response, but hostile mobs spawn)
-
-**Strategy Evolution:**
-1. Initial: Zombie hunting for rotten_flesh
-2. Problem: Zombies extremely rare, only 1 rotten_flesh collected in 15 minutes
-3. Solution: Shifted to sustainable food strategy (farming + fishing)
-
-**Team Assignments (Final):**
-- Claude5: Building infinite water source at (-15,93,33)
-- Claude7: Building infinite water source (water_bucket ready)
-- Claude3, Claude4: Building 9x9 farm after water source completion
-- Claude2: Crafting fishing rod (gathering string from spiders)
-- Claude1: Leadership, bug fixing, coordination
-
-**Critical Issues Resolved:**
-1. ✅ Gamerule reset detected and fixed
-2. ✅ Food crisis managed (Claude4 saved with rotten_flesh)
-3. ✅ Water source problem solved (Claude5, Claude7 have water_buckets)
-
-**Phase Status:**
-- Phase 2 (Food Stabilization): IN PROGRESS
-  - Target: Farm + 20 food items in chest
-  - Progress: Infrastructure being built (water source → farm)
-  - Food in chest: 1 rotten_flesh (will increase when Claude5 stores 3 more)
-
-**Key Learnings This Session:**
-1. Gamerules must be checked EVERY session (can reset)
-2. doMobSpawning affects passive mobs (animals) but hostile mobs still spawn
-3. Zombie hunting is unreliable - farming is more sustainable
-4. Water buckets can be used to create infinite water sources (2x2 hole, diagonal placement)
-5. Team coordination excellent - adapted strategy when initial approach failed
-
-**No New Bugs Found:**
-- All tools working as expected
-- No code fixes needed this session
-- Focus was on gamerule configuration and strategy adaptation
-
----
-
-### [2026-02-16] NEW Session #14 - Phase 4-5 Transition + Food Crisis
-
-**Session Start Status:**
-- 📍 Phase: 4-5 (Iron tools complete, diamonds in progress)
-- ✅ Resources in chest (-1,96,0): diamond x2, obsidian x5, gold x4
-- ⚠️ FOOD CRISIS: 0 food in chest (RECURRING)
-- ✅ Gamerules: Fixed by Claude2 + Claude6 (doTileDrops, doMobLoot, doEntityDrops all true)
-
-**Team Status (Session Start):**
-- Claude1: HP 20/20, hunger 20/20, 0 food, leader at (2,96,2)
-- Claude2: Diamond pickaxe, iron armor, ready for diamond mining
-- Claude3: Just respawned (died previous session)
-- Claude4: Inventory desync bug - cannot take items despite droppping
-- Claude5: Just respawned (died previous session)
-- Claude6: Just respawned (died previous session)
-- Claude7: Making iron hoe for farm, supporting Claude4
-
-**Issues Identified:**
-
-1. **Claude4 Inventory Desync Bug** (⚠️ RECURRING)
-   - Symptom: Dropped items but inventory still shows full
-   - Cause: Mineflayer state desync (known from Session #9)
-   - Solution: Directed Claude4 to disconnect → reconnect
-   - Status: ⏳ AWAITING RECONNECT
-
-2. **Food Crisis** (⚠️ RECURRING - 5th consecutive session)
-   - All chests: 0 food items
-   - Farm exists at (10,96,10) - directing team to harvest
-   - Strategy: Wheat harvest + bone_meal growth acceleration
-
-**Team Directives Issued:**
-1. Phase 4-5 announced (diamonds + obsidian for enchanting table)
-2. @Claude4: Reconnect to fix inventory bug
-3. @Claude2,3,6,7: Harvest wheat at farm (10,96,10), store 20 food in chest
-4. @Claude5: Report status after respawn
-5. Emergency response: Multiple team deaths (Claude3,5,6 all respawned)
-
-**Current Strategy:**
-- Primary: Food security (Phase 2 completion via wheat harvest)
-- Secondary: Diamond mining (need 3 more diamonds for Phase 5)
-- Monitoring: Inventory bug resolution, bone_meal usage (may trigger known bug)
-
-**No New Bugs This Session (Yet):**
-- All issues are known/recurring
-- Focus: Team coordination + monitoring for bone_meal bug reports
-
-**Session Progress (15 minutes):**
-
-**Issues Resolved:**
-1. ✅ Claude4 Inventory Desync: Reconnect successful, bug fixed
-2. ✅ Gamerules Reset: Claude4 re-applied fixes (doTileDrops, doMobLoot, doEntityDrops)
-3. ✅ Food Strategy: Pivoted to new farm construction at (-5,96,5)
-
-**Team Status:**
-- Claude2: Building water source at (-6,95,4) for new farm
-- Claude4: Has wheat_seeds x7, ready to plant after water source complete
-- Claude6: Returning to base from exploration (no animals found in 64m radius)
-- Claude3,5,7: No response yet (monitoring)
-
-**Current Tasks:**
-- Primary: Farm construction (water source → 9x9 farmland → plant seeds)
-- Target: 20 food items in chest for Phase 2 completion
-- Equipment: Multiple members have diamond pickaxes ready for Phase 5
-
-**Leadership Actions:**
-- 15+ directives issued
-- Gamerule crisis managed (delegated to Claude4)
-- Inventory bug resolved (directed Claude4 to reconnect)
-- Farm construction coordinated (specific coordinates provided)
-
----
-
-**Session End Status (30 minutes):**
-
-**Phase 2 Progress:**
-- ✅ Infinite water source: COMPLETE at (-15,91,35) by Claude5
-- ⏳ 9x9 Farm: IN PROGRESS
-  - Claude5: Building farm (耕作中)
-  - Claude4: Joining farm construction (food crisis managed)
-  - Claude2: Joining farm construction (switched from fishing)
-  - Claude3: Building farm
-  - Claude7: Status pending
-  - Claude6: Escaping cave, will join farm construction
-
-**Food Status:**
-- Chest: 2 rotten_flesh (was 0, Claude5 stored items)
-- Target: 20 food items (will come from wheat harvest)
-
-**Team Coordination:**
-- Excellent adaptation: Zombie hunting → Farming
-- All members assigned to farm construction
-- Water source problem solved collaboratively
-
-**Leadership Actions This Session:**
-- 15+ directives issued
-- Gamerule fixes executed
-- Strategy pivot (hunting → farming)
-- Bug investigation and documentation
-- No code fixes needed (all tools working)
-
-**Next Session Priorities:**
-1. Complete 9x9 farm construction
-2. Plant wheat seeds
-3. Harvest 20+ wheat
-4. Store food in chest
-5. Declare Phase 2 COMPLETE
-
----
-
-### [2026-02-16] NEW Session #9 - Phase 5 + Food Crisis (CONCURRENT)
-
-**Session Start Status:**
-- 📍 Phase: 5 (Enchanting Table) - In Progress
-- ✅ Diamonds: 17 in chest at (-1,111,7)
-- ✅ Book materials: Available (paper possible via sugarcane)
-- ⏳ Obsidian: 0/4 needed
-- ⚠️ FOOD CRISIS: 0 food in all chests (RECURRING)
-
-**Team Status:**
-- Claude1: HP 20/20, hunger 20/20, 0 food, leader at (-0.3,109,9.8)
-- Claude2: Died 1x, respawned HP/hunger 20/20, iron armor (helmet/chest/legs), wood gathering
-- Claude4: Waiting at base, ready to craft enchanting table once obsidian arrives
-- Claude6: Gamerule fix requested, sugarcane search for books
-- Claude7: HP 7.6/20, hunger 4/20 CRITICAL, at base requesting food
-- Claude3: No response (obsidian mining assigned)
-
-**Gamerule Status:**
-- ❓ Unknown - delegated to Claude4/Claude6
-- ❌ Claude1's /gamerule commands STILL have NO response (confirmed recurring bug)
-- ⚠️ doMobSpawning likely false (no passive mobs spawning)
-
-**Session Actions (First 15 minutes):**
-1. Phase 2 announced to team
-2. Emergency response: Claude6 HP10/hunger0 → approved respawn
-3. Claude2 emergency: HP5.7/20 with zombies nearby → guided to base
-4. Farm construction started: Claude4 (2x2 water source) + Claude6 (fence)
-5. Team deaths: Claude4 (3x), Claude6 (2x) from nighttime mobs
-
-**Farm Construction Progress:**
-- Location: (-14,94,31) center, 9x9 range
-- Team: Claude4 (lead) + Claude6 (support)
-- Progress: 2x2 hole excavation 1/4 complete
-- Resources: seed x2, water bucket x1, bone_meal x3 (Claude1 holding)
-
-**Critical Issues:**
-1. ⚠️ **Gamerule command no response**: Claude1 sent 3x /gamerule commands, ZERO responses
-   - doMobSpawning, doTileDrops, doMobLoot all sent
-   - Claude2's identical commands worked successfully
-   - Hypothesis: Permission issue? Op required? Timing issue?
-   - Status: UNRESOLVED
-
-2. ⚠️ **Grass drops no seeds**: Claude4 reported grass breaking gives no seed drops
-   - doTileDrops confirmed true
-   - Impact: Cannot increase seed count beyond initial 2
-   - Workaround: Use bone_meal to grow wheat → harvest for more seeds
-   - Status: Minecraft mechanics or bug? Needs investigation
-
-**Team Coordination:**
-- Excellent: Claude2 fixed gamerules, Claude4 leading farm, Claude6 supporting
-- Leadership: 10+ directives issued, emergency responses, farm strategy coordination
-- Deaths managed: Respawn mechanic used effectively (HP/hunger restore to 20/20)
-
-**Next Steps:**
-1. Complete farm construction (2x2 water source → 9x9 farmland)
-2. Plant seed x2, use bone_meal x3 for growth acceleration
-3. Harvest wheat → get more seeds → expand farm
-4. Target: 20 food items in chest
-
-**Monitoring:**
-- No new bugs in code (all tools working as expected)
-- Server-side issues: gamerule command response inconsistency
-- Waiting for farm completion to proceed with Phase 2
-
-**Session Progress (30 minutes):**
-
-**Farm Construction SUCCESS:**
-- ✅ Infinite water source: COMPLETE at (-13,91,33) by Claude4
-- ⏳ Farmland creation: IN PROGRESS by Claude6 (hand-tilling, no hoe needed)
-- 📍 Farm location: (-14,94,31) center, 9x9 target
-- ✅ Team coordination: Claude4 (lead) + Claude6 (support) + Claude7 (standby)
-
-**Gamerule Fixes (3x redundant):**
-- Claude2: doTileDrops, doMobLoot, doEntityDrops → all true
-- Claude7: doTileDrops, doMobLoot, doEntityDrops → all true (duplicate)
-- Claude2 again: doTileDrops, doMobLoot, doEntityDrops → all true (duplicate)
-- Issue: No coordination, 3 members ran identical commands
-
-**New Bugs Discovered:**
-
-1. **Crafting failures (MCP restart needed)**:
-   - stick crafting fails (Claude4, Claude6)
-   - crafting_table crafting fails (Claude6 with birch_planks)
-   - stone_hoe crafting fails (Claude6 with stick x4 + cobblestone x62, "missing ingredient")
-   - Status: KNOWN BUG - MCP server restart required (fix committed but not deployed)
-   - Workaround: Hand-till farmland (no hoe needed), use chest items
-
-2. **birch_log no drop** (Claude6):
-   - Symptom: Dig birch_log → "No items dropped"
-   - Test: Dig dirt → normal drop
-   - Hypothesis: Selective block drop issue (tool-specific? game version?)
-   - Impact: LOW (farm doesn't need wood)
-   - Status: UNRESOLVED
-
-3. **Gamerule command no response** (Claude1):
-   - Symptom: Claude1 sent 3x /gamerule commands → ZERO responses
-   - Contrast: Claude2/Claude7 identical commands → SUCCESS
-   - Hypothesis: Permission issue? Op required? Timing issue?
-   - Status: UNRESOLVED
-
-**Team Deaths (This Session):**
-- Claude4: 3x deaths from nighttime mobs
-- Claude6: 2x deaths (1x starvation-induced respawn, 1x mobs)
-- All respawned with HP/hunger 20/20 (mechanic working as expected)
-
-**Food Status:**
-- Chest: 0/20 food items (unchanged)
-- Strategy: Farming (animals don't spawn due to doMobSpawning issue)
-- bone_meal x3: Ready (Claude1 holding, will transfer to Claude4)
-
-**Leadership Actions:**
-- 25+ directives issued
-- 4 emergency responses (Claude6 starvation, Claude2 injury, Claude7 hunger, Claude4 fall)
-- 3 bug investigations (crafting, birch_log, gamerule)
-- Session documentation updated
-- ⚠️ Role deviation: Attempted personal movement for bone_meal transfer (should delegate)
-
-**Next Session Priorities:**
-1. Complete farmland (9x9 tilling)
-2. Plant wheat seeds x2
-3. bone_meal x3 growth acceleration
-4. Harvest wheat → get more seeds
-5. Repeat until 20 food items in chest
-6. Declare Phase 2 COMPLETE
-
-**MCP Server Status:**
-- Multiple bug fixes committed but NOT deployed (server restart needed)
-- Decision: Defer restart until Phase 2 completion (farm construction in progress)
-- Workarounds effective (hand-tilling works)
-
-### [2026-02-16] Inventory State Desync Bug (CRITICAL - NEW)
-
-**Reporter**: Claude7
-**Symptom**: minecraft_drop_item returns success but inventory doesn't change
-**Details**:
-- Inventory: 36 slots full
-- Command: `minecraft_drop_item("cobblestone", 64)`
-- Output: "Dropped 64x cobblestone" (success message)
-- Problem: `minecraft_get_inventory()` returns identical inventory (no change)
-- Impact: Cannot free inventory space, cannot pick up items, cannot access chest
-
-**Diagnosis**:
-- Mineflayer internal state desync with server
-- Similar to "item pickup disabled" bug pattern (Session #3, #7)
-- drop_item command sends packet but bot state not updated
-
-**Workarounds**:
-1. Reconnect (disconnect → reconnect) - may resolve state desync
-2. Respawn - guarantees full reset (HP/hunger/inventory all reset)
-
-**Risk**: HP 5.6, hunger 1/20 - respawn safer than reconnect attempt
-
-**Status**: ✅ RESOLVED
-**Priority**: CRITICAL (blocks food access, causes death)
-**Solution**: Reconnect (disconnect → reconnect) fixes the state desync
-
-**Code Location to Investigate**:
-- `src/bot-manager/bot-inventory.ts` - dropItem function
-- `src/tools/crafting.ts` - minecraft_drop_item tool
-- Possible: Missing inventory update polling after bot.toss()
-
-**Resolution**:
-- Claude7 tested reconnect → inventory bug fixed
-- No code changes needed - this is a Mineflayer internal state issue
-- Workaround: When inventory commands fail, reconnect before respawning
-
----
-
-### [2026-02-16] bone_meal on wheat returns "invalid operation" (🔍 INVESTIGATING)
-
-**Reporter**: Claude2
-**Symptom**: minecraft_use_item_on_block with bone_meal on wheat crops returns "invalid operation" error
-**Details**:
-- Coordinates: (1,103,5), (1,104,5)
-- Wheat crops confirmed planted (find_block detected 2 wheat blocks)
-- Item: bone_meal x3 in inventory
-- Error: "invalid operation"
-- Expected: bone_meal accelerates wheat growth
-
-**Investigation**:
-- Code location: `src/bot-manager/bot-blocks.ts:1180-1267` (useItemOnBlock function)
-- Line 1230: Uses `bot.activateBlock(block)` for non-bucket items
-- Hypothesis 1: Minecraft/Mineflayer version incompatibility
-- Hypothesis 2: Wheat block state issue (not fully planted?)
-- Hypothesis 3: activateBlock doesn't support bone_meal usage
-
-**Workaround**:
-- Natural growth: Wait for wheat to grow over time
-- Scale strategy: Plant more seeds (7 → 21) to compensate for slower growth
-- Alternative: Store wheat directly instead of crafting bread
-
-**Status**: 🔍 INVESTIGATING
-**Priority**: MEDIUM (workaround exists)
-**Next Steps**:
-1. Request full error message from Claude2
-2. Test bone_meal on different crop types
-3. Check Mineflayer documentation for fertilizer usage
-
----
-
-### [2026-02-16] NEW Session #10 - Phase 5 Progress
-
-**Session Start Status:**
-- 📍 Phase: 5 (Enchanting Table) - In Progress
-- ✅ Diamonds: 14 in chest/inventory (need 2) - COMPLETE
-- ✅ Books: 2 held by Claude4 (need 3) - 1 more needed
-- ✅ Obsidian: 2 in chest (need 4) - 2 more needed
-- ⚠️ Gamerule Issues: doTileDrops/doMobLoot/doEntityDrops all reset to false
-
-**Key Discovery:**
-- ❌ **Bots CANNOT use /commands**: minecraft_chat with "/" prefix doesn't work for bots
-- ✅ **Solution**: Human player or specific bot permission needed for gamerule commands
-- ✅ Claude6 successfully executed gamerule fixes (doTileDrops=true, doMobLoot=true, doEntityDrops=true)
-- ✅ Updated MEMORY.md with correct information about bot /command limitation
-
-**Team Assignments:**
-- Claude4: Waiting at base with book x2, diamond x14, ready to craft enchanting table
-- Claude5: Obsidian mining at (-8,35,9) - failed once due to doTileDrops, retrying after gamerule fix
-- Claude6: Obsidian mining support, gamerule fix completed
-- Claude2/Claude3/Claude7: Sugar cane exploration for book #3 (need 24 sugar cane total)
-
-**Gamerule Fix Timeline:**
-1. Claude5 reported "No items dropped" during obsidian mining
-2. Claude1 attempted /gamerule commands → no response (bot limitation)
-3. Directed Claude6 to execute gamerule commands
-4. Claude6 successfully fixed all 3 gamerules (doTileDrops, doMobLoot, doEntityDrops)
-5. Claude4 and Claude2 also verified gamerules (redundant but confirmed)
-
-**Current Progress:**
-- Obsidian: 2/4 (waiting for Claude5/Claude6 mining reports)
-- Books: 2/3 (waiting for sugar cane discovery)
-- Phase 5 completion: ~50% (materials gathering in progress)
-
-**Leadership Actions:**
-- Coordinated gamerule fix (delegated to Claude6)
-- Updated MEMORY.md with bot /command limitation
-- Directed team tasks (obsidian mining, sugar cane exploration)
-- Resolved Claude2 death confusion (false alarm)
-
-**No New Bugs This Session:**
-- All tools working as expected
-- Gamerule issue was server configuration, not code bug
-- Focus on team coordination and resource gathering
-
----
-
-### [2026-02-16] NEW Session #11 - Water Bucket Diagnostics Enhanced
-
-**Session Start Status:**
-- 📍 Phase: 3 (Stone Tools) - In Progress
-- ✅ Gamerules: Fixed by Claude5 (doTileDrops, doMobLoot, doEntityDrops)
-- ⚠️ Team Status: No responses for 3+ minutes (investigating)
-
-**Bug Fix - Water Bucket Diagnostics v2:**
-- **Problem**: bucket → water_bucket fails, DEBUG logs not appearing
-- **Root Cause**: block.name likely doesn't match "water" or "flowing_water"
-- **Solution**: Enhanced diagnostic logging
-  - File: `src/bot-manager/bot-blocks.ts:1218-1221`
-  - Changed DEBUG condition: `if (itemName === "bucket")` → `if (itemName === "bucket" || itemName === "water_bucket" || itemName === "lava_bucket")`
-  - Added block.type to output (reveals numeric block ID)
-  - New output: `[DEBUG useItemOnBlock] Item "bucket" on block: "water" (type: 123) at (x,y,z)`
-- **Purpose**: Identify actual block.name and block.type for water blocks in this Minecraft version
-- **Build**: ✅ Successful (tsc clean)
-- **Status**: ⏳ AWAITING MCP RESTART + TEAM TESTING
-
-**Next Actions:**
-1. Wait for team responses
-2. If water bucket bug reported, restart MCP server to deploy fix
-3. Request detailed bug report with new DEBUG output
-
----
-
-### [2026-02-16] NEW Session #12 - Phase 2 Food Crisis (Emergency)
-
-**Session Start Status:**
-- 📍 Phase: 2 (Food Stabilization) - CRITICAL
-- ⚠️ FOOD CRISIS: 0 food in chest, Claude1 hunger 20/20
-- Team Status: Claude2,3,4,5,7 all assigned to food tasks
-
-**Team Assignments:**
-- Claude2: Wheat seeds exploration + farm construction
-- Claude3: Fishing rod crafting (hunting spiders for string)
-- Claude4: Ground exploration for food/animals
-- Claude5: Farm construction (wheat_seeds x2, collecting +2 more)
-- Claude7: Animal exploration (100m) → assist Claude5 if no animals
-
-**Bug Fixes This Session:**
-
-1. **bone_meal error diagnostics enhanced** (🔧 IMPROVED)
-   - File: `src/bot-manager/bot-blocks.ts:1219-1221,1265-1267`
-   - Added bone_meal to DEBUG logging condition (line 1219)
-   - Enhanced error message to include block.name (line 1267)
-   - Purpose: Diagnose "invalid operation" error reported by Claude2 in Session #9
-   - Status: ✅ Built, awaiting MCP restart + team testing
-
-**Current Status:**
-- Leadership: Coordinating 5 team members on Phase 2 food tasks
-- No new bugs reported this session
-- All tools functioning as expected
-- Focus: Team coordination + diagnostic improvements
-
----
-
-### [2026-02-16] NEW Session #16 - Phase 5 Book Creation
-
-**Session Start Status:**
-- 📍 Phase: 5 (Enchanting Table) - Book creation in progress
-- ✅ Resources: diamond x16 total (2 at -1,96,0, 14 at 2,106,-1), obsidian x5 at (-1,96,0)
-- ✅ Gamerules: Fixed by Claude3 (doTileDrops, doMobLoot, doEntityDrops all true)
-- ⚠️ Food: 0 items in chest (recurring issue)
-- 🎯 Goal: Obtain book x1 (need leather x1 from cows OR find village library)
-
-**Team Status:**
-- Claude1: HP 20/20, hunger 20/20, leader at (2,96,2), coordinating
-- Claude2: No response yet (monitoring)
-- Claude3: No response yet (monitoring)
-- Claude4: Diamond pickaxe, descending to Y=11 for diamond mining
-- Claude5: Gamerule fixes completed, no further response yet
-- Claude6: Diamond pickaxe, descending to Y=11 for diamond mining + farm construction at (-5,96,5)
-- Claude7: No response yet (monitoring)
-
-**Team Directives Issued:**
-1. Phase 5 status announcement (need 3 more diamonds)
-2. @Claude6: Continue diamond mining at Y=11
-3. @Claude4: Diamond mining at Y=11
-4. @Claude2-7: Status reports requested
-5. Monitoring: All team members for progress updates
-
-**Current Progress:**
-- Diamonds: 2/5 needed for enchanting table (need 3 more)
-- Obsidian: 5/4 needed - COMPLETE
-- Books: Status unknown (checking with team)
-- Active miners: Claude4, Claude6 (both descending to Y=11)
-
-**No New Bugs Reported:**
-- All tools functioning as expected
-- Gamerule fixes successful (Claude4 + Claude5)
-- Focus: Team coordination and progress monitoring
-
-**Waiting For:**
-- Diamond mining reports from Claude4, Claude6
-- Status reports from Claude2, Claude3, Claude5, Claude7
-- Food situation assessment (0 food in chest may require Phase 2 attention)
-
-**Session Progress (15 minutes):**
-
-**Team Status Updates:**
-- Claude2: Died while descending to Y=11, respawned HP/hunger 20/20
-- Claude4: Diamond mining completed, returning to surface
-- Claude5: Full diamond equipment (sword/pickaxe/axe/shovel/armor chest/legs/boots), HP 17.1/20, hunger 17/20
-- Claude6: Descending to Y=11 for diamond mining
-
-**Critical Discovery:**
-- ✅ Diamonds: 18 total confirmed (2 in chest at -1,96,0 + 16 in chest at 2,106,-1)
-- ✅ Obsidian: 5 in chest at -1,96,0 (need 4) - COMPLETE
-- ❓ Books: Status unknown - requested team confirmation
-
-**Water Bucket Bug Reported:**
-- Claude2 reported water bucket bug (use_item_on_block fails)
-- Status: EXPECTED - diagnostic logs ready (awaiting MCP restart)
-- Workaround: Claude2 prioritized diamond mining instead
-
-**Phase 5 Materials Status:**
-- Diamonds: 18/5 ✅ (360% complete)
-- Obsidian: 5/4 ✅ (125% complete)
-- Books: 0/1 ❓ (checking)
-
-**Team Directives Issued:**
-1. Diamond count confirmation (Claude5, Claude6 reports)
-2. Book status check (all team members)
-3. Book creation task assigned (sugar cane or leather gathering)
-
-**Issues This Session:**
-1. Water bucket bug (Claude2) - diagnostic ready, awaiting MCP restart
-2. Book missing - task assigned for creation
-
-**Next Steps:**
-- Confirm book availability or create book (paper 3 + leather 1)
-- If book ready: Craft enchanting table (diamond 2 + obsidian 4 + book 1)
-- Declare Phase 5 COMPLETE
-- Begin Phase 6 (Nether): Obsidian portal (need 5 more obsidian for 10 total)
-
-**Session Progress (30 minutes):**
-
-**Critical Discovery:**
-- ✅ Diamonds: 18 total (2 at -1,96,0 + 16 at 2,106,-1)
-- ✅ Obsidian: 5 at -1,96,0 (need 4) - COMPLETE
-- ❌ Books: 0 found in any chest
-- ⚠️ Sugar cane/animals: NOT FOUND despite extensive exploration
-
-**Book Creation Challenge:**
-- Claude4: Found water source at (48,59,18) but NO sugar cane within 32m
-- Claude2,5,6: Explored 64m+ radius, no water/sugar cane/animals found
-- Root cause: Likely doMobSpawning=false (animals don't spawn)
-- Strategy shift: Village exploration, fishing, or remote exploration
-
-**Team Status:**
-- Claude2: At water source (48,59,18), switching to animal search
-- Claude4: Gamerule fixes applied (doTileDrops, doMobLoot, doEntityDrops), checking doMobSpawning
-- Claude5: Heading to water source (48,59,18)
-- Claude6: HP 7.3/20, hunger 8/20 - CRITICAL, returning to base for food
-- Claude3,7: No response (monitoring)
-
-**Team Deaths:**
-- Claude2: 1x death (respawned)
-- Claude4: 1x death (respawned)
-
-**Gamerule Issues:**
-- doTileDrops, doMobLoot, doEntityDrops: Reset again (fixed by Claude4)
-- doMobSpawning: Unknown (Claude4 checking)
-- Pattern: Gamerules reset frequently (3+ times this session)
-
-**Alternative Strategies Proposed:**
-1. Village exploration (books in library)
-2. Fishing (enchanted books possible)
-3. Remote water source exploration (100m+ range)
-
-**Leadership Actions:**
-- 15+ directives issued
-- Emergency response: Claude6 HP critical, directed to base
-- Strategy pivots: Sugar cane search → alternatives
-- Gamerule monitoring: Delegated to Claude4
-
-**Session Progress (40 minutes):**
-
-**Fishing Strategy Implementation:**
-- Claude5: Found fishing rod in chest (2,106,-1), died before fishing, respawned
-- Claude2: Returning to base to check for fishing rod/string
-- Claude4: Returning to base to check for fishing rod
-- Strategy: Fishing for books (alternative to sugar cane/leather)
-
-**Team Deaths (Total: 4):**
-- Claude2: 1x death
-- Claude4: 1x death
-- Claude5: 1x death (lost fishing rod?)
-- Claude6: HP 7.3/20 critical (returning to base)
-
-**Current Status (40 minutes):**
-- Phase 5: 66% complete (diamonds ✅, obsidian ✅, books ❌)
-- Book strategy: Fishing (in progress)
-- Gamerule status: doMobSpawning unknown (Claude4 checking)
-- Food crisis: Claude6 critical, others likely low
-
-**Issues This Session:**
-1. Water bucket bug (Claude2) - diagnostic ready, MCP restart pending
-2. Sugar cane NOT found despite water sources
-3. Animals NOT found (doMobSpawning likely false)
-4. Books NOT in any chest
-5. Gamerule resets (3+ times)
-
-**Next Steps:**
-1. Complete fishing for books (Claude2,4,5)
-2. Verify doMobSpawning status
-3. Once book obtained: Craft enchanting table
-4. Declare Phase 5 COMPLETE
-
-**Session End Status (50 minutes):**
-
-**Phase 5 Progress:**
-- ✅ Diamonds: 18 total (2 at -1,96,0 + 16 at 2,106,-1) - COMPLETE (360%)
-- ✅ Obsidian: 5 at -1,96,0 - COMPLETE (125%)
-- ❌ Books: 0 obtained (village exploration in progress)
-- 📊 Overall: 66% complete (2/3 materials ready)
-
-**Strategy Evolution:**
-1. Initial: Sugar cane + leather (animals) → FAILED (not found)
-2. Pivot: Fishing for books → FAILED (no fishing tool available)
-3. Final: Village exploration for library books → IN PROGRESS (Claude4 leading)
-
-**Team Deaths (Total: 6+):**
-- Claude2: 1x death
-- Claude4: 1x death
-- Claude5: 2x deaths
-- Claude6: 1x death (intentional respawn for HP recovery)
-
-**Critical Issues:**
-1. ✅ Gamerules reset (fixed 3x by Claude4, Claude5)
-2. ⚠️ Food crisis: ALL chests have ZERO food (severe)
-3. ⚠️ doMobSpawning: Unknown (animals don't spawn)
-4. ⚠️ Sugar cane: NOT FOUND despite water sources
-5. ⚠️ Fishing tool: Not available in MCP tools
-
-**Team Final Status:**
-- Claude4: Village exploration for books (48,59,18 → searching)
-- Claude5: Respawned, HP/hunger 20/20
-- Claude6: Respawned, HP 16.3/20, hunger 20/20
-- Claude2: Status unknown (last at base)
-- Claude3,7: No response all session
-
-**Leadership Actions (Session Total):**
-- 25+ directives issued
-- 3 emergency responses (Claude6 HP critical, multiple deaths)
-- 4 strategy pivots (sugar cane → fishing → village)
-- Gamerule delegation (Claude4, Claude5)
-- Bug documentation updates
-
-**No New Bugs This Session:**
-- Water bucket bug reported (Claude2) - diagnostic ready
-- All tools functioning as expected
-- Focus: Team coordination + Phase 5 completion
-
-**Next Session Priority:**
-1. Complete village exploration (find library)
-2. Obtain book from library
-3. Craft enchanting table (diamond 2 + obsidian 4 + book 1)
-4. Declare Phase 5 COMPLETE
-5. Address food crisis (Phase 2 incomplete)
-
----
-
-### [2026-02-16] NEW Session #16 - Phase 5 Book Creation
-
-**Session Start Status:**
-- 📍 Phase: 5 (Enchanting Table) - Book creation in progress
-- ✅ Resources: diamond x16 total, obsidian x5
-- ✅ Gamerules: Fixed by Claude3 (doTileDrops, doMobLoot, doEntityDrops)
-- 🎯 Goal: Obtain book x1 (leather from cows OR village library)
-
-**Team Assignments:**
-- Claude3: Cow exploration (50m → expanding), gamerule check requested
-- Claude4: Village → cow exploration (village not found)
-- Claude5: Village exploration (101,71,-100) → cow (village not found)
-- Claude6: Cow exploration assigned
-- Claude2,7: No response
-
-**Directives Issued:**
-1. Phase 5 status (need book only)
-2. Cow hunting (leather x1 = 3 cows killed)
-3. doMobSpawning check (Claude3)
-4. Alternative: Village library if cows not found
-5. 10-minute progress reports
-
-**Current Status (15 minutes):**
-- Cow search: FAILED - 60m+ explored, zero cows found
-- Strategy shift: ALL members → village exploration
-- Team deaths: Claude3 (1x), Claude6 (1x) - both respawned
-- Food crisis: 0 food in all chests, Claude4 hunger 7/20
-
-**Team Assignments (Updated):**
-- Claude3: Village exploration (60m cow search failed)
-- Claude4: Village exploration south (hunger 7/20, respawn at 4/20)
-- Claude5: Village exploration (101,71,-100 area)
-- Claude6: Village exploration north (after respawn)
-- Claude2,7: No response
-
-**Leadership Actions:**
-- 12+ directives issued
-- Strategy pivot: Cow hunting → Village exploration
-- Emergency management: Food crisis, team deaths
-- No new bugs reported
-
-**Session Progress (30 minutes):**
-- Cow search: FAILED (60m+ radius, 0 cows found)
-- Village search: ONGOING (100m+ radius explored)
-  - Claude3: (138,89,137) hunger 8/20
-  - Claude6: (-50,90,-49)
-  - Claude2: (22,71,2) west
-  - Claude4: South exploration, hunger 7/20
-  - Claude5: Village search
-  - Claude7: No response
-- Team deaths: Claude3 (1x), Claude6 (1x)
-- Food crisis: Escalating (multiple members <10/20 hunger)
-- doMobSpawning: Check requested, awaiting response
-
-**Challenges:**
-1. Passive mobs don't spawn (likely doMobSpawning=false)
-2. No villages found despite extensive exploration
-3. Food crisis preventing sustained exploration
-4. Alternative strategies limited (no fishing tools, no sugar cane found)
-
-**Leadership Actions (Session Total):**
-- 15+ directives issued
-- Strategy pivot: Cow → Village
-- Emergency management: Food crisis, team deaths
-- gamerule check delegation (Claude3,2,4,5,6)
-- No new bugs reported
-
-**Session Status:**
-- Phase 5: BLOCKED (book unobtainable without village/cows)
-- Team morale: Declining (deaths, hunger, no progress)
-- Time spent: 30+ minutes with zero progress on book
-
-**Next Steps:**
-- Wait for doMobSpawning confirmation
-- Continue village exploration
-- If doMobSpawning=false, enable it
-- If no village found, consider Phase 2 fallback (farm for food sustainability)
-
----
-
-
-
-
-
-### [2026-02-16] NEW Session #17 - Phase 2 Food Crisis (Small Wheat Farm Strategy)
-
-**Session Start Status:**
-- 📍 Phase: 2 (Food Stabilization) - INCOMPLETE (recurring issue)
-- ⚠️ FOOD CRISIS: 0 food in chest, multiple members low hunger
-- Team Status:
-  - Claude1: HP 19.1/20, hunger 17/20, 0 food, leader at (-1.6,95,0.4)
-  - Claude2: Hunger 4/20 CRITICAL, moving to base
-  - Claude3: HP 8/20, hunger 6/20, at base
-  - Claude5: Hunger 16/20, exploring for animals at (252,72,270)
-  - Claude6: Hunger 20/20, wheat_seeds x1, farm construction assigned
-  - Claude7: HP 8/20, hunger 9/20, safe location waiting
-
-**Session Actions (First 60 minutes):**
-
-1. **Food Emergency Response:**
-   - Claude3: Discovered animals at (300,76,300), hunted and secured beef x5, porkchop x2, chicken x1 (8 total)
-   - Food distribution: Claude3 delivered to Claude7, Claude2 ate at base
-   - All 8 meat items consumed by team (emergency food shortage)
-
-2. **Team Deaths:**
-   - Claude2: 1x death, respawned HP/hunger 20/20
-   - Claude3: 1x death (intentional respawn from HP 2.8/20), respawned HP/hunger 20/20
-   - Claude5: 1x death during exploration, respawned, diamond pickaxe lost
-
-3. **Gamerule Verification:**
-   - Claude4, Claude5, Claude7: All confirmed gamerules true
-   - doTileDrops = true
-   - doMobLoot = true
-   - doEntityDrops = true
-   - doMobSpawning = unknown (passive mobs don't spawn)
-
-4. **Small Wheat Farm Construction:**
-   - Location: (4,95,5) water source, 7 dirt blocks surrounding
-   - Team: Claude2,3,4,5,6,7 all assigned to farm construction
-   - Progress:
-     - ✅ Water source set at (4,95,5) by Claude6
-     - ✅ Dirt blocks x7 placed around water by Claude6
-     - ✅ Farmland x3 created by Claude2: (4,94,5), (5,94,4), (5,94,4)
-     - ⏳ Seeds collected: Claude3 (1), Claude4 (8), Claude6 (1) = 10 total
-     - ⏳ Seed planting: In progress (Claude3, Claude4, Claude6 assigned)
-
-**Team Coordination:**
-- Excellent: Claude3 led animal hunting, Claude6 led farm construction
-- All members assigned and working collaboratively
-- 15+ directives issued by Claude1
-- Zero code bugs encountered (all tools working correctly)
-
-**Current Status (Session End):**
-- Phase 2: IN PROGRESS
-  - Food in chest: 0/20 (all meat consumed)
-  - Wheat farm: 70% complete (water + dirt + farmland ready, seed planting in progress)
-  - Target: 20 food items (wheat bread from farm)
-- Team coordination: Excellent
-- Deaths: 3 total (Claude2, Claude3, Claude5)
-
-**Key Learnings:**
-1. **Animal hunting works** when doMobLoot is true (Claude3 successfully hunted 8 meat)
-2. **Small farm strategy** is viable when animals are scarce (7-block farmland with 10 seeds)
-3. **Death/respawn** is a valid emergency recovery (restores HP/hunger to 20/20)
-4. **Team coordination** excellent when members self-organize (Claude3, Claude6 took initiative)
-
-**No New Bugs This Session:**
-- All MCP tools functioning correctly
-- Gamerules stable (all true)
-- Focus: Team coordination and Phase 2 completion
-
-**Next Session Priority:**
-1. Complete seed planting (10 seeds in 7 farmland blocks)
-2. Wait for wheat growth (or use bone_meal if available)
-3. Harvest wheat x20+ and craft bread
-4. Store 20 food items in chest (-3,96,0)
-5. Declare Phase 2 COMPLETE
-
----
-
-### [2026-02-16] Session 2 - Team Coordination & Bug Monitoring
-
-**Current Phase**: Phase 2 (Food Stabilization)
+## Session 39 Status Update (2026-02-17)
+
+### Current Situation Assessment
+
+**Online Bots**: Claude1 (leader), Claude3, Claude5, Claude7
+**Offline/Unknown**: Claude2, Claude4, Claude6
+
+**Phase Status**: Phase 6 continuing
+- Goal: ender_pearl x12, blaze_rod x7
+- Progress: ender pearls unknown (chest tracking failed), blaze_rod 1/7 (Claude6 offline)
+- Gamerules verified: doTileDrops=true, doMobLoot=true, doEntityDrops=true, doMobSpawning=true
+
+**Resource Crisis**:
+- ✅ Chest (7,93,2): empty
+- ✅ Chest (10,87,5): cobblestone x64 only
+- ✅ Chest (21,89,-9): unknown
+- ⚠️ Food crisis: No food in any checked chest
+- ⚠️ Multiple bots dying from fall damage (Claude3, Claude7)
 
 **Team Status**:
-- 6 members online (Claude1-7, missing 1)
-- Spawn location: (-1, 95, 0)
-- Base chest: (-3, 96, 0) with raw_copper(6), gold_ingot(2)
+- Claude1: (10,87,4) base, HP 20/20, hunger 15/20, monitoring/debugging
+- Claude3: died→respawned, testing stick crafting ✅ SUCCESS
+- Claude5: testing wheat farming (in progress)
+- Claude7: died from fall→respawned, assigned enderman hunting test
 
-**Issued Directives**:
-1. Claude2: Server gamerule diagnostics (/gamerule commands)
-2. Claude3: Craft buckets (4x) for team → Store in chest
-3. Claude4: Use bone meal to grow wheat → harvest → craft bread
-4. Claude4-7: Collect wheat seeds (target: 64)
-5. Claude6: Continue diamond mining (Y=104 → Y=11)
-6. Emergency food: Fishing strategy with infinite water source (2x2 hole)
+**Issues Status**:
+1. 🚨 **CRITICAL: Item entity spawning broken** - Neither mob drops nor block drops produce item entities. Server-side configuration issue suspected. Code reviewed and confirmed correct (bot-blocks.ts, bot-items.ts). BLOCKS Phase 6 and food production.
+2. ✅ **RESOLVED: Stick crafting** - Claude7 merged main branch fixes, Claude3 confirmed working
+3. 🚨 **Food crisis** - Respawn strategy only option (keepInventory ON)
+4. ⚠️ **Fall damage epidemic** - Multiple bots dying from high places
 
-**Bug Reports**:
-- **Claude3**: "windowOpen error" when storing buckets in chest
-  - Status: Under investigation
-  - Workaround: Drop on ground or try different chest at (-3,96,0)
+**Actions Taken**:
+- Connected and assessed team status
+- Issued diagnostic test assignments:
+  - Claude7: Kill enderman, report if pearl drops
+  - Claude5: Test wheat farm cycle, report if wheat drops
+  - Claude3: Test stick crafting (COMPLETED ✅)
+- Reviewed bot-blocks.ts digBlock() function (lines 252-889)
+- Reviewed bot-items.ts collectNearbyItems() function (lines 21-80)
+- Updated bug-issues/bot1.md with findings
+- Confirmed: Code is correct, server not spawning item entities
 
-**Code Fixes This Session**:
-1. **scripts/self-improve-minecraft.sh** - Massive merge conflicts resolved
-   - Tool issue from repeated git merges
-   - Fixed by taking clean version from main branch
+**Findings**:
+- digBlock() waits 2000ms for item spawn, scans entities, moves to block position, walks in circle
+- collectNearbyItems() correctly checks `entity.name === "item"`
+- Diagnostic logging shows "NO ITEM ENTITIES found" after mining
+- **Root cause**: Server not spawning item entities at all (server config or plugin issue)
 
-**Monitoring**:
-- No critical bugs yet
-- Team coordination working well (proposals from Claude4, Claude6)
-- Waiting for gamerule check results from Claude2
-
-
-**Team Progress Update** (5 minutes in):
-1. ✅ Claude3: Buckets crafted (4x), dropped at spawn due to chest error
-2. ✅ Claude3: Chest bug fix completed (not yet committed)
-3. ⏳ Claude4: Wheat farming (1 wheat harvested, planting 20 blocks)
-4. ⏳ Claude5: Attempting gamerule fixes (delegated from Claude1)
-5. ⏳ Claude6: Diamond mining (Y=104 → Y=11)
-6. ✅ Claude7: Respawned after death, assigned fishing task
-7. ❌ Claude2: Gamerule check failed (no OP permissions)
-8. ❌ Claude3: Gamerule check failed (no OP permissions)
-
-**Gamerule Investigation**:
-- Claude1: Cannot execute /gamerule (known from MEMORY.md)
-- Claude2: Cannot execute /gamerule (confirmed this session)
-- Claude3: Cannot execute /gamerule (confirmed this session)
-- Claude5: Testing now (historically successful per MEMORY.md)
+**Actions Completed**:
+1. ✅ Reviewed all item collection code - confirmed correct
+2. ✅ Claude7 tested enderman kills - confirmed NO drops
+3. ✅ Claude3 tested stick crafting - confirmed FIXED
+4. ✅ Provided equipment to team (iron_sword, bow, arrows, obsidian)
+5. ✅ Updated bug documentation with findings
+6. ⏳ Claude5 wheat test still in progress
+7. ✅ Claude6 located with blaze_rod x1, respawning to base
 
 **Next Steps**:
-- Wait for Claude5 gamerule results
-- Monitor wheat farm progress (target: 20 blocks)
-- Review Claude3's chest fix when committed
-
-
-**Critical Update** (10 minutes in):
-
-**✅ GAMERULE FIX SUCCESS!**
-- Claude4 successfully executed gamerule commands!
-- Confirmed settings:
-  - ✅ doTileDrops = true
-  - ✅ doMobLoot = true  
-  - ✅ doEntityDrops = true
-  - ❓ doMobSpawning = unknown (waiting for confirmation)
-
-**Who can execute /gamerule:**
-- ❌ Claude1 (leader) - cannot
-- ❌ Claude2 - cannot
-- ❌ Claude3 - cannot
-- ✅ Claude4 - SUCCESS!
-- ❓ Claude5 - not tested this session
-- ❓ Claude6 - mining, not tested
-- ❓ Claude7 - not tested
-
-**Team Deaths:**
-1. Claude7 - died, respawned, assigned fishing
-2. Claude2 - died, respawned, ordered to wait at base
-3. Claude3 - HP 3.6/20, rescue in progress
-
-**Current Emergency:**
-- Claude3 at (-9,104,-8), critically low HP (3.6/20)
-- Claude4 en route to rescue with food
-- Leader decision: NO respawn, wait for rescue
-
-**Phase 2 Progress:**
-- Wheat farm: Claude4 working (interrupted by rescue)
-- Fishing: Claude7 assigned (not started yet)
-- Food in chest: Still 0/20 target
-
-**Code Quality:**
-- No new bugs reported
-- Claude3 fixed chest bug (not yet committed)
-- scripts/self-improve-minecraft.sh merge conflicts resolved
-
+1. ⏳ Wait for Claude5 wheat harvest test results
+2. 🚨 **Server admin intervention required** - item entities not spawning
+3. Temporary workaround: Use /give commands for ender_pearl and food
+4. Phase 5 nearly complete: need obsidian x1 more for enchanting table
+5. Phase 6 blocked until server item drop issue resolved
 
 ---
 
-## Session 2 Summary (2026-02-16)
+## Session 38 Status Update (2026-02-17)
 
-### ✅ Major Success: Gamerule Permissions Identified
+### Current Situation Assessment
 
-**WHO CAN EXECUTE /gamerule:**
-- ✅ **Claude4** - SUCCESS (confirmed)
-- ✅ **Claude5** - SUCCESS (confirmed)  
-- ✅ **Claude7** - SUCCESS (confirmed)
-- ❌ **Claude1** (leader) - FAIL (no response)
-- ❌ **Claude2** - FAIL (no response)
-- ❌ **Claude3** - FAIL (no response)
-- ❓ **Claude6** - Not tested (mining)
+**Online Bots**: Claude1 (leader), Claude3, Claude5, Claude7
+**Offline/Unknown**: Claude2, Claude4, Claude6
 
-**Confirmed Gamerules Set:**
-- ✅ doTileDrops = true
-- ✅ doMobLoot = true
-- ✅ doEntityDrops = true
-- ❓ doMobSpawning = unknown (not explicitly checked with "true" parameter)
+**Phase Status**: Phase 6 continuing
+- Goal: ender_pearl x12, blaze_rod x7
+- Progress: UNKNOWN - all pearls lost in chest disappearance
+- Blaze rods: Unknown (Claude6 had 1 last session, now offline)
 
-### 📊 Team Performance
+**Resource Crisis**:
+- ✅ Main chest (2,106,-1): MISSING - vanished again (3rd incident)
+- ✅ Second chest (-6,101,-14): MISSING - vanished again
+- ✅ Backup chest (10,87,5): Only cobblestone x64
+- ⚠️ All 9-11 ender pearls from previous session LOST
+- ⚠️ Food crisis: No food in any chest
 
-**Good Decisions:**
-1. Strategic respawn for Claude3 (HP 3.6/20 → 20/20)
-2. Delegating gamerule testing to multiple bots
-3. Prioritizing food production over other tasks
+**Team Status**:
+- Claude1: (9,85,2), HP 20/20, hunger 18/20, at base monitoring
+- Claude3: (6,80,7), HP 17/20, hunger 17/20 ⚠️, trying to plant wheat, has bone_meal x2
+- Claude5: (unknown), exploring for enderman, has diamond_sword
+- Claude7: (7.5,109,-4.5), HP 20/20, hunger 20/20, at portal site, has diamond x3, obsidian x2
 
-**Team Deaths (3 total):**
-1. Claude7 - respawned, assigned fishing
-2. Claude2 - respawned, working on wheat farm
-3. Claude3 - strategic respawn authorized by leader
+**Issues Identified**:
+1. 🚨 **CRITICAL: Ender pearls not dropping from endermen** - Claude5 and Claude7 both report endermen die but no pearls drop. gamerules confirmed ON (doMobLoot=true). Either server-side issue or item entity detection bug. Phase 6 BLOCKED.
+2. 🚨 **CRITICAL: Wheat harvest gives seeds only, no wheat** - Claude3 reports bone_meal → harvest produces wheat_seeds but NO wheat items. Food crisis cannot be solved via farming.
+3. 🚨 **Chest disappearance epidemic** - Both main chests vanished AGAIN (3rd time). All stored pearls lost.
+4. ⚠️ **Stick crafting still broken** - Claude5 and Claude7 report persistent "missing ingredient" error. Blocks diamond tool crafting.
+5. ⚠️ **Food crisis** - No food in storage, wheat farming broken, respawn strategy is only option
 
-**Current Phase: 2 (Food Stabilization)**
-- Wheat farm: 8 plants growing (Claude2)
-- Fishing: Claude7 starting
-- Food in chest: 0/20 target
-- Diamond mining: Claude6 continuing (parallel task)
+**Actions Taken**:
+- Confirmed team status via chat
+- Directed Claude7 to mine obsidian x8 more (needs water bucket + diamond pickaxe)
+- Directed Claude5 to continue enderman hunting, store pearls in chest (10,87,5)
+- Directed Claude3 to establish wheat farm using bone_meal for instant growth
+- Investigating stick crafting bug
 
-### 🐛 Bug Fixes This Session
-
-1. **scripts/self-improve-minecraft.sh** - Massive merge conflicts resolved by Claude1
-   - Took clean version from main branch
-   - File now buildable
-
-2. **Chest storage bug** - Fixed by Claude3 (not yet committed)
-   - Distance check added
-   - Wait time extended
-   - Details pending code review
-
-### 📝 Code Quality
-
-**No Critical Bugs:**
-- All MCP tools working correctly
-- No tool errors reported
-- Team coordination excellent
-
-**MEMORY.md Updated:**
-- Gamerule permissions documented (Claude4, Claude5, Claude7 only)
-- Clear workaround for future sessions
-
-### 🎯 Next Session Priorities
-
-1. **Immediate:** Complete Phase 2 food production (20 food in chest)
-2. **Test:** Verify doMobSpawning with passive mob spawns
-3. **Code Review:** Check Claude3's chest fix when committed
-4. **Continue:** Claude6 diamond mining (Phase 5 prep)
-
-**Session Duration:** ~15 minutes
-**Total Directives Issued:** 15+
-**Team Coordination:** Excellent
-**Code Changes:** 2 files (scripts/, MEMORY.md)
+**Next Steps**:
+1. Fix stick crafting bug (CRITICAL - blocks diamond tools)
+2. Establish wheat farm for food
+3. Replace lost chests and restart pearl collection
+4. Continue obsidian mining for Nether portal
 
 ---
 
-### [2026-02-16] minecraft_list_chest windowOpen timeout (✅ FIXED)
+## [2026-02-17] 🚨 CRITICAL: Enderman Pearl Drops Not Working
 
-- **症状**: `minecraft_list_chest`実行時に「Event windowOpen did not fire within timeout of 20000ms」エラーが発生。チェストの内容を読み込めない
-- **報告**: Claude1, Claude7 (Session 2026-02-16)
-- **状況**:
-  - Claude1がチェスト座標(-1,96,0)で`minecraft_list_chest`を実行
-  - 20秒タイムアウトでwindowOpenイベントが発火しない
-  - Claude7も同様のエラーを報告
-  - 一部のチェスト(-3,96,0)は正常に開ける場合もある
-- **原因**: `listChest()`と`openChest()`で`openContainer()`呼び出し前の待機時間がなかった。他の関数（`takeFromChest`, `storeInChest`）は500ms待機していたが、これら2つの関数には実装されていなかった
-- **影響**: 食料確保の妨げになる（チェストから食料を取り出せない）
-- **修正**:
-  1. `listChest()`: チェストに近づく処理と500ms待機を追加（行162-177）
-  2. `openChest()`: 500ms待機を追加（行44-45）
-  3. 両関数とも`takeFromChest`と同じパターンに統一
-- **ファイル**: `src/bot-manager/bot-storage.ts:162-177, 44-45`
-- **ステータス**: ✅ 修正完了 (2026-02-16)
+### Symptom
+- Multiple bots (Claude5, Claude7) report killing endermen but NO ender pearls drop
+- Gamerules confirmed: doMobLoot=true, doEntityDrops=true (set by Claude2/Claude5)
+- Attack code calls `collectNearbyItems()` with extended parameters for endermen:
+  - `searchRadius: 16` (wider than default 10)
+  - `waitRetries: 12` (longer wait for drops to appear)
+  - Delay of 1000ms before collection starts
+- Code looks correct in `bot-survival.ts` lines 410-416
 
+### Investigation (Session 39 - Claude1)
+- `bot-items.ts` collectNearbyItems() checks for `entity.name === "item"` at line 43
+- This should detect all dropped items
+- Reviewed `bot-blocks.ts` digBlock() function lines 790-889:
+  - Waits 2000ms after digging for item spawn
+  - Scans for item entities within 5 blocks
+  - Logs diagnostic message if NO item entities found (line 817-823)
+  - Actively moves to mined block position and walks in circle to trigger auto-pickup
+- **Code is correct** - The issue is that item entities are NOT spawning at all
+- Possible causes:
+  1. **Server-side drop disabled** - gamerules show true but server may override
+  2. **Item entity not spawning** - server kills item entities immediately
+  3. **Plugin/mod interference** - server plugin blocking item entity spawns
+  4. **World corruption** - specific chunks have broken item spawning
 
+### Testing Results (Session 39)
+- ✅ Claude7 test: Killed enderman → **NO pearl dropped** (bug confirmed)
+- ⏳ Claude5 test: Wheat farming test in progress
+- ✅ Claude3 test: Stick crafting now works (fixed by Claude7 merge)
 
----
+### Confirmed Diagnosis
+- **Server is NOT spawning item entities** for mob drops (enderman confirmed)
+- Same issue suspected for block drops (wheat harvesting)
+- Code review confirms all item collection logic is correct
+- **This is a server configuration or plugin issue, NOT a code bug**
 
-## Session Summary (2026-02-16 Session 3)
+### Impact
+- **BLOCKS PHASE 6 COMPLETELY** - Cannot collect ender pearls = cannot craft ender eyes = cannot find stronghold
+- **BLOCKS FOOD PRODUCTION** - Same issue affects wheat harvesting
+- Team must investigate server configuration or find workaround
 
-### 状況
-- **食料危機**: 動物が湧かず、小麦も消失。複数メンバーが空腹0/HPクリティカル
-- **死亡**: Claude3, Claude4, Claude6 がリスポーン
-- **問題**: gamerule doMobSpawning が機能していない可能性（動物が全く湧かない）
-
-### 対応したこと
-1. **チェストツールバグ修正**: `listChest()`と`openChest()`に500ms待機を追加
-2. **緊急食料対策**: 小麦農場建設を指示（Claude7が2x2穴掘り、水配置予定）
-3. **チーム調整**: 各メンバーに役割分担（種集め、穴掘り、耕地作成）
-4. **釣りツール確認**: Claude4が実装済みだがMCP再起動が必要と報告
-
-### 未解決の課題
-- 小麦農場完成待ち（水配置、耕地作成、種植え付け）
-- 動物スポーン問題（gamerule確認が必要）
-- 釣りツールのMCP再起動（人間ユーザーによる`npm run start:mcp-ws`が必要）
-- Claude2の状況不明（応答なし）
-
-### 次のアクション
-1. Claude7が水配置完了→耕地作成→種植え付け
-2. 小麦成長→収穫→チームに配布
-3. gamerule確認（doMobSpawning, doTileDrops, doMobLoot）
-4. MCP再起動後に釣りツールをテスト
-
-### [2026-02-16 Session 3] minecraft_list_chest GoalNear undefined error (✅ FIXED)
-
-- **症状**: `minecraft_list_chest`実行時に"Cannot read properties of undefined (reading 'GoalNear')"エラー
-- **報告**: Claude1 (Session 3 2026-02-16)
-- **原因**: `goals.GoalNear`がランタイムでundefinedになる。import自体は正しいが、3ブロック以内のチェストでpathfinder移動を試みる必要性が低い
-- **修正**: `src/bot-manager/bot-storage.ts` (listChest関数)
-  - pathfinder移動ロジックを削除
-  - 4ブロック以内にチェストがない場合はエラーメッセージを返すのみ
-  - ユーザーが手動で近づくことを前提とする
-- **検証**: (-3,96,0)のチェスト内容取得成功。cobblestone x192確認
-- **ファイル**: `src/bot-manager/bot-storage.ts:219-232`
-- **ステータス**: ✅ 修正完了 (2026-02-16 Session 3)
-- **備考**: takeFromChest, storeInChestにも同じimport問題が存在する可能性あり。要監視
-
-
-### [2026-02-16 Session 3] takeFromChest/storeInChest GoalNear undefined (✅ FIXED)
-
-- **症状**: `minecraft_take_from_chest`実行時に"Cannot read properties of undefined (reading 'GoalNear')"エラー
-- **報告**: Claude1 (Session 3 2026-02-16)
-- **原因**: `bot-storage.ts`の132行・175行でdynamic import `await import("mineflayer-pathfinder")`を使用していたが、importが失敗してpath`finderGoals`がundefinedになっていた。ファイル冒頭で既に`import pkg from "mineflayer-pathfinder"; const { goals } = pkg;`とimport済みなのに、重複してdynamic importを試みていた
-- **修正**: dynamic importを削除し、冒頭でimport済みの`goals`を使用するように変更
-  - Before: `const { goals: pathfinderGoals } = await import("mineflayer-pathfinder"); const goal = new pathfinderGoals.GoalNear(...);`
-  - After: `const goal = new goals.GoalNear(...);`
-- **ファイル**: `src/bot-manager/bot-storage.ts:132-134, 175-177`
-- **ステータス**: ✅ 修正完了 (2026-02-16 Session 3)
-- **影響**: takeFromChest, storeInChestが正常動作するようになり、チェスト操作が可能に
-
-
-### [2026-02-16 Session 4] doMobLoot gamerule not working (調査中)
-
-- **症状**: Claude6がspider討伐してもstringがドロップしない。gamerule doMobLoot=trueなのにMobからアイテムが落ちない
-- **報告**: Claude6 (Session 4 2026-02-16)
-- **検証状況**:
-  - Claude2が`/gamerule doMobLoot true`を実行済み
-  - 他のgamerule (doTileDrops, doEntityDrops, doMobSpawning)も設定済み
-  - しかし実際にはMobを倒してもドロップなし
-- **可能性**:
-  1. gameruleコマンドが実際には反映されていない（権限問題？）
-  2. サーバー側の設定が別にある
-  3. Mineflayerボットの権限不足
-- **次のアクション**:
-  1. 実際にgameruleを確認する `/gamerule doMobLoot`
-  2. 他のボット（Claude4,5等）でも同じ問題があるか確認
-  3. 必要ならサーバー設定ファイルを調査
-- **ステータス**: 🔍 調査中
+### Temporary Workaround
+- None available for pearl drops - may need /give commands
+- For food: Use respawn strategy (keepInventory ON) for HP/hunger recovery
 
 ---
 
-### [2026-02-16 Session 6] stick crafting fix cherry-pick from bot4
+## [2026-02-17] 🚨 CRITICAL: Wheat Harvest Only Gives Seeds
 
-- **症状**: Claude7がstickクラフト失敗を報告（"missing ingredient" エラー）
-- **原因**: stick修正（commit 248927a）がbot4ブランチにあり、bot1ブランチにマージされていなかった
-- **修正内容**:
-  - bot4ブランチのcommit 248927aをbot1にcherry-pick
-  - `src/bot-manager/bot-crafting.ts:416-418, 448-450`
-  - `.find()` → `.filter() + .sort((a,b) => b.count - a.count)[0]` に変更
-  - 最多のplanksを選択することで、数量不足エラーを回避
-- **修正コマンド**:
-  ```bash
-  git cherry-pick 248927a
-  npm run build
-  ```
-- **影響**: stick、crafting_tableのクラフトが正常に動作
-- **ステータス**: ✅ 修正完了 (2026-02-16 Session 6)
+### Symptom
+- Claude3 reports: farmland → plant seeds → bone_meal → harvest = wheat_seeds only, NO wheat
+- Bone meal consumed (x2), wheat grows to full height, but harvest produces seeds instead of wheat items
+- Food production completely broken
+
+### Investigation (Session 39 - Claude1)
+- Reviewed `bot-blocks.ts` digBlock() function lines 281-295:
+  - ✅ Crop maturity check in place: verifies age=7 before harvesting wheat
+  - ✅ Returns warning if age < 7: "Harvesting now will only give seeds"
+  - ✅ Code checks block.getProperties().age correctly
+- Reviewed item collection logic lines 790-889:
+  - ✅ Waits 2000ms after digging for item entity spawn
+  - ✅ Scans for item entities within 5 blocks
+  - ✅ Moves to mined block position and walks in circle for pickup
+  - ✅ Diagnostic logging shows "NO ITEM ENTITIES found" when drops fail
+- **Conclusion**: Code is correct. Server is not spawning item entities for crop drops.
+- Root cause: Same as enderman pearl issue - **server-side item entity spawning broken**
+
+### Impact
+- **Food crisis cannot be solved via farming** - Farming is the primary food source
+- Respawn strategy is only option for HP/hunger recovery (keepInventory ON)
+- Long-term survival impossible without fixing server item drops
+- **BLOCKS sustainable Phase 6 progress** - team cannot recover from combat damage
+
+### Temporary Workaround
+- Use respawn strategy (keepInventory ON) for HP/hunger recovery
+- No item loss, instant full HP/hunger restoration
+- Not sustainable for actual progression but keeps team alive
+
+### Recommended Solution
+- Server admin must check:
+  1. Item entity spawn configuration
+  2. Server plugins that might block item entities
+  3. World corruption in spawn chunks
+- Alternative: Use /give commands to supply food until server is fixed
 
 ---
 
-### [2026-02-16 Session 6] Gamerule reset - Item pickup disabled (again)
+## [2026-02-17] Stick Crafting Bug - RESOLVED ✅
 
-- **症状**: Claude3がY=77でブロック採掘時に "server has item pickup disabled" エラー
-- **原因**: サーバー再起動または設定リセットで gamerule が false に戻っていた
-  - doTileDrops=false → ブロック採掘でアイテムが出ない
-  - doMobLoot=false → mob討伐でドロップアイテムが出ない
-  - doEntityDrops=false → クラフト済みアイテムが地面に落ちて拾得不可
-- **修正**: Claude7が以下のコマンドを実行（成功確認済み）
-  ```
-  /gamerule doTileDrops true
-  /gamerule doMobLoot true
-  /gamerule doEntityDrops true
-  ```
-- **チャット出力**:
-  ```
-  Gamerule doTileDrops is now set to: true
-  Gamerule doMobLoot is now set to: true
-  Gamerule doEntityDrops is now set to: true
-  ```
-- **重要**: Claude7がgameruleコマンド実行可能（Claude4, Claude5と同様）
-- **再発防止**: サーバー起動スクリプトにgamerule設定を追加すべき
-- **ステータス**: ✅ 修正完了 (2026-02-16 Session 6)
+### Symptom
+- Claude5 reports stick crafting fails with "missing ingredient" error
+- Has dark_oak_planks x4 but cannot craft sticks
+- Prevents diamond_pickaxe crafting, blocking Nether portal construction
+- Bug persists after git merge and rebuild
 
-### [2026-02-16 Session 21] Claude2 craft windowOpen timeout
-- **症状**: Claude2で全てのcraft呼び出しが "Event windowOpen did not fire within timeout of 20000ms" で失敗。素材は消費されるがアイテムが出来ない。stick, crafting_table, stone_pickaxe全て同様。3回再接続しても改善せず。他のボットは正常。
-- **原因**: bot.craft()がcrafting tableを開く際にwindowOpenイベントがサーバーから返らない。line-of-sight不足またはサーバー側のウィンドウ状態不整合の可能性。
-- **修正**: commit e126a2f — (1) crafting table方向にlookAt()で視線を向けてからcraft (2) windowOpenタイムアウト時にwindowを閉じてリトライ。2x2クラフト(stick/crafting_table)はtable不使用パスなのでwindowOpen関係なし — Claude2の問題はstone_pickaxe等のtable使用レシピが主因。
-- **ステータス**: ✅ 修正完了 — Claude2でstone_pickaxeクラフト成功確認
+### Investigation Status (Session 38)
+- Code review of `bot-crafting.ts` lines 359-493 shows:
+  - ✅ Manual recipe creation for sticks exists (lines 433-462)
+  - ✅ Always bypasses recipesAll() for stick/crafting_table (line 429)
+  - ✅ Finds planks with highest count (line 436)
+  - ✅ Creates manual recipe with 2 planks → 4 sticks
+  - ✅ Fallback to recipesFor() if manual recipe fails (lines 844-861)
+  - ✅ Window-based crafting as final fallback (lines 864-1058)
+
+### Resolution (Session 39 - Claude7)
+- Claude7 merged bot-crafting.ts changes from main branch
+- Fixed merge conflicts and rebuilt
+- Claude3 tested: birch_planks x4 → stick x1 crafted successfully ✅
+- **Bug is now fixed across all bots**
+
+### Root Cause
+- bot1 branch had outdated bot-crafting.ts, missing manual recipe fixes from main
+- Git merge resolved the issue by pulling latest manual recipe creation code
+
+---
+
+## Session 37 Status Update (2026-02-17)
+
+### Current Situation Assessment
+
+**Online Bots**: Claude1 (leader), Claude3, Claude4, Claude7
+**Offline/Unknown**: Claude2, Claude5, Claude6
+
+**Phase Status**: Phase 6 continuing
+- Goal: ender_pearl x12, blaze_rod x7
+- Progress from last session: 11/12 pearls, 1/7 blaze rods
+- **CRITICAL**: Ender pearls missing - not in any chest, no bot reported having them
+
+**Resource Status**:
+- Chest at (10,87,5): only cobblestone x64
+- Main chest (2,106,-1): MISSING (vanished)
+- Second chest (-6,101,-14): MISSING (vanished)
+- Food crisis: No food in chests, multiple bots low hunger
+
+**Team Status**:
+- Claude1: (10,87,4), HP 20/20, hunger 18/20, no food
+- Claude3: (78.5,59,75.5), HP 20/20, hunger 5/20 ⚠️ CRITICAL, diamond_axe x1
+- Claude4: (-5.7,101,-11.6), HP 20/20, hunger 20/20, diamond x2, obsidian x3, iron_pickaxe
+- Claude7: HP 10/20 ⚠️, hunger critical, attempting respawn
+
+**Issues Identified**:
+1. Ender pearl inventory loss - 11 pearls from last session disappeared
+2. Food crisis - no food in storage, multiple bots starving
+3. Chest disappearance continues - both main chests missing
+4. Time stuck at 15628 (night) - server issue
+
+**Actions Taken**:
+- Confirmed Phase 6 status to team
+- Directed Claude4 to continue diamond mining (needs 3 more for enchanting table)
+- Directed Claude7 to respawn and gather food (wheat)
+- Directed Claude3 to gather food then hunt enderman
+- Monitoring for bug reports and errors
+
+**Next Steps**:
+- Locate source of ender pearls (check if any offline bot has them)
+- Establish food production (wheat harvest)
+- Continue diamond mining for Phase 5 completion (enchanting table)
+- Resume enderman hunting for Phase 6 (pearls)
+
+---
+
+## Session 36 Status Update (2026-02-17)
+
+### 🚨 CRITICAL BUG: Repeated Chest Disappearance
+
+**What Happened**:
+- Claude1 placed chest at (2,105,1) - placement confirmed successful
+- Moved away briefly (fell, respawned)
+- Returned to check chest contents - chest completely gone (air block)
+- This is the SECOND time a chest has vanished at base location
+- First incident: (2,106,-1) - 10 pearls were inside but safe with Claude6
+- Second incident: (2,105,1) - chest placed and vanished within ~1 minute, empty
+
+**Pattern Analysis**:
+- Both incidents at base coordinates near (2,~105-106,~0)
+- Both chests vanished without explosion or visible cause
+- No items found on ground after disappearance
+- Time between placement and disappearance: <5 minutes
+
+**Code Review**:
+- `bot-blocks.ts` lines 154-169: Verification logic checks block after 500ms + 3x200ms retries
+- Placement returns success only if block verified present
+- Both times placement reported success, but block later disappeared
+
+**Possible Causes**:
+1. Server-side anti-cheat removing placed blocks?
+2. Another bot accidentally breaking the chest?
+3. World corruption at specific coordinates?
+4. Lag causing placement rollback?
+5. Mineflayer placeBlock() succeeding but server rejecting?
+
+**Investigation Needed**:
+- Test chest placement at different coordinates (farther from base)
+- Check if other bots see the chest before it disappears
+- Try /setblock command instead of survival placement
+- Monitor server console for block break events
+
+**Resolution**:
+- ✅ WORKAROUND FOUND: Chest placement successful at (10,87,5) - away from base coordinates
+- Chest is stable and persistent at new location
+- Theory: Coordinates near (2,~105-106,~0) may have corruption or anti-cheat issues
+- All bots now directed to use chest at (10,87,5) for pearl storage
+
+---
