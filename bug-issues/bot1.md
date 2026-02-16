@@ -12,6 +12,26 @@
 
 ---
 
+### [2026-02-16 Session 21] /give command items not appearing in bot inventory (Known Issue)
+- **症状**: `/give Claude2 bread 10` でサーバーは「Gave 10 [Bread] to Claude2」と表示するが、Claude2のMineflayerボットのインベントリに反映されない
+- **再現**: /give bread、/give cooked_beef 両方で発生。disconnect→reconnect後も変わらず
+- **回避策**: チェストに入れて `minecraft_take_from_chest` で取得すれば正常動作
+- **原因**: Mineflayerが `/give` による `set_slot` パケットを正しく処理していない可能性。Mineflayerのバグか、パケット順序の問題
+- **対応**: コード修正は困難（Mineflayer内部の問題）。チェスト経由で物資を渡す運用で回避
+- **ファイル**: N/A（Mineflayerライブラリ内部）
+- **ステータス**: ⚠️ 回避策あり（チェスト経由）
+
+---
+
+### [2026-02-16 Session 21] Portal entry fails — bot stands on obsidian frame instead of inside portal (✅ FIXED)
+- **症状**: Claude6がネザーポータルに入ろうとすると、足元がobsidian（フレーム）で頭がnether_portalブロックの状態で止まり、転送されずタイムアウト
+- **原因**: `enterPortal()`が`GoalBlock`でポータルブロック座標に移動するが、pathfinderはポータルブロックの上（=obsidianフレーム上）に立ってしまう。また1秒だけforward歩行して止まるため、ポータル内に確実に入れていなかった
+- **修正**: (1) 最下段のポータルブロックを検索して足元ターゲットに (2) `GoalNear(range=1)`で近づいてからforward歩行を最大5回リトライし、足元がnether_portalか確認 (3) タイムアウトを15→30秒に延長
+- **ファイル**: `src/bot-manager/bot-movement.ts`
+- **ステータス**: ✅ 修正完了（commit 9ed0ad9）
+
+---
+
 ### [2026-02-16 Session 19] Pathfinder routes through deep water causing drowning (✅ FIXED)
 - **症状**: Claude2がエンダーマン狩り中に繰り返し溺死。pathfinderが水中を通るルートを選択
 - **原因**: `mineflayer-pathfinder`のデフォルト`liquidCost=1`で、水を陸地と同コストで通過可能と判定。深い水域を横断するルートが選ばれ溺死
@@ -2577,3 +2597,9 @@
 - **重要**: Claude7がgameruleコマンド実行可能（Claude4, Claude5と同様）
 - **再発防止**: サーバー起動スクリプトにgamerule設定を追加すべき
 - **ステータス**: ✅ 修正完了 (2026-02-16 Session 6)
+
+### [2026-02-16 Session 21] Claude2 craft windowOpen timeout
+- **症状**: Claude2で全てのcraft呼び出しが "Event windowOpen did not fire within timeout of 20000ms" で失敗。素材は消費されるがアイテムが出来ない。stick, crafting_table, stone_pickaxe全て同様。3回再接続しても改善せず。他のボットは正常。
+- **原因**: bot.craft()がcrafting tableを開く際にwindowOpenイベントがサーバーから返らない。line-of-sight不足またはサーバー側のウィンドウ状態不整合の可能性。
+- **修正**: commit e126a2f — (1) crafting table方向にlookAt()で視線を向けてからcraft (2) windowOpenタイムアウト時にwindowを閉じてリトライ。2x2クラフト(stick/crafting_table)はtable不使用パスなのでwindowOpen関係なし — Claude2の問題はstone_pickaxe等のtable使用レシピが主因。
+- **ステータス**: ✅ 修正完了 — Claude2でstone_pickaxeクラフト成功確認

@@ -194,6 +194,18 @@ export async function sleep(managed: ManagedBot): Promise<string> {
 export async function attack(managed: ManagedBot, entityName?: string): Promise<string> {
   const bot = managed.bot;
 
+  // Auto-eat before combat if HP is not full and food is available
+  if (bot.health < 16 && bot.food < 20) {
+    const foodItem = bot.inventory.items().find(i => isFoodItem(bot, i.name));
+    if (foodItem) {
+      try {
+        await bot.equip(foodItem, "hand");
+        await bot.consume();
+        console.error(`[Attack] Auto-ate ${foodItem.name} before combat (HP: ${bot.health}, hunger: ${bot.food})`);
+      } catch (_) { /* ignore eat errors */ }
+    }
+  }
+
   // Auto-equip best armor and weapon before attacking
   try { await equipArmor(bot); } catch (_) { /* ignore armor equip errors */ }
 
@@ -210,7 +222,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
   }
 
   // Find target
-  let target = null;
+  let target: any = null;
   const entities = Object.values(bot.entities);
 
   if (entityName) {
@@ -245,6 +257,82 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
   }
 
   let distance = target.position.distanceTo(bot.entity.position);
+
+  // Enderman strategy: approach to ~12 blocks if far, then stare to provoke
+  if (target.name === "enderman" && distance > 4 && distance <= 64) {
+    // If enderman is far, approach to ~12 blocks first for reliable provocation
+    if (distance > 16) {
+      console.error(`[Attack] Enderman at ${distance.toFixed(1)} blocks — approaching to 12 blocks first...`);
+      const approachGoal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 12);
+      bot.pathfinder.setGoal(approachGoal);
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
+        const check = setInterval(() => {
+          const currentDist = target.position.distanceTo(bot.entity.position);
+          if (currentDist <= 14 || !bot.pathfinder.isMoving()) {
+            clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+          }
+        }, 200);
+      });
+      distance = target.position.distanceTo(bot.entity.position);
+    }
+
+    console.error(`[Attack] Enderman at ${distance.toFixed(1)} blocks — provoking by staring at eyes...`);
+    // Look at the enderman's eye level to provoke it
+    await bot.lookAt(target.position.offset(0, target.height * 0.9, 0));
+    // Wait for it to come to us (angry enderman will teleport close and attack)
+    for (let i = 0; i < 50; i++) { // 50 * 300ms = 15s max wait (extended for reliable aggro)
+      await new Promise(r => setTimeout(r, 300));
+      // Keep looking at the enderman
+      const currentTarget = Object.values(bot.entities).find(e => e.id === target.id);
+      if (!currentTarget) break; // enderman died or despawned
+      await bot.lookAt(currentTarget.position.offset(0, currentTarget.height * 0.9, 0));
+      const currentDist = currentTarget.position.distanceTo(bot.entity.position);
+      if (currentDist < 8) {
+        console.error(`[Attack] Enderman aggro'd, now ${currentDist.toFixed(1)} blocks away — attacking!`);
+        target = currentTarget;
+        break;
+      }
+    }
+    distance = target.position.distanceTo(bot.entity.position);
+  }
+
+  // Blaze strategy: approach quickly, eat aggressively during approach (they shoot fireballs)
+  if (target.name === "blaze" && distance > 3.5) {
+    console.error(`[Attack] Blaze at ${distance.toFixed(1)} blocks — rushing to melee range...`);
+    // Eat before approaching if not full HP (fireballs deal damage during approach)
+    if (bot.health < 18 && bot.food < 20) {
+      const food = bot.inventory.items().find(i => isFoodItem(bot, i.name));
+      if (food) {
+        try { await bot.equip(food, "hand"); await bot.consume(); } catch (_) {}
+        // Re-equip weapon after eating
+        for (const wn of ["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"]) {
+          const w = bot.inventory.items().find(i => i.name === wn);
+          if (w) { try { await bot.equip(w, "hand"); } catch (_) {} break; }
+        }
+      }
+    }
+    // Sprint toward blaze
+    bot.setControlState("sprint", true);
+    const blazeGoal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2);
+    bot.pathfinder.setGoal(blazeGoal);
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); bot.setControlState("sprint", false); resolve(); }, 10000);
+      const check = setInterval(() => {
+        const currentTarget = Object.values(bot.entities).find(e => e.id === target.id);
+        if (!currentTarget) { clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); bot.setControlState("sprint", false); resolve(); return; }
+        // Update goal to track blaze movement (they fly around)
+        const newDist = currentTarget.position.distanceTo(bot.entity.position);
+        if (newDist < 3.5 || !bot.pathfinder.isMoving()) {
+          clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); bot.setControlState("sprint", false); resolve();
+        } else {
+          // Re-target if blaze moved significantly
+          bot.pathfinder.setGoal(new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2));
+        }
+      }, 300);
+    });
+    distance = target.position.distanceTo(bot.entity.position);
+  }
 
   // Move closer if needed
   if (distance > 3) {
@@ -331,8 +419,9 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       // Check if target is too far - if so, chase it instead of giving up
       const currentDist = currentTarget.position.distanceTo(bot.entity.position);
       if (currentDist > 6) {
-        // Animals run away when attacked - chase them!
-        if (currentDist > 32) {
+        // Endermen can be chased further (they teleport but usually stay within 64 blocks)
+        const maxChaseDistance = currentTarget.name === "enderman" ? 64 : 32;
+        if (currentDist > maxChaseDistance) {
           // Too far to chase
           return `Target ${target.name} escaped after ${attacks} attacks (distance: ${currentDist.toFixed(1)} blocks)`;
         }
@@ -341,12 +430,13 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         const goal = new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2);
         bot.pathfinder.setGoal(goal);
 
-        // Brief chase (don't wait too long)
+        // Chase duration scales with distance, endermen get longer chase
+        const chaseDuration = currentTarget.name === "enderman" ? 5000 : 2000;
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {
             bot.pathfinder.setGoal(null);
             resolve();
-          }, 2000);
+          }, chaseDuration);
 
           const check = setInterval(() => {
             const checkDist = currentTarget.position.distanceTo(bot.entity.position);
@@ -361,6 +451,19 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
 
         // Continue to attack after chasing
         continue;
+      }
+
+      // Mid-combat eat for ranged mobs (blazes deal sustained damage)
+      if (target.name === "blaze" && bot.health < 16 && bot.food < 20 && attacks % 3 === 0) {
+        const midFood = bot.inventory.items().find(i => isFoodItem(bot, i.name));
+        if (midFood) {
+          try { await bot.equip(midFood, "hand"); await bot.consume(); console.error(`[Attack] Mid-combat eat vs blaze (HP: ${bot.health})`); } catch (_) {}
+          // Re-equip weapon
+          for (const wn of ["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"]) {
+            const w = bot.inventory.items().find(i => i.name === wn);
+            if (w) { try { await bot.equip(w, "hand"); } catch (_) {} break; }
+          }
+        }
       }
 
       // Attack
@@ -391,6 +494,18 @@ export async function fight(
   fleeHealthThreshold: number = 12
 ): Promise<string> {
   const bot = managed.bot;
+
+  // Step 0: Auto-eat before combat if HP is not full and food is available
+  if (bot.health < 16 && bot.food < 20) {
+    const foodItem = bot.inventory.items().find(i => isFoodItem(bot, i.name));
+    if (foodItem) {
+      try {
+        await bot.equip(foodItem, "hand");
+        await bot.consume();
+        console.error(`[Fight] Auto-ate ${foodItem.name} before combat (HP: ${bot.health}, hunger: ${bot.food})`);
+      } catch (_) { /* ignore eat errors */ }
+    }
+  }
 
   // Step 1: Equip best armor and weapon
   try { await equipArmor(bot); } catch (_) { /* ignore armor equip errors */ }
@@ -461,6 +576,38 @@ export async function fight(
   let lastKnownFightPos = target.position.clone();
 
   console.error(`[BotManager] Starting fight with ${targetName}`);
+
+  // Enderman strategy: approach to ~12 blocks if far, then stare to provoke
+  let fightDistance = target.position.distanceTo(bot.entity.position);
+  if (targetName === "enderman" && fightDistance > 4 && fightDistance <= 64) {
+    // Approach closer first if far away for reliable provocation
+    if (fightDistance > 16) {
+      console.error(`[Fight] Enderman at ${fightDistance.toFixed(1)} blocks — approaching to 12 blocks first...`);
+      const approachGoal = new goals.GoalNear(target!.position.x, target!.position.y, target!.position.z, 12);
+      bot.pathfinder.setGoal(approachGoal);
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
+        const check = setInterval(() => {
+          const currentDist = target!.position.distanceTo(bot.entity.position);
+          if (currentDist <= 14 || !bot.pathfinder.isMoving()) {
+            clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+          }
+        }, 200);
+      });
+    }
+
+    console.error(`[Fight] Enderman at ${target!.position.distanceTo(bot.entity.position).toFixed(1)} blocks — provoking by staring at eyes...`);
+    for (let i = 0; i < 50; i++) { // 50 * 300ms = 15s max wait
+      await new Promise(r => setTimeout(r, 300));
+      const currentTarget = Object.values(bot.entities).find(e => e.id === targetId);
+      if (!currentTarget) break;
+      await bot.lookAt(currentTarget.position.offset(0, currentTarget.height * 0.9, 0));
+      if (currentTarget.position.distanceTo(bot.entity.position) < 8) {
+        console.error(`[Fight] Enderman aggro'd, now close — attacking!`);
+        break;
+      }
+    }
+  }
 
   // Step 3: Combat loop
   while (attackCount < maxAttacks) {
@@ -800,10 +947,10 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
   const oldHP = bot.health;
   const oldFood = bot.food;
 
-  // Guard: Don't respawn if HP is still okay
-  if (oldHP > 4) {
+  // Guard: Don't respawn if HP is very high (likely accidental)
+  if (oldHP > 10) {
     const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
-    return `Refused to respawn: HP is ${oldHP}/20 (still survivable). Try eating, fleeing, or pillar_up first. Inventory: ${inventory}`;
+    return `Refused to respawn: HP is ${oldHP}/20 (still healthy). Try eating, fleeing, or use chat "/kill ${managed.username}" if truly stuck. Inventory: ${inventory}`;
   }
 
   console.error(`[Respawn] Intentional death requested. Reason: ${reason || "unspecified"}`);
@@ -822,7 +969,7 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
 
   console.error(`[Respawn] After: HP=${newHP}, Food=${newFood}, Pos=(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}, ${newPos.z.toFixed(1)})`);
 
-  return `Respawned! Old: (${oldPos.x.toFixed(0)}, ${oldPos.y.toFixed(0)}, ${oldPos.z.toFixed(0)}) HP:${oldHP?.toFixed(0)}/20 Food:${oldFood}/20 → New: (${newPos.x.toFixed(0)}, ${newPos.y.toFixed(0)}, ${newPos.z.toFixed(0)}) HP:${newHP?.toFixed(0)}/20 Food:${newFood}/20. Reason: ${reason || "strategic reset"}. Inventory lost!`;
+  return `Respawned! Old: (${oldPos.x.toFixed(0)}, ${oldPos.y.toFixed(0)}, ${oldPos.z.toFixed(0)}) HP:${oldHP?.toFixed(0)}/20 Food:${oldFood}/20 → New: (${newPos.x.toFixed(0)}, ${newPos.y.toFixed(0)}, ${newPos.z.toFixed(0)}) HP:${newHP?.toFixed(0)}/20 Food:${newFood}/20. Reason: ${reason || "strategic reset"}.`;
 }
 
 /**

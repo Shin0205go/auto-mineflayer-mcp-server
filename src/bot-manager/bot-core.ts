@@ -7,6 +7,7 @@ import prismarineViewer from "prismarine-viewer";
 const { mineflayer: mineflayerViewer } = prismarineViewer;
 import type { BotConfig, ManagedBot, GameEvent } from "./types.js";
 import { isHostileMob, isPassiveMob } from "./minecraft-utils.js";
+import { equipArmor } from "./bot-items.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -456,7 +457,7 @@ export class BotCore extends EventEmitter {
           });
         });
 
-        // Oxygen level check (drowning detection)
+        // Oxygen level check (drowning detection + auto swim up)
         let lastOxygenLevel = 20;
         bot.on("breath", () => {
           const oxygen = bot.oxygenLevel ?? 20;
@@ -465,6 +466,24 @@ export class BotCore extends EventEmitter {
             addEvent("drowning", `LOW OXYGEN: ${oxygen}/20! Swim up immediately!`, {
               oxygenLevel: oxygen,
             });
+          }
+          // Auto swim up when oxygen is getting low (trigger early at 15 to prevent drowning)
+          if (oxygen < 15 && oxygen < lastOxygenLevel) {
+            const feetBlock = bot.blockAt(bot.entity.position.floored());
+            if (feetBlock?.name === "water") {
+              console.error(`[AutoSwim] Low oxygen (${oxygen}/20), swimming up!`);
+              bot.pathfinder.setGoal(null); // Cancel current pathfinding
+              // Look straight up so forward movement swims upward
+              bot.look(bot.entity.yaw, -Math.PI / 2, true);
+              bot.setControlState("jump", true);
+              bot.setControlState("sprint", true);
+              bot.setControlState("forward", true);
+              setTimeout(() => {
+                bot.setControlState("jump", false);
+                bot.setControlState("sprint", false);
+                bot.setControlState("forward", false);
+              }, 5000); // Extended from 3s to 5s for deeper water
+            }
           }
           lastOxygenLevel = oxygen;
         });
@@ -500,6 +519,13 @@ export class BotCore extends EventEmitter {
                 try {
                   bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
                 } catch (_) { /* ignore pathfinder errors during auto-flee */ }
+                // Auto-eat while fleeing to recover HP
+                const food = bot.inventory.items().find(i =>
+                  ["bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "baked_potato", "cooked_mutton", "cooked_cod", "cooked_salmon", "golden_apple"].includes(i.name)
+                );
+                if (food && bot.food < 20) {
+                  bot.equip(food, "hand").then(() => bot.consume()).catch(() => {});
+                }
               }
             }
           } else if (entity.position.distanceTo(bot.entity.position) < 10) {
@@ -555,9 +581,14 @@ export class BotCore extends EventEmitter {
           console.error(`[BotManager] ${config.username} died! Auto-respawning...`);
           addEvent("death", "Bot died! Respawning...");
           bot.chat("やられた！リスポーン中...");
-          setTimeout(() => {
+          setTimeout(async () => {
             bot.chat("復活しました！");
             addEvent("respawn", "Bot respawned");
+            // Auto-equip best armor after respawn
+            try {
+              await equipArmor(bot);
+              console.error(`[BotManager] Auto-equipped armor after respawn`);
+            } catch (_) { /* ignore armor equip errors */ }
           }, 2000);
         });
 

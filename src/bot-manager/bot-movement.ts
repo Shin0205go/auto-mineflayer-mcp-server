@@ -1342,7 +1342,19 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
     throw new Error("No nether portal found within 10 blocks");
   }
 
-  console.error(`[Portal] Found portal at (${portalBlock.position.x}, ${portalBlock.position.y}, ${portalBlock.position.z}), bot at (${bot.entity.position.x.toFixed(1)}, ${bot.entity.position.y.toFixed(1)}, ${bot.entity.position.z.toFixed(1)})`);
+  // Find the lowest portal block in this portal (bottom of the portal opening)
+  // The bot needs its feet inside a portal block, so target the lowest one
+  let lowestPortal = portalBlock;
+  for (let dy = -1; dy >= -3; dy--) {
+    const below = bot.blockAt(portalBlock.position.offset(0, dy, 0));
+    if (below && below.name === "nether_portal") {
+      lowestPortal = below;
+    } else {
+      break;
+    }
+  }
+
+  console.error(`[Portal] Found portal at (${lowestPortal.position.x}, ${lowestPortal.position.y}, ${lowestPortal.position.z}), bot at (${bot.entity.position.x.toFixed(1)}, ${bot.entity.position.y.toFixed(1)}, ${bot.entity.position.z.toFixed(1)})`);
 
   // Check if bot is already inside the portal block
   const botBlockPos = bot.entity.position.floored();
@@ -1361,24 +1373,45 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
     }
 
     if (!alreadyInPortal) {
-      // Move to portal block center
-      const goals = new GoalBlock(portalBlock.position.x, portalBlock.position.y, portalBlock.position.z);
-      await bot.pathfinder.goto(goals);
+      // Move near the lowest portal block (not ON it, but beside it)
+      const goal = new goals.GoalNear(lowestPortal.position.x, lowestPortal.position.y, lowestPortal.position.z, 1);
+      await bot.pathfinder.goto(goal);
 
-      // Force walk into the portal block center (pathfinder may stop at edge)
-      const portalCenter = portalBlock.position.offset(0.5, 0, 0.5);
-      bot.lookAt(portalCenter);
-      bot.setControlState("forward", true);
-      await new Promise(r => setTimeout(r, 1000));
-      bot.setControlState("forward", false);
+      // Force walk into the portal block center — retry from multiple angles
+      const portalCenter = lowestPortal.position.offset(0.5, 0, 0.5);
+      // Try approaching from different directions (portal could be oriented either way)
+      const approaches = [
+        portalCenter,                                           // direct center
+        lowestPortal.position.offset(0.5, 0, -0.5),           // from south
+        lowestPortal.position.offset(0.5, 0, 1.5),            // from north
+        lowestPortal.position.offset(-0.5, 0, 0.5),           // from east
+        lowestPortal.position.offset(1.5, 0, 0.5),            // from west
+      ];
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const target = approaches[attempt] || portalCenter;
+        await bot.lookAt(target);
+        bot.setControlState("forward", true);
+        bot.setControlState("sprint", false);
+        await new Promise(r => setTimeout(r, 1000));
+        bot.setControlState("forward", false);
+        await new Promise(r => setTimeout(r, 300));
+
+        // Check if we're inside the portal now
+        const currentBlock = bot.blockAt(bot.entity.position.floored());
+        if (currentBlock?.name === "nether_portal") {
+          console.error(`[Portal] Bot entered portal block on attempt ${attempt + 1}`);
+          break;
+        }
+        console.error(`[Portal] Attempt ${attempt + 1}: feet at ${currentBlock?.name}, trying different angle...`);
+      }
     }
 
-    // Wait for dimension change (teleport)
+    // Wait for dimension change (teleport) — portals need ~4s standing inside
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         cleanup();
-        reject(new Error("Portal teleport timeout after 15 seconds"));
-      }, 15000);
+        reject(new Error("Portal teleport timeout after 30 seconds"));
+      }, 30000);
 
       const onSpawn = () => {
         const newDimension = bot.game.dimension;
