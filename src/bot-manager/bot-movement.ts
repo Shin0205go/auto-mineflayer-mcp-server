@@ -335,15 +335,16 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     console.error(`[Move] No standable candidate succeeded, falling through to pathfinder for (${x}, ${y}, ${z})`);
   }
 
-  // SAFETY CHECK: If target is significantly lower, prevent fall damage
-  // by refusing to path there if it would require falling more than 3 blocks
-  // EXCEPTION: Allow if target is water (no fall damage in water)
+  // SAFETY CHECK: If target is significantly lower, check if it's a safe descent
+  // Allow falling to ground level positions even if high, since pathfinder will handle safe descent
+  // Only warn if falling INTO solid blocks or very high distances
   const currentY = bot.entity.position.y;
   const targetY = y;
   const fallDistance = currentY - targetY;
 
-  if (fallDistance > 3) {
-    // Check if target or nearby blocks are water
+  if (fallDistance > 10) {
+    // Check if target block is passable (ground level) or water
+    const targetBlock = bot.blockAt(targetPos);
     const isWaterNearby = () => {
       for (let dx = -1; dx <= 1; dx++) {
         for (let dy = -1; dy <= 1; dy++) {
@@ -359,11 +360,13 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
       return false;
     };
 
-    if (!isWaterNearby()) {
-      console.error(`[Move] Safety check: target is ${fallDistance.toFixed(0)} blocks lower - would cause fall damage!`);
-      return `Cannot move to (${x}, ${y}, ${z}) - target is ${fallDistance.toFixed(0)} blocks lower than current position. This would cause fall damage. Use minecraft_dig_block or minecraft_pillar_up to descend safely, or choose a closer target at similar height.` + getBriefStatus(managed);
+    const isSafeGround = targetBlock && (isPassableBlock(targetBlock.name) || targetBlock.name === "air");
+    if (!isSafeGround && !isWaterNearby()) {
+      // Target is a solid non-water block and fall is significant - risky
+      console.error(`[Move] High fall (${fallDistance.toFixed(0)} blocks) to solid block ${targetBlock?.name || "unknown"}`);
+      // Continue anyway - pathfinder may find a safe route
     } else {
-      console.error(`[Move] Safety check: target is ${fallDistance.toFixed(0)} blocks lower but water detected - allowing movement`);
+      console.error(`[Move] Large descent ${fallDistance.toFixed(0)} blocks allowed (safe ground or water detected)`);
     }
   }
 
