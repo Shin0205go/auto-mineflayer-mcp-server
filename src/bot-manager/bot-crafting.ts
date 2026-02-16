@@ -1401,9 +1401,32 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 }, 200);
               });
             }
+            // Look at the crafting table to ensure line-of-sight for windowOpen
+            await bot.lookAt(craftingTable.position.offset(0.5, 0.5, 0.5));
+            await new Promise(resolve => setTimeout(resolve, 100));
           }
 
-          await bot.craft(tryRecipe, 1, craftingTable || undefined);
+          // Try bot.craft() with retry on windowOpen timeout
+          try {
+            await bot.craft(tryRecipe, 1, craftingTable || undefined);
+          } catch (craftTimeoutErr: any) {
+            const errMsg = String(craftTimeoutErr?.message || craftTimeoutErr);
+            if (errMsg.includes("windowOpen") && craftingTable) {
+              // windowOpen timeout - close any stale window and retry once
+              console.error(`[Craft] windowOpen timeout, retrying after closing window and re-looking at table...`);
+              if (bot.currentWindow) {
+                bot.closeWindow(bot.currentWindow);
+                await new Promise(resolve => setTimeout(resolve, 500));
+              }
+              // Re-look at the table and move slightly closer
+              await bot.lookAt(craftingTable.position.offset(0.5, 0.5, 0.5));
+              await new Promise(resolve => setTimeout(resolve, 200));
+              // Retry craft
+              await bot.craft(tryRecipe, 1, craftingTable);
+            } else {
+              throw craftTimeoutErr;
+            }
+          }
 
           // Wait for crafting to complete and item transfer
           // Increased timeout to 1500ms to handle slower servers
