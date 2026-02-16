@@ -516,6 +516,13 @@ export class BotCore extends EventEmitter {
                 try {
                   bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
                 } catch (_) { /* ignore pathfinder errors during auto-flee */ }
+                // Auto-eat while fleeing to recover HP
+                const food = bot.inventory.items().find(i =>
+                  ["bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "baked_potato", "cooked_mutton", "cooked_cod", "cooked_salmon", "golden_apple"].includes(i.name)
+                );
+                if (food && bot.food < 20) {
+                  bot.equip(food, "hand").then(() => bot.consume()).catch(() => {});
+                }
               }
             }
           } else if (entity.position.distanceTo(bot.entity.position) < 10) {
