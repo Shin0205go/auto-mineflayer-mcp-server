@@ -1322,7 +1322,7 @@ export async function useItemOnBlock(
       // For placing water/lava, we need to right-click a SOLID block face.
       // Water appears in the air block adjacent to the face we click.
       // If target block is solid, click its top face (water goes above).
-      // If target block is air, find an adjacent solid block and click its face toward the air.
+      // If target block is air/fluid, find an adjacent solid block and click its face toward the target.
       console.log(`[DEBUG] Placing ${itemName} at (${x},${y},${z}) on block: "${block.name}" (solid: ${block.boundingBox === 'block'})`);
 
       let clickPos: Vec3;
@@ -1369,34 +1369,50 @@ export async function useItemOnBlock(
       await new Promise(resolve => setTimeout(resolve, 100));
 
       let placed = false;
-      // Attempt 1: block_place packet with correct adjacent block
+
+      // Attempt 1: activateBlock on the target block (most natural - simulates right-click)
+      // This works well when target is lava/air - Minecraft server handles water placement
       try {
-        (bot as any)._client.write('block_place', {
-          location: clickPos,
-          direction: direction,
-          hand: 0,
-          cursorX: 0.5,
-          cursorY: 0.5,
-          cursorZ: 0.5,
-          insideBlock: false,
-        });
-        await new Promise(resolve => setTimeout(resolve, 500));
-        // Check if bucket changed to empty bucket
-        const heldNow = bot.heldItem;
-        placed = !heldNow || heldNow.name === "bucket";
-        console.log(`[DEBUG] block_place attempt: placed=${placed}, held=${heldNow?.name}`);
+        console.log(`[DEBUG] Attempt 1: activateBlock on "${block.name}" at (${x},${y},${z})`);
+        await bot.activateBlock(block);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const heldNow0 = bot.heldItem;
+        placed = !heldNow0 || heldNow0.name === "bucket";
+        console.log(`[DEBUG] activateBlock attempt: placed=${placed}, held=${heldNow0?.name}`);
       } catch (e) {
-        console.error(`[DEBUG] block_place for ${itemName} failed: ${e}`);
+        console.error(`[DEBUG] activateBlock for ${itemName} failed: ${e}`);
       }
 
-      // Attempt 2: activateItem (right-click in the air while looking at target)
+      // Attempt 2: block_place packet with correct adjacent block
       if (!placed) {
         try {
-          console.error(`[DEBUG] Trying activateItem fallback for ${itemName}...`);
-          await bot.lookAt(pos.offset(0.5, 0, 0.5));
+          console.log(`[DEBUG] Attempt 2: block_place packet clicking (${clickPos.x},${clickPos.y},${clickPos.z}) face ${direction}`);
+          (bot as any)._client.write('block_place', {
+            location: clickPos,
+            direction: direction,
+            hand: 0,
+            cursorX: 0.5,
+            cursorY: 0.5,
+            cursorZ: 0.5,
+            insideBlock: false,
+          });
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const heldNow = bot.heldItem;
+          placed = !heldNow || heldNow.name === "bucket";
+          console.log(`[DEBUG] block_place attempt: placed=${placed}, held=${heldNow?.name}`);
+        } catch (e) {
+          console.error(`[DEBUG] block_place for ${itemName} failed: ${e}`);
+        }
+      }
+
+      // Attempt 3: activateItem (right-click in the air while looking at target)
+      if (!placed) {
+        try {
+          console.error(`[DEBUG] Attempt 3: activateItem while looking at (${x},${y},${z})`);
+          await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
           await new Promise(resolve => setTimeout(resolve, 200));
           bot.activateItem();
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await new Promise(resolve => setTimeout(resolve, 500));
           bot.deactivateItem();
           await new Promise(resolve => setTimeout(resolve, 500));
           const heldNow2 = bot.heldItem;
@@ -1437,7 +1453,31 @@ export async function useItemOnBlock(
         return `⚠️ Used bucket on lava but lava_bucket not found in inventory. Holding: ${heldName}`;
       }
     } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
-      return `Placed ${itemName.replace("_bucket", "")} at (${x}, ${y}, ${z}). Now holding ${heldName}.`;
+      // Check for obsidian/cobblestone creation when placing water near lava
+      await new Promise(resolve => setTimeout(resolve, 500)); // extra wait for world updates
+      const blockAfterPlace = bot.blockAt(pos);
+      const blockAfterName = blockAfterPlace?.name || "unknown";
+      let obsidianInfo = "";
+      if (itemName === "water_bucket") {
+        // Search nearby for obsidian that may have formed
+        const nearbyObsidian: string[] = [];
+        for (let dx = -2; dx <= 2; dx++) {
+          for (let dy = -2; dy <= 2; dy++) {
+            for (let dz = -2; dz <= 2; dz++) {
+              const checkBlock = bot.blockAt(pos.offset(dx, dy, dz));
+              if (checkBlock?.name === "obsidian") {
+                nearbyObsidian.push(`(${pos.x+dx},${pos.y+dy},${pos.z+dz})`);
+              }
+            }
+          }
+        }
+        if (nearbyObsidian.length > 0) {
+          obsidianInfo = ` Obsidian found nearby: ${nearbyObsidian.join(", ")}`;
+        } else {
+          obsidianInfo = ` No obsidian detected nearby. Block at target is now: ${blockAfterName}`;
+        }
+      }
+      return `Placed ${itemName.replace("_bucket", "")} at (${x}, ${y}, ${z}). Now holding ${heldName}.${obsidianInfo}`;
     } else if (itemName === "bone_meal") {
       // Report crop growth status after bone_meal application
       const blockAfterBoneMeal = bot.blockAt(pos);
