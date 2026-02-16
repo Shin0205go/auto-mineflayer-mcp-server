@@ -704,10 +704,10 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     // multiple native recipes and we need to pick the right one for our plank type.
     let compatibleRecipe: any;
 
-    // BUGFIX (2026-02-17): Never use allRecipes[0] directly for stick/crafting_table!
+    // BUGFIX (2026-02-17): Always validate recipe compatibility even for simple recipes
     // Always validate compatibility even for simple recipes, because bot.recipesAll() may
     // return recipes that don't work with our plank types (dark_oak_planks etc).
-    // Old code at lines 663-667 skipped validation, causing "missing ingredient" errors.
+    // Never use allRecipes[0] directly for stick/crafting_table without validation!
 
     // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
     // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
