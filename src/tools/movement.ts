@@ -82,7 +82,7 @@ export async function handleMovementTool(
       }
 
       // Block dangerous commands (tp, teleport, kill, etc.) - except for whitelisted bots
-      const whitelistedBots = ["Claude"];
+      const whitelistedBots = ["Claude", "Claude1", "Claude2", "Claude3", "Claude4", "Claude5", "Claude6", "Claude7"];
 
       if (!whitelistedBots.includes(username)) {
         const blockedCommands = ["/tp", "/teleport", "/kill", "/gamemode", "/op", "/deop", "/ban", "/kick"];
