@@ -1290,27 +1290,92 @@ export async function useItemOnBlock(
         }
       }
     } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
-      // For placing water/lava, use raw packet targeting the block face
-      // activateBlock doesn't work for fluid placement on solid blocks
-      console.log(`[DEBUG] Placing ${itemName} at (${x},${y},${z}) on block: ${block.name}`);
-      await bot.lookAt(pos);
+      // For placing water/lava, we need to right-click a SOLID block face.
+      // Water appears in the air block adjacent to the face we click.
+      // If target block is solid, click its top face (water goes above).
+      // If target block is air, find an adjacent solid block and click its face toward the air.
+      console.log(`[DEBUG] Placing ${itemName} at (${x},${y},${z}) on block: "${block.name}" (solid: ${block.boundingBox === 'block'})`);
+
+      let clickPos: Vec3;
+      let direction: number;
+
+      if (block.boundingBox === 'block') {
+        // Target is solid - click its top face, water goes above
+        clickPos = pos;
+        direction = 1; // top face
+      } else {
+        // Target is air/fluid - find adjacent solid block to click
+        // direction: 0=bottom(-Y), 1=top(+Y), 2=north(-Z), 3=south(+Z), 4=west(-X), 5=east(+X)
+        const adjacentChecks = [
+          { offset: new Vec3(0, -1, 0), dir: 1 },  // block below, click top face
+          { offset: new Vec3(0, 0, -1), dir: 3 },   // block to north, click south face
+          { offset: new Vec3(0, 0, 1), dir: 2 },    // block to south, click north face
+          { offset: new Vec3(-1, 0, 0), dir: 5 },   // block to west, click east face
+          { offset: new Vec3(1, 0, 0), dir: 4 },    // block to east, click west face
+          { offset: new Vec3(0, 1, 0), dir: 0 },    // block above, click bottom face
+        ];
+
+        let found = false;
+        clickPos = pos; // default
+        direction = 1;  // default
+
+        for (const check of adjacentChecks) {
+          const adjPos = pos.plus(check.offset);
+          const adjBlock = bot.blockAt(adjPos);
+          if (adjBlock && adjBlock.boundingBox === 'block') {
+            clickPos = adjPos;
+            direction = check.dir;
+            console.log(`[DEBUG] Found solid block "${adjBlock.name}" at (${adjPos.x},${adjPos.y},${adjPos.z}), clicking face ${direction}`);
+            found = true;
+            break;
+          }
+        }
+
+        if (!found) {
+          console.error(`[DEBUG] No solid block adjacent to (${x},${y},${z}) for water placement`);
+        }
+      }
+
+      await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
       await new Promise(resolve => setTimeout(resolve, 100));
+
+      let placed = false;
+      // Attempt 1: block_place packet with correct adjacent block
       try {
         (bot as any)._client.write('block_place', {
-          location: pos,
-          direction: 1, // top face
+          location: clickPos,
+          direction: direction,
           hand: 0,
           cursorX: 0.5,
           cursorY: 0.5,
           cursorZ: 0.5,
           insideBlock: false,
         });
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 500));
+        // Check if bucket changed to empty bucket
+        const heldNow = bot.heldItem;
+        placed = !heldNow || heldNow.name === "bucket";
+        console.log(`[DEBUG] block_place attempt: placed=${placed}, held=${heldNow?.name}`);
       } catch (e) {
-        console.error(`[DEBUG] block_place for ${itemName} failed: ${e}, falling back to activateItem`);
-        bot.activateItem();
-        await new Promise(resolve => setTimeout(resolve, 300));
-        bot.deactivateItem();
+        console.error(`[DEBUG] block_place for ${itemName} failed: ${e}`);
+      }
+
+      // Attempt 2: activateItem (right-click in the air while looking at target)
+      if (!placed) {
+        try {
+          console.error(`[DEBUG] Trying activateItem fallback for ${itemName}...`);
+          await bot.lookAt(pos.offset(0.5, 0, 0.5));
+          await new Promise(resolve => setTimeout(resolve, 200));
+          bot.activateItem();
+          await new Promise(resolve => setTimeout(resolve, 300));
+          bot.deactivateItem();
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const heldNow2 = bot.heldItem;
+          placed = !heldNow2 || heldNow2.name === "bucket";
+          console.log(`[DEBUG] activateItem attempt: placed=${placed}, held=${heldNow2?.name}`);
+        } catch (e) {
+          console.error(`[DEBUG] activateItem for ${itemName} failed: ${e}`);
+        }
       }
     } else {
       // For other items, use activateBlock
