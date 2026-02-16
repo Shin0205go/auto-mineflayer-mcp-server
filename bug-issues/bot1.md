@@ -12,6 +12,15 @@
 
 ---
 
+### [2026-02-16 Session 21] Portal entry fails — bot stands on obsidian frame instead of inside portal (✅ FIXED)
+- **症状**: Claude6がネザーポータルに入ろうとすると、足元がobsidian（フレーム）で頭がnether_portalブロックの状態で止まり、転送されずタイムアウト
+- **原因**: `enterPortal()`が`GoalBlock`でポータルブロック座標に移動するが、pathfinderはポータルブロックの上（=obsidianフレーム上）に立ってしまう。また1秒だけforward歩行して止まるため、ポータル内に確実に入れていなかった
+- **修正**: (1) 最下段のポータルブロックを検索して足元ターゲットに (2) `GoalNear(range=1)`で近づいてからforward歩行を最大5回リトライし、足元がnether_portalか確認 (3) タイムアウトを15→30秒に延長
+- **ファイル**: `src/bot-manager/bot-movement.ts`
+- **ステータス**: ✅ 修正完了（commit 9ed0ad9）
+
+---
+
 ### [2026-02-16 Session 19] Pathfinder routes through deep water causing drowning (✅ FIXED)
 - **症状**: Claude2がエンダーマン狩り中に繰り返し溺死。pathfinderが水中を通るルートを選択
 - **原因**: `mineflayer-pathfinder`のデフォルト`liquidCost=1`で、水を陸地と同コストで通過可能と判定。深い水域を横断するルートが選ばれ溺死
