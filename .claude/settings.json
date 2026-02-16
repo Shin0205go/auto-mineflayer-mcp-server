@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import sys,json; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); exit(0 if any(p.startswith(d) for d in ['src/','bug-issues/','.claude/skills/']) else 2)\" || echo 'Only src/, bug-issues/, .claude/skills/ editable'",
+            "command": "python3 -c \"import sys,json,os; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); parts=p.replace(os.sep,'/').split('/'); allowed=['src','bug-issues']; exit(0 if any(d in parts for d in allowed) else 2)\" || echo 'Only src/, bug-issues/ editable'",
             "statusMessage": "Checking file permissions"
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'if git status --porcelain 2>/dev/null | grep -q \"^UU\\|^AA\\|^DD\"; then echo \"Resolving merge conflicts...\"; git checkout --theirs .claude/settings.json 2>/dev/null; git checkout --theirs logs/tool-execution.jsonl 2>/dev/null; git add -A 2>/dev/null; git commit -m \"Auto-resolve merge conflicts on session start\" 2>/dev/null; fi'",
+            "command": "bash -c 'CONFLICTS=$(git diff --name-only --diff-filter=U 2>/dev/null); if [ -n \"$CONFLICTS\" ]; then echo \"Resolving conflicts...\"; echo \"$CONFLICTS\" | while IFS= read -r f; do git checkout --theirs -- \"$f\" 2>/dev/null && git add \"$f\" 2>/dev/null; done; if grep -rq \"^<<<<<<< \" src/ scripts/ .claude/ 2>/dev/null; then git merge --abort 2>/dev/null; else git commit -m \"Auto-resolve conflicts\" 2>/dev/null; fi; fi'",
             "timeout": 15,
             "statusMessage": "Checking git conflicts"
           }

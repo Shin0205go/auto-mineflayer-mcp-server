@@ -216,9 +216,9 @@ function getExpectedDrop(blockName: string): string | null {
     "glowstone": "glowstone_dust",
     "redstone_lamp": "redstone_lamp", // Drops itself
     "sea_lantern": "prismarine_crystals",
-    "grass": "", // Drops nothing
-    "tall_grass": "", // Drops nothing (or seeds)
-    "fern": "", // Drops nothing (or seeds)
+    "short_grass": "wheat_seeds", // Drops seeds (sometimes)
+    "tall_grass": "wheat_seeds", // Drops seeds (sometimes)
+    "fern": "wheat_seeds", // Drops seeds (sometimes)
   };
 
   // If not in dropMappings, assume block drops itself (logs, planks, etc.)
@@ -1227,6 +1227,38 @@ export async function useItemOnBlock(
       console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
       bot.activateItem();
       bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
+    } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
+      // For placing water/lava from buckets, we need to placeBlock on a reference block
+      // The position (x,y,z) is where we want the water/lava to appear
+      // We need to find a solid block adjacent to it and place on that block's face
+      console.log(`[DEBUG] Placing ${itemName} at position (${x},${y},${z})`);
+
+      // Find the block below the target position (the reference block)
+      const belowPos = pos.offset(0, -1, 0);
+      const referenceBlock = bot.blockAt(belowPos);
+
+      if (referenceBlock && referenceBlock.name !== 'air') {
+        console.log(`[DEBUG] Using reference block ${referenceBlock.name} at (${belowPos.x},${belowPos.y},${belowPos.z}), placing on top face`);
+        try {
+          // Place on the top face (y+) of the reference block
+          await bot.placeBlock(referenceBlock, new Vec3(0, 1, 0));
+          console.log(`[DEBUG] placeBlock succeeded`);
+        } catch (placeErr) {
+          console.log(`[DEBUG] placeBlock failed: ${placeErr}, trying activateItem`);
+          await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+          await new Promise(resolve => setTimeout(resolve, 100));
+          bot.activateItem();
+          await new Promise(resolve => setTimeout(resolve, 100));
+          bot.deactivateItem();
+        }
+      } else {
+        console.log(`[DEBUG] No reference block below target, using activateItem`);
+        await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+        await new Promise(resolve => setTimeout(resolve, 100));
+        bot.activateItem();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        bot.deactivateItem();
+      }
     } else {
       // For other items, use activateBlock
       await bot.activateBlock(block);
