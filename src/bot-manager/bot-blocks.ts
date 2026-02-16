@@ -1236,27 +1236,58 @@ export async function useItemOnBlock(
       const initialItem = bot.heldItem?.name;
       console.log(`[DEBUG] Initial item: ${initialItem}, collecting ${block.name} at (${x},${y},${z})`);
 
-      // Method 1: Send raw block_place packet targeting the liquid block
-      // This bypasses the mineflayer activateItem bug
+      // Try multiple methods to collect liquid with bucket
+      // Method 1: raw block_place packet (most reliable for Minecraft 1.20+)
+      const expectedBucket = (block.name === "water" || block.name === "flowing_water") ? "water_bucket" : "lava_bucket";
+      let collected = false;
+
+      // Attempt 1: block_place packet
       try {
         (bot as any)._client.write('block_place', {
           location: pos,
-          direction: 1, // top face
+          direction: 1,
           hand: 0,
           cursorX: 0.5,
           cursorY: 0.5,
           cursorZ: 0.5,
           insideBlock: false,
         });
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Wait longer for server to process and send inventory update
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
+        console.error(`[DEBUG] block_place attempt: collected=${collected}`);
       } catch (e) {
-        console.error(`[DEBUG] block_place packet failed: ${e}, falling back to activateItem`);
-        // Fallback: try activateItem with longer delay
-        await bot.lookAt(pos);
-        await new Promise(resolve => setTimeout(resolve, 200));
-        bot.activateItem();
-        await new Promise(resolve => setTimeout(resolve, 300));
-        bot.deactivateItem();
+        console.error(`[DEBUG] block_place packet failed: ${e}`);
+      }
+
+      // Attempt 2: activateBlock (works on some servers)
+      if (!collected) {
+        try {
+          console.error(`[DEBUG] Trying activateBlock fallback...`);
+          await bot.activateBlock(block);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
+          console.error(`[DEBUG] activateBlock attempt: collected=${collected}`);
+        } catch (e) {
+          console.error(`[DEBUG] activateBlock failed: ${e}`);
+        }
+      }
+
+      // Attempt 3: activateItem (last resort)
+      if (!collected) {
+        try {
+          console.error(`[DEBUG] Trying activateItem fallback...`);
+          await bot.lookAt(pos);
+          await new Promise(resolve => setTimeout(resolve, 200));
+          bot.activateItem();
+          await new Promise(resolve => setTimeout(resolve, 500));
+          bot.deactivateItem();
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
+          console.error(`[DEBUG] activateItem attempt: collected=${collected}`);
+        } catch (e) {
+          console.error(`[DEBUG] activateItem failed: ${e}`);
+        }
       }
     } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
       // For placing water/lava, use raw packet targeting the block face
