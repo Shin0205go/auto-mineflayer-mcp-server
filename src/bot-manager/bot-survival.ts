@@ -194,6 +194,19 @@ export async function sleep(managed: ManagedBot): Promise<string> {
 export async function attack(managed: ManagedBot, entityName?: string): Promise<string> {
   const bot = managed.bot;
 
+  // Auto-equip best weapon before attacking
+  const weaponPriority = [
+    "netherite_sword", "diamond_sword", "iron_sword", "stone_sword", "wooden_sword",
+    "netherite_axe", "diamond_axe", "iron_axe", "stone_axe", "wooden_axe",
+  ];
+  for (const weaponName of weaponPriority) {
+    const weapon = bot.inventory.items().find(i => i.name === weaponName);
+    if (weapon) {
+      try { await bot.equip(weapon, "hand"); } catch (_) { /* ignore equip errors */ }
+      break;
+    }
+  }
+
   // Find target
   let target = null;
   const entities = Object.values(bot.entities);
@@ -263,12 +276,13 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
   const targetId = target.id;
   let attacks = 0;
   const maxAttacks = 20; // Safety limit (20 attacks should kill most mobs)
+  let lastKnownTargetPos = target.position.clone();
 
   try {
     while (attacks < maxAttacks) {
-      // Check HP - flee if critically low
-      if (bot.health <= 8) {
-        console.error(`[Attack] HP critically low (${bot.health}), fleeing from ${target.name}!`);
+      // Check HP - flee if low (raised from 8 to 12 for better survival margin)
+      if (bot.health <= 12) {
+        console.error(`[Attack] HP low (${bot.health}), fleeing from ${target.name}!`);
         bot.pathfinder.setGoal(null);
         // Try to eat food while fleeing
         const food = bot.inventory.items().find(i => i.name === "bread" || i.name === "cooked_beef" || i.name === "cooked_porkchop" || i.name === "cooked_chicken" || i.name === "golden_apple" || i.name === "baked_potato" || i.name === "cooked_mutton" || i.name === "cooked_cod" || i.name === "cooked_salmon");
@@ -286,12 +300,29 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       const currentTarget = Object.values(bot.entities).find(e => e.id === targetId);
       if (!currentTarget) {
         // Auto-collect dropped items after kill
+        // Move to last known position first (endermen teleport, drops spawn where they died)
+        const distToLastPos = bot.entity.position.distanceTo(lastKnownTargetPos);
+        if (distToLastPos > 3) {
+          console.error(`[Attack] Target died ${distToLastPos.toFixed(1)} blocks away, moving to last known pos to collect drops`);
+          const collectGoal = new goals.GoalNear(lastKnownTargetPos.x, lastKnownTargetPos.y, lastKnownTargetPos.z, 2);
+          bot.pathfinder.setGoal(collectGoal);
+          await new Promise<void>((resolve) => {
+            const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 5000);
+            const check = setInterval(() => {
+              if (bot.entity.position.distanceTo(lastKnownTargetPos) < 3 || !bot.pathfinder.isMoving()) {
+                clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+              }
+            }, 200);
+          });
+        }
         await delay(500);
         try {
           await collectNearbyItems(managed);
         } catch (_) { /* ignore collection errors */ }
         return `Killed ${target.name} after ${attacks} attacks`;
       }
+      // Track last known position (important for teleporting mobs like endermen)
+      lastKnownTargetPos = currentTarget.position.clone();
 
       // Check if target is too far - if so, chase it instead of giving up
       const currentDist = currentTarget.position.distanceTo(bot.entity.position);
@@ -353,7 +384,7 @@ export async function fight(
   managed: ManagedBot,
   flee: (managed: ManagedBot, distance: number) => Promise<string>,
   entityName?: string,
-  fleeHealthThreshold: number = 6
+  fleeHealthThreshold: number = 12
 ): Promise<string> {
   const bot = managed.bot;
 
@@ -421,6 +452,7 @@ export async function fight(
   const targetId = target.id;
   let attackCount = 0;
   const maxAttacks = 30; // Safety limit
+  let lastKnownFightPos = target.position.clone();
 
   console.error(`[BotManager] Starting fight with ${targetName}`);
 
@@ -439,12 +471,29 @@ export async function fight(
     target = Object.values(bot.entities).find(e => e.id === targetId) || null;
     if (!target) {
       // Auto-collect dropped items after kill
+      // Move to last known position first (endermen teleport, drops spawn where they died)
+      const distToLast = bot.entity.position.distanceTo(lastKnownFightPos);
+      if (distToLast > 3) {
+        console.error(`[Fight] Target died ${distToLast.toFixed(1)} blocks away, moving to collect drops`);
+        const collectGoal = new goals.GoalNear(lastKnownFightPos.x, lastKnownFightPos.y, lastKnownFightPos.z, 2);
+        bot.pathfinder.setGoal(collectGoal);
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 5000);
+          const check = setInterval(() => {
+            if (bot.entity.position.distanceTo(lastKnownFightPos) < 3 || !bot.pathfinder.isMoving()) {
+              clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+            }
+          }, 200);
+        });
+      }
       await delay(500);
       try {
         await collectNearbyItems(managed);
       } catch (_) { /* ignore collection errors */ }
       return `${targetName} defeated! Attacked ${attackCount} times.` + getBriefStatus(bot);
     }
+    // Track last known position (important for teleporting mobs like endermen)
+    lastKnownFightPos = target.position.clone();
 
     const distance = target.position.distanceTo(bot.entity.position);
 
