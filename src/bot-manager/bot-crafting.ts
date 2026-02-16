@@ -1377,6 +1377,13 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             .join(", ");
           console.error(`[Craft] Attempting recipe: ${recipeIngredients}`);
 
+          // Close any existing open window to prevent windowOpen event conflicts
+          if (bot.currentWindow) {
+            console.error(`[Craft] Closing existing open window before crafting`);
+            bot.closeWindow(bot.currentWindow);
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+
           // Ensure bot is close enough to crafting table before crafting (within 3.5 blocks)
           if (craftingTable) {
             const distToTable = bot.entity.position.distanceTo(craftingTable.position);
