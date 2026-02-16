@@ -484,6 +484,22 @@ export async function fight(
 
   console.error(`[BotManager] Starting fight with ${targetName}`);
 
+  // Enderman strategy: stare at them to provoke instead of chasing
+  let fightDistance = target.position.distanceTo(bot.entity.position);
+  if (targetName === "enderman" && fightDistance > 4 && fightDistance <= 64) {
+    console.error(`[Fight] Enderman at ${fightDistance.toFixed(1)} blocks — provoking by staring at eyes...`);
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 300));
+      const currentTarget = Object.values(bot.entities).find(e => e.id === targetId);
+      if (!currentTarget) break;
+      await bot.lookAt(currentTarget.position.offset(0, currentTarget.height * 0.9, 0));
+      if (currentTarget.position.distanceTo(bot.entity.position) < 4) {
+        console.error(`[Fight] Enderman provoked, now close — attacking!`);
+        break;
+      }
+    }
+  }
+
   // Step 3: Combat loop
   while (attackCount < maxAttacks) {
     // Check health - flee if low
