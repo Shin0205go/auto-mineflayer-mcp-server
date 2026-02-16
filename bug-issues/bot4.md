@@ -299,3 +299,21 @@
   3. **全ボット再接続**: インベントリ・状態同期の強制更新
 - **ステータス**: 🔴 CRITICAL - サーバー侵入/設定エラー の可能性。即対応が必要。
 
+## [2026-02-16] stick crafting still failing after "fix" - MCPサーバー未更新
+
+- **症状**: `minecraft_craft("stick")` が「Failed to craft stick from dark_oak_planks: Error: missing ingredient」エラーで失敗。birch_planks x4, dark_oak_planks x16 を所持していても失敗。
+- **再現手順**:
+  1. inventory に複数種類の planks がある状態
+  2. `minecraft_craft("stick", 1)` を実行
+  3. エラーで失敗、planks が消費されない
+- **調査結果**:
+  - コード (`src/bot-manager/bot-crafting.ts` line 416-418) は修正済み（`find()` → `filter()+sort()` で最も数が多い planks を選択）
+  - しかし、実際には dark_oak_planks x5 が選ばれてエラーになる
+  - 修正コードが実行されていない → MCPサーバーが古い `.js` ファイルをキャッシュしている
+- **原因**: MCPサーバープロセスが起動時に `dist/` フォルダ内の古い `.js` をキャッシュ。`npm run build` で `dist/` は更新されたが、MCPサーバープロセスが再起動されていない
+- **影響**: stick クラフト不可 → pickaxe クラフト不可 → mining・道具製作全般が停止
+- **解決策**:
+  1. MCPサーバープロセスを再起動 (`kill` + `npm run start:mcp-ws`)
+  2. または、全MCPサーバーを完全に停止・再起動
+- **ステータス**: ⚠️ MCPサーバー再起動待ち - コード修正は済み (line 416-418)
+
