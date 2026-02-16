@@ -293,6 +293,12 @@ export class BotCore extends EventEmitter {
         const lavaBlock = bot.registry.blocksByName["lava"];
         if (lavaBlock) movements.blocksToAvoid.add(lavaBlock.id);
 
+        // Avoid fire and soul_fire blocks (common in Nether fortresses)
+        const fireBlock = bot.registry.blocksByName["fire"];
+        const soulFireBlock = bot.registry.blocksByName["soul_fire"];
+        if (fireBlock) movements.blocksToAvoid.add(fireBlock.id);
+        if (soulFireBlock) movements.blocksToAvoid.add(soulFireBlock.id);
+
         bot.pathfinder.setMovements(movements);
         console.error(`[BotManager] Pathfinder configured: canDig=true, allow1by1towers=true, scaffoldingBlocks=${movements.scafoldingBlocks.length} types`);
 
