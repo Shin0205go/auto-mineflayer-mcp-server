@@ -221,6 +221,12 @@ function getExpectedDrop(blockName: string): string | null {
     "tall_grass": "wheat_seeds", // ~12.5% chance to drop seeds
     "fern": "wheat_seeds", // ~12.5% chance to drop seeds
     "large_fern": "wheat_seeds", // ~12.5% chance to drop seeds
+
+    // Crop blocks - primary drops (mature crops drop both item + seeds)
+    "wheat": "wheat_seeds", // Always drops seeds; mature (age 7) also drops wheat item
+    "beetroots": "beetroot",
+    "carrots": "carrot",
+    "potatoes": "potato",
   };
 
   // If not in dropMappings, assume block drops itself (logs, planks, etc.)
