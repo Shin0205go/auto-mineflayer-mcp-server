@@ -790,6 +790,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         const tableToUse = (itemName === "stick" || itemName === "crafting_table") ? undefined : (craftingTableBlock || undefined);
         console.error(`[Craft] Calling bot.craft() with table: ${tableToUse ? 'YES' : 'NO'}`);
 
+        const invBeforeSimple = bot.inventory.items().map(it => `${it.name}x${it.count}`).join(", ");
+        console.error(`[Craft] Inventory before simple wooden craft: ${invBeforeSimple}`);
+
         try {
           await bot.craft(compatibleRecipe, 1, tableToUse);
         } catch (craftErr: any) {
@@ -901,8 +904,36 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         // Wait for crafting to complete (match timing from general crafting path)
         await new Promise(resolve => setTimeout(resolve, 1500));
 
+        // Close any lingering crafting window to flush items to inventory
+        if (bot.currentWindow) {
+          bot.closeWindow(bot.currentWindow);
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+
         // Additional wait for inventory synchronization
         await new Promise(resolve => setTimeout(resolve, 700));
+
+        const invAfterSimple = bot.inventory.items().map(it => `${it.name}x${it.count}`).join(", ");
+        console.error(`[Craft] Inventory after simple wooden craft: ${invAfterSimple}`);
+
+        // Verify crafted item is in inventory
+        const craftedCheck = bot.inventory.items().find(it => it.name === itemName);
+        if (!craftedCheck) {
+          console.error(`[Craft] WARNING: ${itemName} not in inventory after simple wooden craft, trying to collect dropped items...`);
+          // Try to collect dropped items nearby
+          const { collectNearbyItems } = await import("./bot-items.js");
+          try {
+            await collectNearbyItems(managed);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } catch (collectErr) {
+            console.error(`[Craft] collectNearbyItems failed: ${collectErr}`);
+          }
+
+          const recheck = bot.inventory.items().find(it => it.name === itemName);
+          if (!recheck) {
+            throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting. Materials were consumed but item vanished. Try again.`);
+          }
+        }
       }
 
       const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
