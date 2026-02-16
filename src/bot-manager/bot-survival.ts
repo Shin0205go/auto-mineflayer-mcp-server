@@ -297,6 +297,43 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
     distance = target.position.distanceTo(bot.entity.position);
   }
 
+  // Blaze strategy: approach quickly, eat aggressively during approach (they shoot fireballs)
+  if (target.name === "blaze" && distance > 3.5) {
+    console.error(`[Attack] Blaze at ${distance.toFixed(1)} blocks — rushing to melee range...`);
+    // Eat before approaching if not full HP (fireballs deal damage during approach)
+    if (bot.health < 18 && bot.food < 20) {
+      const food = bot.inventory.items().find(i => isFoodItem(bot, i.name));
+      if (food) {
+        try { await bot.equip(food, "hand"); await bot.consume(); } catch (_) {}
+        // Re-equip weapon after eating
+        for (const wn of ["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"]) {
+          const w = bot.inventory.items().find(i => i.name === wn);
+          if (w) { try { await bot.equip(w, "hand"); } catch (_) {} break; }
+        }
+      }
+    }
+    // Sprint toward blaze
+    bot.setControlState("sprint", true);
+    const blazeGoal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2);
+    bot.pathfinder.setGoal(blazeGoal);
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); bot.setControlState("sprint", false); resolve(); }, 10000);
+      const check = setInterval(() => {
+        const currentTarget = Object.values(bot.entities).find(e => e.id === target.id);
+        if (!currentTarget) { clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); bot.setControlState("sprint", false); resolve(); return; }
+        // Update goal to track blaze movement (they fly around)
+        const newDist = currentTarget.position.distanceTo(bot.entity.position);
+        if (newDist < 3.5 || !bot.pathfinder.isMoving()) {
+          clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); bot.setControlState("sprint", false); resolve();
+        } else {
+          // Re-target if blaze moved significantly
+          bot.pathfinder.setGoal(new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2));
+        }
+      }, 300);
+    });
+    distance = target.position.distanceTo(bot.entity.position);
+  }
+
   // Move closer if needed
   if (distance > 3) {
     console.error(`[Attack] Target ${target.name} is ${distance.toFixed(1)} blocks away, moving closer...`);
@@ -412,6 +449,19 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
 
         // Continue to attack after chasing
         continue;
+      }
+
+      // Mid-combat eat for ranged mobs (blazes deal sustained damage)
+      if (target.name === "blaze" && bot.health < 16 && bot.food < 20 && attacks % 3 === 0) {
+        const midFood = bot.inventory.items().find(i => isFoodItem(bot, i.name));
+        if (midFood) {
+          try { await bot.equip(midFood, "hand"); await bot.consume(); console.error(`[Attack] Mid-combat eat vs blaze (HP: ${bot.health})`); } catch (_) {}
+          // Re-equip weapon
+          for (const wn of ["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"]) {
+            const w = bot.inventory.items().find(i => i.name === wn);
+            if (w) { try { await bot.equip(w, "hand"); } catch (_) {} break; }
+          }
+        }
       }
 
       // Attack

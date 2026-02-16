@@ -636,8 +636,8 @@ export async function minecraft_explore_area(
     const bot = botManager.getBot(username);
     if (bot) {
       const timeOfDay = bot.time?.timeOfDay ?? 0;
-      if (timeOfDay < 13000 || timeOfDay > 23000) {
-        return `Cannot find enderman during daytime (current time: ${timeOfDay}). Endermen only spawn at night (13000-23000). Wait for nightfall or do other tasks like mining iron for armor.`;
+      if (timeOfDay < 12541 || timeOfDay > 23458) {
+        return `Cannot find enderman during daytime (current time: ${timeOfDay}). Endermen only spawn at night (12541-23458). Wait for nightfall or do other tasks like mining iron for armor.`;
       }
     }
   }
@@ -788,11 +788,20 @@ export async function minecraft_explore_area(
                 const fightResult = await botManager.attack(username, target);
                 findings.push(`Combat #${fightCount + 1}: ${fightResult}`);
                 fightCount++;
-                // Check HP before continuing
-                const botHealth = botManager.getBot(username)?.health ?? 20;
-                if (botHealth <= 12) {
-                  console.error(`[ExploreArea] HP low after combat, stopping fight chain`);
-                  break;
+                // Eat between fights if HP or hunger is low
+                const botAfterFight = botManager.getBot(username);
+                if (botAfterFight) {
+                  const botHealth = botAfterFight.health ?? 20;
+                  if (botHealth <= 12) {
+                    console.error(`[ExploreArea] HP low after combat, stopping fight chain`);
+                    break;
+                  }
+                  if (botHealth < 18 && botAfterFight.food < 20) {
+                    try {
+                      await botManager.eat(username);
+                      console.error(`[ExploreArea] Ate food between fights (HP: ${botHealth})`);
+                    } catch (_) { /* no food available */ }
+                  }
                 }
               } catch (fightErr) {
                 console.error(`[ExploreArea] Combat failed: ${fightErr}`);
