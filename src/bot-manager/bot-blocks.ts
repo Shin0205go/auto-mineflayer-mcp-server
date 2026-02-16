@@ -277,7 +277,6 @@ export async function digBlock(
 
   const blockName = block.name;
 
-<<<<<<< HEAD
   // Check crop maturity before harvesting - immature crops only drop seeds, not the crop item
   const cropBlocks = ["wheat", "beetroots", "carrots", "potatoes"];
   if (cropBlocks.includes(blockName)) {
@@ -294,20 +293,6 @@ export async function digBlock(
     }
   }
 
-  // Check for lava in adjacent blocks before digging (unless force=true)
-  if (!force) {
-    const adjacentPositions = [
-      blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
-      blockPos.offset(0, 1, 0), blockPos.offset(0, -1, 0),
-      blockPos.offset(0, 0, 1), blockPos.offset(0, 0, -1),
-    ];
-    for (const adjPos of adjacentPositions) {
-      const adjBlock = bot.blockAt(adjPos);
-      if (adjBlock?.name === "lava") {
-        console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
-        return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`;
-      }
-=======
   // Check for lava in adjacent blocks before digging
   const adjacentPositions = [
     blockPos.offset(1, 0, 0), blockPos.offset(-1, 0, 0),
@@ -319,7 +304,6 @@ export async function digBlock(
     if (adjBlock?.name === "lava") {
       console.error(`[Dig] ⚠️ LAVA adjacent to target block at (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`);
       return `🚨 警告: このブロックの隣に溶岩があります！掘ると溶岩が流れ込みます。別の場所を掘るか、水バケツで溶岩を固めてから掘ってください。溶岩位置: (${adjPos.x}, ${adjPos.y}, ${adjPos.z})`;
->>>>>>> origin/main
     }
   }
 
@@ -1267,7 +1251,6 @@ export async function useItemOnBlock(
     await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
     await new Promise(resolve => setTimeout(resolve, 100));
 
-<<<<<<< HEAD
     // DEBUG: Always log block name for bucket and bone_meal operations
     if (itemName === "bucket" || itemName === "water_bucket" || itemName === "lava_bucket" || itemName === "bone_meal") {
       console.log(`[DEBUG useItemOnBlock] Item "${itemName}" on block: "${block.name}" (type: ${block.type}) at (${x},${y},${z})`);
@@ -1283,7 +1266,6 @@ export async function useItemOnBlock(
       let collected = false;
 
       // Attempt 1: Use _genericPlace on the liquid block (sends proper protocol packet)
-      // For bucket collection, we "place" the bucket on the liquid block's top face
       try {
         console.log(`[DEBUG] Attempt 1: _genericPlace on ${block.name}`);
         await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
@@ -1294,7 +1276,6 @@ export async function useItemOnBlock(
         console.error(`[DEBUG] _genericPlace attempt: collected=${collected}`);
       } catch (e) {
         console.error(`[DEBUG] _genericPlace for bucket collection failed: ${e}`);
-        // Check if collection succeeded despite error
         await new Promise(resolve => setTimeout(resolve, 500));
         collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
         if (collected) {
@@ -1333,7 +1314,6 @@ export async function useItemOnBlock(
       }
     } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
       // For placing water/lava, we need to right-click a SOLID block's face.
-      // Water/lava appears in the air block adjacent to the face we click.
       // Use bot.placeBlock(solidBlock, faceVector) which handles protocol correctly.
       console.log(`[DEBUG] Placing ${itemName} at (${x},${y},${z}) on block: "${block.name}" (solid: ${block.boundingBox === 'block'})`);
 
@@ -1341,19 +1321,16 @@ export async function useItemOnBlock(
       let faceVector: Vec3 = new Vec3(0, 1, 0); // default: top face
 
       if (block.boundingBox === 'block') {
-        // Target is solid - click its top face, water goes above
         referenceBlock = block;
         faceVector = new Vec3(0, 1, 0);
       } else {
-        // Target is air/fluid - find adjacent solid block to click
-        // faceVector points FROM the solid block TOWARD the target (where water will appear)
         const adjacentChecks = [
-          { offset: new Vec3(0, -1, 0), face: new Vec3(0, 1, 0) },   // block below, click top face
-          { offset: new Vec3(0, 0, -1), face: new Vec3(0, 0, 1) },   // block to north, click south face
-          { offset: new Vec3(0, 0, 1), face: new Vec3(0, 0, -1) },   // block to south, click north face
-          { offset: new Vec3(-1, 0, 0), face: new Vec3(1, 0, 0) },   // block to west, click east face
-          { offset: new Vec3(1, 0, 0), face: new Vec3(-1, 0, 0) },   // block to east, click west face
-          { offset: new Vec3(0, 1, 0), face: new Vec3(0, -1, 0) },   // block above, click bottom face
+          { offset: new Vec3(0, -1, 0), face: new Vec3(0, 1, 0) },
+          { offset: new Vec3(0, 0, -1), face: new Vec3(0, 0, 1) },
+          { offset: new Vec3(0, 0, 1), face: new Vec3(0, 0, -1) },
+          { offset: new Vec3(-1, 0, 0), face: new Vec3(1, 0, 0) },
+          { offset: new Vec3(1, 0, 0), face: new Vec3(-1, 0, 0) },
+          { offset: new Vec3(0, 1, 0), face: new Vec3(0, -1, 0) },
         ];
 
         for (const check of adjacentChecks) {
@@ -1376,7 +1353,6 @@ export async function useItemOnBlock(
       let placed = false;
 
       // Attempt 1: Use bot.placeBlock() - the proper Mineflayer API
-      // This handles lookAt, packet format (including sequence field), and block update waiting
       try {
         console.log(`[DEBUG] Attempt 1: bot.placeBlock on "${referenceBlock.name}" at (${referenceBlock.position.x},${referenceBlock.position.y},${referenceBlock.position.z}), face=${faceVector}`);
         await bot.placeBlock(referenceBlock, faceVector);
@@ -1385,10 +1361,8 @@ export async function useItemOnBlock(
         placed = !heldNow0 || heldNow0.name === "bucket";
         console.log(`[DEBUG] placeBlock attempt: placed=${placed}, held=${heldNow0?.name}`);
       } catch (e: any) {
-        // placeBlock throws if blockUpdate doesn't fire - but water/lava may still have been placed
         const errMsg = e.message || String(e);
         console.error(`[DEBUG] placeBlock for ${itemName} error: ${errMsg}`);
-        // Check if bucket was consumed (water placed successfully despite error)
         await new Promise(resolve => setTimeout(resolve, 500));
         const heldAfterError = bot.heldItem;
         if (!heldAfterError || heldAfterError.name === "bucket") {
@@ -1446,11 +1420,6 @@ export async function useItemOnBlock(
       // For other items, use activateBlock
       await bot.activateBlock(block);
     }
-=======
-    // Use activateBlock for bucket interaction with water/lava blocks
-    // activateBlock ensures the block is properly targeted
-    await bot.activateBlock(block);
->>>>>>> origin/main
 
     // Wait longer for inventory to update properly
     await new Promise(resolve => setTimeout(resolve, 500));
