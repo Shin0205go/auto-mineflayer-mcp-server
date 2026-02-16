@@ -945,10 +945,10 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
   const oldHP = bot.health;
   const oldFood = bot.food;
 
-  // Guard: Don't respawn if HP is still okay
-  if (oldHP > 4) {
+  // Guard: Don't respawn if HP is very high (likely accidental)
+  if (oldHP > 10) {
     const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
-    return `Refused to respawn: HP is ${oldHP}/20 (still survivable). Try eating, fleeing, or pillar_up first. Inventory: ${inventory}`;
+    return `Refused to respawn: HP is ${oldHP}/20 (still healthy). Try eating, fleeing, or use chat "/kill ${managed.username}" if truly stuck. Inventory: ${inventory}`;
   }
 
   console.error(`[Respawn] Intentional death requested. Reason: ${reason || "unspecified"}`);
@@ -967,7 +967,7 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
 
   console.error(`[Respawn] After: HP=${newHP}, Food=${newFood}, Pos=(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}, ${newPos.z.toFixed(1)})`);
 
-  return `Respawned! Old: (${oldPos.x.toFixed(0)}, ${oldPos.y.toFixed(0)}, ${oldPos.z.toFixed(0)}) HP:${oldHP?.toFixed(0)}/20 Food:${oldFood}/20 → New: (${newPos.x.toFixed(0)}, ${newPos.y.toFixed(0)}, ${newPos.z.toFixed(0)}) HP:${newHP?.toFixed(0)}/20 Food:${newFood}/20. Reason: ${reason || "strategic reset"}. Inventory lost!`;
+  return `Respawned! Old: (${oldPos.x.toFixed(0)}, ${oldPos.y.toFixed(0)}, ${oldPos.z.toFixed(0)}) HP:${oldHP?.toFixed(0)}/20 Food:${oldFood}/20 → New: (${newPos.x.toFixed(0)}, ${newPos.y.toFixed(0)}, ${newPos.z.toFixed(0)}) HP:${newHP?.toFixed(0)}/20 Food:${newFood}/20. Reason: ${reason || "strategic reset"}.`;
 }
 
 /**
