@@ -2577,3 +2577,9 @@
 - **重要**: Claude7がgameruleコマンド実行可能（Claude4, Claude5と同様）
 - **再発防止**: サーバー起動スクリプトにgamerule設定を追加すべき
 - **ステータス**: ✅ 修正完了 (2026-02-16 Session 6)
+
+### [2026-02-16 Session 21] Claude2 craft windowOpen timeout
+- **症状**: Claude2で全てのcraft呼び出しが "Event windowOpen did not fire within timeout of 20000ms" で失敗。素材は消費されるがアイテムが出来ない。stick, crafting_table, stone_pickaxe全て同様。3回再接続しても改善せず。他のボットは正常。
+- **原因**: bot.craft()がcrafting tableを開く際にwindowOpenイベントがサーバーから返らない。line-of-sight不足またはサーバー側のウィンドウ状態不整合の可能性。
+- **修正**: commit e126a2f — (1) crafting table方向にlookAt()で視線を向けてからcraft (2) windowOpenタイムアウト時にwindowを閉じてリトライ。2x2クラフト(stick/crafting_table)はtable不使用パスなのでwindowOpen関係なし — Claude2の問題はstone_pickaxe等のtable使用レシピが主因。
+- **ステータス**: ✅ 修正完了 — Claude2でstone_pickaxeクラフト成功確認
