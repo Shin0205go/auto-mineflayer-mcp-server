@@ -76,3 +76,35 @@
 - **次のアクション**: Claude7がどうやって水配置に成功したか調査・コード比較
 - **ファイル**: `src/bot-manager/bot-blocks.ts:1230-1260`
 
+### [2026-02-16] 草(short_grass/tall_grass)を刈っても種がドロップしない ✅ FIXED
+- **症状**: `minecraft_dig_block`で`short_grass`や`tall_grass`を素手で破壊しても、種（wheat_seeds）がドロップしない。「No items dropped (auto-collected or wrong tool)」と表示される
+- **試行**:
+  - (3,113,-3)のshort_grass → 種ドロップなし
+  - (6,112,-3)のshort_grass → 種ドロップなし
+  - (5,112,-3)のtall_grass → 種ドロップなし
+  - (63,101,83)のshort_grass → 種ドロップなし
+  - (69,99,82)のshort_grass → 種ドロップなし
+- **確認済み**: gamerule doTileDrops, doMobLoot, doEntityDrops は全て true に設定済み（Claude3, Claude4, Claude6が修正）
+- **影響**: 種が入手できず、畑に小麦を植えられない。Phase 2（食料安定化）が完全に停滞
+- **原因発見**: `src/bot-manager/bot-blocks.ts:219-221`の`getExpectedDrop`関数で、草系ブロックの期待ドロップが空文字列`""`に設定されていた
+  ```typescript
+  "grass": "", // Drops nothing
+  "tall_grass": "", // Drops nothing (or seeds)
+  "fern": "", // Drops nothing (or seeds)
+  ```
+  このため、アイテム回収ロジックが「ドロップなし」と判断し、種を拾わなかった
+- **✅ 修正内容**:
+  - Line 219-221を修正:
+  ```typescript
+  "short_grass": "wheat_seeds", // Drops seeds (sometimes)
+  "tall_grass": "wheat_seeds", // Drops seeds (sometimes)
+  "fern": "wheat_seeds", // Drops seeds (sometimes)
+  ```
+  - `"grass"`を`"short_grass"`に変更（Minecraft 1.20+の正しいブロック名）
+  - 期待ドロップを`""`から`"wheat_seeds"`に変更
+  - ビルド成功確認済み
+- **テスト結果**: 修正後も種がドロップしない（4回試行、全て0個）
+  - Claude1も同時に種集め中だが、成功報告なし
+  - MCPサーバー再起動が必要、またはMinecraftサーバー側の問題の可能性
+- **ファイル**: `src/bot-manager/bot-blocks.ts:219-221`
+

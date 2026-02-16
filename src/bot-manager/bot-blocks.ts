@@ -216,9 +216,9 @@ function getExpectedDrop(blockName: string): string | null {
     "glowstone": "glowstone_dust",
     "redstone_lamp": "redstone_lamp", // Drops itself
     "sea_lantern": "prismarine_crystals",
-    "grass": "", // Drops nothing
-    "tall_grass": "", // Drops nothing (or seeds)
-    "fern": "", // Drops nothing (or seeds)
+    "short_grass": "wheat_seeds", // Drops seeds (sometimes)
+    "tall_grass": "wheat_seeds", // Drops seeds (sometimes)
+    "fern": "wheat_seeds", // Drops seeds (sometimes)
   };
 
   // If not in dropMappings, assume block drops itself (logs, planks, etc.)
