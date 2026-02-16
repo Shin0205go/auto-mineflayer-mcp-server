@@ -92,3 +92,15 @@
 - **影響**: チェスト操作、資源収集、建築など位置指定が必要な全ての操作が困難
 - **調査予定**: `src/bot-manager/bot-movement.ts`のmoveTo関数を確認
 
+### [2026-02-16] minecraft_eatコマンドがタイムアウト
+- **症状**: `minecraft_eat(food_name="wheat")`を実行すると「Error: Promise timed out」が発生。最初の1回は成功して「Hunger: 12/20」が返るが、2回目以降のeat呼び出しが全てタイムアウト。
+- **原因**:
+  - 不明（Mineflayerの`bot.consume()`のイベント待機がタイムアウト？）
+  - または食料が完全に消費されてない？
+- **再現手順**:
+  1. `minecraft_eat(food_name="wheat")` → 成功（Hunger 15→12）
+  2. `minecraft_eat(food_name="wheat")` → 「Promise timed out」エラー
+  3. `minecraft_eat(food_name="wheat")` → 同じくタイムアウト
+- **回避策**: bread（パン）を食べるか、コマンドをスキップ
+- **影響**: 食料復旧が困難（HPが2.4/20で危機的）
+

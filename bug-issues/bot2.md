@@ -12,18 +12,13 @@
 
 ---
 
-### [2026-02-15] minecraft_move_to が目標座標に到達しない (✅ FIXED - 2026-02-16)
+### [2026-02-15] minecraft_move_to が目標座標に到達しない
 - **症状**: `minecraft_move_to(x, y, z)`を呼んでも、実際の位置が変わらない、または目標と異なる座標に移動する
-- **例**:
-  - `move_to(-71, 89, -49)` → 実際はY=90に移動
-  - `move_to(-69, 62, -52)` → 実際はY=63に移動し、その後同じコマンドで位置が変わらない
-  - `move_to(26, 10, 53)` → 「Moved near stone at (26.0, 7.0, 54.0)」と表示されるが、実際はY=95に留まる
-  - **Claude4報告**: 3ブロック以内の短距離移動が特に失敗しやすい
-- **原因**: `src/bot-manager/bot-movement.ts:94-99` で `distance < 2` の早期リターンがあり、pathfinderを起動せずに即座に成功を返していた
+- **例**: `move_to(-71, 89, -49)` → 実際はY=90に移動。`move_to(-69, 62, -52)` → 実際はY=63に移動し、その後同じコマンドで位置が変わらない
+- **原因**: `src/tools/movement.ts`の`minecraft_move_to`実装に問題がある可能性
 - **影響**: 正確な位置への移動が必要な作業（チェスト操作、ブロック設置等）で支障
-- **回避策**: Claude4報告 - 一旦遠くに移動してから目標に向かう
-- **修正**: ✅ Claude1が修正完了。94-99行の早期リターンを削除し、pathfinderに移動を任せるように変更
-- **ファイル**: `src/bot-manager/bot-movement.ts:88-102`
+- **修正**: 未対応（要調査）
+- **ファイル**: `src/tools/movement.ts`
 
 ### [2026-02-15] minecraft_open_chest / store_in_chest / list_chest がタイムアウト
 - **症状**: チェスト操作系のツールが全て「Event windowOpen did not fire within timeout of 20000ms」でエラー
@@ -33,13 +28,12 @@
 - **修正**: 未対応（要調査）
 - **ファイル**: `src/tools/crafting.ts` または関連ファイル
 
-### [2026-02-15] minecraft_use_item_on_block で水・溶岩バケツ取得失敗（✅解決）
+### [2026-02-15] minecraft_use_item_on_block で水・溶岩バケツ取得失敗（未解決）
 - **症状**: `use_item_on_block(bucket, x, y, z)`で水源・溶岩源に対して使用しても、water_bucket/lava_bucketがインベントリに反映されない
 - **試行**:
   - 水源(-84, 64, -42): ⚠️ water_bucket not found
   - 溶岩源(-91, 63, -32): ⚠️ lava_bucket not found
   - 溶岩源(-90, 63, -32): ⚠️ lava_bucket not found
-  - 水源(-5, 38, 9): ⚠️ water_bucket not found (2回試行)
 - **現在の実装**: `bot.activateBlock(block)`を使用、待機時間1000ms、インベントリ検証あり
 - **影響**: 水バケツ・溶岩バケツが取得できず、黒曜石作成（水+溶岩）ができない
 - **推定原因**:
@@ -53,58 +47,46 @@
   3. イベントリスナー(`itemDrop`, `windowOpen`)で状態変化を監視
   4. 別のAPIメソッド（`bot.useOn`, `bot.activateItem`）を試す
 - **ファイル**: `src/bot-manager/bot-blocks.ts`(Line 1215-1243)
-- **✅ 修正完了 (2026-02-15)**:
-  - gitマージコンフリクトマーカー(`<<<<<<< Updated upstream`等)が残っていたのが原因
-  - マーカーを削除し、正しいコードに統合
-  - `bot.activateItem()` + `bot.deactivateItem()` を使用（await不要）
-  - ビルド成功、動作確認待ち
 
-### [2026-02-16] minecraft_use_item_on_block で水バケツからの水配置が失敗 🚨未解決
-- **症状**: `use_item_on_block(item_name="water_bucket", x, y, z)`を実行すると「Placed water at (x, y, z). Now holding water_bucket.」と表示されるが、実際には水が配置されず、water_bucketがインベントリに残る
-- **試行**:
-  - 修正1: activateItem() + deactivateItem() → 失敗
-  - 修正2: placeBlock(referenceBlock, Vec3(0,1,0)) → 失敗
-  - 修正3: activateItemで向いた方向に配置 → 失敗
-  - 修正4: placeBlock(下のブロック, 上面) + fallback → 失敗
-  - 全ての試行で`find_block("water", 5)`: No water found
-- **影響**: 畑作りに必要な水源が作れない、無限水源が作れない、Phase 2食料確保が停滞
+---
+
+### [2026-02-16] Claudeエージェント起動直後にシャットダウン（未解決）
+- **症状**: `npm run start:claude`でエージェント起動後、Loop 1開始→MCP接続→イベント購読→即座にシャットダウン
+- **ログ**:
+  ```
+  [Agent] === Loop 1 ===
+  [MCP-WS] Connected to MCP server
+  [Claude] MCP hook connection ready
+  [Claude] Subscribed to events for Claude2
+  [Agent] Shutting down...
+  ```
 - **推定原因**:
-  - Mineflayerのwater_bucket配置の正しいAPIが不明
-  - equip/activateItem/placeBlockのいずれも機能していない
-  - MCPサーバーとMineflayerボット間の通信に問題がある可能性
-- **回避策**: 自然の水源を探して利用、またはClaude7が成功した方法を確認
-- **次のアクション**: Claude7がどうやって水配置に成功したか調査・コード比較
-- **ファイル**: `src/bot-manager/bot-blocks.ts:1230-1260`
+  1. Claude SDK の `query()` 関数が Claude Code 環境で正常に動作しない
+  2. OAuth認証に問題がある
+  3. `runQuery()` がエラーをスローせずにプロセスを終了させている
+- **調査内容**:
+  - エラーログなし（例外は発生していない）
+  - `cleanup()` が呼ばれている（SIGINT/SIGTERM または fatal error）
+  - `runQuery()` が実行される前にシャットダウンしている可能性
+- **次のアクション**:
+  1. `claude-client.ts` の `runQuery` にデバッグログ追加
+  2. Claude SDK のバージョンとClaude Code互換性確認
+  3. 別の認証方法を試す（API キー直接指定）
+  4. フォアグラウンドで実行してすべての出力をキャプチャ
+- **影響**: Claude2エージェントが自律動作できない。手動でMCPツールを呼び出す必要あり
+- **ファイル**: `src/agent/claude-agent.ts`, `src/agent/claude-client.ts`
 
-### [2026-02-16] 草(short_grass/tall_grass)を刈っても種がドロップしない ✅ FIXED
-- **症状**: `minecraft_dig_block`で`short_grass`や`tall_grass`を素手で破壊しても、種（wheat_seeds）がドロップしない。「No items dropped (auto-collected or wrong tool)」と表示される
-- **試行**:
-  - (3,113,-3)のshort_grass → 種ドロップなし
-  - (6,112,-3)のshort_grass → 種ドロップなし
-  - (5,112,-3)のtall_grass → 種ドロップなし
-  - (63,101,83)のshort_grass → 種ドロップなし
-  - (69,99,82)のshort_grass → 種ドロップなし
-- **確認済み**: gamerule doTileDrops, doMobLoot, doEntityDrops は全て true に設定済み（Claude3, Claude4, Claude6が修正）
-- **影響**: 種が入手できず、畑に小麦を植えられない。Phase 2（食料安定化）が完全に停滞
-- **原因発見**: `src/bot-manager/bot-blocks.ts:219-221`の`getExpectedDrop`関数で、草系ブロックの期待ドロップが空文字列`""`に設定されていた
-  ```typescript
-  "grass": "", // Drops nothing
-  "tall_grass": "", // Drops nothing (or seeds)
-  "fern": "", // Drops nothing (or seeds)
-  ```
-  このため、アイテム回収ロジックが「ドロップなし」と判断し、種を拾わなかった
-- **✅ 修正内容**:
-  - Line 219-221を修正:
-  ```typescript
-  "short_grass": "wheat_seeds", // Drops seeds (sometimes)
-  "tall_grass": "wheat_seeds", // Drops seeds (sometimes)
-  "fern": "wheat_seeds", // Drops seeds (sometimes)
-  ```
-  - `"grass"`を`"short_grass"`に変更（Minecraft 1.20+の正しいブロック名）
-  - 期待ドロップを`""`から`"wheat_seeds"`に変更
-  - ビルド成功確認済み
-- **テスト結果**: 修正後も種がドロップしない（4回試行、全て0個）
-  - Claude1も同時に種集め中だが、成功報告なし
-  - MCPサーバー再起動が必要、またはMinecraftサーバー側の問題の可能性
-- **ファイル**: `src/bot-manager/bot-blocks.ts:219-221`
+---
+
+### [2026-02-16] throwItem / tillSoil インポートエラー（✅解決）
+- **症状**: MCPサーバー起動時に `SyntaxError: The requested module './bot-blocks.js' does not provide an export named 'throwItem'` で起動失敗
+- **原因**: `src/bot-manager/index.ts` で `throwItem`, `tillSoil` をインポートしているが、`bot-blocks.ts` に関数が定義されていなかった
+- **影響**: MCPサーバーが起動できない
+- **修正**: ✅完了
+  - `src/bot-manager/bot-blocks.ts` に `throwItem` 関数を実装（line 1296-1323）
+  - `src/bot-manager/bot-blocks.ts` に `tillSoil` 関数を実装（line 1267-1293）
+  - `src/bot-manager/index.ts` の `digBlock` 呼び出しで不要な `force` 引数を削除
+  - `src/tools/building.ts` の `digBlock` 呼び出しで不要な `force` 引数を削除
+  - ビルド成功
+- **ファイル**: `src/bot-manager/bot-blocks.ts`, `src/bot-manager/index.ts`, `src/tools/building.ts`
 
