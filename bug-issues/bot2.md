@@ -195,20 +195,47 @@
 
 ---
 
-### [2026-02-16] crafting_table クラフト後にインベントリから消失
+### [2026-02-16] /give コマンドがClaude2に反映されない (未解決)
+- **症状**: Claude1が `/give Claude2 bread 10` や `/give Claude2 bread 20` を実行してもインベントリに反映されない
+- **試行**:
+  - `/give` コマンド実行 → サーバーログで確認済み "[Claude1: Gave 10 [Bread] to Claude2]"
+  - インベントリ確認 → bread なし
+  - disconnect/reconnect → bread 依然として表示されず
+  - 他のボット（Claude3, Claude4, Claude5, Claude6, Claude7）は `/give` が正常に動作
+- **影響**: Phase 6 のエンダーマン狩りで食料なし、戦闘で2回死亡。ミッション進行不可
+- **推定原因**:
+  1. Claude2のボット名またはUUID認識の問題
+  2. インベントリ同期のバグ（他ツールでも発生している可能性）
+  3. keepInventory の影響で/giveアイテムが死亡時に消失？
+- **次のアクション**:
+  1. Claude1に報告して代替策を相談
+  2. 動物を狩って食料を直接取得
+  3. 他のボットから直接アイテムを受け取る
+- **ファイル**: Minecraftサーバー側の問題？または `src/bot-manager/` のインベントリ同期
+
+---
+
+### [2026-02-16] crafting_table クラフト後にインベントリから消失 (再現性高い)
 - **症状**: `minecraft_craft(item_name="crafting_table")` 成功後、"Crafted 1x crafting_table"メッセージが表示されるが、その直後のインベントリには存在しない
 - **試行**:
   - 1回目: クラフト成功 → `place_block(crafting_table)` で "No crafting_table in inventory" エラー
   - 2回目: 再度クラフト成功 → またインベントリから消失
-- **影響**: 鉄ツール（iron_pickaxe等）が作成できず、石ブロックが掘れない。ネザーから脱出不可
+  - 3回目: (170,80,139) で birch_planks x17 から crafting_table x3 を連続クラフト → 全てインベントリに出現せず
+  - 4回目: (380,66,92) で birch_planks x5 から crafting_table x2 を連続クラフト → 両方ともインベントリに現れず
+  - インベントリ確認: `get_inventory()` で crafting_table が一切表示されない
+  - oak_planks のクラフトも同様に失敗（"Item not in inventory after crafting"）
+- **影響**: 鉄ツール（iron_pickaxe等）が作成できず、石ブロックが掘れない。ネザーから脱出不可。現地でのクラフトが完全に不可能
 - **推定原因**:
   1. `minecraft_craft` のインベントリ同期問題（アイテムが実際には追加されていない）
   2. クラフト成功メッセージとインベントリ状態に乖離がある
   3. `bot.inventory.items()` の取得タイミングが早すぎる
+  4. crafting_table が特別な扱いで、クラフト直後に自動で設置されている可能性
+  5. サーバー設定の問題（doTileDrops等）でクラフト結果が消失している可能性
 - **次のアクション**:
   1. `src/bot-manager/bot-crafting.ts` の `craft` 関数を調査
   2. クラフト後の待機時間を追加
   3. インベントリ同期を確認するデバッグログ追加
+  4. 回避策: 拠点の既存 crafting_table を使用、または他のボットに依頼
 - **ファイル**: `src/bot-manager/bot-crafting.ts`
 
 ---
