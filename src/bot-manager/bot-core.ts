@@ -471,8 +471,21 @@ export class BotCore extends EventEmitter {
             addEvent("damaged", `Took damage! Health: ${bot.health?.toFixed(1)}/20`, {
               health: bot.health,
             });
+            // Emergency lava escape: if standing in lava, immediately jump and sprint away
+            const feetBlock = bot.blockAt(bot.entity.position.floored());
+            if (feetBlock?.name === "lava") {
+              console.error(`[AutoFlee] IN LAVA! Emergency escape, HP=${bot.health.toFixed(1)}`);
+              bot.setControlState("jump", true);
+              bot.setControlState("sprint", true);
+              bot.setControlState("forward", true);
+              setTimeout(() => {
+                bot.setControlState("jump", false);
+                bot.setControlState("sprint", false);
+                bot.setControlState("forward", false);
+              }, 3000);
+            }
             // Auto-flee when HP drops to 10 or below after taking damage
-            if (bot.health <= 10) {
+            else if (bot.health <= 10) {
               const nearestHostile = Object.values(bot.entities)
                 .filter(e => e !== bot.entity && e.name && isHostileMob(bot, e.name.toLowerCase()))
                 .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position))[0];
