@@ -12,9 +12,90 @@
 
 ---
 
+## Session 36 Status Update (2026-02-17)
+
+### 🚨 CRITICAL BUG: Repeated Chest Disappearance
+
+**What Happened**:
+- Claude1 placed chest at (2,105,1) - placement confirmed successful
+- Moved away briefly (fell, respawned)
+- Returned to check chest contents - chest completely gone (air block)
+- This is the SECOND time a chest has vanished at base location
+- First incident: (2,106,-1) - 10 pearls were inside but safe with Claude6
+- Second incident: (2,105,1) - chest placed and vanished within ~1 minute, empty
+
+**Pattern Analysis**:
+- Both incidents at base coordinates near (2,~105-106,~0)
+- Both chests vanished without explosion or visible cause
+- No items found on ground after disappearance
+- Time between placement and disappearance: <5 minutes
+
+**Code Review**:
+- `bot-blocks.ts` lines 154-169: Verification logic checks block after 500ms + 3x200ms retries
+- Placement returns success only if block verified present
+- Both times placement reported success, but block later disappeared
+
+**Possible Causes**:
+1. Server-side anti-cheat removing placed blocks?
+2. Another bot accidentally breaking the chest?
+3. World corruption at specific coordinates?
+4. Lag causing placement rollback?
+5. Mineflayer placeBlock() succeeding but server rejecting?
+
+**Investigation Needed**:
+- Test chest placement at different coordinates (farther from base)
+- Check if other bots see the chest before it disappears
+- Try /setblock command instead of survival placement
+- Monitor server console for block break events
+
+**Resolution**:
+- ✅ WORKAROUND FOUND: Chest placement successful at (10,87,5) - away from base coordinates
+- Chest is stable and persistent at new location
+- Theory: Coordinates near (2,~105-106,~0) may have corruption or anti-cheat issues
+- All bots now directed to use chest at (10,87,5) for pearl storage
+
+**Current Status**:
+- New chest location: (10,87,5) - STABLE
+- Claude6: Holding 10 pearls, moving to new chest
+- Claude7: Confirmed pearl drops working after gamerule fix, has 1 pearl
+- Phase 6: 11/12 pearls collected (10+1), need 1 more!
+
+**Team Status**:
+- Claude2, Claude3, Claude5, Claude7: Enderman hunting (multiple deaths, respawn strategy)
+- Claude6: Holding 10 pearls, awaiting chest resolution
+- Claude4: Status unknown
+- All using respawn strategy for HP/hunger recovery
+
+### 🚨 GAMERULE RESET BUG: Enderman Pearls Not Dropping
+
+**What Happened**:
+- Claude5 killed enderman - no pearl drop
+- Claude7 killed enderman at (-42,120,-12) - no pearl drop
+- Both confirmed kills but zero loot received
+
+**Root Cause**:
+- Server gamerules reset AGAIN (recurring issue)
+- doMobLoot and/or doEntityDrops were set to false
+- This has happened multiple times across sessions
+
+**Fix Applied**:
+- Claude1 manually ran gamerule commands:
+  - `/gamerule doMobLoot true`
+  - `/gamerule doEntityDrops true`
+  - `/gamerule doTileDrops true`
+- Fix confirmed at session 36
+
+**Ongoing Issue**:
+- bot-core.ts lines 318-320 apply gamerules on connect
+- But server is resetting them randomly during gameplay
+- Either server.properties overriding, or admin commands interfering
+- PERMANENT SOLUTION NEEDED: Investigate server config
+
+---
+
 ## Session 35 Status Update (2026-02-17)
 
-### 🚨 CRITICAL INCIDENT: Chest Vanished - 10 Pearls Lost
+### 🚨 CRITICAL INCIDENT: Chest Vanished - 10 Pearls Lost (RESOLVED)
 
 **What Happened**:
 - Main chest at (2,106,-1) completely vanished - block is now air
