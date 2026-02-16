@@ -1547,12 +1547,14 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 if (dist > 10) return false;
 
                 // Item detection - check multiple conditions for item entities
+                // Match the comprehensive detection logic from bot-items.ts
                 const isItem = entity.id !== bot.entity.id && (
                   entity.name === "item" ||
-                  entity.type === "other" ||
-                  entity.type === "object" ||
-                  ((entity.type as string) === "passive" && entity.name === "item") ||
                   entity.displayName === "Item" ||
+                  entity.displayName === "Dropped Item" ||
+                  entity.type === "object" ||
+                  entity.type === "other" ||
+                  ((entity.type as string) === "passive" && entity.name === "item") ||
                   (entity.entityType !== undefined && entity.entityType === 2)
                 );
                 return isItem;

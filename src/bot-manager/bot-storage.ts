@@ -215,8 +215,34 @@ export async function takeFromChest(
   const takeCount = count || item.count;
   const actualCount = Math.min(takeCount, item.count);
 
-  await chest.withdraw(item.type, null, actualCount);
+  // Record inventory before withdrawal for verification
+  const inventoryBefore = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
+  console.error(`[Storage] Before withdrawal: ${itemName} count in inventory = ${inventoryBefore}`);
+
+  try {
+    await chest.withdraw(item.type, null, actualCount);
+  } catch (err) {
+    chest.close();
+    throw new Error(`Failed to withdraw from chest: ${err}`);
+  }
+
+  // Wait a moment for inventory to sync
+  await new Promise(resolve => setTimeout(resolve, 500));
+
+  // Verify items were actually withdrawn
+  const inventoryAfter = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
+  const withdrawnCount = inventoryAfter - inventoryBefore;
+  console.error(`[Storage] After withdrawal: ${itemName} count in inventory = ${inventoryAfter}, withdrawn = ${withdrawnCount}`);
+
+  if (withdrawnCount < actualCount) {
+    chest.close();
+    throw new Error(`Failed to withdraw full amount: requested ${actualCount}, but only got ${withdrawnCount}. This indicates a server sync issue or the chest contents changed unexpectedly.`);
+  }
+
   chest.close();
+
+  // Additional wait for full inventory sync before returning
+  await new Promise(resolve => setTimeout(resolve, 500));
 
   const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
   return `Took ${actualCount}x ${itemName} from chest. Inventory: ${newInventory}`;
