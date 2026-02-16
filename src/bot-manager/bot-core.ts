@@ -548,6 +548,8 @@ export class BotCore extends EventEmitter {
               if (nearestHostile) {
                 const dir = bot.entity.position.minus(nearestHostile.position).normalize();
                 const fleeTarget = bot.entity.position.plus(dir.scaled(15));
+                // Fix Session 32: Keep Y coordinate to avoid falling off cliffs
+                fleeTarget.y = bot.entity.position.y;
                 console.error(`[AutoFlee] HP=${bot.health.toFixed(1)}, fleeing from ${nearestHostile.name}`);
                 try {
                   bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));

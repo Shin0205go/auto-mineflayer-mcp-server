@@ -12,6 +12,33 @@
 
 ---
 
+### [2026-02-17 Session 32] Auto-flee causes fall deaths (✅ FIXED)
+- **症状**: Claude2が "hit the ground too hard while trying to escape Zombie" で死亡。逃走中に落下死
+- **原因**: `bot-core.ts` lines 544-563 の auto-flee (HP<=10時) が GoalNear で pathfinding するが、落下安全チェックなし
+- **問題コード**:
+  ```typescript
+  bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
+  ```
+  - pathfinder は最短距離を優先し、崖から落ちるルートも選択する
+  - 夜間の暗闇では地形が見えず、より危険
+- **修正方針**:
+  1. **Option A**: pathfinder の Movements に `allowFreeMotion: false` を設定し、落下を制限
+  2. **Option B**: 逃走目標の Y 座標を現在と同じにして水平方向のみ逃走
+  3. **Option C**: 逃走前に周囲の地形をスキャンし、安全な方向を選択
+- **推奨修正**: Option B (簡単、即効性)
+  ```typescript
+  const fleeTarget = bot.entity.position.plus(dir.scaled(15));
+  // Fix: Keep Y coordinate same as current position
+  fleeTarget.y = bot.entity.position.y;
+  bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
+  ```
+- **ファイル**: `src/bot-manager/bot-core.ts` lines 544-563
+- **修正内容**: fleeTarget.y = bot.entity.position.y を追加し、Y座標を現在地に固定
+- **効果**: 水平方向のみ逃走、崖から落ちるリスク消失
+- **ステータス**: ✅ 修正完了 (Session 32)
+
+---
+
 ### [2026-02-17 Session 30] Nether portal cannot be activated (🚫 REQUIRES HUMAN)
 - **症状**: Claude6がflint_and_steelでネザーポータルフレーム(7-10,106-110,-3)に火をつけても起動しない
 - **原因**: Obsidianフレームが不完全、または構造が正しくない可能性。ボットは/setblockコマンドを実行できない
