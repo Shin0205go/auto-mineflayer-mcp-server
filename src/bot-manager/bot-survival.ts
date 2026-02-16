@@ -4,6 +4,7 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 import type { ManagedBot } from "./types.js";
 import { isHostileMob, isFoodItem, isBedBlock } from "./minecraft-utils.js";
+import { collectNearbyItems } from "./bot-items.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -268,6 +269,11 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       // Check if target still exists
       const currentTarget = Object.values(bot.entities).find(e => e.id === targetId);
       if (!currentTarget) {
+        // Auto-collect dropped items after kill
+        await delay(500);
+        try {
+          await collectNearbyItems(managed);
+        } catch (_) { /* ignore collection errors */ }
         return `Killed ${target.name} after ${attacks} attacks`;
       }
 
@@ -416,6 +422,11 @@ export async function fight(
     // Re-find target (it might have moved or died)
     target = Object.values(bot.entities).find(e => e.id === targetId) || null;
     if (!target) {
+      // Auto-collect dropped items after kill
+      await delay(500);
+      try {
+        await collectNearbyItems(managed);
+      } catch (_) { /* ignore collection errors */ }
       return `${targetName} defeated! Attacked ${attackCount} times.` + getBriefStatus(bot);
     }
 
