@@ -282,7 +282,7 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   }
   const isPassableBlock = (name: string) => {
     if (!name) return false;
-    const passable = ["air", "cave_air", "void_air", "water", "lava",
+    const passable = ["air", "cave_air", "void_air", "water",
       "grass", "tall_grass", "fern", "large_fern", "dead_bush",
       "dandelion", "poppy", "blue_orchid", "allium", "azure_bluet",
       "red_tulip", "orange_tulip", "white_tulip", "pink_tulip",
