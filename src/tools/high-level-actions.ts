@@ -652,7 +652,11 @@ export async function minecraft_explore_area(
 
   const findings: string[] = [];
   let visitedPoints = 0;
-  const maxVisitedPoints = Math.min(50, Math.floor(radius / 5)); // Limit exploration points
+  // Use larger steps for entity hunting (detection range is 32 blocks, so step=20 still has overlap)
+  const knownEntitiesForStep = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "cat", "ocelot", "parrot", "wolf", "llama", "turtle", "panda", "fox", "bee", "axolotl", "frog", "goat", "zombie", "skeleton", "spider", "creeper", "enderman", "blaze"];
+  const isEntityHunt = target && knownEntitiesForStep.some(e => target.toLowerCase().includes(e));
+  const stepSize = isEntityHunt ? 20 : 5; // Larger steps for entity hunting (32-block detection range)
+  const maxVisitedPoints = Math.min(50, Math.floor(radius / stepSize)); // Limit exploration points
   const startTime = Date.now();
   const maxDuration = 120000; // 2 minutes max
 
@@ -660,7 +664,7 @@ export async function minecraft_explore_area(
   let x = startX;
   let z = startZ;
   let dx = 0;
-  let dz = -5; // Start moving north
+  let dz = -stepSize; // Start moving north/south
   let segmentLength = 1;
   let segmentPassed = 0;
 
