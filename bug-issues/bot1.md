@@ -12,6 +12,15 @@
 
 ---
 
+### [2026-02-16 Session 19] Pathfinder routes through deep water causing drowning (✅ FIXED)
+- **症状**: Claude2がエンダーマン狩り中に繰り返し溺死。pathfinderが水中を通るルートを選択
+- **原因**: `mineflayer-pathfinder`のデフォルト`liquidCost=1`で、水を陸地と同コストで通過可能と判定。深い水域を横断するルートが選ばれ溺死
+- **修正**: `bot-core.ts`で`movements.liquidCost = 100`に設定。pathfinderが陸路を強く優先するようになった（水路を完全にブロックはしない）
+- **ファイル**: `src/bot-manager/bot-core.ts`
+- **ステータス**: ✅ 修正完了（commit 8cec55e）
+
+---
+
 ### [2026-02-16 Session 18] Lava listed as passable block in moveTo() (✅ FIXED)
 - **症状**: Claude7がネザーで繰り返し溶岩死。pathfinderのblocksToAvoidに溶岩を追加済みなのに死亡が続く
 - **原因**: `moveTo()`内の`isPassableBlock()`関数に`"lava"`が含まれていた。ターゲット付近の立ち位置を探す際、溶岩を「立てる場所」として判定してしまう
