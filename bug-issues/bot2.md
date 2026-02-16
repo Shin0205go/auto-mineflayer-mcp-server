@@ -59,3 +59,52 @@
   - `bot.activateItem()` + `bot.deactivateItem()` を使用（await不要）
   - ビルド成功、動作確認待ち
 
+### [2026-02-16] minecraft_use_item_on_block で水バケツからの水配置が失敗 🚨未解決
+- **症状**: `use_item_on_block(item_name="water_bucket", x, y, z)`を実行すると「Placed water at (x, y, z). Now holding water_bucket.」と表示されるが、実際には水が配置されず、water_bucketがインベントリに残る
+- **試行**:
+  - 修正1: activateItem() + deactivateItem() → 失敗
+  - 修正2: placeBlock(referenceBlock, Vec3(0,1,0)) → 失敗
+  - 修正3: activateItemで向いた方向に配置 → 失敗
+  - 修正4: placeBlock(下のブロック, 上面) + fallback → 失敗
+  - 全ての試行で`find_block("water", 5)`: No water found
+- **影響**: 畑作りに必要な水源が作れない、無限水源が作れない、Phase 2食料確保が停滞
+- **推定原因**:
+  - Mineflayerのwater_bucket配置の正しいAPIが不明
+  - equip/activateItem/placeBlockのいずれも機能していない
+  - MCPサーバーとMineflayerボット間の通信に問題がある可能性
+- **回避策**: 自然の水源を探して利用、またはClaude7が成功した方法を確認
+- **次のアクション**: Claude7がどうやって水配置に成功したか調査・コード比較
+- **ファイル**: `src/bot-manager/bot-blocks.ts:1230-1260`
+
+### [2026-02-16] 草(short_grass/tall_grass)を刈っても種がドロップしない ✅ FIXED
+- **症状**: `minecraft_dig_block`で`short_grass`や`tall_grass`を素手で破壊しても、種（wheat_seeds）がドロップしない。「No items dropped (auto-collected or wrong tool)」と表示される
+- **試行**:
+  - (3,113,-3)のshort_grass → 種ドロップなし
+  - (6,112,-3)のshort_grass → 種ドロップなし
+  - (5,112,-3)のtall_grass → 種ドロップなし
+  - (63,101,83)のshort_grass → 種ドロップなし
+  - (69,99,82)のshort_grass → 種ドロップなし
+- **確認済み**: gamerule doTileDrops, doMobLoot, doEntityDrops は全て true に設定済み（Claude3, Claude4, Claude6が修正）
+- **影響**: 種が入手できず、畑に小麦を植えられない。Phase 2（食料安定化）が完全に停滞
+- **原因発見**: `src/bot-manager/bot-blocks.ts:219-221`の`getExpectedDrop`関数で、草系ブロックの期待ドロップが空文字列`""`に設定されていた
+  ```typescript
+  "grass": "", // Drops nothing
+  "tall_grass": "", // Drops nothing (or seeds)
+  "fern": "", // Drops nothing (or seeds)
+  ```
+  このため、アイテム回収ロジックが「ドロップなし」と判断し、種を拾わなかった
+- **✅ 修正内容**:
+  - Line 219-221を修正:
+  ```typescript
+  "short_grass": "wheat_seeds", // Drops seeds (sometimes)
+  "tall_grass": "wheat_seeds", // Drops seeds (sometimes)
+  "fern": "wheat_seeds", // Drops seeds (sometimes)
+  ```
+  - `"grass"`を`"short_grass"`に変更（Minecraft 1.20+の正しいブロック名）
+  - 期待ドロップを`""`から`"wheat_seeds"`に変更
+  - ビルド成功確認済み
+- **テスト結果**: 修正後も種がドロップしない（4回試行、全て0個）
+  - Claude1も同時に種集め中だが、成功報告なし
+  - MCPサーバー再起動が必要、またはMinecraftサーバー側の問題の可能性
+- **ファイル**: `src/bot-manager/bot-blocks.ts:219-221`
+
