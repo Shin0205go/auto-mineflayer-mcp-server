@@ -918,7 +918,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         }
 
         // Additional wait for inventory synchronization
-        await new Promise(resolve => setTimeout(resolve, 700));
+        // BUGFIX: Increased from 700ms to 2000ms to ensure items appear in inventory
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const invAfterSimple = bot.inventory.items().map(it => `${it.name}x${it.count}`).join(", ");
         console.error(`[Craft] Inventory after simple wooden craft: ${invAfterSimple}`);
@@ -1509,8 +1510,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           }
 
           // Wait for crafting to complete and item transfer
-          // Increased timeout to 1500ms to handle slower servers
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          // BUGFIX: Increased from 1500ms to 2500ms to fix item disappearance bug
+          await new Promise(resolve => setTimeout(resolve, 2500));
 
           // Only close window if we used a crafting table (not player inventory)
           // Closing the inventory window can cause items to drop!
@@ -1519,9 +1520,10 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             await new Promise(resolve => setTimeout(resolve, 300));
           }
 
-          // Additional wait for inventory synchronization (increased from 700ms to 1500ms to reduce false positives)
+          // Additional wait for inventory synchronization
+          // BUGFIX: Increased to 2500ms to prevent item disappearance bug
           // Simple recipes (planks, sticks) crafted in player inventory can take time to sync
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          await new Promise(resolve => setTimeout(resolve, 2500));
 
           // CRITICAL: Check if item appears in inventory
           // If not, it may have been dropped as an entity
