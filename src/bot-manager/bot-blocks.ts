@@ -1212,26 +1212,15 @@ export async function useItemOnBlock(
     await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // For buckets on water/lava, try activateItem instead of activateBlock
-    // activateItem uses the item in hand towards the block you're looking at
-    if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
-      await bot.activateItem();
-    } else {
-      // For other items (water_bucket, lava_bucket, etc), use activateBlock
-      await bot.activateBlock(block);
-    }
+    // Use activateBlock for bucket interaction with water/lava blocks
+    // activateBlock ensures the block is properly targeted
+    await bot.activateBlock(block);
 
-    // Wait longer for inventory to update properly (extended to 1500ms)
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // Force inventory update by checking actual inventory, not just heldItem
-    bot.updateHeldItem();
+    // Check what happened (e.g., bucket → water_bucket)
+    // Wait longer for server synchronization (1000ms instead of 500ms)
+    await new Promise(resolve => setTimeout(resolve, 1000));
     const heldAfter = bot.heldItem;
     const heldName = heldAfter?.name || "nothing";
-
-    // Debug: log all bucket-related items
-    const buckets = bot.inventory.items().filter(i => i.name.includes("bucket"));
-    console.log(`[DEBUG] Buckets in inventory after action:`, buckets.map(b => b.name));
 
     // Detect what happened based on item type
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water")) {
