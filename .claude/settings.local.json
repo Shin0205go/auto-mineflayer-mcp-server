@@ -99,21 +99,23 @@
       "Bash(git rebase:*)",
       "Bash(git worktree remove:*)",
       "Bash(for:*)",
-      "Bash(do echo -n \"bot$i: \" cd \"/Users/shingo/Develop/auto-mineflayer-bot$i\")",
       "Bash(gh pr list:*)",
       "Bash(gh pr close:*)",
-      "Bash(do echo -n 'bot$i: ' cd /Users/shingo/Develop/auto-mineflayer-bot$i git stash push -m 'auto-stash before merge')",
-      "Bash(then echo else echo ' \\(conflict\\)' fi git stash pop)",
-      "Bash(bash -n:*)",
-      "Bash(do echo -n \"bot$i: \" cd /Users/shingo/Develop/auto-mineflayer-bot$i git merge main --no-edit)",
-      "Bash(do echo -n 'bot$i: ' cd /Users/shingo/Develop/auto-mineflayer-bot$i git stash push -m auto)",
-      "Bash(do echo '=== bot$i ===' cd /Users/shingo/Develop/auto-mineflayer-bot$i git log --oneline --author-date-order --no-merges --all -- src/ bug-issues/ .claude/skills/)",
-      "Bash(do echo -n 'bot$i: ' cd /Users/shingo/Develop/auto-mineflayer-bot$i git checkout --theirs .claude/settings.json)",
       "Bash(gh pr view:*)",
-      "Bash(/Users/shingo/Develop/auto-mineflayer-mcp-server/scripts/hook-stop-auto-pr.sh:*)",
-      "Bash(do)",
+      "Bash(bash -n:*)",
+      "Bash(bash:*)",
       "Bash(echo:*)",
+<<<<<<< HEAD
+      "Bash(xargs:*)",
+      "Bash(/Users/shingo/Develop/auto-mineflayer-mcp-server/scripts/hook-stop-auto-pr.sh:*)"
+=======
+<<<<<<< HEAD
+      "Bash(xargs:*)",
+      "Bash(/Users/shingo/Develop/auto-mineflayer-mcp-server/scripts/hook-stop-auto-pr.sh:*)"
+=======
       "Bash(bash:*)"
+>>>>>>> origin/main
+>>>>>>> origin/main
     ]
   },
   "enableAllProjectMcpServers": true,
