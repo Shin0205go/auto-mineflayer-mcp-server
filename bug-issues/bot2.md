@@ -50,6 +50,19 @@
 
 ---
 
+### [2026-02-16] stick クラフトバグ（✅解決）
+- **症状**: `minecraft_craft(item_name="stick")` で birch_planks x5 所持も "missing ingredient" エラー
+- **原因**: `src/bot-manager/bot-crafting.ts` の `compatibleRecipe` 検索ロジック（line 496-525）で、manual recipe が除外されていた
+  - stick の manual recipe は planks のみを使用（sticks は不要）
+  - 検索ロジックは `needsPlanks || needsSticks` をチェックするが、stick recipe は `needsSticks = false` となり、条件にマッチしなかった
+- **影響**: stick が作れず、石ツール（Phase 3 目標）が作成できない
+- **修正**: ✅完了（line 496-530）
+  - stick/crafting_table の場合は `needsPlanks && !needsSticks` の条件を追加
+  - planks の数だけチェックするように修正
+- **ファイル**: `src/bot-manager/bot-crafting.ts`
+
+---
+
 ### [2026-02-16] Claudeエージェント起動直後にシャットダウン（未解決）
 - **症状**: `npm run start:claude`でエージェント起動後、Loop 1開始→MCP接続→イベント購読→即座にシャットダウン
 - **ログ**:
@@ -75,6 +88,26 @@
   4. フォアグラウンドで実行してすべての出力をキャプチャ
 - **影響**: Claude2エージェントが自律動作できない。手動でMCPツールを呼び出す必要あり
 - **ファイル**: `src/agent/claude-agent.ts`, `src/agent/claude-client.ts`
+
+---
+
+### [2026-02-16] ネザーポータル進入機能がない（✅解決）
+- **症状**: ネザーポータルブロックの近くに移動しても、ネザーに自動転送されない
+- **試行**:
+  - `move_to(8, 107, -3)` でポータルブロック座標に移動
+  - ポータルブロック上で6秒待機
+  - 結果: テレポート発生せず、オーバーワールドに留まる
+- **原因**: `minecraft_enter_portal` ツール定義は存在するが、ハンドラーが未実装だった
+  - `src/bot-manager/bot-movement.ts` に `enterPortal` 関数は存在
+  - `src/bot-manager/index.ts` でインポート・エクスポートされていない
+  - `src/tools/movement.ts` の `handleMovementTool` にケースが未追加
+- **影響**: Phase 6（ネザー）でネザーに突入できない。ブレイズロッド・エンダーパール収集不可
+- **修正**: ✅完了
+  1. `src/bot-manager/index.ts`: `enterPortal` をインポート（line 28）
+  2. `src/bot-manager/index.ts`: `BotManager.enterPortal` メソッド追加（line 166-170）
+  3. `src/tools/movement.ts`: `minecraft_enter_portal` ケース追加（line 109-112）
+  4. ビルド成功
+- **ファイル**: `src/tools/movement.ts`, `src/bot-manager/index.ts`
 
 ---
 

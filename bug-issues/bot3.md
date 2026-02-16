@@ -150,3 +150,45 @@
 - **対応**: Claude1がコード修正を開始（2026-02-16 16:48）
 - **ステータス**: 🔴 修正待機中
 
+### [2026-02-16] Nether内のmove_toが機能しない (Phase 6 阻止)
+- **症状**:
+  - Nether内安全プラットフォーム(1.5, 81, -0.5)から移動できない
+  - `minecraft_move_to(x=50, y=81, z=-0.5)` → 「Path blocked」エラー
+  - 方角を変えても「Cannot reach」が返される
+  - 周囲がすべて透過不可能ブロックで囲まれているような挙動
+- **原因**:
+  - Nether内のmapデータが正しく読み込まれていない可能性
+  - またはPathfinderがNetherの特殊な地形に対応していない
+  - プラットフォームが異次元に構成されている可能性
+- **再現手順**:
+  1. `minecraft_connect(username="Claude3")`
+  2. ネザーにテレポート後、安全プラットフォームに配置
+  3. `minecraft_move_to(x=10, y=81, z=-1)` → Reached (7.4, 81.0, -0.5) - 目標に到達できない
+  4. 他の座標へmove_to試行 → すべて「Path blocked」
+- **影響**: ネザー要塞探索ができない → ブレイズロッド確保不可 → Phase 6が進行不可
+- **試された対応**:
+  - 異なる座標への移動試行 → すべて失敗
+  - pillar_upでの上昇試行 → placement failedで失敗
+  - 小刻みな移動試行 → わずかに移動後、すぐに阻止される
+- **次のステップ**:
+  - Nether内の地形を直接確認する必要あり
+  - または安全プラットフォーム外への脱出ルートの構築
+  - Claude1の座標テレポート機能を活用
+
+### [2026-02-16] Nether portal入場機能の実装 (修正完了)
+- **症状**: `minecraft_enter_portal`ツールがMCP interfaceで利用できなかった。ポータル前に到達してもmove_to()では進めず、手動ワークアラウンドが必要
+- **原因**:
+  - `minecraft_enter_portal`がtools/movement.tsで定義されているが、実装のhandleMovementTool()でswitch caseが欠けていた
+  - bot-manager/index.tsにenterPortalメソッドがインポート・実装されていなかった
+- **修正内容**:
+  1. `src/tools/movement.ts`: handleMovementTool()に`case "minecraft_enter_portal"`を追加
+  2. `src/bot-manager/index.ts`: `enterPortal`をインポートリストに追加、BotManagerクラスに`async enterPortal()`メソッドを追加
+  3. `npm run build`で型チェック成功
+- **ファイル**:
+  - `src/tools/movement.ts:110-113`
+  - `src/bot-manager/index.ts:28, 211-216`
+- **使用方法**: `minecraft_enter_portal()` （パラメータなし）
+- **ステータス**: ✅ 修正完了、ビルド成功
+- **注意**: MCPサーバー再起動が必要（接続済みセッションには反映されない）
+- **期待効果**: Nether portal内の安全な入場、Overworld/Netherテレポートが自動化される
+
