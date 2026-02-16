@@ -12,6 +12,41 @@
 
 ---
 
+### [2026-02-16 Session 14] move_to can't enter Nether/End portals (✅ FIXED)
+
+- **症状**: ネザーポータルの前にいるがmove_toでポータルに入れない。"Path blocked"エラー
+- **報告**: Claude3
+- **原因**: `isPassableBlock()`にnether_portal, end_portalが含まれていない。move_toがポータルブロックを固体と判定し、別の位置に移動しようとする
+- **修正**: `bot-movement.ts:289`のpassableリストに`"nether_portal", "end_portal"`を追加
+- **ファイル**: `src/bot-manager/bot-movement.ts:289`
+- **ステータス**: ✅ 修正完了（次回MCP再起動後に反映）
+
+---
+
+### [2026-02-16 Session 14] Chat command whitelist doesn't include Claude1-7 (✅ FIXED)
+
+- **症状**: Claude1が`/tp Claude3`を実行しようとすると「Command '/tp' is not allowed」エラー。ネザーで動けないClaude3をテレポートできない
+- **原因**: `src/tools/movement.ts:85`のwhitelistが`["Claude"]`のみで、Claude1〜Claude7が含まれていない
+- **修正**: whitelistを`["Claude", "Claude1", "Claude2", "Claude3", "Claude4", "Claude5", "Claude6", "Claude7"]`に拡大
+- **ファイル**: `src/tools/movement.ts:85`
+- **ステータス**: ✅ 修正完了（次回ビルド後に反映）
+
+---
+
+### [2026-02-16 Session 13] stick/crafting_table crafting - manual recipe rejected by filter (✅ FIXED)
+
+- **症状**: `minecraft_craft("stick")` が "missing ingredient" エラーで失敗。birch_planks x70 所持。manual recipe作成は成功するが、compatibleRecipe検索(line 661-690)で除外される
+- **報告**: Claude4, Claude5, Claude2
+- **原因**: manual recipeが`allRecipes`に追加された後、`compatibleRecipe`フィルターロジックが`mcData.items[d.id]`のlookupに失敗してrecipeを除外
+- **修正** (commit e91a82f):
+  1. stick/crafting_tableでmanual recipe(allRecipes.length===1)の場合、フィルターをバイパスして直接使用
+  2. window-based crafting fallback追加: `bot.clickWindow()`で2x2グリッドに直接アイテム配置
+  3. recipesFor fallbackも維持(3段階fallback)
+- **ファイル**: `src/bot-manager/bot-crafting.ts:661-700`
+- **ステータス**: ✅ 修正完了
+
+---
+
 ### [2026-02-16 Session 12] water_bucket/lava_bucket placement fails silently (✅ FIXED)
 
 - **症状**: `minecraft_use_item_on_block`でwater_bucketをlavaに使っても溶岩が固まらない。bucketでlavaを集めてもlava_bucketが生成されない。

@@ -248,3 +248,54 @@
   - `src/bot-manager/bot-crafting.ts` (craft 実装)
 - **ステータス**: 🔴 CRITICAL - サーバー再起動またはbot再接続が必須
 
+## [2026-02-16] stick crafting with fallback recipe - still failing
+
+- **症状**: stick クラフトが「missing ingredient」で失敗し続ける。修正済み（#55）とされているが、MCPサーバーが古いコードを実行している可能性
+- **エラー例**:
+  ```
+  Cannot craft stick: Failed to craft stick from birch_planks: Error: missing ingredient.
+  ```
+- **所持状態**: birch_planks x62, dark_oak_planks x6
+- **推定原因**: MCPサーバーが最新のビルド済みコードを読み込んでいない。修正コード（line 416-418の find()→filter+sort）が実装されていない
+- **回避策**:
+  1. MCPサーバーを再起動（最新コードをロード）
+  2. または iron_ingot直接クラフト以外の方法でツール確保
+- **ステータス**: ⚠️ MCPサーバー再起動待ち - コード修正は済み
+
+## [2026-02-16] gamerule doMobLoot disabled - mobs don't drop loot
+
+- **症状**: Claude6がスケルトンを倒しても骨がドロップしない。モブキルメッセージは表示されるが、lootが発生しない
+- **報告者**: Claude6 「スケルトン1体倒しましたが、骨がドロップしていません」
+- **推定原因**: サーバーのgamerule `doMobLoot false` が設定されている
+- **影響**: 全ボットが骨・ダイヤ・その他モブドロップを入手できない → Phase 進行不可
+- **解決策**:
+  1. 人間がサーバーで `/gamerule doMobLoot true` を実行
+  2. または Claude1 がコンソールコマンド実行権限がある場合は実行
+- **ステータス**: ⚠️ サーバー設定確認・修正が必須
+
+## [2026-02-16] Claude1 continuous teleportation and death loop 🔴 CRITICAL
+
+- **症状**: Claude1がネザーの安全プラットフォーム(0.5, 70, 0.5)から突然繰り返し遠い座標にテレポートされ、その直後に死亡を繰り返す。テレポート先: (200.5, 70, -199.5), (400.5, 70, 0.5), (-199.5, 70, 0.5)など、非常に遠い座標へのテレポート。
+- **サイクル**:
+  1. Claude1が Teleported to [遠い座標] というメッセージ（自動実行）
+  2. 数秒後に やられた！リスポーン中...
+  3. リスポーン後、再び テレポート実行
+  4. ループ継続
+- **推定原因**:
+  1. サーバーにコマンドブロックまたはMod が設置されており、Claude1に対して自動テレポートを実行している
+  2. または、クライアント側の問題で意図しないテレポートコマンドが送信されている
+  3. または、Minecraftサーバーの設定エラー
+- **影響**:
+  - リーダー(Claude1)が機能不全に陥り、チーム全体の指揮・指示ができない
+  - Nether Phase 進行完全停止
+  - 他のボット(Claude2-7)が指示なしで放置状態
+- **観察**:
+  - Claude1以外のボット(Claude2, Claude3, Claude4, Claude5)は安全プラットフォームでも同じテレポートが発生せず、正常
+  - Claude5も一度死亡し、リスポーン後に異常なし
+  - 異常はClaudeに対してのみ発生している可能性
+- **推奨解決策**:
+  1. **サーバー調査**: MinecraftサーバーでCommandBlock/Mod確認、無効化
+  2. **Claude1再接続**: 完全に切断・再接続してセッションをリセット
+  3. **全ボット再接続**: インベントリ・状態同期の強制更新
+- **ステータス**: 🔴 CRITICAL - サーバー侵入/設定エラー の可能性。即対応が必要。
+

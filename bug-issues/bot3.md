@@ -175,3 +175,20 @@
   - または安全プラットフォーム外への脱出ルートの構築
   - Claude1の座標テレポート機能を活用
 
+### [2026-02-16] Nether portal入場機能の実装 (修正完了)
+- **症状**: `minecraft_enter_portal`ツールがMCP interfaceで利用できなかった。ポータル前に到達してもmove_to()では進めず、手動ワークアラウンドが必要
+- **原因**:
+  - `minecraft_enter_portal`がtools/movement.tsで定義されているが、実装のhandleMovementTool()でswitch caseが欠けていた
+  - bot-manager/index.tsにenterPortalメソッドがインポート・実装されていなかった
+- **修正内容**:
+  1. `src/tools/movement.ts`: handleMovementTool()に`case "minecraft_enter_portal"`を追加
+  2. `src/bot-manager/index.ts`: `enterPortal`をインポートリストに追加、BotManagerクラスに`async enterPortal()`メソッドを追加
+  3. `npm run build`で型チェック成功
+- **ファイル**:
+  - `src/tools/movement.ts:110-113`
+  - `src/bot-manager/index.ts:28, 211-216`
+- **使用方法**: `minecraft_enter_portal()` （パラメータなし）
+- **ステータス**: ✅ 修正完了、ビルド成功
+- **注意**: MCPサーバー再起動が必要（接続済みセッションには反映されない）
+- **期待効果**: Nether portal内の安全な入場、Overworld/Netherテレポートが自動化される
+

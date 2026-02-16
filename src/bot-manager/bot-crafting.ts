@@ -358,8 +358,21 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   // without handling plank type substitution properly
   const simpleWoodenRecipes: string[] = ["stick", "crafting_table"];
   if (simpleWoodenRecipes.includes(itemName)) {
-    // Find any planks in inventory
-    const anyPlanks = inventoryItems.find(i => i.name.endsWith("_planks"));
+    // Find the plank type with the highest count in inventory
+    const planksByType = new Map<string, number>();
+    let bestPlank: typeof inventoryItems[0] | undefined;
+    let bestPlankCount = 0;
+    for (const i of inventoryItems) {
+      if (i.name.endsWith("_planks")) {
+        const total = (planksByType.get(i.name) || 0) + i.count;
+        planksByType.set(i.name, total);
+        if (total > bestPlankCount) {
+          bestPlankCount = total;
+          bestPlank = i;
+        }
+      }
+    }
+    const anyPlanks = bestPlank;
     if (!anyPlanks) {
       throw new Error(`Cannot craft ${itemName}: Need any type of planks. Craft planks from logs first. Inventory: ${inventory}`);
     }
@@ -410,9 +423,10 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     let craftingTableBlock = null;
     console.error(`[Craft] recipesAll(${item.id}, null, null) returned ${allRecipes.length} recipes`);
 
-    // FIX: If no recipes found for stick/crafting_table, use manual recipe crafting
-    // This handles Minecraft versions where recipesAll/recipesFor don't work properly
-    if (allRecipes.length === 0 && (itemName === "stick" || itemName === "crafting_table")) {
+    // FIX: ALWAYS use manual recipe for stick/crafting_table
+    // recipesAll() often returns broken recipes for these items (Mineflayer version bug)
+    // Manual recipe is more reliable than filtering broken recipesAll results
+    if (itemName === "stick" || itemName === "crafting_table") {
       console.error(`[Craft] No recipes found with recipesAll, using manual crafting...`);
 
       // Manual crafting for stick: 2 planks → 4 sticks
@@ -506,9 +520,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       "arrow": { inputs: { flint: 1, stick: 1, feather: 1 }, outputCount: 4, requiresTable: true },
     };
 
-    if (allRecipes.length === 0 && shapelessRecipes[itemName]) {
+    if (shapelessRecipes[itemName]) {
       const recipe = shapelessRecipes[itemName];
-      console.error(`[Craft] No recipes found for ${itemName}, using manual shapeless crafting...`);
+      console.error(`[Craft] Using manual shapeless recipe for ${itemName} (bypassing potentially broken recipesAll)...`);
 
       const ingredientIds: number[] = [];
       const delta: { id: number; count: number }[] = [{ id: item.id, count: recipe.outputCount }];
@@ -532,8 +546,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       allRecipes = [manualRecipe as any];
     }
 
-    if (allRecipes.length === 0 && (itemName === "bread" || itemName === "bone_meal")) {
-      console.error(`[Craft] No recipes found for ${itemName}, using manual crafting...`);
+    if (itemName === "bread" || itemName === "bone_meal" || itemName === "shield") {
+      console.error(`[Craft] Using manual recipe for ${itemName} (bypassing potentially broken recipesAll)...`);
 
       if (itemName === "bread") {
         const wheatItem = mcData.itemsByName["wheat"];
@@ -572,9 +586,38 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         };
         allRecipes = [manualRecipe as any];
       }
+
+      if (itemName === "shield") {
+        const ironItem = mcData.itemsByName["iron_ingot"];
+        if (!ironItem) throw new Error("Cannot find iron_ingot item data");
+        const ironInv = inventoryItems.filter(i => i.name === "iron_ingot").reduce((s, i) => s + i.count, 0);
+        if (ironInv < 1) throw new Error(`Cannot craft shield: Need 1 iron_ingot, have ${ironInv}`);
+        // Find any planks
+        const plankItem = inventoryItems.find(i => i.name.endsWith("_planks"));
+        if (!plankItem) throw new Error("Cannot craft shield: Need 6 planks");
+        const plankMcData = mcData.itemsByName[plankItem.name];
+        if (!plankMcData) throw new Error(`Cannot find item data for ${plankItem.name}`);
+        const plankInv = inventoryItems.filter(i => i.name === plankItem.name).reduce((s, i) => s + i.count, 0);
+        if (plankInv < 6) throw new Error(`Cannot craft shield: Need 6 planks, have ${plankInv}`);
+
+        const P = plankMcData.id;
+        const I = ironItem.id;
+        const manualRecipe = {
+          result: { id: item.id, count: 1 },
+          inShape: [[P, I, P], [P, P, P], [0, P, 0]],
+          ingredients: [P, I, P, P, P, P, P],
+          delta: [
+            { id: item.id, count: 1 },
+            { id: plankMcData.id, count: -6 },
+            { id: ironItem.id, count: -1 }
+          ],
+          requiresTable: true
+        };
+        allRecipes = [manualRecipe as any];
+      }
     }
 
-    // Manual recipe fallback for tools when recipesAll returns nothing (Mineflayer version bug)
+    // Manual recipe for tools - always prefer manual over broken recipesAll (Mineflayer version bug)
     // Pattern: material + stick in standard tool shapes
     if (allRecipes.length === 0) {
       const toolRecipes: Record<string, { material: string; shape: number[][]; sticks: number; materialCount: number }> = {
@@ -656,32 +699,27 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       }
     }
 
-    // SPECIAL CASE: stick and crafting_table manual recipes don't use the general compatibleRecipe search
-    // They're simple 2x2 recipes that don't use crafting tables
+    // If we have exactly 1 recipe (manual recipe from above), use it directly.
+    // The planks/sticks filter below is only needed when recipesAll() returns
+    // multiple native recipes and we need to pick the right one for our plank type.
     let compatibleRecipe: any;
-
-    if ((itemName === "stick" || itemName === "crafting_table") && allRecipes.length > 0) {
-      // For stick/crafting_table, use the first manual recipe (already validated above)
+    if (allRecipes.length === 1) {
       compatibleRecipe = allRecipes[0];
-      console.error(`[Craft] Using manual recipe for ${itemName} directly (no compatibleRecipe search)`);
+      console.error(`[Craft] Using single recipe directly for ${itemName}`);
     } else {
       // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
-      // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
       compatibleRecipe = allRecipes.find(recipe => {
         const delta = recipe.delta as Array<{ id: number; count: number }>;
 
-        // Check if this recipe uses planks and sticks (wooden tool pattern)
         let needsPlanks = false;
         let needsSticks = false;
         let planksCount = 0;
         let sticksCount = 0;
 
         for (const d of delta) {
-          if (d.count >= 0) continue; // Skip output items
-
+          if (d.count >= 0) continue;
           const ingredientItem = mcData.items[d.id];
           if (!ingredientItem) continue;
-
           if (ingredientItem.name.endsWith("_planks")) {
             needsPlanks = true;
             planksCount = Math.abs(d.count);
@@ -691,16 +729,14 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           }
         }
 
-        // Verify we have enough materials
         const hasEnoughPlanks = planksCount === 0 || totalPlanks >= planksCount;
         const hasEnoughSticks = sticksCount === 0 || totalSticks >= sticksCount;
-
         return (needsPlanks || needsSticks) && hasEnoughPlanks && hasEnoughSticks;
       });
+    }
 
-      if (!compatibleRecipe) {
-        throw new Error(`Cannot craft ${itemName}: No compatible recipe found. Have ${totalPlanks} planks and ${totalSticks} sticks. Found ${allRecipes.length} recipes total. This may be a Minecraft version compatibility issue.`);
-      }
+    if (!compatibleRecipe) {
+      throw new Error(`Cannot craft ${itemName}: No compatible recipe found. Have ${totalPlanks} planks and ${totalSticks} sticks. Found ${allRecipes.length} recipes total. This may be a Minecraft version compatibility issue.`);
     }
 
     // CRITICAL FIX: Mineflayer's bot.craft() does STRICT ID matching.
@@ -753,7 +789,114 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         // IMPORTANT: For stick/crafting_table, always pass undefined (never use table)
         const tableToUse = (itemName === "stick" || itemName === "crafting_table") ? undefined : (craftingTableBlock || undefined);
         console.error(`[Craft] Calling bot.craft() with table: ${tableToUse ? 'YES' : 'NO'}`);
-        await bot.craft(compatibleRecipe, 1, tableToUse);
+
+        try {
+          await bot.craft(compatibleRecipe, 1, tableToUse);
+        } catch (craftErr: any) {
+          // Fallback: If bot.craft() fails with manual recipe, try recipesFor as alternative
+          const craftErrMsg = craftErr.message || String(craftErr);
+          console.error(`[Craft] bot.craft() failed: ${craftErrMsg}, trying recipesFor fallback...`);
+
+          if (craftErrMsg.includes("missing ingredient") && (itemName === "stick" || itemName === "crafting_table")) {
+            // Try recipesFor with specific planks item as metadata
+            const planksInInv = bot.inventory.items().filter(inv => inv.name.endsWith("_planks"));
+            let fallbackWorked = false;
+
+            for (const planksStack of planksInInv) {
+              try {
+                const recipesFor = bot.recipesFor(item.id, planksStack.type, 1, null);
+                console.error(`[Craft] recipesFor(${item.id}, ${planksStack.type}, 1, null) returned ${recipesFor.length} recipes`);
+                if (recipesFor.length > 0) {
+                  await bot.craft(recipesFor[0], 1, undefined);
+                  fallbackWorked = true;
+                  break;
+                }
+              } catch (e2) {
+                console.error(`[Craft] recipesFor fallback with ${planksStack.name} failed: ${e2}`);
+              }
+            }
+
+            if (!fallbackWorked) {
+              // Final fallback: window-based crafting using clickWindow
+              console.error(`[Craft] recipesFor fallback failed, trying window-based crafting...`);
+              try {
+                const planksForWindow = bot.inventory.items().filter(inv => inv.name.endsWith("_planks")).sort((a, b) => b.count - a.count)[0];
+                if (planksForWindow) {
+                  // Open player inventory window
+                  const invWindow = await (bot as any).openInventoryWindow?.() || bot.inventory;
+                  if (invWindow) {
+                    // Player inventory 2x2 crafting grid: slots 1,2,3,4 (result=0)
+                    // For stick: place planks in slot 1 (top-left) and slot 3 (bottom-left)
+                    // For crafting_table: place planks in slots 1,2,3,4
+                    const planksSlot = planksForWindow.slot;
+
+                    if (itemName === "stick") {
+                      // Click planks to pick up, then place 1 in slot 1
+                      await bot.clickWindow(planksSlot, 0, 0); // pick up planks stack
+                      await new Promise(r => setTimeout(r, 100));
+                      await bot.clickWindow(1, 1, 0); // right-click to place 1 in slot 1
+                      await new Promise(r => setTimeout(r, 100));
+                      await bot.clickWindow(3, 1, 0); // right-click to place 1 in slot 3
+                      await new Promise(r => setTimeout(r, 100));
+                      // Put remaining planks back
+                      await bot.clickWindow(planksSlot, 0, 0);
+                      await new Promise(r => setTimeout(r, 100));
+                      // Pick up result (4 sticks from slot 0)
+                      await bot.clickWindow(0, 0, 0);
+                      await new Promise(r => setTimeout(r, 100));
+                      // Put sticks in inventory
+                      const emptySlot = Array.from({length: 36}, (_, i) => i + 9).find(s => !invWindow.slots[s]);
+                      if (emptySlot !== undefined) {
+                        await bot.clickWindow(emptySlot, 0, 0);
+                      }
+                      await new Promise(r => setTimeout(r, 200));
+                    } else if (itemName === "crafting_table") {
+                      // Click planks to pick up, then place 1 in each of slots 1,2,3,4
+                      await bot.clickWindow(planksSlot, 0, 0);
+                      await new Promise(r => setTimeout(r, 100));
+                      for (const slot of [1, 2, 3, 4]) {
+                        await bot.clickWindow(slot, 1, 0); // right-click = place 1
+                        await new Promise(r => setTimeout(r, 100));
+                      }
+                      // Put remaining planks back
+                      await bot.clickWindow(planksSlot, 0, 0);
+                      await new Promise(r => setTimeout(r, 100));
+                      // Pick up result
+                      await bot.clickWindow(0, 0, 0);
+                      await new Promise(r => setTimeout(r, 100));
+                      const emptySlot2 = Array.from({length: 36}, (_, i) => i + 9).find(s => !invWindow.slots[s]);
+                      if (emptySlot2 !== undefined) {
+                        await bot.clickWindow(emptySlot2, 0, 0);
+                      }
+                      await new Promise(r => setTimeout(r, 200));
+                    }
+
+                    // Close inventory window
+                    if (invWindow !== bot.inventory && typeof (invWindow as any).close === 'function') {
+                      (invWindow as any).close();
+                    }
+
+                    // Check if crafting succeeded
+                    const stickCount = bot.inventory.items().filter(inv => inv.name === itemName).reduce((s, inv) => s + inv.count, 0);
+                    if (stickCount > 0) {
+                      fallbackWorked = true;
+                      console.error(`[Craft] Window-based crafting succeeded! ${itemName} count: ${stickCount}`);
+                    }
+                  }
+                }
+              } catch (windowErr) {
+                console.error(`[Craft] Window-based crafting failed: ${windowErr}`);
+              }
+
+              if (!fallbackWorked) {
+                console.error(`[Craft] All craft attempts failed, throwing original error`);
+                throw craftErr;
+              }
+            }
+          } else {
+            throw craftErr;
+          }
+        }
 
         // Wait for crafting to complete (match timing from general crafting path)
         await new Promise(resolve => setTimeout(resolve, 1500));
@@ -1377,8 +1520,11 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     throw new Error(`No ${itemName} in inventory. Have: ${inventory}`);
   }
 
-  // Find fuel (coal, charcoal, wood, etc.) using dynamic helper
-  const fuel = bot.inventory.items().find(i => isFuelItem(i.name));
+  // Find fuel - prefer coal/charcoal over wood to avoid wasting building materials
+  const allFuel = bot.inventory.items().filter(i => isFuelItem(i.name));
+  const fuel = allFuel.find(i => i.name === "coal" || i.name === "charcoal")
+    || allFuel.find(i => i.name === "lava_bucket" || i.name === "dried_kelp_block")
+    || allFuel[0];
   if (!fuel) {
     throw new Error("No fuel in inventory. Need coal, charcoal, or wood.");
   }
