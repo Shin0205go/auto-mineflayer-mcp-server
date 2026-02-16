@@ -281,15 +281,15 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
     // Look at the enderman's eye level to provoke it
     await bot.lookAt(target.position.offset(0, target.height * 0.9, 0));
     // Wait for it to come to us (angry enderman will teleport close and attack)
-    for (let i = 0; i < 30; i++) { // 30 * 300ms = 9s max wait
+    for (let i = 0; i < 50; i++) { // 50 * 300ms = 15s max wait (extended for reliable aggro)
       await new Promise(r => setTimeout(r, 300));
       // Keep looking at the enderman
       const currentTarget = Object.values(bot.entities).find(e => e.id === target.id);
       if (!currentTarget) break; // enderman died or despawned
       await bot.lookAt(currentTarget.position.offset(0, currentTarget.height * 0.9, 0));
       const currentDist = currentTarget.position.distanceTo(bot.entity.position);
-      if (currentDist < 4) {
-        console.error(`[Attack] Enderman provoked, now ${currentDist.toFixed(1)} blocks away — attacking!`);
+      if (currentDist < 8) {
+        console.error(`[Attack] Enderman aggro'd, now ${currentDist.toFixed(1)} blocks away — attacking!`);
         target = currentTarget;
         break;
       }
@@ -419,8 +419,9 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       // Check if target is too far - if so, chase it instead of giving up
       const currentDist = currentTarget.position.distanceTo(bot.entity.position);
       if (currentDist > 6) {
-        // Animals run away when attacked - chase them!
-        if (currentDist > 32) {
+        // Endermen can be chased further (they teleport but usually stay within 64 blocks)
+        const maxChaseDistance = currentTarget.name === "enderman" ? 64 : 32;
+        if (currentDist > maxChaseDistance) {
           // Too far to chase
           return `Target ${target.name} escaped after ${attacks} attacks (distance: ${currentDist.toFixed(1)} blocks)`;
         }
@@ -429,12 +430,13 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         const goal = new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2);
         bot.pathfinder.setGoal(goal);
 
-        // Brief chase (don't wait too long)
+        // Chase duration scales with distance, endermen get longer chase
+        const chaseDuration = currentTarget.name === "enderman" ? 5000 : 2000;
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {
             bot.pathfinder.setGoal(null);
             resolve();
-          }, 2000);
+          }, chaseDuration);
 
           const check = setInterval(() => {
             const checkDist = currentTarget.position.distanceTo(bot.entity.position);
