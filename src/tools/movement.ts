@@ -45,6 +45,15 @@ export const movementTools = {
       required: ["message"],
     },
   },
+
+  minecraft_enter_portal: {
+    description: "Enter a Nether portal to teleport to the Nether or back to Overworld. The bot will find the nearest portal within 10 blocks, move into it, and wait for teleportation.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
 };
 
 export async function handleMovementTool(

@@ -91,6 +91,26 @@
 
 ---
 
+### [2026-02-16] ネザーポータル進入機能がない（調査中）
+- **症状**: ネザーポータルブロックの近くに移動しても、ネザーに自動転送されない
+- **試行**:
+  - `move_to(8, 107, -3)` でポータルブロック座標に移動
+  - ポータルブロック上で6秒待機
+  - 結果: テレポート発生せず、オーバーワールドに留まる
+- **原因**: Mineflayerでネザーポータルに入るには、ポータルブロックの中に立ち続ける必要があるが、専用のツールが存在しない
+- **推定実装**:
+  1. ポータルブロックを検出
+  2. ポータルの中心座標に移動
+  3. `bot.setControlState('forward', true)` でポータル内に押し込む
+  4. ディメンション変更イベント(`spawn`)を待つ
+- **影響**: Phase 6（ネザー）でネザーに突入できない。ブレイズロッド・エンダーパール収集不可
+- **次のアクション**:
+  1. `src/tools/movement.ts` に `minecraft_enter_portal` ツールを追加
+  2. またはBashで `/execute in minecraft:the_nether run tp @s ~ ~ ~` コマンドを使用
+- **ファイル**: `src/tools/movement.ts`
+
+---
+
 ### [2026-02-16] throwItem / tillSoil インポートエラー（✅解決）
 - **症状**: MCPサーバー起動時に `SyntaxError: The requested module './bot-blocks.js' does not provide an export named 'throwItem'` で起動失敗
 - **原因**: `src/bot-manager/index.ts` で `throwItem`, `tillSoil` をインポートしているが、`bot-blocks.ts` に関数が定義されていなかった

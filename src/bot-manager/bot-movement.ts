@@ -1,6 +1,7 @@
 import { Vec3 } from "vec3";
 import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
+const { GoalBlock } = goals;
 import type { ManagedBot } from "./types.js";
 import { isHostileMob } from "./minecraft-utils.js";
 
@@ -1310,5 +1311,58 @@ export async function dismount(managed: ManagedBot): Promise<string> {
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to dismount: ${errMsg}`);
+  }
+}
+
+/**
+ * Enter a Nether portal and teleport to the Nether/Overworld
+ */
+export async function enterPortal(managed: ManagedBot): Promise<string> {
+  const bot = managed.bot;
+  const startDimension = bot.game.dimension;
+
+  // Find nearest nether_portal block
+  const portalBlock = bot.findBlock({
+    matching: (block) => block.name === "nether_portal",
+    maxDistance: 10,
+  });
+
+  if (!portalBlock) {
+    throw new Error("No nether portal found within 10 blocks");
+  }
+
+  try {
+    // Move to portal block center
+    const goals = new GoalBlock(portalBlock.position.x, portalBlock.position.y, portalBlock.position.z);
+    await bot.pathfinder.goto(goals);
+
+    // Wait for dimension change (teleport)
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error("Portal teleport timeout after 10 seconds"));
+      }, 10000);
+
+      const onSpawn = () => {
+        const newDimension = bot.game.dimension;
+        if (newDimension !== startDimension) {
+          cleanup();
+          const dimName = String(newDimension).includes("nether") ? "Nether" :
+                         String(newDimension).includes("overworld") ? "Overworld" :
+                         String(newDimension).includes("end") ? "End" : String(newDimension);
+          resolve(`Teleported to ${dimName} via portal. Position: (${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.y)}, ${Math.round(bot.entity.position.z)})`);
+        }
+      };
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        bot.removeListener("spawn", onSpawn);
+      };
+
+      bot.on("spawn", onSpawn);
+    });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to enter portal: ${errMsg}`);
   }
 }
