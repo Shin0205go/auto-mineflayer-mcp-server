@@ -309,27 +309,6 @@ export async function handleBuildingTool(
       return result;
     }
 
-    case "minecraft_till_soil": {
-      const x = args.x as number;
-      const y = args.y as number;
-      const z = args.z as number;
-
-      const result = await botManager.tillSoil(username, x, y, z);
-      return result;
-    }
-
-    case "minecraft_throw_item": {
-      const itemName = args.item_name as string;
-      const count = (args.count as number) || 1;
-
-      if (!itemName) {
-        throw new Error("item_name is required");
-      }
-
-      const result = await botManager.throwItem(username, itemName, count);
-      return result;
-    }
-
     default:
       throw new Error(`Unknown building tool: ${name}`);
   }
