@@ -305,7 +305,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   // First check nearby (5 blocks) - but skip for simple recipes
   // Using 5 blocks to be more forgiving of bot positioning
-  let craftingTable = null;
+  let craftingTable: ReturnType<typeof bot.findBlock> = null;
   if (!isSimpleRecipe) {
     craftingTable = bot.findBlock({
       matching: craftingTableId,
@@ -939,6 +939,72 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     console.error(`[Craft] Using crafting table (3x3) for ${itemName}, found ${recipes.length} recipes`);
   } else {
     console.error(`[Craft] No 2x2 recipes and no crafting table found for ${itemName}`);
+  }
+
+  // Manual recipe fallback for armor and other shaped items when recipesAll returns 0
+  // These require a crafting table (3x3 grid). Shape uses 1=material, 0=empty.
+  if (recipes.length === 0) {
+    const armorRecipes: Record<string, { material: string; shape: number[][]; materialCount: number }> = {
+      "iron_helmet":      { material: "iron_ingot", shape: [[1,1,1],[1,0,1]],             materialCount: 5 },
+      "iron_chestplate":  { material: "iron_ingot", shape: [[1,0,1],[1,1,1],[1,1,1]],     materialCount: 8 },
+      "iron_leggings":   { material: "iron_ingot", shape: [[1,1,1],[1,0,1],[1,0,1]],     materialCount: 7 },
+      "iron_boots":       { material: "iron_ingot", shape: [[1,0,1],[1,0,1]],             materialCount: 4 },
+      "diamond_helmet":   { material: "diamond",    shape: [[1,1,1],[1,0,1]],             materialCount: 5 },
+      "diamond_chestplate":{ material: "diamond",   shape: [[1,0,1],[1,1,1],[1,1,1]],     materialCount: 8 },
+      "diamond_leggings": { material: "diamond",    shape: [[1,1,1],[1,0,1],[1,0,1]],     materialCount: 7 },
+      "diamond_boots":    { material: "diamond",    shape: [[1,0,1],[1,0,1]],             materialCount: 4 },
+    };
+
+    const armorRecipe = armorRecipes[itemName];
+    if (armorRecipe) {
+      const materialItem = mcData.itemsByName[armorRecipe.material];
+      if (materialItem) {
+        const materialInv = inventoryItems.filter(i => i.name === armorRecipe.material).reduce((s, i) => s + i.count, 0);
+        if (materialInv >= armorRecipe.materialCount) {
+          // Need a crafting table for armor (3x3 recipes)
+          if (!craftingTable) {
+            const craftingTableId = mcData.blocksByName.crafting_table?.id;
+            craftingTable = bot.findBlock({ matching: craftingTableId, maxDistance: 32 });
+            if (craftingTable) {
+              // Move to crafting table
+              const goal = new goals.GoalNear(craftingTable.position.x, craftingTable.position.y, craftingTable.position.z, 3);
+              bot.pathfinder.setGoal(goal);
+              await new Promise<void>((resolve) => {
+                const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 10000);
+                const check = setInterval(() => {
+                  if (craftingTable && bot.entity.position.distanceTo(craftingTable.position) < 4 || !bot.pathfinder.isMoving()) {
+                    clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+                  }
+                }, 300);
+              });
+            }
+          }
+
+          if (!craftingTable) {
+            throw new Error(`${itemName} requires a crafting_table nearby. Place one first. Inventory: ${inventory}`);
+          }
+
+          const inShape = armorRecipe.shape.map(row =>
+            row.map(cell => cell === 1 ? materialItem.id : 0)
+          );
+          const ingredients = inShape.flat().filter(id => id !== 0);
+
+          const manualRecipe = {
+            result: { id: item.id, count: 1 },
+            inShape,
+            ingredients,
+            delta: [
+              { id: item.id, count: 1 },
+              { id: materialItem.id, count: -armorRecipe.materialCount },
+            ],
+            requiresTable: true,
+          };
+
+          console.error(`[Craft] Manual armor recipe created for ${itemName} using ${armorRecipe.material}`);
+          recipes = [manualRecipe as any];
+        }
+      }
+    }
   }
 
   // Helper function to check if we have a compatible item
