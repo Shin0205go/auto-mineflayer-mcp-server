@@ -1406,35 +1406,56 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             await new Promise(resolve => setTimeout(resolve, 100));
           }
 
-          // Try bot.craft() — if windowOpen timeout, try to pre-open the table first
+          // Try bot.craft() with crafting table
           if (craftingTable) {
-            // Pre-open the crafting table to avoid windowOpen timeout inside bot.craft()
+            // Verify distance right before interaction
+            const finalDist = bot.entity.position.distanceTo(craftingTable.position);
+            if (finalDist > 4.5) {
+              console.error(`[Craft] Still too far from crafting table (${finalDist.toFixed(1)} blocks), aborting this attempt`);
+              throw new Error(`Too far from crafting table (${finalDist.toFixed(1)} blocks)`);
+            }
+            console.error(`[Craft] Distance to crafting table: ${finalDist.toFixed(1)} blocks`);
+
+            // Try direct bot.craft() with table reference first (simplest approach)
             try {
-              console.error(`[Craft] Pre-opening crafting table at ${craftingTable.position}...`);
-              const tableWindow = await bot.openContainer(craftingTable);
-              console.error(`[Craft] Crafting table window opened successfully`);
-              // Now craft with table=undefined since window is already open
-              await bot.craft(tryRecipe, 1, undefined);
-              // Close the window after crafting
-              bot.closeWindow(tableWindow);
-              await new Promise(resolve => setTimeout(resolve, 300));
-            } catch (preOpenErr: any) {
-              const errMsg = String(preOpenErr?.message || preOpenErr);
-              console.error(`[Craft] Pre-open craft failed: ${errMsg}`);
-              // Close any lingering window
-              if (bot.currentWindow) {
-                bot.closeWindow(bot.currentWindow);
-                await new Promise(resolve => setTimeout(resolve, 300));
-              }
-              // Fallback: try traditional bot.craft() with table reference
-              try {
-                await bot.craft(tryRecipe, 1, craftingTable);
-              } catch (fallbackErr: any) {
-                const fallbackMsg = String(fallbackErr?.message || fallbackErr);
-                if (fallbackMsg.includes("windowOpen")) {
-                  console.error(`[Craft] windowOpen timeout even on fallback — materials may have been consumed by server`);
+              await bot.craft(tryRecipe, 1, craftingTable);
+            } catch (directErr: any) {
+              const errMsg = String(directErr?.message || directErr);
+              console.error(`[Craft] Direct craft failed: ${errMsg}`);
+
+              // If windowOpen timeout, try pre-open approach
+              if (errMsg.includes("windowOpen")) {
+                // Close any lingering window
+                if (bot.currentWindow) {
+                  bot.closeWindow(bot.currentWindow);
+                  await new Promise(resolve => setTimeout(resolve, 300));
                 }
-                throw fallbackErr;
+                // Re-look at the crafting table
+                await bot.lookAt(craftingTable.position.offset(0.5, 0.5, 0.5));
+                await new Promise(resolve => setTimeout(resolve, 200));
+
+                try {
+                  console.error(`[Craft] Pre-opening crafting table at ${craftingTable.position}...`);
+                  const tableWindow = await bot.openContainer(craftingTable);
+                  console.error(`[Craft] Crafting table window opened successfully`);
+                  // Wait for window to be fully ready
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                  // Now craft with table=undefined since window is already open
+                  await bot.craft(tryRecipe, 1, undefined);
+                  // Close the window after crafting
+                  bot.closeWindow(tableWindow);
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                } catch (preOpenErr: any) {
+                  const preMsg = String(preOpenErr?.message || preOpenErr);
+                  console.error(`[Craft] Pre-open craft also failed: ${preMsg}`);
+                  if (bot.currentWindow) {
+                    bot.closeWindow(bot.currentWindow);
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                  }
+                  throw preOpenErr;
+                }
+              } else {
+                throw directErr;
               }
             }
           } else {
