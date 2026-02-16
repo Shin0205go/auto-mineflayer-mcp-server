@@ -1216,9 +1216,11 @@ export async function useItemOnBlock(
     // activateBlock ensures the block is properly targeted
     await bot.activateBlock(block);
 
-    // Check what happened (e.g., bucket → water_bucket)
-    // Wait longer for server synchronization (1000ms instead of 500ms)
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait longer for inventory to update properly
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Force inventory update by checking actual inventory, not just heldItem
+    bot.updateHeldItem();
     const heldAfter = bot.heldItem;
     const heldName = heldAfter?.name || "nothing";
 
