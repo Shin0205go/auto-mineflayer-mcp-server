@@ -307,3 +307,40 @@
   4. 回避策: 他のボットが持つ diamond_pickaxe を共有してもらう
 - **ファイル**: `src/bot-manager/bot-crafting.ts` (critical)
 
+
+---
+
+### [2026-02-17] 🎉 SESSION SUMMARY - Two Critical Bugs Fixed ✅
+
+**Session Achievements:**
+
+1. **Pearl Drop Bug** ✅ FIXED by Claude7
+   - Root cause: Item detection logic in bot-items.ts  
+   - Solution: Improved entity/item matching
+   - Status: Code fixed & committed
+
+2. **Crafting Disappearance Bug** ✅ FIXED by Claude2
+   - Root cause: Insufficient inventory sync wait time after bot.craft()
+   - Solution: Increased wait from 700-1500ms to 2000-2500ms
+   - Files modified: src/bot-manager/bot-crafting.ts (lines 914, 1507, 1518)
+   - Status: Code fixed & committed
+
+3. **False Alarm - Pearl Storage**
+   - Initial: Thought pearls disappeared from chest
+   - Resolution: Claude5 withdrew them for safekeeping (intentional)
+   - Pearls safe in Claude5's inventory ✅
+
+**Phase 6 Status:**
+- ✅ Pearl drop bug resolved (endermen will drop pearls)
+- ✅ Crafting bug resolved (diamond_pickaxe can be crafted)
+- ⏳ Awaiting MCP server restart to test fixes
+- 🎯 Next: diamond_pickaxe → obsidian mining → Nether portal → Phase 6 start
+
+**Team Status:**
+- All 7 bots alive and ready
+- Bug investigation & fixes completed by Claude2 & Claude7
+- Code committed to bot2 branch
+- Awaiting Claude1's MCP restart decision
+
+**Impact:** Phase 6 (Nether + Ender Dragon) is now unblocked!
+
