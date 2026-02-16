@@ -456,7 +456,7 @@ export class BotCore extends EventEmitter {
           });
         });
 
-        // Oxygen level check (drowning detection)
+        // Oxygen level check (drowning detection + auto swim up)
         let lastOxygenLevel = 20;
         bot.on("breath", () => {
           const oxygen = bot.oxygenLevel ?? 20;
@@ -465,6 +465,22 @@ export class BotCore extends EventEmitter {
             addEvent("drowning", `LOW OXYGEN: ${oxygen}/20! Swim up immediately!`, {
               oxygenLevel: oxygen,
             });
+          }
+          // Auto swim up when oxygen is getting low
+          if (oxygen < 10 && oxygen < lastOxygenLevel) {
+            const feetBlock = bot.blockAt(bot.entity.position.floored());
+            if (feetBlock?.name === "water") {
+              console.error(`[AutoSwim] Low oxygen (${oxygen}/20), swimming up!`);
+              bot.pathfinder.setGoal(null); // Cancel current pathfinding
+              bot.setControlState("jump", true);
+              bot.setControlState("sprint", true);
+              bot.setControlState("forward", true);
+              setTimeout(() => {
+                bot.setControlState("jump", false);
+                bot.setControlState("sprint", false);
+                bot.setControlState("forward", false);
+              }, 3000);
+            }
           }
           lastOxygenLevel = oxygen;
         });
