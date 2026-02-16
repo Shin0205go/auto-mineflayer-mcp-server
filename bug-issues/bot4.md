@@ -215,3 +215,36 @@
 - **ファイル**: `src/bot-manager/bot-crafting.ts`
 - **ステータス**: ⚠️ 未修正 - 回避策（collect_items）で対応可能
 
+## [2026-02-16] wheat harvest sync bug - items disappear from inventory
+
+- **症状**: `minecraft_dig_block` で wheat を収穫しても、インベントリに反映されない。dig_blockのメッセージは「Dug wheat with wheat_seeds and picked up 1 item(s)!」と表示されるが、実際には wheat がインベントリに追加されない。
+- **再現手順**:
+  1. wheat_seeds を farmland に植える
+  2. `minecraft_use_item_on_block("bone_meal", x, y+1, z)` で加速
+  3. wheat が mature（黄色）になる
+  4. `minecraft_dig_block(x, y, z)` で収穫→メッセージは成功を示すが
+  5. `minecraft_get_inventory()` で確認すると wheat がない
+  6. `minecraft_craft("bread")` が "need wheat x3, have 0" エラーで失敗
+- **観察**:
+  - Claude3, Claude5, Claude6, Claude7 が同じバグを報告
+  - wheat 消失のサイクル: seeds植え → bone_meal加速 → wheat一瞬表示 → 即座に消失
+  - drop_item, take_from_chest, store_in_chest も同期エラーの影響を受ける可能性
+  - サーバーのgamerule（doTileDrops, doEntityDrops, doMobLoot）が設定されている
+- **根本原因推定**:
+  1. インベントリ同期エラー（サーバーとボット間で状態不一致）
+  2. アイテムピックアップの検出失敗（collectItem イベント発火なし）
+  3. doTileDrops による drops の処理ミス
+- **影響**:
+  - Phase 2（食料安定化）が完全に停止
+  -全ボット（Claude3: HP2.5, Claude7: HP7.7, Claude4: HP8/20）が食料0で危機的
+  - bread を作成できない（必須アイテム）
+- **症状レベル**: 🔴 CRITICAL - ゲームプレイ不可状態
+- **推奨解決策**:
+  1. サーバー再起動（gamerule リセット）
+  2. 全ボット再接続（inventory sync 強制更新）
+  3. または、Mineflayer の collectItem イベントハンドラ修正
+- **ファイル**:
+  - `src/bot-manager/bot-blocks.ts` (dig_block 実装)
+  - `src/bot-manager/bot-crafting.ts` (craft 実装)
+- **ステータス**: 🔴 CRITICAL - サーバー再起動またはbot再接続が必須
+
