@@ -1,6 +1,7 @@
 import { Vec3 } from "vec3";
 import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
+const { GoalBlock } = goals;
 import type { ManagedBot } from "./types.js";
 import { isHostileMob } from "./minecraft-utils.js";
 
@@ -286,6 +287,7 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
       "blue_carpet", "brown_carpet", "green_carpet", "red_carpet", "black_carpet",
       "sugar_cane", "kelp", "seagrass", "tall_seagrass",
       "crimson_fungus", "warped_fungus", "crimson_roots", "warped_roots", "nether_sprouts",
+      "nether_portal", "end_portal",
       "sign", "wall_sign", "hanging_sign"];
     return passable.includes(name) || name.includes("sign") || name.includes("carpet") || name.includes("button") || name.includes("pressure_plate");
   };
@@ -816,64 +818,82 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
 export async function flee(managed: ManagedBot, distance: number = 20): Promise<string> {
   const bot = managed.bot;
 
-  // Find nearest hostile (using dynamic registry check)
-  const hostile = Object.values(bot.entities)
-    .filter(e => isHostileMob(bot, e.name?.toLowerCase() || ""))
-    .sort((a, b) =>
-      a.position.distanceTo(bot.entity.position) -
-      b.position.distanceTo(bot.entity.position)
-    )[0];
+  try {
+    // Find nearest hostile (using dynamic registry check)
+    const hostile = Object.values(bot.entities)
+      .filter(e => isHostileMob(bot, e.name?.toLowerCase() || ""))
+      .sort((a, b) =>
+        a.position.distanceTo(bot.entity.position) -
+        b.position.distanceTo(bot.entity.position)
+      )[0];
 
-  // Calculate flee direction
-  let direction: { x: number; y: number; z: number; scaled: (n: number) => any };
-  let fleeFromName: string;
+    // Calculate flee direction
+    let direction: { x: number; y: number; z: number; scaled: (n: number) => any };
+    let fleeFromName: string;
 
-  if (hostile) {
-    // Flee away from hostile
-    direction = bot.entity.position.minus(hostile.position).normalize();
-    fleeFromName = hostile.name || "hostile";
-    console.error(`[Flee] Fleeing from ${fleeFromName} at (${hostile.position.x.toFixed(1)}, ${hostile.position.y.toFixed(1)}, ${hostile.position.z.toFixed(1)})`);
-  } else {
-    // No hostile found - flee in a random direction
-    const angle = Math.random() * 2 * Math.PI;
-    const vec = new (bot.entity.position as any).constructor(Math.cos(angle), 0, Math.sin(angle));
-    direction = vec.normalize();
-    fleeFromName = "danger";
-    console.error(`[Flee] No hostile found, fleeing in random direction`);
-  }
+    if (hostile) {
+      // Flee away from hostile
+      direction = bot.entity.position.minus(hostile.position).normalize();
+      fleeFromName = hostile.name || "hostile";
+      console.error(`[Flee] Fleeing from ${fleeFromName} at (${hostile.position.x.toFixed(1)}, ${hostile.position.y.toFixed(1)}, ${hostile.position.z.toFixed(1)})`);
+    } else {
+      // No hostile found - flee in a random direction
+      const angle = Math.random() * 2 * Math.PI;
+      const vec = new (bot.entity.position as any).constructor(Math.cos(angle), 0, Math.sin(angle));
+      direction = vec.normalize();
+      fleeFromName = "danger";
+      console.error(`[Flee] No hostile found, fleeing in random direction`);
+    }
 
-  const fleeTarget = bot.entity.position.plus(direction.scaled(distance));
-  const startPos = bot.entity.position.clone();
+    const fleeTarget = bot.entity.position.plus(direction.scaled(distance));
+    const startPos = bot.entity.position.clone();
 
-  const goal = new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3);
-  bot.pathfinder.setGoal(goal);
+    const goal = new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3);
+    bot.pathfinder.setGoal(goal);
 
-  // Wait for movement with proper completion check
-  await new Promise<void>((resolve) => {
-    const timeout = setTimeout(() => {
-      bot.pathfinder.setGoal(null);
-      resolve();
-    }, 8000);
-
-    const check = setInterval(() => {
-      const distMoved = bot.entity.position.distanceTo(startPos);
-
-      // Success: moved enough distance or reached target
-      if (distMoved >= distance * 0.7 || !bot.pathfinder.isMoving()) {
-        clearInterval(check);
-        clearTimeout(timeout);
-        bot.pathfinder.setGoal(null);
+    // Wait for movement with proper completion check
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        try { bot.pathfinder.setGoal(null); } catch { /* bot may have disconnected */ }
         resolve();
-      }
-    }, 200);
-  });
+      }, 8000);
 
-  const distMoved = bot.entity.position.distanceTo(startPos);
-  if (hostile) {
-    const newDist = bot.entity.position.distanceTo(hostile.position);
-    return `Fled from ${fleeFromName}! Now ${newDist.toFixed(1)} blocks away`;
+      const check = setInterval(() => {
+        try {
+          const distMoved = bot.entity.position.distanceTo(startPos);
+
+          // Success: moved enough distance or reached target
+          if (distMoved >= distance * 0.7 || !bot.pathfinder.isMoving()) {
+            clearInterval(check);
+            clearTimeout(timeout);
+            try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+            resolve();
+          }
+        } catch {
+          // Bot entity may be invalid if disconnected during flee
+          clearInterval(check);
+          clearTimeout(timeout);
+          resolve();
+        }
+      }, 200);
+    });
+
+    const distMoved = bot.entity.position.distanceTo(startPos);
+    if (hostile) {
+      const newDist = bot.entity.position.distanceTo(hostile.position);
+      return `Fled from ${fleeFromName}! Now ${newDist.toFixed(1)} blocks away`;
+    }
+    return `Fled ${distMoved.toFixed(1)} blocks from ${fleeFromName}!`;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[Flee] Error during flee: ${errMsg}`);
+    // Stop all movement controls to prevent stuck state
+    try {
+      bot.clearControlStates();
+      bot.pathfinder.setGoal(null);
+    } catch { /* bot may be disconnected */ }
+    return `Flee interrupted: ${errMsg}`;
   }
-  return `Fled ${distMoved.toFixed(1)} blocks from ${fleeFromName}!`;
 }
 
 /**
@@ -1292,5 +1312,58 @@ export async function dismount(managed: ManagedBot): Promise<string> {
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to dismount: ${errMsg}`);
+  }
+}
+
+/**
+ * Enter a Nether portal and teleport to the Nether/Overworld
+ */
+export async function enterPortal(managed: ManagedBot): Promise<string> {
+  const bot = managed.bot;
+  const startDimension = bot.game.dimension;
+
+  // Find nearest nether_portal block
+  const portalBlock = bot.findBlock({
+    matching: (block) => block.name === "nether_portal",
+    maxDistance: 10,
+  });
+
+  if (!portalBlock) {
+    throw new Error("No nether portal found within 10 blocks");
+  }
+
+  try {
+    // Move to portal block center
+    const goals = new GoalBlock(portalBlock.position.x, portalBlock.position.y, portalBlock.position.z);
+    await bot.pathfinder.goto(goals);
+
+    // Wait for dimension change (teleport)
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error("Portal teleport timeout after 10 seconds"));
+      }, 10000);
+
+      const onSpawn = () => {
+        const newDimension = bot.game.dimension;
+        if (newDimension !== startDimension) {
+          cleanup();
+          const dimName = String(newDimension).includes("nether") ? "Nether" :
+                         String(newDimension).includes("overworld") ? "Overworld" :
+                         String(newDimension).includes("end") ? "End" : String(newDimension);
+          resolve(`Teleported to ${dimName} via portal. Position: (${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.y)}, ${Math.round(bot.entity.position.z)})`);
+        }
+      };
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        bot.removeListener("spawn", onSpawn);
+      };
+
+      bot.on("spawn", onSpawn);
+    });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to enter portal: ${errMsg}`);
   }
 }

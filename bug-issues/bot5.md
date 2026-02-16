@@ -51,17 +51,24 @@
 
 ---
 
-### [2026-02-16] stick クラフトで birch_planks を使わず dark_oak_planks を選択 ✅ **FIXED**
-- **症状**: インベントリに `birch_planks x49` と `dark_oak_planks x7` がある状態で `minecraft_craft(item_name="stick", count=24)` を実行すると、`dark_oak_planks` から作ろうとして "missing ingredient" エラーになる。birch_planksが大量にあるのに使われない。
-- **エラーメッセージ**: `Failed to craft stick from dark_oak_planks: Error: missing ingredient. Try crafting planks from logs first`
-- **原因**: `inventoryItems.find(i => i.name.endsWith("_planks"))` がインベントリ順序で最初に見つかった planks を返すため、数量に関係なく dark_oak_planks が選ばれていた。
-- **影響**: stickが作成できず、鉄ツール作成に支障。Claude4, Claude7も同じ問題を報告。
-- **修正内容**:
-  - `inventoryItems.find()` → `inventoryItems.filter().sort((a,b) => b.count - a.count)[0]` に変更
-  - 最も数量が多い planks を選択するようにロジック改善
-  - stick と crafting_table の両方のマニュアルレシピ作成箇所を修正
-- **ファイル**: `src/bot-manager/bot-crafting.ts` (line 414-450)
-- **ステータス**: ✅ FIXED (2026-02-16, Bot5修正)
+### [2026-02-16] stick クラフトで birch_planks を使わず dark_oak_planks を選択 ✅ **PARTIALLY FIXED**
+- **症状**: インベントリに `birch_planks x50` がある状態で `minecraft_craft(item_name="stick", count=2)` を実行すると、"missing ingredient" エラーになる。
+- **エラーメッセージ**: `Failed to craft stick from birch_planks: Error: missing ingredient. Try crafting planks from logs first`
+- **原因**:
+  1. bot.recipesAll(item.id, null, null)が何かレシピを返している
+  2. その後のクラフト実行で「missing ingredient」エラーが発生
+  3. マニュアルレシピの条件`allRecipes.length === 0`に到達していない
+  4. つまり、有効なレシピが存在しないのにrecipesAllが何かを返している（Mineflayer/mcDataのバグの可能性）
+- **影響**: stickが作成できず、石ツール作成に支障。ただし既にダイヤ装備があるため優先度は低い。
+- **修正内容(試みられたが失敗)**:
+  - マニュアルレシピ作成箇所で最も数量が多い planks を選択するロジックを追加（line 417-418）
+  - ただし、このコードパスに到達しないため無効
+- **修正案**:
+  - bot.recipesAll()の戻り値をフィルタして有効なレシピだけを使用する
+  - または、stick クラフトの場合は常にマニュアルレシピを使用するように条件を変更
+  - または、bot.recipesFor()で個別にレシピ確認を試みる
+- **ファイル**: `src/bot-manager/bot-crafting.ts` (line 405-444)
+- **ステータス**: 🔴 未解決 (2026-02-16確認)
 
 ---
 

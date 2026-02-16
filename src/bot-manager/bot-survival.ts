@@ -4,6 +4,7 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 import type { ManagedBot } from "./types.js";
 import { isHostileMob, isFoodItem, isBedBlock } from "./minecraft-utils.js";
+import { collectNearbyItems } from "./bot-items.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -265,9 +266,30 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
 
   try {
     while (attacks < maxAttacks) {
+      // Check HP - flee if critically low
+      if (bot.health <= 8) {
+        console.error(`[Attack] HP critically low (${bot.health}), fleeing from ${target.name}!`);
+        bot.pathfinder.setGoal(null);
+        // Try to eat food while fleeing
+        const food = bot.inventory.items().find(i => i.name === "bread" || i.name === "cooked_beef" || i.name === "cooked_porkchop" || i.name === "cooked_chicken" || i.name === "golden_apple" || i.name === "baked_potato" || i.name === "cooked_mutton" || i.name === "cooked_cod" || i.name === "cooked_salmon");
+        if (food) {
+          try {
+            await bot.equip(food, "hand");
+            bot.deactivateItem();
+            await bot.consume();
+          } catch (_) { /* ignore eat errors during flee */ }
+        }
+        return `Fled from ${target.name} at low HP (${bot.health}/20) after ${attacks} attacks. Eat food and try again.`;
+      }
+
       // Check if target still exists
       const currentTarget = Object.values(bot.entities).find(e => e.id === targetId);
       if (!currentTarget) {
+        // Auto-collect dropped items after kill
+        await delay(500);
+        try {
+          await collectNearbyItems(managed);
+        } catch (_) { /* ignore collection errors */ }
         return `Killed ${target.name} after ${attacks} attacks`;
       }
 
@@ -416,6 +438,11 @@ export async function fight(
     // Re-find target (it might have moved or died)
     target = Object.values(bot.entities).find(e => e.id === targetId) || null;
     if (!target) {
+      // Auto-collect dropped items after kill
+      await delay(500);
+      try {
+        await collectNearbyItems(managed);
+      } catch (_) { /* ignore collection errors */ }
       return `${targetName} defeated! Attacked ${attackCount} times.` + getBriefStatus(bot);
     }
 

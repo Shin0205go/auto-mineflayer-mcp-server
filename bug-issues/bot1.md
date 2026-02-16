@@ -12,6 +12,121 @@
 
 ---
 
+### [2026-02-16 Session 14] move_to can't enter Nether/End portals (✅ FIXED)
+
+- **症状**: ネザーポータルの前にいるがmove_toでポータルに入れない。"Path blocked"エラー
+- **報告**: Claude3
+- **原因**: `isPassableBlock()`にnether_portal, end_portalが含まれていない。move_toがポータルブロックを固体と判定し、別の位置に移動しようとする
+- **修正**: `bot-movement.ts:289`のpassableリストに`"nether_portal", "end_portal"`を追加
+- **ファイル**: `src/bot-manager/bot-movement.ts:289`
+- **ステータス**: ✅ 修正完了（次回MCP再起動後に反映）
+
+---
+
+### [2026-02-16 Session 14] Chat command whitelist doesn't include Claude1-7 (✅ FIXED)
+
+- **症状**: Claude1が`/tp Claude3`を実行しようとすると「Command '/tp' is not allowed」エラー。ネザーで動けないClaude3をテレポートできない
+- **原因**: `src/tools/movement.ts:85`のwhitelistが`["Claude"]`のみで、Claude1〜Claude7が含まれていない
+- **修正**: whitelistを`["Claude", "Claude1", "Claude2", "Claude3", "Claude4", "Claude5", "Claude6", "Claude7"]`に拡大
+- **ファイル**: `src/tools/movement.ts:85`
+- **ステータス**: ✅ 修正完了（次回ビルド後に反映）
+
+---
+
+### [2026-02-16 Session 13] stick/crafting_table crafting - manual recipe rejected by filter (✅ FIXED)
+
+- **症状**: `minecraft_craft("stick")` が "missing ingredient" エラーで失敗。birch_planks x70 所持。manual recipe作成は成功するが、compatibleRecipe検索(line 661-690)で除外される
+- **報告**: Claude4, Claude5, Claude2
+- **原因**: manual recipeが`allRecipes`に追加された後、`compatibleRecipe`フィルターロジックが`mcData.items[d.id]`のlookupに失敗してrecipeを除外
+- **修正** (commit e91a82f):
+  1. stick/crafting_tableでmanual recipe(allRecipes.length===1)の場合、フィルターをバイパスして直接使用
+  2. window-based crafting fallback追加: `bot.clickWindow()`で2x2グリッドに直接アイテム配置
+  3. recipesFor fallbackも維持(3段階fallback)
+- **ファイル**: `src/bot-manager/bot-crafting.ts:661-700`
+- **ステータス**: ✅ 修正完了
+
+---
+
+### [2026-02-16 Session 12] water_bucket/lava_bucket placement fails silently (✅ FIXED)
+
+- **症状**: `minecraft_use_item_on_block`でwater_bucketをlavaに使っても溶岩が固まらない。bucketでlavaを集めてもlava_bucketが生成されない。
+- **報告**: Claude3 (SOS)
+- **原因**:
+  1. Raw `block_place`パケットに`sequence`フィールドが欠落 — Minecraft 1.19+で必須のフィールドが送信されず、サーバーがパケットを無視
+  2. Attempt 1で`activateBlock(lavaBlock)`を試行 — 溶岩は非固体ブロックのため`activateBlock`が機能しない
+  3. `bot.lookAt()`がターゲット位置（溶岩）を見ていたが、`block_place`パケットは隣接固体ブロックを指定 — サーバーが不整合を検知
+- **修正** (commit baf62b2):
+  - water_bucket配置: `bot.placeBlock(adjacentSolidBlock, faceVector)`を使用。プロトコル形式、lookAt方向、sequenceフィールドを正しく処理
+  - bucket収集: `bot._genericPlace()`を使用。raw block_placeパケットの代替
+  - 検証強化: 水が実際に配置されたか、黒曜石が生成されたかを確認
+  - 隣接固体ブロックが見つからない場合のエラーメッセージ追加
+- **ファイル**: `src/bot-manager/bot-blocks.ts:1262-1430`
+- **ステータス**: ✅ 修正完了
+
+---
+
+### [2026-02-16 Session 11] serverHasItemPickupDisabled false positive blocking crafting (✅ FIXED)
+
+- **症状**: Bot6,Bot7等でクラフトが全て「Server has item pickup disabled」で拒否される。実際にはアイテムピックアップは正常動作中
+- **報告**: Bot6 (Session 10), Bot4, Bot7
+- **原因**: `collectNearbyItems()`が他のボットがアイテムを先に拾った場合に「pickup disabled」と誤検知。マルチボット環境では、あるボットが掘ったアイテムを別の近くのボットが拾うことが頻繁に発生。この誤検知が`serverHasItemPickupDisabled`フラグを設定し、そのボットの全クラフトを1分間ブロック
+- **修正**:
+  - `bot-items.ts`: `collectNearbyItems()`からフラグ設定ロジックを完全削除
+  - `bot-crafting.ts`: クラフト前のフラグチェック2箇所を削除、ポストクラフト検証のフラグ設定2箇所を削除
+  - `bot-blocks.ts`: dig後の「server has item pickup disabled」メッセージを適切な表現に変更
+  - `bot-crafting.ts`: smelt後の同様のメッセージを修正
+- **ファイル**: `src/bot-manager/bot-items.ts`, `src/bot-manager/bot-crafting.ts`, `src/bot-manager/bot-blocks.ts`
+- **ステータス**: ✅ 修正完了
+
+---
+
+### [2026-02-16 Session 11] Immature wheat harvesting gives only seeds (✅ FIXED)
+
+- **症状**: wheatをdigしてもwheat itemが出ず、seedsのみ。チーム全員が「sync bug」と誤解
+- **報告**: Bot2, Bot4, Bot5, Bot6, Bot7 (Session 10-11)
+- **原因**: wheatは成熟(age=7)でないとwheat itemをドロップしない。未成熟(age<7)ではwheat_seedsのみ。ボットたちがbone_mealを1-2回しか使わず未成熟のまま収穫していた
+- **修正**: `bot-blocks.ts`の`digBlock()`にcrop maturityチェックを追加。wheat/beetroots/carrots/potatoesブロックの`getProperties().age`を確認し、最大age未満の場合は収穫をブロックして警告メッセージを返す
+- **ファイル**: `src/bot-manager/bot-blocks.ts`
+- **ステータス**: ✅ 修正完了
+
+---
+
+### [2026-02-16 Session 8] Inventory slot range bug - false "inventory full" (✅ FIXED)
+
+- **症状**: `minecraft_dig_block`と`minecraft_take_from_chest`がインベントリに空きがあるのに"inventory is full"と報告
+- **報告**: Bot4 (Session unfixed bug report)
+- **原因**: `bot.inventory.slots[0-35]`をチェックしていたが、mineflayerのスロット配置は:
+  - 0: crafting output, 1-4: crafting grid, 5-8: armor, 9-35: main inventory, 36-44: hotbar, 45: off-hand
+  - **slots 0-8 (crafting+armor) を誤ってカウント** → 装備するとスロットが埋まっていると判定
+  - **slots 36-44 (hotbar) を未カウント** → hotbarの空きスロットが無視される
+- **修正**: `src/bot-manager/bot-blocks.ts` のスロット範囲を `0..35` → `9..44` に修正（2箇所）
+- **ステータス**: ✅ 修正完了
+
+---
+
+### [2026-02-16 Session 8] Grass seed drop mapping missing short_grass (✅ FIXED)
+
+- **症状**: `minecraft_dig_block`で草を壊してもseed収集の追跡が行われない
+- **報告**: Claude2が種がドロップしないと報告
+- **原因**: `getExpectedDrop()`マッピングで`grass`と`tall_grass`のドロップが`""`(空文字)。
+  - Minecraft 1.20+では`short_grass`にリネームされたが、マッピングに未追加
+  - 空文字だとseed追跡ロジックがスキップされる
+- **修正**: `src/bot-manager/bot-blocks.ts`のdropMappingsに追加:
+  - `short_grass` → `wheat_seeds`
+  - `grass`, `tall_grass`, `fern`, `large_fern` → `wheat_seeds`
+- **ステータス**: ✅ 修正完了
+
+---
+
+### [2026-02-16 Session 8] Auto-gamerule missing doMobSpawning (✅ FIXED)
+
+- **症状**: bot-core.tsの自動gamerule修正にdoMobSpawningが含まれていない
+- **原因**: 元のコードはdoTileDrops, doMobLoot, doEntityDropsのみ設定
+- **修正**: `src/bot-manager/bot-core.ts`にdoMobSpawning trueを追加
+- **ステータス**: ✅ 修正完了
+
+---
+
 ### [2026-02-16 Session 7] Food Crisis Recurrence + Gamerule Reset Issue (❌ CRITICAL)
 
 - **症状**:

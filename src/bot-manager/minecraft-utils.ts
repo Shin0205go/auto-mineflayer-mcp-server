@@ -117,8 +117,9 @@ export function isFuelItem(itemName: string): boolean {
   const fuelPatterns = ["coal", "charcoal", "_log", "_planks", "_wood",
     "stick", "wooden_", "bamboo", "carpet", "wool", "banner",
     "scaffolding", "ladder", "fence", "boat", "bowl", "bookshelf"];
+  // Note: blaze_rod is technically fuel but too valuable (needed for Phase 6 ender eyes)
+  // so it is excluded from auto-fuel selection
   return fuelPatterns.some(p => itemName.includes(p)) ||
-         itemName === "blaze_rod" ||
          itemName === "dried_kelp_block" ||
          itemName === "lava_bucket";
 }
