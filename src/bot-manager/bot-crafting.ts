@@ -1417,8 +1417,12 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             console.error(`[Craft] Distance to crafting table: ${finalDist.toFixed(1)} blocks`);
 
             // Try direct bot.craft() with table reference first (simplest approach)
+            const invBefore = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(", ");
+            console.error(`[Craft] Inventory before craft: ${invBefore}`);
             try {
               await bot.craft(tryRecipe, 1, craftingTable);
+              const invAfter = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(", ");
+              console.error(`[Craft] Inventory after craft: ${invAfter}`);
             } catch (directErr: any) {
               const errMsg = String(directErr?.message || directErr);
               console.error(`[Craft] Direct craft failed: ${errMsg}`);
@@ -1459,7 +1463,11 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
               }
             }
           } else {
+            const invBefore = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(", ");
+            console.error(`[Craft] Inventory before simple craft: ${invBefore}`);
             await bot.craft(tryRecipe, 1, undefined);
+            const invAfter = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(", ");
+            console.error(`[Craft] Inventory after simple craft: ${invAfter}`);
           }
 
           // Wait for crafting to complete and item transfer
