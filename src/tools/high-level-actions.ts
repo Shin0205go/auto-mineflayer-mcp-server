@@ -825,6 +825,21 @@ export async function minecraft_explore_area(
         }
       }
 
+      // Defensive combat: fight back if a hostile mob is very close (attacking us)
+      const botObj = botManager.getBot(username);
+      if (botObj && botObj.health < 18) {
+        const nearHostile = Object.values(botObj.entities)
+          .filter(e => e !== botObj.entity && e.name && e.position.distanceTo(botObj.entity.position) < 5)
+          .filter(e => ["zombie", "skeleton", "spider", "creeper", "drowned", "husk", "stray", "wither_skeleton", "piglin_brute"].includes(e.name || ""))
+          .sort((a, b) => a.position.distanceTo(botObj.entity.position) - b.position.distanceTo(botObj.entity.position))[0];
+        if (nearHostile) {
+          console.error(`[ExploreArea] Defensive: ${nearHostile.name} attacking at ${nearHostile.position.distanceTo(botObj.entity.position).toFixed(1)} blocks, fighting back!`);
+          try {
+            await botManager.attack(username, nearHostile.name);
+          } catch (_) { /* ignore combat errors */ }
+        }
+      }
+
       // Move in spiral
       x += dx;
       z += dz;
