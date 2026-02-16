@@ -790,8 +790,10 @@ export async function minecraft_explore_area(
       }
 
       // Check for target entity (skip "passive" keyword as it matches items too)
+      // Use wider range (48) for entity detection to spot endermen from further away
+      const entitySearchRange = 48;
       if (target && target !== "passive" && target !== "hostile" && target !== "all") {
-        const entityResult = botManager.findEntities(username, target, 32);
+        const entityResult = botManager.findEntities(username, target, entitySearchRange);
         // Only count as found if NOT starting with "No" (avoid false positives)
         if (entityResult.includes(target) && !entityResult.startsWith("No")) {
           findings.push(`${target} entity at current location`);
@@ -803,7 +805,7 @@ export async function minecraft_explore_area(
             let fightCount = 0;
             const maxFights = 5; // Safety limit per exploration step
             while (fightCount < maxFights) {
-              const checkResult = botManager.findEntities(username, target, 32);
+              const checkResult = botManager.findEntities(username, target, entitySearchRange);
               if (!checkResult.includes(target) || checkResult.startsWith("No")) break;
 
               console.error(`[ExploreArea] Found ${target} (#${fightCount + 1}) — auto-engaging in combat!`);
