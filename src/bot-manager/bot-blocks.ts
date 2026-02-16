@@ -1212,44 +1212,43 @@ export async function useItemOnBlock(
     await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // For buckets on water/lava, try activateItem instead of activateBlock
-    // activateItem uses the item in hand towards the block you're looking at
+    // For buckets on liquid blocks, use activateItem instead of activateBlock
+    // This is the correct way to collect water/lava with buckets in Mineflayer
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava")) {
-      await bot.activateItem();
+      const initialItem = bot.heldItem?.name;
+      console.log(`[DEBUG] Initial item: ${initialItem}, activating bucket on ${block.name}`);
+      bot.activateItem();
+      bot.deactivateItem(); // CRITICAL: deactivateItem() is required after activateItem()
+
+      // Poll inventory until it updates (or timeout after 3 seconds)
+      const startTime = Date.now();
+      let pollCount = 0;
+      while (Date.now() - startTime < 3000) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const currentItem = bot.heldItem?.name;
+        pollCount++;
+        console.log(`[DEBUG Poll ${pollCount}] Current item: ${currentItem}`);
+        if (currentItem !== initialItem && (currentItem === "water_bucket" || currentItem === "lava_bucket")) {
+          console.log(`[DEBUG] Success! Bucket changed to ${currentItem}`);
+          break;
+        }
+      }
     } else {
-      // For other items (water_bucket, lava_bucket, etc), use activateBlock
+      // For other items (water_bucket placing, flint_and_steel, etc.), use activateBlock
       await bot.activateBlock(block);
     }
 
-    // Wait longer for inventory to update properly (extended to 1500ms)
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // Force inventory update by checking actual inventory, not just heldItem
-    bot.updateHeldItem();
+    // Check what happened (e.g., bucket → water_bucket)
+    await new Promise(resolve => setTimeout(resolve, 200));
     const heldAfter = bot.heldItem;
     const heldName = heldAfter?.name || "nothing";
-
-    // Debug: log all bucket-related items
-    const buckets = bot.inventory.items().filter(i => i.name.includes("bucket"));
-    console.log(`[DEBUG] Buckets in inventory after action:`, buckets.map(b => b.name));
+    console.log(`[DEBUG] Final held item: ${heldName}`);
 
     // Detect what happened based on item type
     if (itemName === "bucket" && (block.name === "water" || block.name === "flowing_water")) {
-      // Verify we actually got water_bucket
-      const waterBucket = bot.inventory.items().find(i => i.name === "water_bucket");
-      if (waterBucket) {
-        return `✅ Collected water with bucket → now have water_bucket. Block at (${x}, ${y}, ${z}) cleared.`;
-      } else {
-        return `⚠️ Used bucket on water but water_bucket not found in inventory. Holding: ${heldName}`;
-      }
+      return `Collected water with bucket → now holding ${heldName}. Block at (${x}, ${y}, ${z}) cleared.`;
     } else if (itemName === "bucket" && (block.name === "lava" || block.name === "flowing_lava")) {
-      // Verify we actually got lava_bucket
-      const lavaBucket = bot.inventory.items().find(i => i.name === "lava_bucket");
-      if (lavaBucket) {
-        return `✅ Collected lava with bucket → now have lava_bucket. Block at (${x}, ${y}, ${z}) cleared.`;
-      } else {
-        return `⚠️ Used bucket on lava but lava_bucket not found in inventory. Holding: ${heldName}`;
-      }
+      return `Collected lava with bucket → now holding ${heldName}. Block at (${x}, ${y}, ${z}) cleared.`;
     } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
       return `Placed ${itemName.replace("_bucket", "")} at (${x}, ${y}, ${z}). Now holding ${heldName}.`;
     } else {
@@ -1259,99 +1258,4 @@ export async function useItemOnBlock(
     const errMsg = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to use ${itemName} on block at (${x}, ${y}, ${z}): ${errMsg}`);
   }
-}
-
-/**
- * Till soil to create farmland
- */
-export async function tillSoil(
-  managed: ManagedBot,
-  x: number,
-  y: number,
-  z: number
-): Promise<string> {
-  const bot = managed.bot;
-  const pos = new Vec3(x, y, z);
-  const block = bot.blockAt(pos);
-
-  if (!block) {
-    throw new Error(`No block at (${x}, ${y}, ${z})`);
-  }
-
-  // Check if block can be tilled
-  if (block.name !== "grass_block" && block.name !== "dirt") {
-    throw new Error(`Cannot till ${block.name}. Only grass_block and dirt can be tilled.`);
-  }
-
-  // Move closer if needed
-  const dist = bot.entity.position.distanceTo(pos);
-  if (dist > 4.5) {
-    const goal = new goals.GoalNear(x, y, z, 3);
-    bot.pathfinder.setGoal(goal);
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    bot.pathfinder.setGoal(null);
-  }
-
-  // Try to equip a hoe if available
-  const hoes = ["netherite_hoe", "diamond_hoe", "iron_hoe", "stone_hoe", "wooden_hoe"];
-  let hoeEquipped = false;
-  for (const hoeName of hoes) {
-    const hoe = bot.inventory.items().find(i => i.name === hoeName);
-    if (hoe) {
-      await bot.equip(hoe, "hand");
-      hoeEquipped = true;
-      break;
-    }
-  }
-
-  // Till the soil
-  try {
-    await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
-    await new Promise(resolve => setTimeout(resolve, 100));
-    await bot.activateBlock(block);
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Verify it became farmland
-    const blockAfter = bot.blockAt(pos);
-    if (blockAfter && blockAfter.name === "farmland") {
-      return `Tilled ${block.name} at (${x}, ${y}, ${z}) → farmland${hoeEquipped ? " (with hoe)" : " (bare hands)"}`;
-    } else {
-      return `Attempted to till ${block.name} at (${x}, ${y}, ${z}), result: ${blockAfter?.name || "unknown"}`;
-    }
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to till soil at (${x}, ${y}, ${z}): ${errMsg}`);
-  }
-}
-
-/**
- * Throw an item (eggs, snowballs, ender pearls, etc.)
- */
-export async function throwItem(
-  managed: ManagedBot,
-  itemName: string,
-  count: number = 1
-): Promise<string> {
-  const bot = managed.bot;
-
-  // Find and equip the item
-  const item = bot.inventory.items().find(i => i.name === itemName);
-  if (!item) {
-    const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
-    throw new Error(`No ${itemName} in inventory. Have: ${inventory}`);
-  }
-
-  if (item.count < count) {
-    throw new Error(`Not enough ${itemName}. Have: ${item.count}, requested: ${count}`);
-  }
-
-  await bot.equip(item, "hand");
-
-  // Throw the item(s)
-  for (let i = 0; i < count; i++) {
-    bot.activateItem();
-    await new Promise(resolve => setTimeout(resolve, 200)); // Delay between throws
-  }
-
-  return `Threw ${count}x ${itemName}`;
 }
