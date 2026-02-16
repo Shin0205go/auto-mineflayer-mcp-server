@@ -266,6 +266,22 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
 
   try {
     while (attacks < maxAttacks) {
+      // Check HP - flee if critically low
+      if (bot.health <= 8) {
+        console.error(`[Attack] HP critically low (${bot.health}), fleeing from ${target.name}!`);
+        bot.pathfinder.setGoal(null);
+        // Try to eat food while fleeing
+        const food = bot.inventory.items().find(i => i.name === "bread" || i.name === "cooked_beef" || i.name === "cooked_porkchop" || i.name === "cooked_chicken" || i.name === "golden_apple" || i.name === "baked_potato" || i.name === "cooked_mutton" || i.name === "cooked_cod" || i.name === "cooked_salmon");
+        if (food) {
+          try {
+            await bot.equip(food, "hand");
+            bot.deactivateItem();
+            await bot.consume();
+          } catch (_) { /* ignore eat errors during flee */ }
+        }
+        return `Fled from ${target.name} at low HP (${bot.health}/20) after ${attacks} attacks. Eat food and try again.`;
+      }
+
       // Check if target still exists
       const currentTarget = Object.values(bot.entities).find(e => e.id === targetId);
       if (!currentTarget) {
