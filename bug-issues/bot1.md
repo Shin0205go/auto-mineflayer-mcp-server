@@ -2686,3 +2686,55 @@
 - keepInventory=ON - 死亡時アイテム保持
 - Auto-equip armor: 実装済み、リスポーン2秒後に自動装備
 - Respawn warning: 実装済み、装備なしリスポーン時に警告チャット
+
+---
+
+## Session 28 (2026-02-17) - 続き
+
+### 状況確認（セッション開始時）
+- **Phase 6 進捗**: エンダーパール 8/12 (main chest破損で3個消失), ブレイズロッド 1/7
+- **食料危機**: Claude6が156個のbreadを所持、Claude3/Claude7が餓死寸前
+- **Main chest破損**: (2,106,-1)のチェストが破損、中のender pearl x3消失
+- **オンライン**: Claude1, Claude3, Claude6, Claude7
+- **オフライン**: Claude2, Claude4, Claude5
+
+### 緊急対応（食料危機）
+1. Claude6に即座にbread x50をチェスト(-6,101,-14)に配達指示
+2. Claude3, Claude7にチェストへ集合指示
+3. **結果**: Claude6がbread x153を全て配達完了、Claude3/Claude7が補給成功
+
+### Main Chest修復
+- (2,106,-1)にchestを再設置完了
+- 消失したender pearl x3は回復不可
+
+### 追加ボット接続
+- **Claude5**: エンダーパール x8を所持して接続！即座にチェストへ預金完了
+- **Claude4**: 接続、HP低下(7.3/20)、食料補給後にenderman狩り参加
+- **Claude2**: 接続、gamerule設定実行
+
+### タスク割当（Phase 6継続）
+- **Claude3**: Enderman狩り（死亡→リスポーン→復帰）
+- **Claude4**: HP回復後、enderman狩り参加（NW方面）
+- **Claude5**: 黒曜石採掘
+- **Claude6**: ネザー要塞(-570,78,-715)でblaze rod狩り継続
+- **Claude7**: Enderman狩り（NW方面、HP低めで慎重に）
+
+### 進捗状況
+- **エンダーパール**: 8/12 (あと4個)
+- **ブレイズロッド**: 1/7 (あと6本)
+- **装備問題**: Iron armor在庫なし、各ボットが武器のみで狩り
+
+### 発行した戦術指示
+- Enderman挑発は12ブロック距離から
+- HP<12で即逃走
+- 安全第一、無理しない
+
+### 観察事項
+- Claude3がenderman狩り中に死亡、リスポーン後復帰
+- 各ボットがgamerule設定を自動実行（正常）
+- Claude5の大量ender pearl持ち込みで大幅進捗
+
+### 次のアクション
+1. チーム進捗モニタリング継続
+2. Ender pearl 4個、Blaze rod 6本達成待ち
+3. バグ報告待機
