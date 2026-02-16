@@ -520,9 +520,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       "arrow": { inputs: { flint: 1, stick: 1, feather: 1 }, outputCount: 4, requiresTable: true },
     };
 
-    if (allRecipes.length === 0 && shapelessRecipes[itemName]) {
+    if (shapelessRecipes[itemName]) {
       const recipe = shapelessRecipes[itemName];
-      console.error(`[Craft] No recipes found for ${itemName}, using manual shapeless crafting...`);
+      console.error(`[Craft] Using manual shapeless recipe for ${itemName} (bypassing potentially broken recipesAll)...`);
 
       const ingredientIds: number[] = [];
       const delta: { id: number; count: number }[] = [{ id: item.id, count: recipe.outputCount }];
@@ -546,8 +546,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       allRecipes = [manualRecipe as any];
     }
 
-    if (allRecipes.length === 0 && (itemName === "bread" || itemName === "bone_meal" || itemName === "shield")) {
-      console.error(`[Craft] No recipes found for ${itemName}, using manual crafting...`);
+    if (itemName === "bread" || itemName === "bone_meal" || itemName === "shield") {
+      console.error(`[Craft] Using manual recipe for ${itemName} (bypassing potentially broken recipesAll)...`);
 
       if (itemName === "bread") {
         const wheatItem = mcData.itemsByName["wheat"];
@@ -617,7 +617,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       }
     }
 
-    // Manual recipe fallback for tools when recipesAll returns nothing (Mineflayer version bug)
+    // Manual recipe for tools - always prefer manual over broken recipesAll (Mineflayer version bug)
     // Pattern: material + stick in standard tool shapes
     if (allRecipes.length === 0) {
       const toolRecipes: Record<string, { material: string; shape: number[][]; sticks: number; materialCount: number }> = {
@@ -699,13 +699,13 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       }
     }
 
-    // For stick/crafting_table with manual recipe, use it directly (skip filtering).
-    // For other wooden tools, find a compatible recipe from recipesAll.
+    // If we have exactly 1 recipe (manual recipe from above), use it directly.
+    // The planks/sticks filter below is only needed when recipesAll() returns
+    // multiple native recipes and we need to pick the right one for our plank type.
     let compatibleRecipe: any;
-    if ((itemName === "stick" || itemName === "crafting_table") && allRecipes.length === 1) {
-      // Manual recipe was created above - use it directly
+    if (allRecipes.length === 1) {
       compatibleRecipe = allRecipes[0];
-      console.error(`[Craft] Using manual recipe directly for ${itemName}`);
+      console.error(`[Craft] Using single recipe directly for ${itemName}`);
     } else {
       // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
       compatibleRecipe = allRecipes.find(recipe => {
