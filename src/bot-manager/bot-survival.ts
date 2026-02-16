@@ -246,8 +246,25 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
 
   let distance = target.position.distanceTo(bot.entity.position);
 
-  // Enderman strategy: stare at them to provoke, then wait for them to come to us
+  // Enderman strategy: approach to ~12 blocks if far, then stare to provoke
   if (target.name === "enderman" && distance > 4 && distance <= 64) {
+    // If enderman is far, approach to ~12 blocks first for reliable provocation
+    if (distance > 16) {
+      console.error(`[Attack] Enderman at ${distance.toFixed(1)} blocks — approaching to 12 blocks first...`);
+      const approachGoal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 12);
+      bot.pathfinder.setGoal(approachGoal);
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
+        const check = setInterval(() => {
+          const currentDist = target.position.distanceTo(bot.entity.position);
+          if (currentDist <= 14 || !bot.pathfinder.isMoving()) {
+            clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+          }
+        }, 200);
+      });
+      distance = target.position.distanceTo(bot.entity.position);
+    }
+
     console.error(`[Attack] Enderman at ${distance.toFixed(1)} blocks — provoking by staring at eyes...`);
     // Look at the enderman's eye level to provoke it
     await bot.lookAt(target.position.offset(0, target.height * 0.9, 0));
@@ -484,10 +501,26 @@ export async function fight(
 
   console.error(`[BotManager] Starting fight with ${targetName}`);
 
-  // Enderman strategy: stare at them to provoke instead of chasing
+  // Enderman strategy: approach to ~12 blocks if far, then stare to provoke
   let fightDistance = target.position.distanceTo(bot.entity.position);
   if (targetName === "enderman" && fightDistance > 4 && fightDistance <= 64) {
-    console.error(`[Fight] Enderman at ${fightDistance.toFixed(1)} blocks — provoking by staring at eyes...`);
+    // Approach closer first if far away for reliable provocation
+    if (fightDistance > 16) {
+      console.error(`[Fight] Enderman at ${fightDistance.toFixed(1)} blocks — approaching to 12 blocks first...`);
+      const approachGoal = new goals.GoalNear(target!.position.x, target!.position.y, target!.position.z, 12);
+      bot.pathfinder.setGoal(approachGoal);
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
+        const check = setInterval(() => {
+          const currentDist = target!.position.distanceTo(bot.entity.position);
+          if (currentDist <= 14 || !bot.pathfinder.isMoving()) {
+            clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+          }
+        }, 200);
+      });
+    }
+
+    console.error(`[Fight] Enderman at ${target!.position.distanceTo(bot.entity.position).toFixed(1)} blocks — provoking by staring at eyes...`);
     for (let i = 0; i < 30; i++) {
       await new Promise(r => setTimeout(r, 300));
       const currentTarget = Object.values(bot.entities).find(e => e.id === targetId);
