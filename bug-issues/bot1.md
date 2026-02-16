@@ -3439,3 +3439,72 @@ Multiple team members died repeatedly during rain + night:
 - **Current Status**: Claude2 has 11 pearls, hunting enderman in NE quadrant for the 12th
 - **Team Issues**: Claude4 died to spider (respawned), Claude7 HP 2.7/20 crisis (respawn recommended)
 - **Leader Status**: Claude1 HP 9.3/20, no food, monitoring from safe location (2,99,1)
+
+
+## Session 33 - 2026-02-17
+
+### Critical Bug: Enderman Pearl Not Dropping
+- **Reporter**: Claude7
+- **Time**: Session 33
+- **Issue**: Enderman killed but ender_pearl did not drop
+- **Context**: gamerule doMobLoot=true confirmed, but pearls still not dropping
+- **Impact**: Phase 6 blocked - cannot collect 12 ender pearls needed
+- **Status**: Under investigation by Claude1
+
+### Team Status Issues
+- **Food crisis**: Severe - no food in any chest, team using respawn strategy
+- **Main chest missing**: Chest at (2,106,-1) disappeared - 9 ender pearls lost
+- **Rain blocking enderman hunting**: Endermen teleport away during rain
+- **Multiple deaths**: Claude1 (zombie), Claude7 (enderman) due to no food/HP crisis
+
+
+
+### Pearl Drop Analysis - NOT A BUG
+- **Root cause**: Endermen killed during rain teleport erratically
+- **Behavior**: Enderman drops may not appear or spawn far away due to rain teleportation
+- **Solution**: Code already warns about rain (lines 642-644 of high-level-actions.ts)
+- **Action**: Team must wait for rain to stop before enderman hunting
+- **Status**: Working as intended - rain makes enderman hunting impossible
+
+
+## CRITICAL BUG - Session 33 - Pearl Drop Completely Broken
+
+### Bug Description
+**Ender pearls are NOT dropping from endermen kills**
+
+### Test Evidence
+- **Tester**: Claude1
+- **Time**: Session 33, 2026-02-17
+- **Conditions**: Night time (15628), no rain, clear weather
+- **Test 1**: Killed enderman at (-22, 96, -20)
+  - Result: "Killed enderman after 7 attacks"
+  - Inventory check: NO ender_pearl
+  - collectNearbyItems: "No items nearby"
+- **Test 2**: Claude7 reported same issue earlier
+  - Killed enderman, no pearl dropped
+
+### Impact
+- **Severity**: CRITICAL - Blocks Phase 6 completely
+- **Phase 6 requirement**: 12 ender pearls needed
+- **Current progress**: 9 pearls (lost in missing chest) + 0 new pearls = BLOCKED
+
+### Not Rain-Related
+- Initial theory: Rain causes enderman teleportation → drops lost
+- **DISPROVEN**: Claude1 test was during clear weather, still no drops
+
+### Gamerule Status
+- doMobLoot query sent via `/gamerule doMobLoot`
+- Server did NOT respond (concerning)
+- Auto-applied gamerules in bot-core.ts (lines 292-298) may not be working
+
+### Next Steps for Investigation
+1. Test if OTHER mob drops work (zombie → rotten_flesh, skeleton → bones)
+2. Check if this is enderman-specific or all mob drops broken
+3. Verify server-side gamerule configuration
+4. Check Minecraft server version compatibility
+
+### Workaround Options
+- None available - ender pearls ONLY drop from endermen
+- Cannot progress to Phase 7 (End Portal) without 12 ender pearls
+- May need human admin intervention to set gamerules or give pearls
+
