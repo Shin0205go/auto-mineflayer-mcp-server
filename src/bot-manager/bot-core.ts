@@ -472,6 +472,8 @@ export class BotCore extends EventEmitter {
             if (feetBlock?.name === "water") {
               console.error(`[AutoSwim] Low oxygen (${oxygen}/20), swimming up!`);
               bot.pathfinder.setGoal(null); // Cancel current pathfinding
+              // Look straight up so forward movement swims upward
+              bot.look(bot.entity.yaw, -Math.PI / 2, true);
               bot.setControlState("jump", true);
               bot.setControlState("sprint", true);
               bot.setControlState("forward", true);
@@ -479,7 +481,7 @@ export class BotCore extends EventEmitter {
                 bot.setControlState("jump", false);
                 bot.setControlState("sprint", false);
                 bot.setControlState("forward", false);
-              }, 3000);
+              }, 5000); // Extended from 3s to 5s for deeper water
             }
           }
           lastOxygenLevel = oxygen;
