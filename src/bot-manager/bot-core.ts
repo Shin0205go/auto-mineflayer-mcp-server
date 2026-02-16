@@ -475,38 +475,39 @@ export class BotCore extends EventEmitter {
               oxygenLevel: oxygen,
             });
           }
-          // Auto swim up when oxygen is getting low (trigger early at 15 to prevent drowning)
-          if (oxygen < 15 && !autoSwimActive) {
-            const feetBlock = bot.blockAt(bot.entity.position.floored());
-            if (feetBlock?.name === "water") {
-              autoSwimActive = true;
-              console.error(`[AutoSwim] Low oxygen (${oxygen}/20), swimming up!`);
-              bot.pathfinder.setGoal(null); // Cancel current pathfinding
-              // Look straight up so forward movement swims upward
-              bot.look(bot.entity.yaw, -Math.PI / 2, true);
-              bot.setControlState("jump", true);
-              bot.setControlState("sprint", true);
-              bot.setControlState("forward", true);
-              // Keep checking every 500ms — stop only when out of water or max 15s
-              let swimTicks = 0;
-              autoSwimInterval = setInterval(() => {
-                swimTicks++;
-                const currentFeet = bot.blockAt(bot.entity.position.floored());
-                const stillInWater = currentFeet?.name === "water";
-                if (!stillInWater || swimTicks >= 30) { // 30 * 500ms = 15s max
-                  bot.setControlState("jump", false);
-                  bot.setControlState("sprint", false);
-                  bot.setControlState("forward", false);
-                  autoSwimActive = false;
-                  if (autoSwimInterval) clearInterval(autoSwimInterval);
-                  autoSwimInterval = null;
-                  console.error(`[AutoSwim] Stopped swimming (${stillInWater ? "timeout" : "out of water"}) after ${swimTicks * 0.5}s`);
-                } else {
-                  // Keep looking up while swimming
-                  bot.look(bot.entity.yaw, -Math.PI / 2, true);
-                }
-              }, 500);
-            }
+          // Auto swim up when oxygen is getting low (trigger at 18 for extra safety)
+          // Removed feet check — trigger on oxygen alone to catch all water situations
+          if (oxygen < 18 && !autoSwimActive) {
+            autoSwimActive = true;
+            console.error(`[AutoSwim] Low oxygen (${oxygen}/20), swimming up!`);
+            bot.pathfinder.setGoal(null); // Cancel current pathfinding
+            // Look straight up so forward movement swims upward
+            bot.look(bot.entity.yaw, -Math.PI / 2, true);
+            bot.setControlState("jump", true);
+            bot.setControlState("sprint", true);
+            bot.setControlState("forward", true);
+            // Keep checking every 500ms — stop when oxygen recovers or max 30s
+            let swimTicks = 0;
+            autoSwimInterval = setInterval(() => {
+              swimTicks++;
+              const currentOxygen = bot.oxygenLevel ?? 20;
+              const currentFeet = bot.blockAt(bot.entity.position.floored());
+              const stillInWater = currentFeet?.name === "water";
+              // Stop if: oxygen recovered (>19), out of water, or timeout (30s)
+              if (currentOxygen > 19 || !stillInWater || swimTicks >= 60) { // 60 * 500ms = 30s max
+                bot.setControlState("jump", false);
+                bot.setControlState("sprint", false);
+                bot.setControlState("forward", false);
+                autoSwimActive = false;
+                if (autoSwimInterval) clearInterval(autoSwimInterval);
+                autoSwimInterval = null;
+                const reason = currentOxygen > 19 ? "oxygen recovered" : (stillInWater ? "timeout" : "out of water");
+                console.error(`[AutoSwim] Stopped swimming (${reason}) after ${swimTicks * 0.5}s, oxygen: ${currentOxygen}/20`);
+              } else {
+                // Keep looking up while swimming
+                bot.look(bot.entity.yaw, -Math.PI / 2, true);
+              }
+            }, 500);
           }
           lastOxygenLevel = oxygen;
         });

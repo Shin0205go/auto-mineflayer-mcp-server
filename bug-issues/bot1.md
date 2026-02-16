@@ -12,6 +12,23 @@
 
 ---
 
+### [2026-02-17 Session 29] Multiple drownings - auto-swim insufficient (✅ FIXED)
+- **症状**: Claude5, Claude7が連続溺死。commit 81813dd で auto-swim は改善済み（oxygen<15で発動、15秒継続）のに発生
+- **原因分析**:
+  1. **足元チェックの問題**: `feetBlock?.name === "water"` — 頭だけ水中、水流の中では発動しない
+  2. **発動閾値が低い**: oxygen<15 — 深い水域では遅すぎる
+  3. **制限時間不足**: 15秒 — 深い海・湖では水面到達できない
+- **修正内容**:
+  1. **oxygen<18** に変更（より早期発動、余裕を持たせる）
+  2. **足元チェック削除** — oxygen減少のみで発動（すべての水中状況に対応）
+  3. **30秒制限** に延長（15s→30s、深い水域でも到達可能）
+  4. **oxygen回復チェック追加** — oxygen>19で即停止（無駄な泳ぎを減らす）
+- **効果**: 水中のあらゆる状況で早期に発動し、十分な時間で水面到達可能
+- **ファイル**: `src/bot-manager/bot-core.ts` lines 466-512 (auto-swim logic)
+- **ステータス**: ✅ 修正完了（次回接続時に適用）
+
+---
+
 ### [2026-02-16 Session 28] Multiple bot deaths - equipment loss cycle (✅ MITIGATED)
 - **症状**: Claude2, Claude3, Claude4が短時間で繰り返し死亡。Zombie/fall damage。死亡→リスポーン→再度死亡のループ
 - **原因**:
