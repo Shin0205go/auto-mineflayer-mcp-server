@@ -664,14 +664,32 @@ export async function minecraft_explore_area(
 
       // Parse status - handle both JSON and old text format
       let food = 20;
+      let hp = 20;
       try {
         const statusObj = JSON.parse(status);
         const hungerMatch = statusObj.hunger?.match(/([\d.]+)\//);
         if (hungerMatch) food = parseFloat(hungerMatch[1]);
+        const healthMatch = statusObj.health?.match(/([\d.]+)\//);
+        if (healthMatch) hp = parseFloat(healthMatch[1]);
       } catch (e) {
         // Fallback: try old text format
         const statusMatch = status.match(/Food: ([\d.]+)\/20/);
         if (statusMatch) food = parseFloat(statusMatch[1]);
+        const hpMatch = status.match(/Health: ([\d.]+)\//);
+        if (hpMatch) hp = parseFloat(hpMatch[1]);
+      }
+
+      // Auto-eat when HP is low and we have food
+      if (hp < 15 && food < 18) {
+        try {
+          await botManager.eat(username);
+          console.error(`[ExploreArea] Auto-ate food (HP was ${hp}, hunger was ${food})`);
+        } catch (_) { /* no food available */ }
+      }
+
+      // Abort if HP is critically low
+      if (hp <= 6) {
+        return `Exploration aborted at ${visitedPoints} points due to critical HP (${hp}/20). Flee and recover! Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
       }
 
       // More aggressive hunger monitoring to prevent starvation
