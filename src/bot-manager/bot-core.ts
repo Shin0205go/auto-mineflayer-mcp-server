@@ -617,11 +617,36 @@ export class BotCore extends EventEmitter {
           setTimeout(async () => {
             bot.chat("復活しました！");
             addEvent("respawn", "Bot respawned");
+
             // Auto-equip best armor after respawn
             try {
               await equipArmor(bot);
               console.error(`[BotManager] Auto-equipped armor after respawn`);
             } catch (_) { /* ignore armor equip errors */ }
+
+            // Safety check: warn if unarmed and at night
+            setTimeout(() => {
+              const hasWeapon = bot.inventory.items().some(i =>
+                i.name.includes("sword") || i.name.includes("axe")
+              );
+              const hasArmor = bot.inventory.items().some(i =>
+                i.name.includes("helmet") || i.name.includes("chestplate") ||
+                i.name.includes("leggings") || i.name.includes("boots")
+              );
+              const time = bot.time.timeOfDay;
+              const isNight = time >= 12541 && time < 23458;
+
+              if (!hasWeapon || !hasArmor) {
+                console.error(`[Respawn Safety] ${config.username} respawned without equipment! Weapon: ${hasWeapon}, Armor: ${hasArmor}`);
+                if (isNight) {
+                  bot.chat("[警告] 装備なし+夜間。移動危険。シェルター待機推奨");
+                  addEvent("respawn_warning", "Respawned without equipment during night");
+                } else {
+                  bot.chat("[警告] 装備なし。Base帰還・装備回復推奨");
+                  addEvent("respawn_warning", "Respawned without equipment");
+                }
+              }
+            }, 1000);
           }, 2000);
         });
 

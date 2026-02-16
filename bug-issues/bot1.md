@@ -12,12 +12,27 @@
 
 ---
 
-### [2026-02-16 Session 27] Claude4 spawned/teleported into solid stone blocks (⚠️ INVESTIGATING)
-- **症状**: Claude4が座標(142, 66, -146)で石ブロックに完全に囲まれ脱出不可。ピッケル未所持、crafting_table設置不可
-- **原因**: 不明。接続時のスポーン位置が不適切、またはテレポート先が固体ブロック内だった可能性。サーバー側の問題かもしれない
-- **対応**: Claude5が救助に向かっている。今後同様の問題が発生するか監視が必要
-- **ファイル**: N/A（サーバー側問題の可能性）
-- **ステータス**: ⚠️ 監視中（救助進行中）
+### [2026-02-16 Session 28] Multiple bot deaths - equipment loss cycle (⚠️ INVESTIGATING)
+- **症状**: Claude2, Claude3, Claude4が短時間で繰り返し死亡。Zombie/fall damage。死亡→リスポーン→再度死亡のループ
+- **原因推定**:
+  1. keepInventory ONのはずだが、リスポーン後に装備が消失している可能性
+  2. 夜間に装備なしで移動→Zombie遭遇→死亡のパターン
+  3. Auto-equip armor (bot-core.ts line 622)は動作しているが、インベントリに装備がない
+- **対応検討**:
+  1. リスポーン後、装備確認→なければbase帰還を強制する安全ロジック追加
+  2. 夜間は装備なしの場合、移動禁止・シェルター待機を強制
+  3. keepInventoryの動作確認が必要
+- **ファイル**: `src/bot-manager/bot-core.ts` (respawn handler)
+- **ステータス**: ⚠️ 調査中（緊急度高）
+
+---
+
+### [2026-02-16 Session 27] Claude4 spawned/teleported into solid stone blocks (✅ RESOLVED)
+- **症状**: Claude4が座標(142, 66, -146)で石ブロックに完全に囲まれ脱出不可
+- **原因**: サーバー側のスポーン位置決定の問題
+- **対応**: Claude5が救助完了。その後Claude4は正常動作
+- **ファイル**: N/A（サーバー側問題）
+- **ステータス**: ✅ 解決済
 
 ---
 
