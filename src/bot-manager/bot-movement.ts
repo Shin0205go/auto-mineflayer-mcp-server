@@ -286,6 +286,7 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
       "blue_carpet", "brown_carpet", "green_carpet", "red_carpet", "black_carpet",
       "sugar_cane", "kelp", "seagrass", "tall_seagrass",
       "crimson_fungus", "warped_fungus", "crimson_roots", "warped_roots", "nether_sprouts",
+      "nether_portal", "end_portal",
       "sign", "wall_sign", "hanging_sign"];
     return passable.includes(name) || name.includes("sign") || name.includes("carpet") || name.includes("button") || name.includes("pressure_plate");
   };
