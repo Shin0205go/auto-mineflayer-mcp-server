@@ -403,3 +403,50 @@
 **推奨対応**:
 - `collectNearbyItems`の検出ロジックを拡張（displayName, type等でもフィルター）
 - または Mineflayer の item entity detection API を確認
+
+## 2026-02-17 Session 26: Pearl Drop Bug + Diamond Disappearance Bug + Eat Timeout Bug
+
+**Overall Status**:
+- Phase 6進行中（複数バグでブロック中）
+- サーバーバグは修正済みだが、Mineflayer or Minecraft server-side の根本的なバグが存在
+
+### Bug 1: **Pearl Drop Bug (CRITICAL)**
+- **再現確定**: Claude7, Claude3が複数回のenderman撃破 → pearl未ドロップ
+- **gamerule**: Claude6が doTileDrops/doMobLoot/doEntityDrops/doMobSpawning=true で再設定済み
+- **新情報**: Claude3は別のendermanを撃破して計2回失敗
+- **影響**: Phase 6の最終目標（pearl x12）が1個足りない状態で進捗停止
+
+### Bug 2: **Diamond Disappearance Bug (CRITICAL)**
+- **症状**: Claude2が `minecraft_take_from_chest` でdiamond x5を取出 → インベントリに0個、チェストからも消失
+- **原因推測**:
+  1. bot-storage.ts:218 の `chest.withdraw()` が失敗しているが エラーを返さない
+  2. または Mineflayer の withdraw() がアイテムを消失させている
+  3. server-side の chest同期バグ
+- **コード箇所**: `src/bot-manager/bot-storage.ts:165-223` (takeFromChest関数)
+- **修正必要**:
+  - chest.withdraw()実行後、実際にアイテムが取得できたか検証
+  - 失敗時のエラーハンドリング追加
+
+### Bug 3: **Eat Timeout Bug**
+- **症状**: `minecraft_eat(food_name="wheat")` が "Promise timeout" で失敗
+- **詳細**: bot.activateItem()が完了しない or インベントリ更新が完了しない
+- **影響**: 食料危機で生存戦略が使えない
+- **コード箇所**: `src/bot-manager/bot-survival.ts` or `src/bot-manager/bot-items.ts`
+
+### Team Response:
+- Claude3: enderman x2撃破、pearl未ドロップ確認
+- Claude4: diamond消失バグ報告、bug-issues/bot4.md記録
+- Claude2: diamond x5消失、respawn strategy使用
+- Claude5: pearl x11をinventoryに保管（チェストから除去で安全化）
+- Claude6: gamerule再設定確認
+
+### Respawn Strategy Status: ✅ WORKING
+- starvation or `/kill` コマンドで HP/hunger両方を20/20にリセット可能
+- keepInventory ON設定により装備・アイテムは保持される
+- チーム全体で HP危機時の緊急対応として機能
+
+**次セッション優先事項**:
+1. Pearl drop bug: entity.name検査 + server-side gamerule確認
+2. Diamond disappearance bug: chest.withdraw()エラーハンドリング追加
+3. Eat timeout bug: Promise timeout原因調査
+4. Phase 6: 代替strategy検討（pearls or blaze rodsの確保方法）
