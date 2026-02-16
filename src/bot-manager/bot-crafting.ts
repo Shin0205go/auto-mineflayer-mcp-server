@@ -494,7 +494,17 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
     // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
     const compatibleRecipe = allRecipes.find(recipe => {
+      // FIX: Handle manual recipe for stick/crafting_table which don't have proper delta
+      if ((itemName === "stick" || itemName === "crafting_table") && allRecipes.length === 1) {
+        // This is our manual recipe - use it directly
+        return true;
+      }
+
       const delta = recipe.delta as Array<{ id: number; count: number }>;
+      if (!delta || !Array.isArray(delta)) {
+        console.error(`[Craft] Skipping recipe with invalid delta: ${JSON.stringify(recipe)}`);
+        return false;
+      }
 
       // Check if this recipe uses planks and sticks (wooden tool pattern)
       let needsPlanks = false;
@@ -506,7 +516,10 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         if (d.count >= 0) continue; // Skip output items
 
         const ingredientItem = mcData.items[d.id];
-        if (!ingredientItem) continue;
+        if (!ingredientItem) {
+          console.error(`[Craft] Cannot find item data for id ${d.id}`);
+          continue;
+        }
 
         if (ingredientItem.name.endsWith("_planks")) {
           needsPlanks = true;
@@ -525,6 +538,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     });
 
     if (!compatibleRecipe) {
+      console.error(`[Craft] DEBUG: allRecipes.length=${allRecipes.length}, itemName=${itemName}`);
+      console.error(`[Craft] DEBUG: allRecipes=${JSON.stringify(allRecipes.map(r => ({ delta: r.delta, requiresTable: r.requiresTable })))}`);
       throw new Error(`Cannot craft ${itemName}: No compatible recipe found. Have ${totalPlanks} planks and ${totalSticks} sticks. Found ${allRecipes.length} recipes total. This may be a Minecraft version compatibility issue.`);
     }
 
