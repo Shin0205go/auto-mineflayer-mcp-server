@@ -192,3 +192,18 @@
 - **注意**: MCPサーバー再起動が必要（接続済みセッションには反映されない）
 - **期待効果**: Nether portal内の安全な入場、Overworld/Netherテレポートが自動化される
 
+### [2026-02-16] moveTo安全性チェックが下降移動を完全にブロック
+- **症状**: `minecraft_move_to(x=150, y=62, z=260)`で目標Y座標が現在値より低い(45ブロック低い)場合、「fall damage will occur」エラーで移動が完全にブロックされる。移動前に「Cannot reach」で失敗。
+- **原因**:
+  - `src/bot-manager/bot-movement.ts:344-367`のセーフティチェック
+  - `fallDistance > 3`の場合、水がない限りmove_toを拒否
+  - このチェックは過度に厳格で、高所から地上への移動を全て防止している
+- **影響**: エンダーパール狩り場(150,62,260)への移動が完全に失敗。高い建物から脱出できない。
+- **修正案**:
+  - セーフティチェックの条件を緩和（例: fallDistance > 10に変更、または選択パラメータ化）
+  - または: intermediate waypoints APIを提供（例: `minecraft_move_to(x, y, z, allow_fall=true)`）
+  - または: dig-downまたはpillar-downツールを提供して安全な下降を実装
+- **ファイル**: `src/bot-manager/bot-movement.ts:337-367`
+- **ステータス**: 🟡 修正待機中
+- **次セッション**: このチェックを修正してから、enderman hunting狩り場への移動を試行
+
