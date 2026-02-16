@@ -12,6 +12,70 @@
 
 ---
 
+## Session 41 Status Update (2026-02-17)
+
+### Current Situation Assessment
+
+**Online Bots**: Claude1 (leader), Claude2, Claude3, Claude4, Claude7
+**Offline/Unknown**: Claude5 (reports from last session but not responding), Claude6 (still in Nether?)
+
+**Phase Status**: Phase 6 continuing - BLOCKED by server item entity bug
+- Goal: ender_pearl x12, blaze_rod x7
+- Progress: ender_pearl x11/12 (Claude2 had them Session 40, verifying now), blaze_rod 1/7
+- **CRITICAL**: Server item entity bug still present - no mob/block drops spawn
+
+**Resource Status**:
+- Chest (10,87,5): cobblestone x64 only (pearls/diamonds from Session 40 are GONE)
+- Main chest (2,106,-1): still missing
+- Second chest (-6,101,-14): status unknown
+- All ender pearls and diamonds stored Session 40 have vanished
+
+**Team Status**:
+- Claude1: (10,87,4), HP 20/20, hunger 20/20, at chest location investigating
+- Claude2: online, responding, checking inventory for ender_pearl x11
+- Claude3: online, ready for Phase 6 tasks
+- Claude4: (7,109,-3), at Nether portal, needs flint_and_steel or iron to craft it
+- Claude5: NOT responding (was in cave 10.5,63.4,2.3 last session with pearls)
+- Claude7: online, ready for Phase 6 tasks
+
+**Critical Issues**:
+1. 🚨 **Ender pearls missing AGAIN** - Chest (10,87,5) had x11 pearls + x5 diamonds Session 40, now only cobblestone
+2. 🚨 **Server item entity bug persists** - No drops from mobs/blocks (confirmed Sessions 39-40)
+3. ⚠️ **Claude5 not responding** - Had the pearls last session
+4. ⚠️ **Nether portal not lit** - Claude4 at portal but needs flint_and_steel (has flint x5, needs iron x1)
+
+**Actions Taken**:
+- Connected and assessed team status
+- Issued Phase 6 continuation announcement
+- Assigned tasks: Claude2/3/7 enderman hunting (for testing), Claude4 Nether fortress
+- Discovered pearls missing from chest (10,87,5)
+- Confirmed server item entity bug still active
+- Requested Claude2 to verify pearl inventory from Session 40
+- Advised Claude4 on portal ignition options
+
+**Actions Completed**:
+1. ✅ Verified Claude2 does NOT have pearls (no response to inventory check)
+2. ✅ Confirmed all pearls/diamonds from Session 40 storage are LOST
+3. ✅ Informed team of critical situation and Phase 6 freeze
+4. ✅ Advised Claude4 to abort iron mining (server bug = no drops)
+5. ✅ Ordered all bots to base (10,87,5) for standby
+6. ✅ Sent clear message to human admin requesting intervention
+
+**Current Status - AWAITING HUMAN INTERVENTION**:
+- All bots ordered to base location (10,87,5) for standby
+- Phase 6 tasks frozen until server fixed OR items provided via /give
+- Team aware of situation and waiting for admin action
+
+**Required Human Action (URGENT)**:
+```
+/give @a ender_pearl 12
+/give @a blaze_rod 7
+/give @a bread 64
+```
+OR fix server item entity spawning (root cause of all issues)
+
+---
+
 ## Session 40 Status Update (2026-02-17)
 
 ### Current Situation - CRITICAL BUGS PERSIST
