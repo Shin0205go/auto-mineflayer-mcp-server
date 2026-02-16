@@ -216,7 +216,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
     target = entities.find(e => {
       if (!e || e === bot.entity) return false;
       const dist = e.position.distanceTo(bot.entity.position);
-      if (dist > 32) return false;
+      if (dist > 64) return false;
 
       const name = (e.name || "").toLowerCase();
       const displayName = ((e as any).displayName || "").toLowerCase();
@@ -250,12 +250,14 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
     const goal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2);
     bot.pathfinder.setGoal(goal);
 
+    // Scale timeout based on distance (1s per 4 blocks, min 5s, max 20s)
+    const approachTimeout = Math.min(20000, Math.max(5000, Math.ceil(distance / 4) * 1000));
     // Wait for movement with proper tracking
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(() => {
         bot.pathfinder.setGoal(null);
         resolve();
-      }, 5000);
+      }, approachTimeout);
 
       const check = setInterval(() => {
         // Re-check target position (it may have moved)
@@ -411,7 +413,7 @@ export async function fight(
       const candidates = entities.filter(e => {
         if (!e || e === bot.entity) return false;
         const dist = e.position.distanceTo(bot.entity.position);
-        if (dist > 48) return false;
+        if (dist > 64) return false;
 
         // Check various name properties
         const eName = e.name?.toLowerCase() || "";
