@@ -194,6 +194,19 @@ export async function sleep(managed: ManagedBot): Promise<string> {
 export async function attack(managed: ManagedBot, entityName?: string): Promise<string> {
   const bot = managed.bot;
 
+  // Auto-equip best weapon before attacking
+  const weaponPriority = [
+    "netherite_sword", "diamond_sword", "iron_sword", "stone_sword", "wooden_sword",
+    "netherite_axe", "diamond_axe", "iron_axe", "stone_axe", "wooden_axe",
+  ];
+  for (const weaponName of weaponPriority) {
+    const weapon = bot.inventory.items().find(i => i.name === weaponName);
+    if (weapon) {
+      try { await bot.equip(weapon, "hand"); } catch (_) { /* ignore equip errors */ }
+      break;
+    }
+  }
+
   // Find target
   let target = null;
   const entities = Object.values(bot.entities);
