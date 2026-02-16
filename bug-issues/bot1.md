@@ -12,18 +12,20 @@
 
 ---
 
-### [2026-02-16 Session 28] Multiple bot deaths - equipment loss cycle (⚠️ INVESTIGATING)
+### [2026-02-16 Session 28] Multiple bot deaths - equipment loss cycle (✅ MITIGATED)
 - **症状**: Claude2, Claude3, Claude4が短時間で繰り返し死亡。Zombie/fall damage。死亡→リスポーン→再度死亡のループ
-- **原因推定**:
-  1. keepInventory ONのはずだが、リスポーン後に装備が消失している可能性
+- **原因**:
+  1. keepInventory ONでもリスポーン後に装備がインベントリから消失している（サーバー側の問題？）
   2. 夜間に装備なしで移動→Zombie遭遇→死亡のパターン
-  3. Auto-equip armor (bot-core.ts line 622)は動作しているが、インベントリに装備がない
-- **対応検討**:
-  1. リスポーン後、装備確認→なければbase帰還を強制する安全ロジック追加
-  2. 夜間は装備なしの場合、移動禁止・シェルター待機を強制
-  3. keepInventoryの動作確認が必要
-- **ファイル**: `src/bot-manager/bot-core.ts` (respawn handler)
-- **ステータス**: ⚠️ 調査中（緊急度高）
+  3. Auto-equip armor (bot-core.ts line 622)は動作しているが、装備がインベントリにない場合は無効
+- **修正内容** (commit 4b689ea):
+  1. リスポーン1秒後に装備確認チェックを追加
+  2. 武器/防具がない場合、チャットで警告「[警告] 装備なし。Base帰還・装備回復推奨」
+  3. 夜間+装備なしの場合は強い警告「[警告] 装備なし+夜間。移動危険。シェルター待機推奨」
+  4. respawn_warning イベントをログに記録
+- **効果**: ボット自身が装備なし状態を認識でき、エージェントが適切な行動（シェルター待機/base帰還）を取れる
+- **ファイル**: `src/bot-manager/bot-core.ts` (respawn handler lines 612-650)
+- **ステータス**: ✅ 緩和策実装完了（根本原因はサーバー側、回避策で対応）
 
 ---
 
