@@ -491,17 +491,16 @@ export class BotCore extends EventEmitter {
             autoSwimInterval = setInterval(() => {
               swimTicks++;
               const currentOxygen = bot.oxygenLevel ?? 20;
-              const currentFeet = bot.blockAt(bot.entity.position.floored());
-              const stillInWater = currentFeet?.name === "water";
-              // Stop if: oxygen recovered (>19), out of water, or timeout (30s)
-              if (currentOxygen > 19 || !stillInWater || swimTicks >= 60) { // 60 * 500ms = 30s max
+              // Stop if oxygen recovered OR max time reached (30s)
+              // Removed stillInWater check to keep swimming until oxygen is restored
+              if (currentOxygen > 19 || swimTicks >= 60) { // 60 * 500ms = 30s max
                 bot.setControlState("jump", false);
                 bot.setControlState("sprint", false);
                 bot.setControlState("forward", false);
                 autoSwimActive = false;
                 if (autoSwimInterval) clearInterval(autoSwimInterval);
                 autoSwimInterval = null;
-                const reason = currentOxygen > 19 ? "oxygen recovered" : (stillInWater ? "timeout" : "out of water");
+                const reason = currentOxygen > 19 ? "oxygen recovered" : "timeout";
                 console.error(`[AutoSwim] Stopped swimming (${reason}) after ${swimTicks * 0.5}s, oxygen: ${currentOxygen}/20`);
               } else {
                 // Keep looking up while swimming
