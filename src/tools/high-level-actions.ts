@@ -747,6 +747,17 @@ export async function minecraft_explore_area(
       // Small delay to prevent overwhelming the connection
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      // Abort enderman hunt if it becomes daytime (endermen despawn in sunlight)
+      if (target?.toLowerCase() === "enderman") {
+        const timeBot = botManager.getBot(username);
+        if (timeBot) {
+          const timeOfDay = timeBot.time?.timeOfDay ?? 0;
+          if (timeOfDay < 12541 || timeOfDay > 23458) {
+            return `Enderman hunt ended: daytime started (time: ${timeOfDay}). Explored ${visitedPoints} points. Findings: ${findings.length > 0 ? findings.join(", ") : "none"}. Wait for night or do other tasks.`;
+          }
+        }
+      }
+
       // Categorize target type to avoid false matches
       const knownBiomes = ["plains", "forest", "taiga", "desert", "savanna", "jungle", "swamp", "mountains", "ocean", "river", "beach", "snowy", "ice", "mushroom", "nether", "end"];
       const knownEntities = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "cat", "ocelot", "parrot", "wolf", "llama", "turtle", "panda", "fox", "bee", "axolotl", "frog", "goat", "zombie", "skeleton", "spider", "creeper", "enderman"];
