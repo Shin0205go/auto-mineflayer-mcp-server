@@ -12,6 +12,17 @@
 
 ---
 
+### [2026-02-16 Session 21] /give command items not appearing in bot inventory (Known Issue)
+- **症状**: `/give Claude2 bread 10` でサーバーは「Gave 10 [Bread] to Claude2」と表示するが、Claude2のMineflayerボットのインベントリに反映されない
+- **再現**: /give bread、/give cooked_beef 両方で発生。disconnect→reconnect後も変わらず
+- **回避策**: チェストに入れて `minecraft_take_from_chest` で取得すれば正常動作
+- **原因**: Mineflayerが `/give` による `set_slot` パケットを正しく処理していない可能性。Mineflayerのバグか、パケット順序の問題
+- **対応**: コード修正は困難（Mineflayer内部の問題）。チェスト経由で物資を渡す運用で回避
+- **ファイル**: N/A（Mineflayerライブラリ内部）
+- **ステータス**: ⚠️ 回避策あり（チェスト経由）
+
+---
+
 ### [2026-02-16 Session 21] Portal entry fails — bot stands on obsidian frame instead of inside portal (✅ FIXED)
 - **症状**: Claude6がネザーポータルに入ろうとすると、足元がobsidian（フレーム）で頭がnether_portalブロックの状態で止まり、転送されずタイムアウト
 - **原因**: `enterPortal()`が`GoalBlock`でポータルブロック座標に移動するが、pathfinderはポータルブロックの上（=obsidianフレーム上）に立ってしまう。また1秒だけforward歩行して止まるため、ポータル内に確実に入れていなかった
