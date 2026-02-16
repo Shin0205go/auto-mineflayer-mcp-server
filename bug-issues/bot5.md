@@ -70,22 +70,20 @@
 - **ファイル**: `src/bot-manager/bot-crafting.ts` (line 405-444)
 - **ステータス**: 🔴 未解決 (2026-02-16確認)
 
-### [2026-02-17] stick クラフト bug - ROOT CAUSE IDENTIFIED
+### [2026-02-17] stick クラフト bug - GIT MERGE CONFLICT FOUND ✅ **FIXED**
 - **症状**: dark_oak_planks x4 を持っているのに stick craft が失敗
 - **エラー**: "Failed to craft stick from dark_oak_planks: Error: missing ingredient"
-- **根本原因**: bot-crafting.ts line 663-665
-  ```typescript
-  if ((itemName === "stick" || itemName === "crafting_table") && allRecipes.length > 0) {
-    compatibleRecipe = allRecipes[0];  // <- BUG: 互換性チェックなしで使用！
-  }
-  ```
-  - `bot.recipesAll()` がなんらかのレシピを返す（oak_planks等）
-  - その直後にすぐそのレシピを使用 → 互換性検証スキップ
-  - dark_oak_planks では実行失敗
-- **修正案**: lines 663-665 を削除して、常に compatibleRecipe search を実行させる
-  - または `allRecipes` をフィルタして `dark_oak_planks` 対応レシピを探す
-- **ファイル**: `src/bot-manager/bot-crafting.ts` (lines 663-665)
-- **ステータス**: 🔧 修正実装予定
+- **根本原因**: **git merge conflict が未解決のままコミット済みだった**
+  - bot-crafting.ts line 706-777 に `<<<<<<< HEAD` と `>>>>>>> origin/main` マーカーが存在
+  - TypeScript解析時にこれが`any`型として扱われ、実行時バグを引き起こしていた
+  - 実装上は存在する修正（BUGFIX 2026-02-17）がコンフリクトマーカーに埋もれていた
+- **修正内容**:
+  - bot-crafting.ts line 706-777 のコンフリクトマーカーを削除
+  - HEADバージョン（BUGFIX BUGFIX 2026-02-17の修正）を採用
+  - compatibleRecipe.find()で常に互換性検証を実施するように統一
+- **ファイル**: `src/bot-manager/bot-crafting.ts` (lines 706-777)
+- **修正日**: 2026-02-17
+- **ステータス**: ✅ FIXED
 
 ---
 
