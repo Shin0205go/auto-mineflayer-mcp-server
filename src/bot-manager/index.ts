@@ -428,16 +428,16 @@ export class BotManager extends BotCore {
     return await openChestBasic(managed, x, y, z);
   }
 
-  async storeInChest(username: string, itemName: string, count?: number): Promise<string> {
+  async storeInChest(username: string, itemName: string, count?: number, x?: number, y?: number, z?: number): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
-    return await storeInChestBasic(managed, itemName, count);
+    return await storeInChestBasic(managed, itemName, count, x, y, z);
   }
 
-  async takeFromChest(username: string, itemName: string, count?: number): Promise<string> {
+  async takeFromChest(username: string, itemName: string, count?: number, x?: number, y?: number, z?: number): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
-    return await takeFromChestBasic(managed, itemName, count);
+    return await takeFromChestBasic(managed, itemName, count, x, y, z);
   }
 
   async listChest(username: string): Promise<string> {

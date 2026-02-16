@@ -24,7 +24,7 @@ export const storageTools = {
   },
 
   minecraft_take_from_chest: {
-    description: "Take items from a nearby chest (within 4 blocks). DO NOT call minecraft_open_chest first - this tool opens the chest automatically.",
+    description: "Take items from a nearby chest (within 4 blocks). DO NOT call minecraft_open_chest first - this tool opens the chest automatically. Optionally specify chest coordinates to target a specific chest.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -36,13 +36,25 @@ export const storageTools = {
           type: "number",
           description: "Number of items to take (default: all)",
         },
+        x: {
+          type: "number",
+          description: "X coordinate of chest (optional, uses nearest if omitted)",
+        },
+        y: {
+          type: "number",
+          description: "Y coordinate of chest (optional, uses nearest if omitted)",
+        },
+        z: {
+          type: "number",
+          description: "Z coordinate of chest (optional, uses nearest if omitted)",
+        },
       },
       required: ["item_name"],
     },
   },
 
   minecraft_store_in_chest: {
-    description: "Store items from inventory into a nearby chest (within 4 blocks). DO NOT call minecraft_open_chest first - this tool opens the chest automatically.",
+    description: "Store items from inventory into a nearby chest (within 4 blocks). DO NOT call minecraft_open_chest first - this tool opens the chest automatically. Optionally specify chest coordinates to target a specific chest.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -53,6 +65,18 @@ export const storageTools = {
         count: {
           type: "number",
           description: "Number of items to store (default: all)",
+        },
+        x: {
+          type: "number",
+          description: "X coordinate of chest (optional, uses nearest if omitted)",
+        },
+        y: {
+          type: "number",
+          description: "Y coordinate of chest (optional, uses nearest if omitted)",
+        },
+        z: {
+          type: "number",
+          description: "Z coordinate of chest (optional, uses nearest if omitted)",
         },
       },
       required: ["item_name"],
@@ -86,13 +110,19 @@ export async function handleStorageTool(
     case "minecraft_take_from_chest": {
       const itemName = args.item_name as string;
       const count = args.count as number | undefined;
-      return await botManager.takeFromChest(username, itemName, count);
+      const tx = args.x as number | undefined;
+      const ty = args.y as number | undefined;
+      const tz = args.z as number | undefined;
+      return await botManager.takeFromChest(username, itemName, count, tx, ty, tz);
     }
 
     case "minecraft_store_in_chest": {
       const itemName = args.item_name as string;
       const count = args.count as number | undefined;
-      return await botManager.storeInChest(username, itemName, count);
+      const sx = args.x as number | undefined;
+      const sy = args.y as number | undefined;
+      const sz = args.z as number | undefined;
+      return await botManager.storeInChest(username, itemName, count, sx, sy, sz);
     }
 
     case "minecraft_list_chest": {
