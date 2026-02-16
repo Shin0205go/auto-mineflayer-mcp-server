@@ -94,6 +94,15 @@ export async function listAllRecipes(_managed: ManagedBot, category?: string): P
       { name: "torch", ingredients: "1 coal + 1 stick" },
       { name: "white_bed", ingredients: "3 white_wool + 3 planks" },
       { name: "bucket", ingredients: "3 iron_ingot" },
+      { name: "flint_and_steel", ingredients: "1 iron_ingot + 1 flint (no table needed)" },
+      { name: "paper", ingredients: "3 sugar_cane" },
+      { name: "book", ingredients: "3 paper + 1 leather" },
+      { name: "bookshelf", ingredients: "6 planks + 3 books" },
+      { name: "enchanting_table", ingredients: "2 diamond + 4 obsidian + 1 book" },
+    ],
+    nether: [
+      { name: "ender_eye", ingredients: "1 ender_pearl + 1 blaze_powder (no table needed)" },
+      { name: "blaze_powder", ingredients: "1 blaze_rod (no table needed)" },
     ],
     food: [
       { name: "bread", ingredients: "3 wheat" },
@@ -174,6 +183,18 @@ export async function listCraftableNow(managed: ManagedBot): Promise<string> {
     { name: "iron_chestplate", needs: { iron_ingot: 8 } },
     { name: "iron_leggings", needs: { iron_ingot: 7 } },
     { name: "iron_boots", needs: { iron_ingot: 4 } },
+    { name: "flint_and_steel", needs: { iron_ingot: 1, flint: 1 }, noTable: true },
+    { name: "arrow", needs: { flint: 1, stick: 1, feather: 1 }, output: 4 },
+    { name: "bone_meal", needs: { bone: 1 }, noTable: true, output: 3 },
+    { name: "ender_eye", needs: { ender_pearl: 1, blaze_powder: 1 }, noTable: true },
+    { name: "blaze_powder", needs: { blaze_rod: 1 }, noTable: true, output: 2 },
+    { name: "paper", needs: { sugar_cane: 3 }, output: 3 },
+    { name: "book", needs: { paper: 3, leather: 1 } },
+    { name: "bookshelf", needs: { oak_planks: 6, book: 3 }, alt: ["birch_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"] },
+    { name: "enchanting_table", needs: { diamond: 2, obsidian: 4, book: 1 } },
+    { name: "diamond_sword", needs: { diamond: 2, stick: 1 } },
+    { name: "diamond_axe", needs: { diamond: 3, stick: 2 } },
+    { name: "golden_pickaxe", needs: { gold_ingot: 3, stick: 2 } },
   ];
 
   const craftable: string[] = [];
@@ -475,6 +496,42 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     }
 
     // Manual recipe fallback for common items when recipesAll returns nothing
+    // Manual recipe fallback for Phase 6+ items
+    const shapelessRecipes: Record<string, { inputs: Record<string, number>; outputCount: number; requiresTable: boolean }> = {
+      "flint_and_steel": { inputs: { iron_ingot: 1, flint: 1 }, outputCount: 1, requiresTable: false },
+      "ender_eye": { inputs: { ender_pearl: 1, blaze_powder: 1 }, outputCount: 1, requiresTable: false },
+      "blaze_powder": { inputs: { blaze_rod: 1 }, outputCount: 2, requiresTable: false },
+      "paper": { inputs: { sugar_cane: 3 }, outputCount: 3, requiresTable: true },
+      "book": { inputs: { paper: 3, leather: 1 }, outputCount: 1, requiresTable: true },
+      "arrow": { inputs: { flint: 1, stick: 1, feather: 1 }, outputCount: 4, requiresTable: true },
+    };
+
+    if (allRecipes.length === 0 && shapelessRecipes[itemName]) {
+      const recipe = shapelessRecipes[itemName];
+      console.error(`[Craft] No recipes found for ${itemName}, using manual shapeless crafting...`);
+
+      const ingredientIds: number[] = [];
+      const delta: { id: number; count: number }[] = [{ id: item.id, count: recipe.outputCount }];
+
+      for (const [ingredientName, count] of Object.entries(recipe.inputs)) {
+        const ingredientItem = mcData.itemsByName[ingredientName];
+        if (!ingredientItem) throw new Error(`Cannot find item data for ${ingredientName}`);
+        const have = inventoryItems.filter(i => i.name === ingredientName).reduce((s, i) => s + i.count, 0);
+        if (have < count) throw new Error(`Cannot craft ${itemName}: Need ${count} ${ingredientName}, have ${have}`);
+        for (let j = 0; j < count; j++) ingredientIds.push(ingredientItem.id);
+        delta.push({ id: ingredientItem.id, count: -count });
+      }
+
+      const manualRecipe = {
+        result: { id: item.id, count: recipe.outputCount },
+        inShape: [ingredientIds],
+        ingredients: ingredientIds,
+        delta,
+        requiresTable: recipe.requiresTable
+      };
+      allRecipes = [manualRecipe as any];
+    }
+
     if (allRecipes.length === 0 && (itemName === "bread" || itemName === "bone_meal")) {
       console.error(`[Craft] No recipes found for ${itemName}, using manual crafting...`);
 
