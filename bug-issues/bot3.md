@@ -92,3 +92,42 @@
 - **影響**: チェスト操作、資源収集、建築など位置指定が必要な全ての操作が困難
 - **調査予定**: `src/bot-manager/bot-movement.ts`のmoveTo関数を確認
 
+### [2026-02-16] minecraft_eatコマンドがタイムアウト
+- **症状**: `minecraft_eat(food_name="wheat")`を実行すると「Error: Promise timed out」が発生。最初の1回は成功して「Hunger: 12/20」が返るが、2回目以降のeat呼び出しが全てタイムアウト。
+- **原因**:
+  - 不明（Mineflayerの`bot.consume()`のイベント待機がタイムアウト？）
+  - または食料が完全に消費されてない？
+- **再現手順**:
+  1. `minecraft_eat(food_name="wheat")` → 成功（Hunger 15→12）
+  2. `minecraft_eat(food_name="wheat")` → 「Promise timed out」エラー
+  3. `minecraft_eat(food_name="wheat")` → 同じくタイムアウト
+- **回避策**: bread（パン）を食べるか、コマンドをスキップ
+- **影響**: 食料復旧が困難（HPが2.4/20で危機的）
+
+### [2026-02-16] 致命的: Wheat消失sync bug (CRITICAL - Game Breaking)
+- **症状**:
+  - wheat_seeds植え→bone_meal加速→wheat表示→即座に消失のループ
+  - dig_blockでwheatアイテムが取得されない（seedsしか取得不可）
+  - wheatを取得してもinventoryに反映されない
+  - 成熟wheatが表示されるがインベントリには追加されない
+- **影響度**: 🔴 CRITICAL - ゲーム進行不可
+  - Claude3 HP: 2.5/20, Claude4 HP: 8/20, Claude7 HP: 7.7/20 (全員食料ゼロ)
+  - Phase 2食料安定化が完全に阻止されている
+  - エンダードラゴン討伐まで進めない
+- **根本原因**:
+  - サーバー側のitem/blockアイテム同期エラー（推測）
+  - wheat_statesの状態管理が破損している可能性
+  - または吸収状態のwheatブロックが正常にitemドロップされていない
+- **再現手順**:
+  1. farmlandにwheat_seedsを植える
+  2. bone_mealを使用して加速
+  3. wheatブロックが一瞬表示される
+  4. 即座に消失（playersのinventoryに移らず、ワールドから削除される）
+  5. dig_blockしてもseedしか取得できない
+- **解決策**:
+  - ⚠️ サーバー再起動が必須
+  - または全ボット再接続が必要
+  - コード修正では解決不可（サーバー側の問題）
+- **ファイル**: N/A (サーバー側issue)
+- **関連報告**: Claude5, Claude4, Claude6が同じ現象を確認
+
