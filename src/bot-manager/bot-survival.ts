@@ -194,6 +194,18 @@ export async function sleep(managed: ManagedBot): Promise<string> {
 export async function attack(managed: ManagedBot, entityName?: string): Promise<string> {
   const bot = managed.bot;
 
+  // Auto-eat before combat if HP is not full and food is available
+  if (bot.health < 16 && bot.food < 20) {
+    const foodItem = bot.inventory.items().find(i => isFoodItem(bot, i.name));
+    if (foodItem) {
+      try {
+        await bot.equip(foodItem, "hand");
+        await bot.consume();
+        console.error(`[Attack] Auto-ate ${foodItem.name} before combat (HP: ${bot.health}, hunger: ${bot.food})`);
+      } catch (_) { /* ignore eat errors */ }
+    }
+  }
+
   // Auto-equip best armor and weapon before attacking
   try { await equipArmor(bot); } catch (_) { /* ignore armor equip errors */ }
 
@@ -430,6 +442,18 @@ export async function fight(
   fleeHealthThreshold: number = 12
 ): Promise<string> {
   const bot = managed.bot;
+
+  // Step 0: Auto-eat before combat if HP is not full and food is available
+  if (bot.health < 16 && bot.food < 20) {
+    const foodItem = bot.inventory.items().find(i => isFoodItem(bot, i.name));
+    if (foodItem) {
+      try {
+        await bot.equip(foodItem, "hand");
+        await bot.consume();
+        console.error(`[Fight] Auto-ate ${foodItem.name} before combat (HP: ${bot.health}, hunger: ${bot.food})`);
+      } catch (_) { /* ignore eat errors */ }
+    }
+  }
 
   // Step 1: Equip best armor and weapon
   try { await equipArmor(bot); } catch (_) { /* ignore armor equip errors */ }
