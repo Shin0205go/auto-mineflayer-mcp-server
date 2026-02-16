@@ -210,7 +210,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
   }
 
   // Find target
-  let target = null;
+  let target: any = null;
   const entities = Object.values(bot.entities);
 
   if (entityName) {
@@ -245,6 +245,28 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
   }
 
   let distance = target.position.distanceTo(bot.entity.position);
+
+  // Enderman strategy: stare at them to provoke, then wait for them to come to us
+  if (target.name === "enderman" && distance > 4 && distance <= 64) {
+    console.error(`[Attack] Enderman at ${distance.toFixed(1)} blocks — provoking by staring at eyes...`);
+    // Look at the enderman's eye level to provoke it
+    await bot.lookAt(target.position.offset(0, target.height * 0.9, 0));
+    // Wait for it to come to us (angry enderman will teleport close and attack)
+    for (let i = 0; i < 30; i++) { // 30 * 300ms = 9s max wait
+      await new Promise(r => setTimeout(r, 300));
+      // Keep looking at the enderman
+      const currentTarget = Object.values(bot.entities).find(e => e.id === target.id);
+      if (!currentTarget) break; // enderman died or despawned
+      await bot.lookAt(currentTarget.position.offset(0, currentTarget.height * 0.9, 0));
+      const currentDist = currentTarget.position.distanceTo(bot.entity.position);
+      if (currentDist < 4) {
+        console.error(`[Attack] Enderman provoked, now ${currentDist.toFixed(1)} blocks away — attacking!`);
+        target = currentTarget;
+        break;
+      }
+    }
+    distance = target.position.distanceTo(bot.entity.position);
+  }
 
   // Move closer if needed
   if (distance > 3) {
