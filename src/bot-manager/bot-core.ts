@@ -2,7 +2,7 @@ import mineflayer from "mineflayer";
 import { Vec3 } from "vec3";
 import { EventEmitter } from "events";
 import pkg from "mineflayer-pathfinder";
-const { pathfinder, Movements } = pkg;
+const { pathfinder, Movements, goals } = pkg;
 import prismarineViewer from "prismarine-viewer";
 const { mineflayer: mineflayerViewer } = prismarineViewer;
 import type { BotConfig, ManagedBot, GameEvent } from "./types.js";
@@ -471,6 +471,20 @@ export class BotCore extends EventEmitter {
             addEvent("damaged", `Took damage! Health: ${bot.health?.toFixed(1)}/20`, {
               health: bot.health,
             });
+            // Auto-flee when HP drops to 10 or below after taking damage
+            if (bot.health <= 10) {
+              const nearestHostile = Object.values(bot.entities)
+                .filter(e => e !== bot.entity && e.name && isHostileMob(bot, e.name.toLowerCase()))
+                .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position))[0];
+              if (nearestHostile) {
+                const dir = bot.entity.position.minus(nearestHostile.position).normalize();
+                const fleeTarget = bot.entity.position.plus(dir.scaled(15));
+                console.error(`[AutoFlee] HP=${bot.health.toFixed(1)}, fleeing from ${nearestHostile.name}`);
+                try {
+                  bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
+                } catch (_) { /* ignore pathfinder errors during auto-flee */ }
+              }
+            }
           } else if (entity.position.distanceTo(bot.entity.position) < 10) {
             addEvent("entity_hurt", `${entity.name || "Entity"} took damage nearby`, {
               entityName: entity.name,
