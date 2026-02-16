@@ -91,23 +91,23 @@
 
 ---
 
-### [2026-02-16] ネザーポータル進入機能がない（調査中）
+### [2026-02-16] ネザーポータル進入機能がない（✅解決）
 - **症状**: ネザーポータルブロックの近くに移動しても、ネザーに自動転送されない
 - **試行**:
   - `move_to(8, 107, -3)` でポータルブロック座標に移動
   - ポータルブロック上で6秒待機
   - 結果: テレポート発生せず、オーバーワールドに留まる
-- **原因**: Mineflayerでネザーポータルに入るには、ポータルブロックの中に立ち続ける必要があるが、専用のツールが存在しない
-- **推定実装**:
-  1. ポータルブロックを検出
-  2. ポータルの中心座標に移動
-  3. `bot.setControlState('forward', true)` でポータル内に押し込む
-  4. ディメンション変更イベント(`spawn`)を待つ
+- **原因**: `minecraft_enter_portal` ツール定義は存在するが、ハンドラーが未実装だった
+  - `src/bot-manager/bot-movement.ts` に `enterPortal` 関数は存在
+  - `src/bot-manager/index.ts` でインポート・エクスポートされていない
+  - `src/tools/movement.ts` の `handleMovementTool` にケースが未追加
 - **影響**: Phase 6（ネザー）でネザーに突入できない。ブレイズロッド・エンダーパール収集不可
-- **次のアクション**:
-  1. `src/tools/movement.ts` に `minecraft_enter_portal` ツールを追加
-  2. またはBashで `/execute in minecraft:the_nether run tp @s ~ ~ ~` コマンドを使用
-- **ファイル**: `src/tools/movement.ts`
+- **修正**: ✅完了
+  1. `src/bot-manager/index.ts`: `enterPortal` をインポート（line 28）
+  2. `src/bot-manager/index.ts`: `BotManager.enterPortal` メソッド追加（line 166-170）
+  3. `src/tools/movement.ts`: `minecraft_enter_portal` ケース追加（line 109-112）
+  4. ビルド成功
+- **ファイル**: `src/tools/movement.ts`, `src/bot-manager/index.ts`
 
 ---
 
