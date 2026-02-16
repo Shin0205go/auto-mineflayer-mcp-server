@@ -656,7 +656,7 @@ export async function minecraft_explore_area(
   const knownEntitiesForStep = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "cat", "ocelot", "parrot", "wolf", "llama", "turtle", "panda", "fox", "bee", "axolotl", "frog", "goat", "zombie", "skeleton", "spider", "creeper", "enderman", "blaze"];
   const isEntityHunt = target && knownEntitiesForStep.some(e => target.toLowerCase().includes(e));
   const stepSize = isEntityHunt ? 20 : 5; // Larger steps for entity hunting (32-block detection range)
-  const maxVisitedPoints = Math.min(50, Math.floor(radius / stepSize)); // Limit exploration points
+  const maxVisitedPoints = Math.min(50, Math.ceil((radius * 2 / stepSize) ** 2 / 4)); // Cover area proportional to radius
   const startTime = Date.now();
   const maxDuration = 120000; // 2 minutes max
 
