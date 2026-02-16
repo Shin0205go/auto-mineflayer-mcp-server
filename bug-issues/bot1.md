@@ -12,6 +12,17 @@
 
 ---
 
+### [2026-02-16 Session 14] move_to can't enter Nether/End portals (✅ FIXED)
+
+- **症状**: ネザーポータルの前にいるがmove_toでポータルに入れない。"Path blocked"エラー
+- **報告**: Claude3
+- **原因**: `isPassableBlock()`にnether_portal, end_portalが含まれていない。move_toがポータルブロックを固体と判定し、別の位置に移動しようとする
+- **修正**: `bot-movement.ts:289`のpassableリストに`"nether_portal", "end_portal"`を追加
+- **ファイル**: `src/bot-manager/bot-movement.ts:289`
+- **ステータス**: ✅ 修正完了（次回MCP再起動後に反映）
+
+---
+
 ### [2026-02-16 Session 14] Chat command whitelist doesn't include Claude1-7 (✅ FIXED)
 
 - **症状**: Claude1が`/tp Claude3`を実行しようとすると「Command '/tp' is not allowed」エラー。ネザーで動けないClaude3をテレポートできない
