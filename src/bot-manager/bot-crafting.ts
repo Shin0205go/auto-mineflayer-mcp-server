@@ -1520,8 +1520,11 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     throw new Error(`No ${itemName} in inventory. Have: ${inventory}`);
   }
 
-  // Find fuel (coal, charcoal, wood, etc.) using dynamic helper
-  const fuel = bot.inventory.items().find(i => isFuelItem(i.name));
+  // Find fuel - prefer coal/charcoal over wood to avoid wasting building materials
+  const allFuel = bot.inventory.items().filter(i => isFuelItem(i.name));
+  const fuel = allFuel.find(i => i.name === "coal" || i.name === "charcoal")
+    || allFuel.find(i => i.name === "lava_bucket" || i.name === "dried_kelp_block")
+    || allFuel[0];
   if (!fuel) {
     throw new Error("No fuel in inventory. Need coal, charcoal, or wood.");
   }
