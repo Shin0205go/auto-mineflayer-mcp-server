@@ -736,10 +736,32 @@ export async function eat(managed: ManagedBot, foodName?: string): Promise<strin
   }
 
   try {
+    console.error(`[Eat] Equipping ${foodItem.name}...`);
     await bot.equip(foodItem, "hand");
-    await bot.consume();
+
+    // Verify item is in hand
+    const held = bot.heldItem;
+    if (!held || held.name !== foodItem.name) {
+      throw new Error(`Failed to equip ${foodItem.name}. Held item: ${held?.name || "none"}`);
+    }
+
+    console.error(`[Eat] Consuming ${foodItem.name}...`);
+
+    // Add timeout to consume operation (30 seconds max)
+    const consumePromise = bot.consume();
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Eat timeout after 30 seconds")), 30000)
+    );
+
+    await Promise.race([consumePromise, timeoutPromise]);
+
+    // Wait a moment for hunger to update
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    console.error(`[Eat] Successfully consumed ${foodItem.name}. Hunger: ${bot.food}/20`);
     return `Ate ${foodItem.name}. Hunger: ${bot.food}/20` + getBriefStatus(bot);
   } catch (err) {
+    console.error(`[Eat] Error: ${err}`);
     return `Failed to eat: ${err}`;
   }
 }

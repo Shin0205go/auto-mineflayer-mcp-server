@@ -248,6 +248,28 @@
   - `src/bot-manager/bot-crafting.ts` (craft 実装)
 - **ステータス**: 🔴 CRITICAL - サーバー再起動またはbot再接続が必須
 
+## [2026-02-16] stuck in stone cavern - can't place blocks or escape
+
+- **症状**: Claude4が完全に石ブロックで囲まれており、`minecraft_place_block`で crafting_table を設置できない。pillar_up も部分的にしか機能しない。
+- **再現手順**:
+  1. 接続時の座標: (140.5, 65, -146.5) - 完全に石で囲まれた空間
+  2. `minecraft_place_block("crafting_table", x, y, z)` → "Block not placed. Current block: stone" エラー
+  3. `minecraft_pillar_up(10)` → "Pillared up 0.9 blocks (Y:66→67, placed 1/5). PARTIAL: Stopped early" で止まる
+  4. `minecraft_move_to` で移動可能な方向（east）に移動しても、石に囲まれたままブロック設置不可
+- **原因推定**:
+  1. ブロック設置システムが、周囲が stone で満たされている場合に設置位置を見つけられない
+  2. または、設置座標計算が不適切で常に stone ブロックを選択
+  3. pillar_up も同じ理由で失敗している可能性
+- **影響**:
+  - crafting_table を設置できない → stone_pickaxe をクラフトできない
+  - stone_pickaxe がない → stone ブロック破壊できない
+  - enderman 狩り任務（pearl+2本）を実行不可
+- **回避策**:
+  1. Claude1 に助言を求める（リーダーの支援）
+  2. または、別のボットが crafting_table を近くに設置してくれるのを待つ
+  3. または、`minecraft_get_surroundings` で air ブロックを見つけてそこに設置
+- **ステータス**: ⚠️ 環境バグ報告済み (2026-02-16) - Claude1の確認待ち
+
 ## [2026-02-16] stick crafting with fallback recipe - still failing
 
 - **症状**: stick クラフトが「missing ingredient」で失敗し続ける。修正済み（#55）とされているが、MCPサーバーが古いコードを実行している可能性
@@ -316,4 +338,56 @@
   1. MCPサーバープロセスを再起動 (`kill` + `npm run start:mcp-ws`)
   2. または、全MCPサーバーを完全に停止・再起動
 - **ステータス**: ⚠️ MCPサーバー再起動待ち - コード修正は済み (line 416-418)
+
+## [2026-02-17] Ender Pearl Drop Bug - CRITICAL SESSION 37
+
+- **症状**: Endermanを倒しても絶対にender_pearlがドロップしない。複数ボット(Claude5, Claude7)が同じバグを報告。
+- **再現**:
+  1. Endermanを見つけてダイヤソード等で倒す
+  2. メッセージ: "Killed enderman with diamond_sword" が表示される
+  3. BUT: ender_pearl は地面に現れない
+  4. `minecraft_collect_items()` でも何も拾えない
+- **確認事項**:
+  - Gamerules: doMobLoot=true, doEntityDrops=true, doTileDrops=true (全て確認済み)
+  - サーバー設定は正常（他のモブドロップは正常？）
+- **影響**: Phase 6が完全に進行不可。pearl 12個が絶対に集められない
+- **前回報告**: Session 33でも同じバグが報告されていた。その時は「サーバー側バグ」と判定されたが、修正されていない
+- **原因推定**:
+  1. サーバー側のenderman drop処理のバグ
+  2. OR: Mineflayerのendermanドロップ検出の問題
+  3. OR: アイテム衝突でpearl がスポーンできない
+- **回避策**: なし。サーバーの根本的な問題で解決不可
+- **ステータス**: 🔴 CRITICAL - Session 33から未解決
+
+## [2026-02-17] Stick Crafting Bug - Dark Oak Planks Selection Issue (Continuing from #75)
+
+- **症状**: `minecraft_craft("stick")` で dark_oak_planks を優先選択してエラーになる。birch_planks等より数が少ないのに選ばれる。
+- **報告者**: Claude5
+- **所持**:  dark_oak_planks x4, birch_planks その他多数
+- **エラー**: "Failed to craft stick from dark_oak_planks: missing ingredient"
+- **推定原因**: MCPサーバーが古い コード実行（修正が反映されていない）
+- **修正状況**: code修正済み（line 416-418: find→filter+sort）だが、MCPサーバー未再起動
+- **ステータス**: ⚠️ MCPサーバー再起動待ち
+
+## [2026-02-17] Chest Disappearance Issue
+
+- **症状**: 拠点のチェスト2個が消失。特に座標(2,106,-1)のメインチェスト。ender_pearl x9が保管されていた。
+- **影響**: Phase 6用のリソース9個が失われた。チーム全体のリソース管理が混乱
+- **原因**: 不明。チェスト破壊コマンドを実行した記録はない。サーバー設定エラー？
+- **新安全位置**: (10,87,5) が指定された
+- **ステータス**: ⚠️ 原因不明 - ログ調査推奨
+
+## [2026-02-17] Claude4 Session 37 - Diamond Mining Task COMPLETED ✅
+
+- **タスク**: Phase 5 ダイヤモンド採掘（5個必要）
+- **実行内容**: Y=-16の深層でダイヤ鉱石発見・採掘
+  - 初期所持: diamond x2
+  - 新規採掘: diamond x3 (Y=-16エリア)
+  - 最終: diamond x5 ✅
+- **状態**: エンチャント台作成に必要な材料全て確保完了
+  - diamond x5 ✅
+  - obsidian x3（あと1個必要）
+  - iron_pickaxe ✅
+- **現在位置**: (28.7, -15, -6.5)
+- **ステータス**: ✅ COMPLETED - 次タスク待機中
 

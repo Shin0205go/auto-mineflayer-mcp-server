@@ -475,38 +475,38 @@ export class BotCore extends EventEmitter {
               oxygenLevel: oxygen,
             });
           }
-          // Auto swim up when oxygen is getting low (trigger early at 15 to prevent drowning)
-          if (oxygen < 15 && !autoSwimActive) {
-            const feetBlock = bot.blockAt(bot.entity.position.floored());
-            if (feetBlock?.name === "water") {
-              autoSwimActive = true;
-              console.error(`[AutoSwim] Low oxygen (${oxygen}/20), swimming up!`);
-              bot.pathfinder.setGoal(null); // Cancel current pathfinding
-              // Look straight up so forward movement swims upward
-              bot.look(bot.entity.yaw, -Math.PI / 2, true);
-              bot.setControlState("jump", true);
-              bot.setControlState("sprint", true);
-              bot.setControlState("forward", true);
-              // Keep checking every 500ms — stop only when out of water or max 15s
-              let swimTicks = 0;
-              autoSwimInterval = setInterval(() => {
-                swimTicks++;
-                const currentFeet = bot.blockAt(bot.entity.position.floored());
-                const stillInWater = currentFeet?.name === "water";
-                if (!stillInWater || swimTicks >= 30) { // 30 * 500ms = 15s max
-                  bot.setControlState("jump", false);
-                  bot.setControlState("sprint", false);
-                  bot.setControlState("forward", false);
-                  autoSwimActive = false;
-                  if (autoSwimInterval) clearInterval(autoSwimInterval);
-                  autoSwimInterval = null;
-                  console.error(`[AutoSwim] Stopped swimming (${stillInWater ? "timeout" : "out of water"}) after ${swimTicks * 0.5}s`);
-                } else {
-                  // Keep looking up while swimming
-                  bot.look(bot.entity.yaw, -Math.PI / 2, true);
-                }
-              }, 500);
-            }
+          // Auto swim up when oxygen is getting low (trigger at 18 for extra safety)
+          // Removed feet check — trigger on oxygen alone to catch all water situations
+          if (oxygen < 18 && !autoSwimActive) {
+            autoSwimActive = true;
+            console.error(`[AutoSwim] Low oxygen (${oxygen}/20), swimming up!`);
+            bot.pathfinder.setGoal(null); // Cancel current pathfinding
+            // Look straight up so forward movement swims upward
+            bot.look(bot.entity.yaw, -Math.PI / 2, true);
+            bot.setControlState("jump", true);
+            bot.setControlState("sprint", true);
+            bot.setControlState("forward", true);
+            // Keep checking every 500ms — stop when oxygen recovers or max 30s
+            let swimTicks = 0;
+            autoSwimInterval = setInterval(() => {
+              swimTicks++;
+              const currentOxygen = bot.oxygenLevel ?? 20;
+              // Stop if oxygen recovered OR max time reached (30s)
+              // Removed stillInWater check to keep swimming until oxygen is restored
+              if (currentOxygen > 19 || swimTicks >= 60) { // 60 * 500ms = 30s max
+                bot.setControlState("jump", false);
+                bot.setControlState("sprint", false);
+                bot.setControlState("forward", false);
+                autoSwimActive = false;
+                if (autoSwimInterval) clearInterval(autoSwimInterval);
+                autoSwimInterval = null;
+                const reason = currentOxygen > 19 ? "oxygen recovered" : "timeout";
+                console.error(`[AutoSwim] Stopped swimming (${reason}) after ${swimTicks * 0.5}s, oxygen: ${currentOxygen}/20`);
+              } else {
+                // Keep looking up while swimming
+                bot.look(bot.entity.yaw, -Math.PI / 2, true);
+              }
+            }, 500);
           }
           lastOxygenLevel = oxygen;
         });
@@ -548,6 +548,8 @@ export class BotCore extends EventEmitter {
               if (nearestHostile) {
                 const dir = bot.entity.position.minus(nearestHostile.position).normalize();
                 const fleeTarget = bot.entity.position.plus(dir.scaled(15));
+                // Fix Session 32: Keep Y coordinate to avoid falling off cliffs
+                fleeTarget.y = bot.entity.position.y;
                 console.error(`[AutoFlee] HP=${bot.health.toFixed(1)}, fleeing from ${nearestHostile.name}`);
                 try {
                   bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));

@@ -703,37 +703,44 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     // The planks/sticks filter below is only needed when recipesAll() returns
     // multiple native recipes and we need to pick the right one for our plank type.
     let compatibleRecipe: any;
-    if (allRecipes.length === 1) {
-      compatibleRecipe = allRecipes[0];
-      console.error(`[Craft] Using single recipe directly for ${itemName}`);
-    } else {
-      // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
-      compatibleRecipe = allRecipes.find(recipe => {
-        const delta = recipe.delta as Array<{ id: number; count: number }>;
 
-        let needsPlanks = false;
-        let needsSticks = false;
-        let planksCount = 0;
-        let sticksCount = 0;
+    // BUGFIX (2026-02-17): Always validate recipe compatibility even for simple recipes
+    // Always validate compatibility even for simple recipes, because bot.recipesAll() may
+    // return recipes that don't work with our plank types (dark_oak_planks etc).
+    // Never use allRecipes[0] directly for stick/crafting_table without validation!
 
-        for (const d of delta) {
-          if (d.count >= 0) continue;
-          const ingredientItem = mcData.items[d.id];
-          if (!ingredientItem) continue;
-          if (ingredientItem.name.endsWith("_planks")) {
-            needsPlanks = true;
-            planksCount = Math.abs(d.count);
-          } else if (ingredientItem.name === "stick") {
-            needsSticks = true;
-            sticksCount = Math.abs(d.count);
-          }
+    // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
+    // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
+    compatibleRecipe = allRecipes.find(recipe => {
+      const delta = recipe.delta as Array<{ id: number; count: number }>;
+
+      // Check if this recipe uses planks and sticks (wooden tool pattern)
+      let needsPlanks = false;
+      let needsSticks = false;
+      let planksCount = 0;
+      let sticksCount = 0;
+
+      for (const d of delta) {
+        if (d.count >= 0) continue; // Skip output items
+
+        const ingredientItem = mcData.items[d.id];
+        if (!ingredientItem) continue;
+
+        if (ingredientItem.name.endsWith("_planks")) {
+          needsPlanks = true;
+          planksCount = Math.abs(d.count);
+        } else if (ingredientItem.name === "stick") {
+          needsSticks = true;
+          sticksCount = Math.abs(d.count);
         }
+      }
 
-        const hasEnoughPlanks = planksCount === 0 || totalPlanks >= planksCount;
-        const hasEnoughSticks = sticksCount === 0 || totalSticks >= sticksCount;
-        return (needsPlanks || needsSticks) && hasEnoughPlanks && hasEnoughSticks;
-      });
-    }
+      // Verify we have enough materials
+      const hasEnoughPlanks = planksCount === 0 || totalPlanks >= planksCount;
+      const hasEnoughSticks = sticksCount === 0 || totalSticks >= sticksCount;
+
+      return (needsPlanks || needsSticks) && hasEnoughPlanks && hasEnoughSticks;
+    });
 
     if (!compatibleRecipe) {
       throw new Error(`Cannot craft ${itemName}: No compatible recipe found. Have ${totalPlanks} planks and ${totalSticks} sticks. Found ${allRecipes.length} recipes total. This may be a Minecraft version compatibility issue.`);
@@ -911,7 +918,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         }
 
         // Additional wait for inventory synchronization
-        await new Promise(resolve => setTimeout(resolve, 700));
+        // BUGFIX: Increased from 700ms to 2000ms to ensure items appear in inventory
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const invAfterSimple = bot.inventory.items().map(it => `${it.name}x${it.count}`).join(", ");
         console.error(`[Craft] Inventory after simple wooden craft: ${invAfterSimple}`);
@@ -1502,8 +1510,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           }
 
           // Wait for crafting to complete and item transfer
-          // Increased timeout to 1500ms to handle slower servers
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          // BUGFIX: Increased from 1500ms to 2500ms to fix item disappearance bug
+          await new Promise(resolve => setTimeout(resolve, 2500));
 
           // Only close window if we used a crafting table (not player inventory)
           // Closing the inventory window can cause items to drop!
@@ -1512,9 +1520,10 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             await new Promise(resolve => setTimeout(resolve, 300));
           }
 
-          // Additional wait for inventory synchronization (increased from 700ms to 1500ms to reduce false positives)
+          // Additional wait for inventory synchronization
+          // BUGFIX: Increased to 2500ms to prevent item disappearance bug
           // Simple recipes (planks, sticks) crafted in player inventory can take time to sync
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          await new Promise(resolve => setTimeout(resolve, 2500));
 
           // CRITICAL: Check if item appears in inventory
           // If not, it may have been dropped as an entity
@@ -1538,12 +1547,14 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 if (dist > 10) return false;
 
                 // Item detection - check multiple conditions for item entities
+                // Match the comprehensive detection logic from bot-items.ts
                 const isItem = entity.id !== bot.entity.id && (
                   entity.name === "item" ||
-                  entity.type === "other" ||
-                  entity.type === "object" ||
-                  ((entity.type as string) === "passive" && entity.name === "item") ||
                   entity.displayName === "Item" ||
+                  entity.displayName === "Dropped Item" ||
+                  entity.type === "object" ||
+                  entity.type === "other" ||
+                  ((entity.type as string) === "passive" && entity.name === "item") ||
                   (entity.entityType !== undefined && entity.entityType === 2)
                 );
                 return isItem;
