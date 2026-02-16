@@ -382,6 +382,36 @@ export class BotManager extends BotCore {
     return await equipItemBasic(managed.bot, itemName);
   }
 
+  async tillSoil(username: string, x: number, y: number, z: number): Promise<string> {
+    const managed = this.getBotByUsername(username);
+    if (!managed) throw new Error(`Bot ${username} not found`);
+    const bot = managed.bot;
+    const hoeTypes = ["netherite_hoe", "diamond_hoe", "iron_hoe", "stone_hoe", "wooden_hoe"];
+    const hoe = hoeTypes.map(h => bot.inventory.items().find((i: any) => i.name === h)).find(Boolean);
+    if (!hoe) {
+      throw new Error("No hoe in inventory. Craft a hoe first (e.g., stone_hoe).");
+    }
+    return await useItemOnBlockBasic(managed, x, y, z, hoe.name, this.moveTo.bind(this));
+  }
+
+  async throwItem(username: string, itemName: string, count: number = 1): Promise<string> {
+    const managed = this.getBotByUsername(username);
+    if (!managed) throw new Error(`Bot ${username} not found`);
+    const bot = managed.bot;
+    let thrown = 0;
+    for (let i = 0; i < count; i++) {
+      const item = bot.inventory.items().find((it: any) => it.name === itemName);
+      if (!item) break;
+      await bot.equip(item, "hand");
+      bot.activateItem();
+      await new Promise(r => setTimeout(r, 300));
+      bot.deactivateItem();
+      await new Promise(r => setTimeout(r, 200));
+      thrown++;
+    }
+    return `Threw ${thrown}x ${itemName}`;
+  }
+
   // ========== Storage Methods ==========
 
   async openChest(username: string, x: number, y: number, z: number): Promise<string> {

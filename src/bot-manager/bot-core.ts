@@ -289,12 +289,14 @@ export class BotCore extends EventEmitter {
           bot.chat(`/gamemode survival ${config.username}`);
         }
 
-        // Fix gamerule to enable item drops and pickup
-        // This is critical for resource gathering to work properly
-        console.error(`[BotManager] Enabling item drops and pickup via gamerules...`);
+        // Fix gamerules to enable item drops, pickup, and mob spawning
+        // This is critical for resource gathering and survival to work properly
+        // These reset on server restart, so we fix them every time a bot connects
+        console.error(`[BotManager] Enabling item drops, pickup, and mob spawning via gamerules...`);
         bot.chat("/gamerule doTileDrops true");
         bot.chat("/gamerule doMobLoot true");
         bot.chat("/gamerule doEntityDrops true");
+        bot.chat("/gamerule doMobSpawning true");
 
         const managedBot: ManagedBot = {
           bot,
@@ -361,7 +363,7 @@ export class BotCore extends EventEmitter {
 
           // Fast-path: immediate food consumption if hunger < 18 with cooldown
           const now = Date.now();
-          if (currentFood < 18 && now - lastEatTime > 30000) {
+          if (currentFood < 18 && now - lastEatTime > 10000) {
             lastEatTime = now;
             const inventory = bot.inventory.items();
 
@@ -377,10 +379,10 @@ export class BotCore extends EventEmitter {
             if (cookedFood) {
               try {
                 await bot.equip(cookedFood, 'hand');
-                bot.activateItem();
-                addEvent("health_changed", `Food consumed (${cookedFood.name}). Health: ${currentHealth.toFixed(1)}/20, Food: ${currentFood}/20`, {
+                await bot.consume();
+                addEvent("health_changed", `Auto-ate ${cookedFood.name}. Health: ${currentHealth.toFixed(1)}/20, Food: ${bot.food}/20`, {
                   health: currentHealth,
-                  food: currentFood,
+                  food: bot.food,
                   consumed: cookedFood.name,
                   resolved: true
                 });

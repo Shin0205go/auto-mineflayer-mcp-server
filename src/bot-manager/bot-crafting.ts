@@ -94,6 +94,15 @@ export async function listAllRecipes(_managed: ManagedBot, category?: string): P
       { name: "torch", ingredients: "1 coal + 1 stick" },
       { name: "white_bed", ingredients: "3 white_wool + 3 planks" },
       { name: "bucket", ingredients: "3 iron_ingot" },
+      { name: "flint_and_steel", ingredients: "1 iron_ingot + 1 flint (no table needed)" },
+      { name: "paper", ingredients: "3 sugar_cane" },
+      { name: "book", ingredients: "3 paper + 1 leather" },
+      { name: "bookshelf", ingredients: "6 planks + 3 books" },
+      { name: "enchanting_table", ingredients: "2 diamond + 4 obsidian + 1 book" },
+    ],
+    nether: [
+      { name: "ender_eye", ingredients: "1 ender_pearl + 1 blaze_powder (no table needed)" },
+      { name: "blaze_powder", ingredients: "1 blaze_rod (no table needed)" },
     ],
     food: [
       { name: "bread", ingredients: "3 wheat" },
@@ -174,6 +183,18 @@ export async function listCraftableNow(managed: ManagedBot): Promise<string> {
     { name: "iron_chestplate", needs: { iron_ingot: 8 } },
     { name: "iron_leggings", needs: { iron_ingot: 7 } },
     { name: "iron_boots", needs: { iron_ingot: 4 } },
+    { name: "flint_and_steel", needs: { iron_ingot: 1, flint: 1 }, noTable: true },
+    { name: "arrow", needs: { flint: 1, stick: 1, feather: 1 }, output: 4 },
+    { name: "bone_meal", needs: { bone: 1 }, noTable: true, output: 3 },
+    { name: "ender_eye", needs: { ender_pearl: 1, blaze_powder: 1 }, noTable: true },
+    { name: "blaze_powder", needs: { blaze_rod: 1 }, noTable: true, output: 2 },
+    { name: "paper", needs: { sugar_cane: 3 }, output: 3 },
+    { name: "book", needs: { paper: 3, leather: 1 } },
+    { name: "bookshelf", needs: { oak_planks: 6, book: 3 }, alt: ["birch_planks", "spruce_planks", "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "pale_oak_planks"] },
+    { name: "enchanting_table", needs: { diamond: 2, obsidian: 4, book: 1 } },
+    { name: "diamond_sword", needs: { diamond: 2, stick: 1 } },
+    { name: "diamond_axe", needs: { diamond: 3, stick: 2 } },
+    { name: "golden_pickaxe", needs: { gold_ingot: 3, stick: 2 } },
   ];
 
   const craftable: string[] = [];
@@ -250,23 +271,6 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
   // Check if bot is still connected
   if (!bot || !bot.entity) {
     throw new Error("Bot is not connected to the server. Please reconnect.");
-  }
-
-  // CRITICAL: Check if server has item pickup disabled
-  // This prevents wasting materials on crafting when items can't be collected
-  // Auto-clear flag after 5 minutes to allow retry (may have been temporary network issue)
-  if (managed.serverHasItemPickupDisabled === true && managed.serverHasItemPickupDisabledTimestamp) {
-    const timeSinceSet = Date.now() - managed.serverHasItemPickupDisabledTimestamp;
-    const ONE_MINUTE = 60 * 1000;
-
-    if (timeSinceSet < ONE_MINUTE) {
-      throw new Error(`Cannot craft ${itemName}: Server item pickup recently failed (${Math.floor(timeSinceSet / 1000)}s ago). Wait or disconnect/reconnect to reset. This prevents wasting materials if pickup is truly broken.`);
-    } else {
-      // Auto-clear after 5 minutes to allow retry
-      console.error(`[Craft] Clearing serverHasItemPickupDisabled flag after ${Math.floor(timeSinceSet / 1000)}s`);
-      managed.serverHasItemPickupDisabled = false;
-      managed.serverHasItemPickupDisabledTimestamp = undefined;
-    }
   }
 
   // Dynamic import of minecraft-data
@@ -491,41 +495,249 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       }
     }
 
-    // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
-    // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
-    const compatibleRecipe = allRecipes.find(recipe => {
-      const delta = recipe.delta as Array<{ id: number; count: number }>;
+    // Manual recipe fallback for common items when recipesAll returns nothing
+    // Manual recipe fallback for Phase 6+ items
+    const shapelessRecipes: Record<string, { inputs: Record<string, number>; outputCount: number; requiresTable: boolean }> = {
+      "flint_and_steel": { inputs: { iron_ingot: 1, flint: 1 }, outputCount: 1, requiresTable: false },
+      "ender_eye": { inputs: { ender_pearl: 1, blaze_powder: 1 }, outputCount: 1, requiresTable: false },
+      "blaze_powder": { inputs: { blaze_rod: 1 }, outputCount: 2, requiresTable: false },
+      "paper": { inputs: { sugar_cane: 3 }, outputCount: 3, requiresTable: true },
+      "book": { inputs: { paper: 3, leather: 1 }, outputCount: 1, requiresTable: true },
+      "arrow": { inputs: { flint: 1, stick: 1, feather: 1 }, outputCount: 4, requiresTable: true },
+    };
 
-      // Check if this recipe uses planks and sticks (wooden tool pattern)
-      let needsPlanks = false;
-      let needsSticks = false;
-      let planksCount = 0;
-      let sticksCount = 0;
+    if (allRecipes.length === 0 && shapelessRecipes[itemName]) {
+      const recipe = shapelessRecipes[itemName];
+      console.error(`[Craft] No recipes found for ${itemName}, using manual shapeless crafting...`);
 
-      for (const d of delta) {
-        if (d.count >= 0) continue; // Skip output items
+      const ingredientIds: number[] = [];
+      const delta: { id: number; count: number }[] = [{ id: item.id, count: recipe.outputCount }];
 
-        const ingredientItem = mcData.items[d.id];
-        if (!ingredientItem) continue;
-
-        if (ingredientItem.name.endsWith("_planks")) {
-          needsPlanks = true;
-          planksCount = Math.abs(d.count);
-        } else if (ingredientItem.name === "stick") {
-          needsSticks = true;
-          sticksCount = Math.abs(d.count);
-        }
+      for (const [ingredientName, count] of Object.entries(recipe.inputs)) {
+        const ingredientItem = mcData.itemsByName[ingredientName];
+        if (!ingredientItem) throw new Error(`Cannot find item data for ${ingredientName}`);
+        const have = inventoryItems.filter(i => i.name === ingredientName).reduce((s, i) => s + i.count, 0);
+        if (have < count) throw new Error(`Cannot craft ${itemName}: Need ${count} ${ingredientName}, have ${have}`);
+        for (let j = 0; j < count; j++) ingredientIds.push(ingredientItem.id);
+        delta.push({ id: ingredientItem.id, count: -count });
       }
 
-      // Verify we have enough materials
-      const hasEnoughPlanks = planksCount === 0 || totalPlanks >= planksCount;
-      const hasEnoughSticks = sticksCount === 0 || totalSticks >= sticksCount;
+      const manualRecipe = {
+        result: { id: item.id, count: recipe.outputCount },
+        inShape: [ingredientIds],
+        ingredients: ingredientIds,
+        delta,
+        requiresTable: recipe.requiresTable
+      };
+      allRecipes = [manualRecipe as any];
+    }
 
-      return (needsPlanks || needsSticks) && hasEnoughPlanks && hasEnoughSticks;
-    });
+    if (allRecipes.length === 0 && (itemName === "bread" || itemName === "bone_meal")) {
+      console.error(`[Craft] No recipes found for ${itemName}, using manual crafting...`);
 
-    if (!compatibleRecipe) {
-      throw new Error(`Cannot craft ${itemName}: No compatible recipe found. Have ${totalPlanks} planks and ${totalSticks} sticks. Found ${allRecipes.length} recipes total. This may be a Minecraft version compatibility issue.`);
+      if (itemName === "bread") {
+        const wheatItem = mcData.itemsByName["wheat"];
+        if (!wheatItem) throw new Error("Cannot find wheat item data");
+        const wheatInv = inventoryItems.filter(i => i.name === "wheat").reduce((s, i) => s + i.count, 0);
+        if (wheatInv < 3) throw new Error(`Cannot craft bread: Need 3 wheat, have ${wheatInv}`);
+
+        const manualRecipe = {
+          result: { id: item.id, count: 1 },
+          inShape: [[wheatItem.id, wheatItem.id, wheatItem.id]],
+          ingredients: [wheatItem.id, wheatItem.id, wheatItem.id],
+          delta: [
+            { id: item.id, count: 1 },
+            { id: wheatItem.id, count: -3 }
+          ],
+          requiresTable: true
+        };
+        allRecipes = [manualRecipe as any];
+      }
+
+      if (itemName === "bone_meal") {
+        const boneItem = mcData.itemsByName["bone"];
+        if (!boneItem) throw new Error("Cannot find bone item data");
+        const boneInv = inventoryItems.filter(i => i.name === "bone").reduce((s, i) => s + i.count, 0);
+        if (boneInv < 1) throw new Error(`Cannot craft bone_meal: Need 1 bone, have ${boneInv}`);
+
+        const manualRecipe = {
+          result: { id: item.id, count: 3 },
+          inShape: [[boneItem.id]],
+          ingredients: [boneItem.id],
+          delta: [
+            { id: item.id, count: 3 },
+            { id: boneItem.id, count: -1 }
+          ],
+          requiresTable: false
+        };
+        allRecipes = [manualRecipe as any];
+      }
+    }
+
+    // Manual recipe fallback for tools when recipesAll returns nothing (Mineflayer version bug)
+    // Pattern: material + stick in standard tool shapes
+    if (allRecipes.length === 0) {
+      const toolRecipes: Record<string, { material: string; shape: number[][]; sticks: number; materialCount: number }> = {
+        // Pickaxes: 3 material on top, 2 sticks below center
+        "stone_pickaxe": { material: "cobblestone", shape: [[1,1,1],[0,2,0],[0,2,0]], sticks: 2, materialCount: 3 },
+        "iron_pickaxe": { material: "iron_ingot", shape: [[1,1,1],[0,2,0],[0,2,0]], sticks: 2, materialCount: 3 },
+        "golden_pickaxe": { material: "gold_ingot", shape: [[1,1,1],[0,2,0],[0,2,0]], sticks: 2, materialCount: 3 },
+        "diamond_pickaxe": { material: "diamond", shape: [[1,1,1],[0,2,0],[0,2,0]], sticks: 2, materialCount: 3 },
+        // Axes: 2 material top-left + 1 mid-left, 2 sticks right
+        "stone_axe": { material: "cobblestone", shape: [[1,1],[1,2],[0,2]], sticks: 2, materialCount: 3 },
+        "iron_axe": { material: "iron_ingot", shape: [[1,1],[1,2],[0,2]], sticks: 2, materialCount: 3 },
+        "diamond_axe": { material: "diamond", shape: [[1,1],[1,2],[0,2]], sticks: 2, materialCount: 3 },
+        // Swords: 2 material top, 1 stick bottom
+        "stone_sword": { material: "cobblestone", shape: [[1],[1],[2]], sticks: 1, materialCount: 2 },
+        "iron_sword": { material: "iron_ingot", shape: [[1],[1],[2]], sticks: 1, materialCount: 2 },
+        "diamond_sword": { material: "diamond", shape: [[1],[1],[2]], sticks: 1, materialCount: 2 },
+        // Shovels: 1 material top, 2 sticks below
+        "stone_shovel": { material: "cobblestone", shape: [[1],[2],[2]], sticks: 2, materialCount: 1 },
+        "iron_shovel": { material: "iron_ingot", shape: [[1],[2],[2]], sticks: 2, materialCount: 1 },
+        "diamond_shovel": { material: "diamond", shape: [[1],[2],[2]], sticks: 2, materialCount: 1 },
+        // Hoes: 2 material top, 2 sticks below
+        "stone_hoe": { material: "cobblestone", shape: [[1,1],[0,2],[0,2]], sticks: 2, materialCount: 2 },
+        "iron_hoe": { material: "iron_ingot", shape: [[1,1],[0,2],[0,2]], sticks: 2, materialCount: 2 },
+        "diamond_hoe": { material: "diamond", shape: [[1,1],[0,2],[0,2]], sticks: 2, materialCount: 2 },
+        // Furnace
+        "furnace": { material: "cobblestone", shape: [[1,1,1],[1,0,1],[1,1,1]], sticks: 0, materialCount: 8 },
+      };
+
+      const toolRecipe = toolRecipes[itemName];
+      if (toolRecipe) {
+        // Find material (check compatible substitutes too)
+        let materialName = toolRecipe.material;
+        let materialItem = mcData.itemsByName[materialName];
+        const materialInv = inventoryItems.filter(i => i.name === materialName).reduce((s, i) => s + i.count, 0);
+
+        // Check cobbled_deepslate as substitute for cobblestone
+        if (materialInv < toolRecipe.materialCount && materialName === "cobblestone") {
+          const deepslateInv = inventoryItems.filter(i => i.name === "cobbled_deepslate").reduce((s, i) => s + i.count, 0);
+          if (deepslateInv >= toolRecipe.materialCount) {
+            materialName = "cobbled_deepslate";
+            materialItem = mcData.itemsByName[materialName];
+          }
+        }
+
+        const finalMaterialInv = inventoryItems.filter(i => i.name === materialName).reduce((s, i) => s + i.count, 0);
+        if (!materialItem) throw new Error(`Cannot find item data for ${materialName}`);
+        if (finalMaterialInv < toolRecipe.materialCount) throw new Error(`Cannot craft ${itemName}: Need ${toolRecipe.materialCount} ${materialName}, have ${finalMaterialInv}`);
+
+        const stickItem = mcData.itemsByName["stick"];
+        if (toolRecipe.sticks > 0) {
+          const stickInv = inventoryItems.filter(i => i.name === "stick").reduce((s, i) => s + i.count, 0);
+          if (stickInv < toolRecipe.sticks) throw new Error(`Cannot craft ${itemName}: Need ${toolRecipe.sticks} stick, have ${stickInv}`);
+        }
+
+        // Build inShape from pattern (1=material, 2=stick, 0=empty)
+        const inShape = toolRecipe.shape.map(row =>
+          row.map(cell => cell === 1 ? materialItem!.id : cell === 2 ? stickItem!.id : 0)
+        );
+        const ingredients = inShape.flat().filter(id => id !== 0);
+
+        const delta: Array<{ id: number; count: number }> = [
+          { id: item.id, count: 1 },
+          { id: materialItem.id, count: -toolRecipe.materialCount },
+        ];
+        if (toolRecipe.sticks > 0 && stickItem) {
+          delta.push({ id: stickItem.id, count: -toolRecipe.sticks });
+        }
+
+        const manualRecipe = {
+          result: { id: item.id, count: 1 },
+          inShape,
+          ingredients,
+          delta,
+          requiresTable: true
+        };
+
+        console.error(`[Craft] Manual recipe created for ${itemName} using ${materialName}`);
+        allRecipes = [manualRecipe as any];
+      }
+    }
+
+    // SPECIAL CASE: stick and crafting_table manual recipes don't use the general compatibleRecipe search
+    // They're simple 2x2 recipes that don't use crafting tables
+    let compatibleRecipe: any;
+
+    if ((itemName === "stick" || itemName === "crafting_table") && allRecipes.length > 0) {
+      // For stick/crafting_table, use the first manual recipe (already validated above)
+      compatibleRecipe = allRecipes[0];
+      console.error(`[Craft] Using manual recipe for ${itemName} directly (no compatibleRecipe search)`);
+    } else {
+      // For wooden tools, ANY planks work. Just find ANY recipe that uses planks + sticks.
+      // Mineflayer's bot.craft() will automatically substitute our planks for the recipe's planks.
+      compatibleRecipe = allRecipes.find(recipe => {
+        const delta = recipe.delta as Array<{ id: number; count: number }>;
+
+        // Check if this recipe uses planks and sticks (wooden tool pattern)
+        let needsPlanks = false;
+        let needsSticks = false;
+        let planksCount = 0;
+        let sticksCount = 0;
+
+        for (const d of delta) {
+          if (d.count >= 0) continue; // Skip output items
+
+          const ingredientItem = mcData.items[d.id];
+          if (!ingredientItem) continue;
+
+          if (ingredientItem.name.endsWith("_planks")) {
+            needsPlanks = true;
+            planksCount = Math.abs(d.count);
+          } else if (ingredientItem.name === "stick") {
+            needsSticks = true;
+            sticksCount = Math.abs(d.count);
+          }
+        }
+
+        // Verify we have enough materials
+        const hasEnoughPlanks = planksCount === 0 || totalPlanks >= planksCount;
+        const hasEnoughSticks = sticksCount === 0 || totalSticks >= sticksCount;
+
+        return (needsPlanks || needsSticks) && hasEnoughPlanks && hasEnoughSticks;
+      });
+
+      if (!compatibleRecipe) {
+        throw new Error(`Cannot craft ${itemName}: No compatible recipe found. Have ${totalPlanks} planks and ${totalSticks} sticks. Found ${allRecipes.length} recipes total. This may be a Minecraft version compatibility issue.`);
+      }
+    }
+
+    // CRITICAL FIX: Mineflayer's bot.craft() does STRICT ID matching.
+    // If recipe requires oak_planks but we have birch_planks, it fails with "missing ingredient".
+    // We must replace the plank IDs in the recipe with the planks we actually have.
+    const ourPlanksItem = mcData.itemsByName[anyPlanks.name];
+    if (ourPlanksItem) {
+      const delta = compatibleRecipe.delta as Array<{ id: number; count: number }>;
+      const recipePlanksId = delta.find(d => {
+        if (d.count >= 0) return false;
+        const ing = mcData.items[d.id];
+        return ing?.name.endsWith("_planks");
+      })?.id;
+
+      if (recipePlanksId && recipePlanksId !== ourPlanksItem.id) {
+        console.error(`[Craft] Recipe uses plank ID ${recipePlanksId}, but we have ${anyPlanks.name} (ID ${ourPlanksItem.id}). Substituting...`);
+        // Replace plank IDs in delta
+        for (const d of delta) {
+          if (d.id === recipePlanksId) d.id = ourPlanksItem.id;
+        }
+        // Replace in inShape if present
+        if ((compatibleRecipe as any).inShape) {
+          const shape = (compatibleRecipe as any).inShape as number[][];
+          for (let row = 0; row < shape.length; row++) {
+            for (let col = 0; col < shape[row].length; col++) {
+              if (shape[row][col] === recipePlanksId) shape[row][col] = ourPlanksItem.id;
+            }
+          }
+        }
+        // Replace in ingredients if present
+        if ((compatibleRecipe as any).ingredients) {
+          const ingredients = (compatibleRecipe as any).ingredients as number[];
+          for (let i = 0; i < ingredients.length; i++) {
+            if (ingredients[i] === recipePlanksId) ingredients[i] = ourPlanksItem.id;
+          }
+        }
+      }
     }
 
     console.error(`[Craft] Attempting to craft ${itemName} using ${anyPlanks.name} (have ${totalPlanks} planks)`);
@@ -891,28 +1103,6 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     throw new Error(`${itemName} requires a crafting table nearby (within 4 blocks). Inventory: ${inventory}`);
   }
 
-  // Check for server item pickup disabled BEFORE consuming materials
-  // Auto-clear after 1 minute to allow retry (gamerules may have been fixed)
-  if (managed.serverHasItemPickupDisabled === true) {
-    const timeSinceSet = managed.serverHasItemPickupDisabledTimestamp ? Date.now() - managed.serverHasItemPickupDisabledTimestamp : 0;
-    const timeSince = Math.floor(timeSinceSet / 1000);
-    const ONE_MINUTE = 60 * 1000;
-
-    if (timeSinceSet > ONE_MINUTE) {
-      console.error(`[Craft] Clearing serverHasItemPickupDisabled flag after ${timeSince}s (auto-expire)`);
-      managed.serverHasItemPickupDisabled = false;
-      managed.serverHasItemPickupDisabledTimestamp = undefined;
-    } else {
-    throw new Error(
-      `Cannot craft ${itemName}: Server has item pickup disabled (detected ${timeSince}s ago). ` +
-      `Crafted items will drop on ground and be permanently lost. ` +
-      `This is a server configuration issue that requires admin intervention. ` +
-      `Disconnect and reconnect to reset this flag if server config was fixed. ` +
-      `Inventory: ${inventory}`
-    );
-    }
-  }
-
   try {
     // Before crafting, ensure we have the exact items needed
     // Sometimes the bot needs specific item types even if we have compatible ones
@@ -924,8 +1114,51 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
       for (const tryRecipe of craftableRecipes) {
         try {
-          // Debug: Log recipe details before attempting craft
+          // CRITICAL FIX: Substitute recipe ingredient IDs with items we actually have
+          // Mineflayer's bot.craft() does strict ID matching - if recipe requires oak_planks
+          // but we have birch_planks, it fails with "missing ingredient" even though they're compatible.
           const recipeDelta = tryRecipe.delta as Array<{ id: number; count: number }>;
+          for (const d of recipeDelta) {
+            if (d.count >= 0) continue; // Skip output items
+            const ingredientItem = mcData.items[d.id];
+            if (!ingredientItem) continue;
+
+            // Check if we have this exact ingredient
+            const exactMatch = inventoryItems.find(i => i.name === ingredientItem.name);
+            if (exactMatch) continue; // We have it, no substitution needed
+
+            // We don't have the exact ingredient - find a compatible substitute
+            const substitute = findCompatibleItem(ingredientItem.name);
+            if (substitute && substitute.name !== ingredientItem.name) {
+              const substituteItemData = mcData.itemsByName[substitute.name];
+              if (substituteItemData) {
+                const oldId = d.id;
+                console.error(`[Craft] Substituting ${ingredientItem.name} (ID ${oldId}) with ${substitute.name} (ID ${substituteItemData.id})`);
+                // Replace in delta
+                for (const dd of recipeDelta) {
+                  if (dd.id === oldId) dd.id = substituteItemData.id;
+                }
+                // Replace in inShape if present
+                if ((tryRecipe as any).inShape) {
+                  const shape = (tryRecipe as any).inShape as number[][];
+                  for (let row = 0; row < shape.length; row++) {
+                    for (let col = 0; col < shape[row].length; col++) {
+                      if (shape[row][col] === oldId) shape[row][col] = substituteItemData.id;
+                    }
+                  }
+                }
+                // Replace in ingredients if present
+                if ((tryRecipe as any).ingredients) {
+                  const ingredients = (tryRecipe as any).ingredients as number[];
+                  for (let idx = 0; idx < ingredients.length; idx++) {
+                    if (ingredients[idx] === oldId) ingredients[idx] = substituteItemData.id;
+                  }
+                }
+              }
+            }
+          }
+
+          // Debug: Log recipe details before attempting craft
           const recipeIngredients = recipeDelta
             .filter(d => d.count < 0)
             .map(d => {
@@ -1007,15 +1240,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 // Debug: Show all inventory items to see what we actually have
                 const inventoryNames = bot.inventory.items().map(i => i.name).join(", ");
                 console.error(`[Craft] Expected ${itemName}, but inventory has: ${inventoryNames}`);
-                console.error(`[Craft] CRITICAL: Item pickup disabled on server - crafted item lost permanently`);
+                console.error(`[Craft] WARNING: Crafted item not found in inventory - may have been picked up by another bot or despawned`);
 
-                // Set flag to prevent future crafting attempts (with timestamp for expiry)
-                managed.serverHasItemPickupDisabled = true;
-                managed.serverHasItemPickupDisabledTimestamp = Date.now();
-
-                // CRITICAL BUG FIX: Throw error to prevent resource waste
-                // Ingredients were consumed but output is lost - this is a failure, not success
-                throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
+                throw new Error(`Failed to craft ${itemName}: Item not found in inventory after crafting. It may have been collected by another nearby bot or despawned. Inventory: ${inventoryNames}`);
               }
             } else {
               throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting and no dropped items found nearby. This indicates a server configuration issue or the crafting operation did not complete successfully.`);
@@ -1040,15 +1267,9 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
 
     if (!craftedItem) {
-      // Item not in inventory - might have been dropped due to server config
-      console.error(`[Craft] ERROR: ${itemName} not found in inventory after crafting - server has item pickup disabled`);
-
-      // Set flag to prevent future crafting attempts (with timestamp for expiry)
-      managed.serverHasItemPickupDisabled = true;
-      managed.serverHasItemPickupDisabledTimestamp = Date.now();
-
-      // THROW ERROR instead of returning success - this prevents wasting materials
-      throw new Error(`Cannot craft ${itemName}: Server has item pickup disabled. Crafted item dropped on ground but cannot be collected. This server configuration is incompatible with crafting. Ingredients consumed: recipe materials lost permanently.`);
+      // Item not in inventory after crafting - may have been picked up by another bot nearby
+      console.error(`[Craft] ERROR: ${itemName} not found in inventory after crafting`);
+      throw new Error(`Failed to craft ${itemName}: Item not found in inventory after crafting. It may have been collected by another nearby bot or despawned. Try again.`);
     }
 
     // Success - item is in inventory
@@ -1258,8 +1479,8 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
 
       if (actualGained === 0 && totalGained > 0) {
         // Items were smelted but didn't enter inventory - they must have dropped or there's a transfer issue
-        console.error(`[Smelt] WARNING: ${expectedOutputName} not transferred to inventory after smelting - may have dropped due to server settings`);
-        return `Smelted ${smeltCount}x ${itemName} (WARNING: ${totalGained}x ${expectedOutputName} may have dropped - server has item pickup disabled). Inventory: ${newInventory}${debugInfo}`;
+        console.error(`[Smelt] WARNING: ${expectedOutputName} not transferred to inventory after smelting - may need manual collection`);
+        return `Smelted ${smeltCount}x ${itemName} (WARNING: ${totalGained}x ${expectedOutputName} may not have entered inventory - try minecraft_collect_items()). Inventory: ${newInventory}${debugInfo}`;
       }
     }
 

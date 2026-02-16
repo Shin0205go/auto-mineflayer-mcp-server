@@ -298,25 +298,6 @@ export async function collectNearbyItems(managed: ManagedBot): Promise<string> {
   const inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
   const actuallyCollected = inventoryAfter - inventoryBefore;
 
-  // CRITICAL: Detect if server has item pickup disabled
-  // Only flag if items exist AND we got very close to them but still couldn't collect
-  // This prevents false positives from unreachable/stuck items
-  if (items.length > 0 && actuallyCollected === 0 && collectedCount >= 2) {
-    // Check if we actually got close to items (< 2 blocks)
-    const closestItemDist = items.length > 0 ?
-      Math.min(...items.map(item => item.position.distanceTo(bot.entity.position))) : 999;
-
-    if (closestItemDist < 2) {
-      // We got very close to items but couldn't collect them - likely pickup is disabled
-      console.error(`[CollectItems] CRITICAL: ${items.length} items exist, got within ${closestItemDist.toFixed(2)} blocks, but 0 collected - server likely has item pickup disabled!`);
-      managed.serverHasItemPickupDisabled = true;
-      managed.serverHasItemPickupDisabledTimestamp = Date.now();
-      return `CRITICAL: Server has item pickup disabled! Found ${items.length} items but cannot collect them. Survival impossible without admin intervention. Use /give command or fix server config.`;
-    } else {
-      console.error(`[CollectItems] Items exist but too far away (${closestItemDist.toFixed(2)} blocks) - not flagging as pickup disabled`);
-    }
-  }
-
   if (actuallyCollected > 0) {
     return `Collected ${actuallyCollected} items (inventory: ${inventoryAfter} total)`;
   } else if (collectedCount > 0) {
@@ -432,17 +413,58 @@ export async function dropItem(bot: Bot, itemName: string, count?: number): Prom
 
       const item = currentItems[0]; // Always take first matching item
       const dropFromThis = Math.min(remaining, item.count);
-      console.error(`[Drop] Dropping ${dropFromThis} from stack of ${item.count}`);
-      await bot.toss(item.type, null, dropFromThis);
-      totalDropped += dropFromThis;
-      remaining -= dropFromThis;
+      const countBefore = bot.inventory.items().filter(i => i.name === itemName).reduce((s, i) => s + i.count, 0);
+      console.error(`[Drop] Dropping ${dropFromThis} from stack of ${item.count} (slot ${item.slot}), total ${itemName} before: ${countBefore}`);
 
-      // Increased delay to let server inventory update propagate
-      // Server needs time to sync inventory changes, especially when dropping multiple stacks
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Use slot-specific toss for reliability
+      await bot.toss(item.type, null, dropFromThis);
+
+      // Wait for server inventory sync with multiple updateSlot events
+      // A single toss can trigger multiple slot updates
+      let slotsUpdated = 0;
+      await new Promise<void>(resolve => {
+        let resolved = false;
+        const onSlot = () => {
+          slotsUpdated++;
+          // Wait for all slot updates to settle (reset timer on each event)
+        };
+        bot.inventory.on("updateSlot" as any, onSlot);
+        // Wait 500ms after last event, or 2000ms max
+        const maxTimeout = setTimeout(() => {
+          bot.inventory.removeListener("updateSlot" as any, onSlot);
+          if (!resolved) { resolved = true; resolve(); }
+        }, 2000);
+        // Check periodically if inventory actually changed
+        const checkInterval = setInterval(() => {
+          const countNow = bot.inventory.items().filter(i => i.name === itemName).reduce((s, i) => s + i.count, 0);
+          if (countNow < countBefore) {
+            clearInterval(checkInterval);
+            clearTimeout(maxTimeout);
+            bot.inventory.removeListener("updateSlot" as any, onSlot);
+            if (!resolved) { resolved = true; resolve(); }
+          }
+        }, 200);
+      });
+
+      // Verify actual drop by checking inventory change
+      const countAfter = bot.inventory.items().filter(i => i.name === itemName).reduce((s, i) => s + i.count, 0);
+      const actuallyDropped = countBefore - countAfter;
+      console.error(`[Drop] After toss: ${itemName} count ${countBefore} -> ${countAfter} (actually dropped: ${actuallyDropped}, slotsUpdated: ${slotsUpdated})`);
+
+      if (actuallyDropped > 0) {
+        totalDropped += actuallyDropped;
+        remaining -= actuallyDropped;
+      } else {
+        // Toss didn't work - break to avoid infinite loop
+        console.error(`[Drop] WARNING: bot.toss() reported success but inventory unchanged! Breaking.`);
+        break;
+      }
     }
 
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";
+    if (totalDropped === 0) {
+      return `Failed to drop ${itemName}: inventory did not change after toss. Try disconnecting and reconnecting.`;
+    }
     return `Dropped ${totalDropped}x ${itemName}. Inventory: ${newInventory}`;
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
