@@ -1759,3 +1759,114 @@ OR fix server item entity spawning (root cause of all issues)
 - All bots now directed to use chest at (10,87,5) for pearl storage
 
 ---
+
+## Session 62 CRITICAL - Ender Pearl Disappearance (2026-02-17)
+
+### Symptoms
+- **Ender pearl x12 VANISHED from chest (7,93,2)**
+- Session 61: Chest confirmed to have ender_pearl x12 + blaze_rod x1
+- Session 62: Chest only contains blaze_rod x1, pearls completely gone
+- No bot inventories show missing pearls (Claude3,4,5 confirmed 0 pearls)
+- Same item entity bug from Sessions 39-48, 59-60 has returned
+
+### Current Status
+**Phase 6→7 BLOCKED** - Cannot craft Eyes of Ender without pearls
+
+**Online Bots**: Claude1, Claude3, Claude4, Claude5, Claude6(?), Claude7
+**Resources Lost**: ender_pearl x12 (100% of Phase 6 progress)
+**Resources Remaining**: blaze_rod x1 (need 6 more for 7 total)
+
+**Additional Bugs Active**:
+- **Perpetual night**: Time stuck at 15628 (Sessions 32-62 ongoing)
+- **Food crisis**: Multiple bots report no bread, Claude7 HP 9/20
+
+### Investigation
+1. ✅ Chest (7,93,2) opened and verified - only blaze_rod(1) + junk items remain
+2. ✅ All online bots checked inventory - ZERO ender_pearl/ender_eye found
+3. ❌ Pearls did NOT transfer to bot inventories (no auto-pickup occurred)
+4. ❌ Pearls did NOT drop as entities (would have been collected)
+
+**Conclusion**: Server-side item deletion bug. Items in chest storage are not persistent.
+
+### Root Cause Analysis
+**Server bug - NOT code issue**. Possible causes:
+1. Chunk unload/reload corrupts chest NBT data selectively
+2. Server restart between sessions cleared non-vanilla items from chests
+3. Anti-cheat plugin removing "suspicious" item accumulations
+4. Database corruption targeting specific item types (ender_pearl) in storage
+
+**Evidence**:
+- Blaze rod x1 survived in same chest → selective deletion
+- Same pattern as Sessions 59-60 (both chests vanished)
+- Pattern matches Sessions 39-48 (item entities disappearing)
+- No code changes between Session 61 (working) and 62 (broken)
+
+### Admin Request Sent
+```
+[ADMIN REQUEST] URGENT:
+1) /give @a ender_pearl 12 (lost to chest bug)
+2) /time set day (永夜 bug time=15628)
+3) /give @a bread 64 (food crisis)
+Phase 6→7 BLOCKED. Session 62 critical bugs.
+```
+
+### Team Response
+- Claude1: Emergency shelter mode declared, inventory headcount initiated
+- Claude3: Confirmed pearl loss, inventory scan complete (0 pearls)
+- Claude4: Confirmed pearl loss, inventory scan complete (0 pearls)
+- Claude5: Confirmed pearl loss, has bread x4, moving to base
+- Claude6: Sent SOS, confirmed pearl loss from chest
+- Claude7: Confirmed pearl loss, HP 9/20 food crisis
+
+### Workaround Options
+1. **Wait for admin /give ender_pearl 12** (RECOMMENDED)
+2. Re-hunt endermen (12 more kills, ~2 hours nighttime hunting)
+3. Request admin /tp to End portal coordinates directly
+
+### Status: WAITING FOR ADMIN INTERVENTION
+
+**No code fix possible** - This is a server-side storage bug requiring admin investigation and item restoration.
+
+---
+
+## Session 62 UPDATE - False Alarm Resolution (2026-02-17)
+
+### CORRECTION: Pearls NOT Lost
+**Initial Report**: Ender pearls x12 disappeared from chest (7,93,2)
+**Resolution**: Pearls were in Claude7's inventory the entire time
+
+### What Happened
+1. Session 61: Team assumed pearls were stored in chest (7,93,2)
+2. Session 62: Chest checked, no pearls found → panic declared
+3. Emergency headcount initiated → Claude7 checked inventory → found ender_pearl x12
+4. **Conclusion**: Communication gap, NOT a server bug
+
+### Root Cause Analysis
+- Claude7 likely picked up pearls from chest at end of Session 61
+- Team didn't track pearl location properly between sessions
+- Initial panic response was appropriate (given Session 59-60 history) but premature
+
+### Actual Status (Session 62)
+**Phase 6 Progress**: Pearl 12/12✅ (Claude7 inventory), Blaze_rod 1/7 (chest)
+**Blockers**:
+1. ✅ RESOLVED: Pearl location confirmed (Claude7 has them)
+2. ❌ ACTIVE: Eternal night (time=15628, Sessions 32-62 ongoing)
+3. ❌ ACTIVE: Food shortage (Claude7 HP 4→20 after Claude5 bread transfer)
+
+**Phase 6 Remaining Work**: Need 6 more blaze_rods from Nether
+**Phase 7 Status**: Blocked by eternal night, cannot do outdoor work
+
+### Lessons Learned
+1. Always check ALL bot inventories before declaring item loss
+2. Implement inventory tracking protocol between sessions
+3. Chest (7,93,2) is stable - previous server bugs were in Sessions 39-48, 59-60
+
+### Current Team Status
+- Claude1: Respawned at (1,112,6) after skeleton death, coordinating
+- Claude3,4,5,6: All at base, sheltering, waiting for daylight
+- Claude7: At base, HP recovered to 20/20, has ender_pearl x12
+- Claude2: Offline
+
+**Admin request still needed**: /time set day (for Phase 7 outdoor work)
+
+---
