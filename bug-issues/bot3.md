@@ -265,3 +265,26 @@
 - **ステータス**: 🟡 修正待機中
 - **次セッション**: このチェックを修正してから、enderman hunting狩り場への移動を試行
 
+### [2026-02-17 SESSION 71] CHEST SYNC BUG RECURRING - take_from_chest returns 0 (CRITICAL)
+- **症状**:
+  - Coal x40確認（open_chest で可視）→ `minecraft_take_from_chest("coal", 20)` → 0個取得
+  - Retry: `minecraft_take_from_chest("coal", 1)` → 同様に0個
+  - Chest at (7,93,2)は正常に開けるが、アイテム取出に失敗
+- **原因**: 不明（Session 49-60, 69と同じパターン）
+  - take_from_chestの実装に根本的な問題
+  - またはサーバー側の同期遅延
+- **影響度**: 🔴 CRITICAL - Torch production 完全ブロック
+  - Coal x40 stored but cannot retrieve
+  - Torch crafting停止
+  - Phase 7 進行不可
+- **再現**:
+  - Coal x22 を安全に store_in_chest (成功)
+  - Chest (7,93,2) open → coal x40 確認 (成功)
+  - take_from_chest("coal", 20) → Error: Failed to withdraw full amount: requested 20, but only got 0
+- **ファイル**: `src/bot-manager/bot-storage.ts` (takeFromChest関数)
+- **修正予定**: Code investigation required. Possible workarounds:
+  1. Drop coal x40, collect manually (risk: despawn)
+  2. Wait for admin intervention
+  3. Use different chest location
+- **ステータス**: 🔴 修正待機中 (Session 71)
+
