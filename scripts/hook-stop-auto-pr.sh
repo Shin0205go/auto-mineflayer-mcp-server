@@ -15,7 +15,7 @@ fi
 git checkout origin/main -- scripts/ 2>/dev/null
 
 # --- Phase 1: 変更があればcommit ---
-git add src/ bug-issues/ .claude/skills/ 2>/dev/null
+git add src/tools/ bug-issues/ .claude/skills/ 2>/dev/null
 if ! git diff --cached --quiet 2>/dev/null; then
   npm run build --silent 2>/dev/null
   git commit -m "[Claude${BOT}] Auto-commit on stop" 2>/dev/null
