@@ -80,7 +80,9 @@ export async function handleMovementTool(
       const y = args.y as number;
       const z = args.z as number;
 
-      // For long distances (>300 blocks), move in segments to handle chunk loading
+      // For long distances (>50 blocks), move in small segments to handle chunk loading
+      // Pathfinder can only navigate within loaded chunks, so small steps allow
+      // progressive chunk loading as the bot moves toward the destination.
       const pos = botManager.getPosition(username);
       if (pos) {
         const dx = x - pos.x;
@@ -88,9 +90,9 @@ export async function handleMovementTool(
         const dz = z - pos.z;
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-        if (dist > 300) {
-          // Move in 150-block segments
-          const segmentSize = 150;
+        if (dist > 50) {
+          // Move in 30-block segments for reliable chunk-by-chunk navigation
+          const segmentSize = 30;
           const steps = Math.ceil(dist / segmentSize);
           let lastResult = "";
           for (let i = 1; i <= steps; i++) {
@@ -102,7 +104,7 @@ export async function handleMovementTool(
             lastResult = segResult;
             // If we reached the final destination, stop
             if (i === steps) break;
-            // Continue even if segment failed (terrain may block, try next)
+            // Continue even if segment partially failed — terrain may redirect us
           }
           return lastResult;
         }
