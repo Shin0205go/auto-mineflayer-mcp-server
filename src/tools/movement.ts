@@ -92,21 +92,29 @@ export async function handleMovementTool(
 
         if (dist > 50) {
           // Move in 30-block segments for reliable chunk-by-chunk navigation
+          // Each segment is computed from the FINAL destination direction,
+          // using current position to always move toward goal.
           const segmentSize = 30;
           const steps = Math.ceil(dist / segmentSize);
           let lastResult = "";
           for (let i = 1; i <= steps; i++) {
-            const t = i / steps;
-            const ix = pos.x + dx * t;
-            const iz = pos.z + dz * t;
-            const iy = i === steps ? y : (pos.y + dy * t);
+            // Recompute direction from current position each step
+            const curPos = botManager.getPosition(username);
+            if (!curPos) break;
+            const rdx = x - curPos.x;
+            const rdy = y - curPos.y;
+            const rdz = z - curPos.z;
+            const remainDist = Math.sqrt(rdx * rdx + rdy * rdy + rdz * rdz);
+            if (remainDist < 3) break; // Already at destination
+            const t = Math.min(segmentSize / remainDist, 1.0);
+            const ix = curPos.x + rdx * t;
+            const iz = curPos.z + rdz * t;
+            const iy = remainDist <= segmentSize ? y : (curPos.y + rdy * t);
             const segResult = await botManager.moveTo(username, ix, iy, iz);
             lastResult = segResult;
-            // If we reached the final destination, stop
-            if (i === steps) break;
             // Continue even if segment partially failed — terrain may redirect us
           }
-          return lastResult;
+          return lastResult || await botManager.moveTo(username, x, y, z);
         }
       }
 
