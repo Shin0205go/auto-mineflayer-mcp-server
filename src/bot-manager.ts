@@ -2158,24 +2158,33 @@ export class BotManager extends EventEmitter {
       await bot.equip(blockItem, "hand");
 
       try {
-        // Jump and place
+        // Record standing position before jump
+        const standPos = bot.entity.position.clone();
+        const groundPos = new Vec3(Math.floor(standPos.x), Math.floor(standPos.y) - 1, Math.floor(standPos.z));
+        const groundBlock = bot.blockAt(groundPos);
+
+        // Jump and place block on the block we're standing on
         bot.setControlState("jump", true);
-        await this.delay(250);
+        await this.delay(300);
 
-        const currentPos = bot.entity.position;
-        const belowPos = new Vec3(Math.floor(currentPos.x), Math.floor(currentPos.y) - 1, Math.floor(currentPos.z));
-        const blockBelow = bot.blockAt(belowPos);
-
-        if (blockBelow && blockBelow.name === "air") {
-          const groundBlock = bot.blockAt(belowPos.offset(0, -1, 0));
-          if (groundBlock && groundBlock.name !== "air") {
+        if (groundBlock && groundBlock.name !== "air") {
+          try {
             await bot.placeBlock(groundBlock, new Vec3(0, 1, 0));
             blocksPlaced++;
+          } catch (placeErr) {
+            // Try with current position's block below
+            const currentPos = bot.entity.position;
+            const currentBelowPos = new Vec3(Math.floor(currentPos.x), Math.floor(currentPos.y) - 1, Math.floor(currentPos.z));
+            const currentBelow = bot.blockAt(currentBelowPos);
+            if (currentBelow && currentBelow.name !== "air") {
+              await bot.placeBlock(currentBelow, new Vec3(0, 1, 0));
+              blocksPlaced++;
+            }
           }
         }
 
         bot.setControlState("jump", false);
-        await this.delay(200);
+        await this.delay(300);
       } catch (err) {
         console.error(`[Pillar] Place error: ${err}`);
         bot.setControlState("jump", false);
