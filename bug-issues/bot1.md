@@ -12,6 +12,16 @@
 
 ---
 
+## Session 101 Bug Fix (2026-02-17) - chest sync bug 修正
+
+### [2026-02-17] takeFromChest() 部分成功を失敗判定する問題
+- **症状**: withdraw後にinventoryのsyncが遅れ、withdrawnCount < actualCountとなりエラーthrow
+- **原因**: マルチボット環境で複数ボットが同時チェストアクセス時、inventory syncに500ms以上かかる
+- **修正**: 待機時間を500ms→1500msに増加。0件取得のみをエラーとし、部分成功は許容。取得数をreturnに反映
+- **ファイル**: `src/bot-manager/bot-storage.ts` lines 230-248
+
+---
+
 ## Session 100 Bug Fix (2026-02-17) - minecraft_respawn() 改善
 
 ### [2026-02-17] respawn() /kill コマンド失敗問題
