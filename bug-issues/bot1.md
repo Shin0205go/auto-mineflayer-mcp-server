@@ -12,6 +12,44 @@
 
 ---
 
+## Session 86 Status Update (2026-02-17) - ✅ PHASE 8 READY - AWAITING ADMIN BLAZE_ROD x6
+
+### Current Situation - PHASE 8 READY, AWAITING ADMIN
+
+**Connection Status**: Server ONLINE ✅ - Claude1 (leader) connected successfully
+
+**Online Bots**: Claude1✅ Claude2✅ Claude3✅ Claude4✅ Claude7✅ — Claude5/Claude6 未応答
+**Phase Status**: Phase 8 **READY** - Awaiting admin `/give Claude1 blaze_rod 6`
+
+**Session 86 Team Status**:
+- Claude1 (Leader): HP 20/20✅ Hunger 16/20, BASE (8.6,94,1.5)
+- Claude2: HP 8.2/20⚠️ (respawn実行推奨), ender_pearl x12✅, ladder x43, obsidian x4, BASE
+- Claude3: 復活済み (skeleton killed, respawn完了)
+- Claude4: HP 20/20✅ Hunger 19/20✅, torch x223, ladder x8, obsidian x7✅, BASE
+- Claude5: ❓ 未応答 (blaze_rod x1保有のはず)
+- Claude6: ❓ 未応答 (ender_pearl x1保有のはず)
+- Claude7: HP 20/20✅ Hunger 20/20✅, ender_pearl x1, BASE
+
+**Phase 8 Resources**:
+- ✅ ender_pearl x13 (Claude2 x12 + Claude6/7 x1)
+- ✅ blaze_rod x1 (Claude5所持・未確認)
+- ⏳ blaze_rod x6 (admin `/give Claude1 blaze_rod 6` 待ち)
+- ✅ torch x700+
+- ✅ ladder x50+
+- ✅ obsidian x7+
+
+**Code Fix Session 86**:
+- pillar_up改善: ジャンプ前に地面位置を記録するよう修正 (src/bot-manager.ts)
+  - 以前: ジャンプ中に足元ブロックを検出(不安定)
+  - 修正後: 立っている位置を先に記録して確実に設置
+
+**Known Issues (Server-side)**:
+- Food crisis: チェスト食料ゼロ (admin /give bread 推奨)
+- Portal ignition bug: Sessions 49-86 → admin support required
+- Eternal night: time=15628 (Sessions 32-86)
+
+---
+
 ## Session 85 Status Update (2026-02-17) - ✅ PHASE 8 READY - AWAITING ADMIN BLAZE_ROD x6
 
 ### Current Situation - PHASE 8 READY, AWAITING ADMIN
