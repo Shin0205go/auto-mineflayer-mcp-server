@@ -12,6 +12,22 @@
 
 ---
 
+## Session 99 Status Update (2026-02-17) - PHASE 8 ACTIVE - admin blaze_rod x5待ち
+
+### Online Status
+- Claude1✅ Claude2✅ Claude3✅ Claude4✅ Claude5✅ Claude6✅ Claude7✅ (全員集合)
+- Claude5: HP 0.5/20 CRITICAL → zombie respawn戦略実行中
+- Claude4: BASE待機 HP20/20✅ bow+arrow準備済み✅
+- Chest(9,93,2): ender_pearl x13✅, obsidian x7✅, blaze_rod x1, book x1, 食料x0❌
+- **待機中**: admin `/give Claude1 blaze_rod 5` (chest x1 + admin x5 = x6合計でpowder x12)
+- Phase 8手順: blaze_rod x6→blaze_powder x12→ender_eye x12→Stronghold(-736,~,-1280)→ドラゴン討伐
+
+### Admin Request (Priority)
+- `/give Claude1 blaze_rod 5` (必須、chestのx1と合わせてx6=powder x12)
+- `/give Claude1 bread 20` (推奨、食料危機対策)
+
+---
+
 ## Session 93 Status Update (2026-02-17) - PHASE 8 ACTIVE - 全7名BASE集結✅
 
 ### Online Status
