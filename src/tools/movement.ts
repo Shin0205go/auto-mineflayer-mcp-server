@@ -80,8 +80,51 @@ export async function handleMovementTool(
       const y = args.y as number;
       const z = args.z as number;
 
-      const result = await botManager.moveTo(username, x, y, z);
-      return result;
+      // For very long distances (> 200 blocks), use segmented movement
+      const currentPos = botManager.getPosition(username);
+      if (!currentPos) {
+        throw new Error("Cannot get current position");
+      }
+
+      const distance = Math.sqrt(
+        Math.pow(x - currentPos.x, 2) +
+        Math.pow(z - currentPos.z, 2)
+      );
+
+      if (distance > 200) {
+        // Segment into 30-block hops for safer navigation
+        const segmentSize = 30;
+        const segments = Math.ceil(distance / segmentSize);
+        const deltaX = (x - currentPos.x) / segments;
+        const deltaZ = (z - currentPos.z) / segments;
+
+        let currentX = currentPos.x;
+        let currentZ = currentPos.z;
+
+        for (let i = 0; i < segments; i++) {
+          const nextX = i === segments - 1 ? x : currentX + deltaX;
+          const nextZ = i === segments - 1 ? z : currentZ + deltaZ;
+
+          const segmentResult = await botManager.moveTo(username, nextX, y, nextZ);
+
+          // If a segment fails, return the error
+          if (segmentResult.includes("Cannot reach") || segmentResult.includes("Path blocked")) {
+            return `Segmented move stopped at segment ${i + 1}/${segments}: ${segmentResult}`;
+          }
+
+          currentX = nextX;
+          currentZ = nextZ;
+
+          // Small delay between segments to allow chunk loading
+          await new Promise<void>(resolve => setTimeout(resolve, 500));
+        }
+
+        return `Reached destination via ${segments} segments`;
+      } else {
+        // For short distances, use normal movement
+        const result = await botManager.moveTo(username, x, y, z);
+        return result;
+      }
     }
 
     case "minecraft_chat": {
