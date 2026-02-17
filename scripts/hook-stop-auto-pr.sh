@@ -61,7 +61,9 @@ if ! git merge origin/main --no-edit 2>/dev/null; then
   if grep -rq "^<<<<<<< " src/ scripts/ .claude/ 2>/dev/null; then
     echo "❌ Conflict markers still present, aborting merge"
     git merge --abort 2>/dev/null
-    git push origin "$BRANCH" 2>/dev/null || true
+    # mainと同期してブランチを揃える
+    git reset --hard origin/main 2>/dev/null
+    git push origin "$BRANCH" --force 2>/dev/null || true
     exit 0
   fi
 
@@ -71,7 +73,9 @@ fi
 # ビルドチェック
 if ! npm run build --silent 2>/dev/null; then
   echo "❌ Build failed, skipping push to main"
-  git push origin "$BRANCH" 2>/dev/null || true
+  # mainと同期してブランチを揃える
+  git reset --hard origin/main 2>/dev/null
+  git push origin "$BRANCH" --force 2>/dev/null || true
   exit 0
 fi
 
@@ -79,7 +83,10 @@ fi
 for ATTEMPT in 1 2 3; do
   if git push origin "$BRANCH":main 2>/dev/null; then
     echo "✅ Pushed $BRANCH to main"
-    git push origin "$BRANCH" 2>/dev/null || true
+    # botブランチをmainと同じ位置にリセット（ズレ防止）
+    git fetch origin main 2>/dev/null
+    git reset --hard origin/main 2>/dev/null
+    git push origin "$BRANCH" --force 2>/dev/null || true
     exit 0
   fi
   echo "⚠️ Push to main failed (attempt $ATTEMPT/3), re-fetching..."
@@ -94,4 +101,7 @@ for ATTEMPT in 1 2 3; do
 done
 
 echo "❌ Failed to push to main after 3 attempts"
-git push origin "$BRANCH" 2>/dev/null || true
+# 失敗しても、mainと同期してブランチを揃える
+git fetch origin main 2>/dev/null
+git reset --hard origin/main 2>/dev/null
+git push origin "$BRANCH" --force 2>/dev/null || true
