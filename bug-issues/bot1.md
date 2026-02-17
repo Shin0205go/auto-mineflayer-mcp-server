@@ -12,42 +12,48 @@
 
 ---
 
-## Session 84 Status Update (2026-02-17) - ✅ PHASE 8 READY - AWAITING ADMIN BLAZE_ROD x6
+## Session 85 Status Update (2026-02-17) - ✅ PHASE 8 READY - AWAITING ADMIN BLAZE_ROD x6
 
 ### Current Situation - PHASE 8 READY, AWAITING ADMIN
 
 **Connection Status**: Server ONLINE ✅ - Claude1 (leader) connected successfully
 
-**Online Bots**: Claude1✅ Claude3✅ Claude4✅ Claude6✅ Claude7✅ - **5+ ONLINE** (Claude2/5 未確認)
+**Online Bots**: Claude1✅ Claude2✅ Claude3✅ Claude4✅ Claude5✅ Claude6✅ Claude7✅ - **7/7 ALL ONLINE**
 **Phase Status**: Phase 8 **READY** - Awaiting admin `/give blaze_rod 6`
 
-**Session 84 Team Status**:
-- Claude1 (Leader): HP 20/20✅ (zombie respawn成功), BASE (4,95,0)
-- Claude3: 前Session確認済み✅
-- Claude4: HP回復中 (fall death→respawn), torch x159, ladder x8, obsidian x7✅
-- Claude6: HP 12/20⚠️, Hunger 9/20⚠️, ender_pearl x1, BASE (9,93,2) → zombie respawn推奨
-- Claude7: HP 20/20✅, BASE, 食料確保試み中
+**Session 85 Team Status**:
+- Claude1 (Leader): HP 20/20✅, BASE (20,88,-8)
+- Claude2: HP 13/20⚠️, food=0, ender_pearl x12✅, pos (8.5,111,-5.4) → zombie respawn推奨
+- Claude3: HP 20/20✅, torch x320, ladder x22, diamond tools, BASE (6,94,2)
+- Claude4: HP 20/20✅, torch x223, ladder x8, obsidian x7, BASE (8,94,1)
+- Claude5: HP 20/20✅ (respawn済み), blaze_rod x1✅, pos (18,54,-30) → BASE移動中
+- Claude6: HP 20/20✅, ender_pearl x1, torch x118, coal x33, BASE (6,94,1)
+- Claude7: HP 10/20⚠️, food=0, pos (-2,68,5) → zombie respawn推奨
 
-**Phase 8 Resources** (同前):
-- ✅ ender_pearl x13 (Claude2 x12 + Claude6 x1)
+**Phase 8 Resources**:
+- ✅ ender_pearl x13 (Claude2 x12 + Claude6 x1) — 目標x12達成
 - ✅ blaze_rod x1 (Claude5所持)
 - ⏳ blaze_rod x6 (admin `/give Claude1 blaze_rod 6` 待ち)
 - ✅ torch x700+
-- ✅ ladder x75+
-- ✅ obsidian x11+
+- ✅ ladder x30+
+- ✅ obsidian x7+
+
+**Phase 8 実行手順** (admin blaze_rod x6 入手後):
+1. blaze_rod x7 → blaze_powder x14 クラフト
+2. blaze_powder x12 + ender_pearl x12 → eye_of_ender x12 クラフト
+3. stronghold (-736,~,-1280) へ全員出発
+4. end portal 起動 → エンダードラゴン討伐
 
 **Known Issues (Server-side)**:
-- Food crisis: チェスト(7,93,2)食料ゼロ、junk(cobblestone/dirt)で満杯
-- Chest sync bug: Sessions 39-84 ongoing
-- Portal ignition bug: Sessions 49-84 → admin support required
-- Eternal night: time=15628 (Sessions 32-84)
+- Food crisis: チェスト(7,93,2)食料ゼロ
+- Portal ignition bug: Sessions 49-85 → admin support required
+- Eternal night: time=15628 (Sessions 32-85)
 
-**Session 84 Actions**:
-- Claude1: zombie respawn→HP 20/20回復✅ (2回目も成功)
-- Claude2: fall death→respawn✅ HP 20/20, ender_pearl x12✅保護確認
-- Claude4: fall death→respawn✅ HP 20/20
-- Claude6: skeleton death→respawn✅ HP 20/20
-- Claude7: zombie death→respawn✅ HP 20/20
+**Session 85 Actions**:
+- 全員状況確認完了
+- ender_pearl x13確認済み (Claude2 x12 + Claude6 x1)
+- blaze_rod x1確認済み (Claude5所持)
+- admin blaze_rod x6 /give 待ち
 - チーム: C1✅C2✅C3✅C4✅C5✅C6✅C7✅ (7/7 HP回復済み！🎉)
 
 ---
