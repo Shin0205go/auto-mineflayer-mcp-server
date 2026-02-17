@@ -1,8 +1,8 @@
 ---
 name: redstone-basics
 description: |
-  Minecraft redstone circuit basics - logic gates, clocks, pistons.
-  Use when: Building automated systems, doors, traps, farms.
+  レッドストーン回路の基礎。論理ゲート、クロック回路、ピストンの使い方。
+  Use when: 自動化システムを作りたい、レッドストーンドアやトラップを建てたい、回路の知識が必要な時。
 ---
 
 # レッドストーン回路基礎スキル

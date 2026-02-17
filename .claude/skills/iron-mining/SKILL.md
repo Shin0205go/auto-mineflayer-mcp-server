@@ -1,8 +1,8 @@
 ---
 name: iron-mining
 description: |
-  Minecraft iron ore mining and smelting guide.
-  Use when: Need iron tools, armor, or bucket.
+  鉄鉱石の採掘と精錬の手順。石ピッケルで鉄鉱石を掘り、かまどで鉄インゴットに精錬。
+  Use when: 鉄が必要、鉄ピッケル/鉄の剣/鉄防具/バケツを作りたい、鉄鉱石を掘りたい時。
 ---
 
 # 鉄鉱石採掘スキル

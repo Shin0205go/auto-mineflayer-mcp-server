@@ -1,8 +1,8 @@
 ---
 name: mob-farm
 description: |
-  Minecraft mob farm/trap tower guide - XP and loot farming.
-  Use when: Need experience points, want automated mob drops.
+  モブトラップタワーの建設ガイド。経験値とドロップアイテムを自動で稼ぐ施設。
+  Use when: 経験値を効率的に稼ぎたい、モブドロップを自動化したい、トラップタワーを作りたい時。
 ---
 
 # モブトラップスキル

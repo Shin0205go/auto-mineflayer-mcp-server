@@ -1,8 +1,8 @@
 ---
 name: auto-farm
 description: |
-  Minecraft automatic farming skill - wheat, sugarcane, pumpkin, melon.
-  Use when: Need food automation, want passive resource generation.
+  自動農場の構築と運用。小麦・サトウキビ・カボチャ・スイカの農場を作って食料を自動生産。
+  Use when: 食料の安定供給が必要、農場を作りたい、小麦を育てたい、パンを焼きたい、食料不足を根本解決したい時。
 ---
 
 # 自動農場スキル

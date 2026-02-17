@@ -1,8 +1,8 @@
 ---
 name: enchanting
 description: |
-  Minecraft enchanting guide - table setup, best enchants, XP farming.
-  Use when: Want to enchant tools/armor, need XP, setting up enchanting area.
+  エンチャントテーブルの設置、最適なエンチャント構成、経験値稼ぎの方法。
+  Use when: 道具や防具をエンチャントしたい、経験値が必要、エンチャントエリアを作りたい時。
 ---
 
 # エンチャントスキル
