@@ -2424,3 +2424,102 @@ Phase 6→7 BLOCKED. Session 62 critical bugs.
 **Admin request still needed**: /time set day (for Phase 7 outdoor work)
 
 ---
+
+## Session 75 Progress (2026-02-17)
+
+### Current Status
+- **Phase 7 prep**: Torch production 708/1000 (70.8%), BLOCKED by item drop bug recurrence
+- **Online**: Claude1 (leader), Claude2, Claude3, Claude4, Claude5, Claude6 (6/7 bots)
+- **Offline**: Claude7
+- **Active bugs**: Eternal night (time=15628), Item drop bug (recurrence from Sessions 39-48, 59-60)
+
+### Session 75 Events
+1. **Claude3 creeper death**: Killed by creeper, respawned successfully (HP/Hunger 20/20✅, stick x28 retained✅)
+2. **Item drop bug confirmed**: Multiple bots report log mining fails (items don't spawn)
+3. **Claude2 anomaly**: Reports birch_log x1 mining SUCCESS - investigating if bug is intermittent
+4. **Team coordination**: Testing small-scale coal transfer workaround (C2 drop coal x2 → C3 collect)
+
+### Resources Status
+- Claude2: coal x28, birch_log x1(?)
+- Claude3: stick x28, torch x228, HP/Hunger 20/20 (post-respawn)
+- Claude4: coal x16
+- Claude5: torch x64
+- Claude6: coal x43 (stick x10 lost to item bug)
+
+### Bug Analysis
+**Item Drop Bug (Sessions 39-48, 59-60 recurrence)**:
+- Symptom: Blocks break but item entities don't spawn
+- Affected: Oak_log, stick transfers
+- Possible intermittent: Claude2 reports birch_log success (needs verification)
+- Server-side bug, no code fix possible
+
+### Active Tests
+- **Small-scale transfer test**: Claude2 drop coal x2 → Claude3 collect attempt (PENDING RESULTS)
+- **Birch_log success verification**: Claude2 inventory check for birch_log x1 (PENDING)
+
+### Code Analysis Completed
+- Reviewed src/bot-manager/bot-blocks.ts digBlock() implementation
+- Confirmed auto_collect logic is correct (lines 835-906)
+- Uses proven collectNearbyItems() function with proper delays
+- No code bugs found - issue is server-side entity spawning failure
+
+### Workarounds Under Test
+1. Small-scale item drops (minimize loss if bug persists)
+2. Direct crafting with existing inventory resources
+3. Waiting for admin: /give oak_log x100 OR /give stick x300
+
+### Next Steps
+1. Wait for Claude2/Claude3 transfer test results
+2. If successful: resume limited torch production with small batches
+3. If failed: request admin intervention
+4. Continue monitoring for intermittent bug behavior
+
+---
+
+## Session 75 UPDATE - Item Drop Bug Pattern Discovered
+
+### BREAKTHROUGH: Partial Workaround Found ✅
+
+**Discovery by Claude3**: Item drop bug is SELECTIVE, not total failure!
+
+**Working operations** (items spawn correctly):
+- ✅ **Ore mining with auto_collect=true**: coal_ore → coal (VERIFIED by Claude3 x2)
+- ✅ **Ore mining**: iron_ore, diamond_ore, etc. (assumed working)
+
+**Failing operations** (items don't spawn):
+- ❌ **Log mining**: oak_log, birch_log, spruce_log (all fail)
+- ❌ **Planks mining**: dark_oak_planks confirmed fail by Claude4
+- ❌ **Item transfers**: drop_item entities don't spawn (coal drop test failed)
+
+### Pattern Analysis
+The item drop bug appears to target:
+1. Natural/placed blocks (logs, planks) - entity spawning fails
+2. Dropped items from inventory - entity spawning fails
+3. BUT ore blocks still spawn items correctly with auto_collect
+
+**Root cause hypothesis**: Server plugin or config selectively blocking entity spawning for non-ore blocks
+
+### Workaround Strategy (Active)
+1. ✅ Coal supply: Mine coal_ore with auto_collect (unlimited, works perfectly)
+2. ❌ Stick supply: STILL BLOCKED (oak_log mining fails, no workaround found)
+3. Partial progress: Claude2 has birch_planks x4 → can craft stick x2
+4. Admin request: /give oak_log x50 (critical for stick production)
+
+### Session 75 Deaths
+- Claude2: Killed by Creeper (respawned, HP/Hunger 20/20)
+- Claude3: Killed by Creeper earlier (respawned successfully)
+- Claude5: Fell from high place (respawned, HP/Hunger 20/20)
+- Eternal night (time=15628) + mob spawning causing frequent deaths
+
+### Current Team Strategy
+1. Claude3: Craft torch x28 using stick x28 + coal (maximize existing resources)
+2. Claude5: Mine coal_ore to stockpile coal
+3. Claude2: Craft stick from birch_planks x4
+4. Claude4/6: Standby at base, wait for admin oak_log support
+5. All: Shelter mode, avoid unnecessary movement (creeper danger)
+
+### Code Status
+**No code changes needed** - workaround uses existing auto_collect functionality.
+Bug is server-side and selective to block types.
+
+---
