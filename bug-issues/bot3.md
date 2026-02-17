@@ -265,6 +265,60 @@
 - **ステータス**: 🟡 修正待機中
 - **次セッション**: このチェックを修正してから、enderman hunting狩り場への移動を試行
 
+### [2026-02-17 SESSION 77] RESPAWN MECHANIC BROKEN - HP/Hunger NOT reset (CRITICAL)
+- **症状**:
+  - `minecraft_respawn(reason="...")` を実行
+  - ツール出力: "Respawned! Old: (7, 94, 2) HP:4/20 Food:10/20 → New: (7, 94, 2) HP:4/20 Food:10/20"
+  - HP/Hungerが変化していない（20/20に回復していない）
+  - Inventory は保持（keepInventory ON で正常）だが、HP/Hunger が改善されない
+- **原因**:
+  - `bot.chat('/kill @username')` が実装の主体だが、chat()はメッセージ送信API
+  - サーバー側の /kill コマンドはBot7権限でしか実行できない可能性
+  - または3000msの待機時間が不十分で、respawn完了前に status check を実行している
+  - death/spawn イベントを wait していないため、ゲーム側で処理完了前に値を読んでいる
+- **影響度**: 🔴 CRITICAL - Survival impossible
+  - Claude3: HP 4/20 starvation, Hunger 10/20
+  - Claude5: HP 0.5/20 (即死レベル)
+  - Admin /heal が必須、respawn では対応不可
+- **再現**:
+  - HP 4-5/20 の状態で respawn() 呼び出し
+  - ツール出力では "Respawned" とあるが、`get_status()` で確認すると HP が変わっていない
+- **ファイル**: `src/bot-manager.ts:2616-2644` (respawn メソッド)
+- **根本原因の推測**:
+  - Line 2631: `bot.chat('/kill @username')` → 実際のコマンド実行ではなく、チャットメッセージ送信
+  - Line 2634: `await this.delay(3000)` → イベント based wait ではなく、固定待機時間
+  - Line 2637-2639: status読み込みが respawn 完了前に行われている可能性
+  - **必要な修正**: `bot.once('death')` や `bot.once('spawn')` を使用してイベント待機すべき
+- **修正提案**:
+  ```typescript
+  async respawn(username: string, reason?: string): Promise<string> {
+    const managed = this.bots.get(username);
+    const bot = managed.bot;
+    const oldPos = bot.entity.position.clone();
+    const oldHP = bot.health;
+    const oldFood = bot.food;
+
+    console.error(`[Respawn] Sending /kill command...`);
+
+    // Wait for death event
+    const deathPromise = new Promise(resolve => bot.once('death', resolve));
+    const spawnPromise = new Promise(resolve => bot.once('spawn', resolve));
+
+    bot.chat(`/kill ${username}`);
+
+    await Promise.all([deathPromise, spawnPromise]);
+    await this.delay(1000); // Post-respawn sync
+
+    const newPos = bot.entity.position;
+    const newHP = bot.health;
+    const newFood = bot.food;
+
+    return `Respawned! ...`;
+  }
+  ```
+- **ステータス**: 🔴 修正待機中 (Session 77) - Admin /heal による緊急対応必須
+- **注意**: 前 session (71) の respawn 成功報告は、別の原因か timing の偶然かもしれない
+
 ### [2026-02-17 SESSION 71] CHEST SYNC BUG RECURRING - take_from_chest returns 0 (CRITICAL)
 - **症状**:
   - Coal x40確認（open_chest で可視）→ `minecraft_take_from_chest("coal", 20)` → 0個取得
