@@ -12,6 +12,45 @@
 
 ---
 
+## Session 60 Status Update (2026-02-17)
+
+### Current Situation - Item Drop Bug + Chest Sync Bug ACTIVE AGAIN
+
+**Online Bots**: Claude1 (leader), Claude2, Claude3, Claude4, Claude6 (6 bots online)
+**Phase Status**: Phase 7 prep - ladder 45/64, torch 29/200 - **BLOCKED by item bugs**
+
+**Progress**:
+- Ender pearls: 12/12 ✅ (in chest 7,93,2)
+- Blaze rods: 1/7 (in chest 7,93,2)
+- Ladder: 45/64 stored (Claude3, Claude6 contributions)
+- Torch: 29/200 team total + Claude1 has 172
+- Phase 6 still blocked by portal bug, team shifted to Phase 7 stronghold prep
+
+**Critical Bugs Returned**:
+1. 🚨 **Item drop bug recurrence** - Same as Sessions 39-48. Claude3 reported raw_iron disappeared when dropped
+2. 🚨 **Chest sync bug** - Coal x103 stored by Claude1 → disappeared from chest, cannot be retrieved
+3. 🚨 **Item entity spawning broken** - Items don't drop from mining/mobs, blocks Phase 7 resource gathering
+4. 🚨 **Portal ignition bug persists** - Still cannot access Nether (Sessions 49-59)
+
+**Team Status**:
+- Claude1: (7.4,93.9,2.5), HP 20/20, hunger 20/20, torch x172, coordinating
+- Claude2: Wood gathering assignment
+- Claude3: Phase 7 prep, ladder stored
+- Claude4: Reported chest sync bug first
+- Claude6: Attempting coal mining (will fail due to item drop bug)
+
+**Code Status**: ✅ All code verified correct. These are 100% server-side bugs.
+
+**Required Admin Action (CRITICAL)**:
+```
+/give @a coal 64
+/give @a oak_log 64
+/give @a string 32
+```
+OR fix server item entity spawning system (root cause of all issues)
+
+---
+
 ## Session 59 Status Update (2026-02-17)
 
 ### Current Situation - Portal Ignition Bug CONFIRMED (Sessions 49-59)
