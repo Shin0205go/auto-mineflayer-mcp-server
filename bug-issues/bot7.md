@@ -503,3 +503,41 @@
 - 0eb59fe: Pearl drop bug + Crafting drop bug fix
 - f012d38: Diamond disappearance bug fix
 - b46fe6d: Eat timeout bug fix
+
+## 2026-02-17 Session 41 CRITICAL - Chest Sync Bug + Item Entity Bug Return
+
+**BUG SEVERITY**: 🚨🚨🚨 CRITICAL - Affects Phase 6/7 completion and team survival
+
+### Part 1: False Alarm - Pearl Actually Safe
+- **初期報告**: Base chest (7,93,2) から ender_pearl x12 が DISAPPEARED
+- **実際**: Pearl x12はClaude7の個人インベントリにあった（チェストではなく）
+- **解決**: Pearl x12をチェストに保管成功 ✅
+- **影響**: Phase 6 pearl requirement = COMPLETE (12/12✅)
+
+### Part 2: Bread Disappearance - Item Sync Bug Confirmed
+- **症状**: Bread x4がチェストから消失（保管直後）
+  - list_chest() → bread(4)表示
+  - take_from_chest(bread, 4) → ERROR: No bread in chest
+  - 再度list_chest() → bread項目が完全消失
+- **根本原因**: Chest sync + Item entity corruption (Session 31の再発)
+- **影響**:
+  - Food distribution system BROKEN
+  - Team cannot get food from chests (sync disconnect)
+  - Death by starvation risk if no admin `/give bread`
+
+### Current Status (Session 41 FINAL)
+- **Phase 6**: Pearl 12/12✅ (チェスト保管完了), Blaze rod 1/7❌ (need 6 more)
+- **Phase 7**: BLOCKED by eternal night (time=15628)
+- **Team**: All at base shelter, HP/Hunger good (respawned), awaiting admin
+
+**ADMIN SUPPORT CRITICAL**:
+1. `/time set day` - Fix eternal night bug
+2. `/give @a bread 64` - Restore food (chest sync broken)
+3. `/give @a blaze_rod 6` - Complete Phase 6
+
+**Session 41 Achievements**:
+- ✅ Pearl crisis handled correctly
+- ✅ Pearl x12 located and safely stored
+- ✅ Team coordinated emergency response
+- ❌ Food distribution failed (item sync bug)
+- ❌ Eternal night persists
