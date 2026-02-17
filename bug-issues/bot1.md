@@ -12,6 +12,118 @@
 
 ---
 
+## Session 93 Status Update (2026-02-17) - PHASE 8 ACTIVE - 全7名BASE集結✅
+
+### Online Status
+- 全7名BASE(9,93,2)集結✅: Claude1✅ Claude2✅ Claude3✅ Claude4✅ Claude6✅ Claude7✅
+- 全員リスポーン戦略運用中（食料0対策）HP/Hunger 20/20維持
+- Chest(9,93,2): ender_pearl x13✅, obsidian x7✅, arrow x0❌
+- **待機中**: admin blaze_rod x6, bow x7, arrow x256, bread x64, golden_apple x14
+- Phase 8手順: blaze_rod→blaze_powder x12→eye_of_ender x6(Claude3担当)→Stronghold(-736,~,-1280)→ドラゴン討伐
+- **NOTE**: explore_area combatTargetsにend_crystal未登録 → attack("end_crystal")を直接呼ぶこと
+- **NOTE**: 食料なし対策 = HP≤5でゾンビ自然死→リスポーン(keepInventory ON)でHP/Hunger 20/20回復
+
+### Code Verification (Session 93)
+- bot-movement.ts: enterPortal() end_portal対応済み✅
+- bot-survival.ts: end_crystal弓攻撃(heightDiff>3)実装済み✅ (commit 5d1a531)
+- bot-blocks.ts: useItemOnBlock() ender_eye→end_portal_frame対応済み(activateBlock)✅
+- moveTo() タイムアウト: distance*1500ms (1477blocks=36.9分) 十分✅
+
+---
+
+## Session 89 Status Update (2026-02-17) - PHASE 8 ACTIVE - BOW ATTACK IMPLEMENTED ✅
+
+### Code Fix: Bow Attack for end_crystal (Session 89)
+- **症状**: attack()関数が近接攻撃のみ。End Crystalは塔の上にあり近接不可
+- **修正**: attack()にend_crystal用弓攻撃ロジック追加 (bot-survival.ts blaze戦略の直後)
+  - heightDiff > 3ブロック AND bow+arrowがある場合: 弓で最大7発射撃
+  - lookAt→activateItem→1200ms保持→deactivateItem×7ループ
+  - 破壊確認後は武器に戻す。弓攻撃失敗時は近接フォールバック
+  - Crystal低い場合(heightDiff<=3)またはbow/arrow不足: 通常の近接攻撃
+- **ファイル**: `src/bot-manager/bot-survival.ts`
+- **ビルド**: ✅ 成功
+
+### Online Status
+- Claude1✅, Claude3✅(respawn HP20✅), Claude7✅ — BASE(9,93,2)待機
+- Claude2,4,5,6 未接続
+- **待機中**: admin blaze_rod x6, bow x7, arrow x256, bread x64, golden_apple x14
+
+---
+
+## Session 87 Status Update (2026-02-17) - ✅ PHASE 8 READY - AWAITING ADMIN BLAZE_ROD x6
+
+### Current Situation - PHASE 8 READY, AWAITING ADMIN
+
+**Connection Status**: Server ONLINE ✅ - Claude1 (leader) connected successfully
+
+**Online Bots**: Claude1✅ Claude2✅ Claude3✅ Claude4✅ Claude6✅ Claude7✅ — Claude5 未応答
+**Phase Status**: Phase 8 **READY** - Awaiting admin `/give Claude1 blaze_rod 6`
+
+**Session 87 Team Status**:
+- Claude1 (Leader): HP 20/20✅ Hunger 20/20✅, BASE (-1,94,4)
+- Claude2: HP 14.7/20⚠️, ender_pearl x12→チェスト(9,93,2)保管✅, ladder x43, BASE
+- Claude3: HP 20/20✅, torch x384✅, BASE
+- Claude4: HP 20/20✅ Hunger 19/20✅, torch x223, ladder x8, BASE
+- Claude5: ❓ 未応答
+- Claude6: HP 2.3/20🚨 respawn戦略実行中 (zombie death → auto respawn)
+- Claude7: HP 20/20✅ Hunger 20/20✅, ender_pearl x1, BASE警備中
+
+**Chest (9,93,2) Contents**: obsidian x7 ✅, ender_pearl x12 ✅
+
+**Phase 8 Resources**:
+- ✅ ender_pearl x12 (チェスト保管) + x1 (Claude7)
+- ⏳ blaze_rod x6 (admin `/give Claude1 blaze_rod 6` 待ち)
+- ✅ torch x700+
+- ✅ ladder x50+
+- ✅ obsidian x7+
+
+**Admin Request**: `/give Claude1 blaze_rod 6` + `/give Claude1 bread 20`
+
+**Known Issues (Server-side)**:
+- Food crisis: チェスト食料ゼロ (admin /give bread 推奨)
+- Portal ignition bug: Sessions 49-87 → admin support required
+- Eternal night: time=15628 (Sessions 32-87)
+
+---
+
+## Session 86 Status Update (2026-02-17) - ✅ PHASE 8 READY - AWAITING ADMIN BLAZE_ROD x6
+
+### Current Situation - PHASE 8 READY, AWAITING ADMIN
+
+**Connection Status**: Server ONLINE ✅ - Claude1 (leader) connected successfully
+
+**Online Bots**: Claude1✅ Claude2✅ Claude3✅ Claude4✅ Claude7✅ — Claude5/Claude6 未応答
+**Phase Status**: Phase 8 **READY** - Awaiting admin `/give Claude1 blaze_rod 6`
+
+**Session 86 Team Status**:
+- Claude1 (Leader): HP 20/20✅ Hunger 16/20, BASE (8.6,94,1.5)
+- Claude2: HP 8.2/20⚠️ (respawn実行推奨), ender_pearl x12✅, ladder x43, obsidian x4, BASE
+- Claude3: 復活済み (skeleton killed, respawn完了)
+- Claude4: HP 20/20✅ Hunger 19/20✅, torch x223, ladder x8, obsidian x7✅, BASE
+- Claude5: ❓ 未応答 (blaze_rod x1保有のはず)
+- Claude6: ❓ 未応答 (ender_pearl x1保有のはず)
+- Claude7: HP 20/20✅ Hunger 20/20✅, ender_pearl x1, BASE
+
+**Phase 8 Resources**:
+- ✅ ender_pearl x13 (Claude2 x12 + Claude6/7 x1)
+- ✅ blaze_rod x1 (Claude5所持・未確認)
+- ⏳ blaze_rod x6 (admin `/give Claude1 blaze_rod 6` 待ち)
+- ✅ torch x700+
+- ✅ ladder x50+
+- ✅ obsidian x7+
+
+**Code Fix Session 86**:
+- pillar_up改善: ジャンプ前に地面位置を記録するよう修正 (src/bot-manager.ts)
+  - 以前: ジャンプ中に足元ブロックを検出(不安定)
+  - 修正後: 立っている位置を先に記録して確実に設置
+
+**Known Issues (Server-side)**:
+- Food crisis: チェスト食料ゼロ (admin /give bread 推奨)
+- Portal ignition bug: Sessions 49-86 → admin support required
+- Eternal night: time=15628 (Sessions 32-86)
+
+---
+
 ## Session 85 Status Update (2026-02-17) - ✅ PHASE 8 READY - AWAITING ADMIN BLAZE_ROD x6
 
 ### Current Situation - PHASE 8 READY, AWAITING ADMIN
