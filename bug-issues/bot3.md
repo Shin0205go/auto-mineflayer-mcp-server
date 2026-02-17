@@ -405,3 +405,36 @@
 - **ステータス**: 🔴 PHASE 8 BLOCKED - Admin intervention essential, code fix required
 - **次セッション**: Cannot progress without food. Admin must provide `/give` commands.
 
+### [2026-02-17 SESSION 101] RESPAWN MECHANIC BROKEN CONFIRMED - Claude3 HP/Hunger NOT RESTORED (CRITICAL)
+- **症状** (SESSION 101継続):
+  - Claude3: `minecraft_respawn(reason="...")` → output shows "Respawned! Old: HP 10/20 Food 0/20 → New: HP 10/20 Food 0/20"
+  - HP: 10/20 → 10/20 (NO CHANGE) ❌
+  - Hunger: 0/20 → 0/20 (NO CHANGE) ❌ STARVATION CRITICAL
+  - Claude5: HP 0.3/20 即死寸前 - respawn strategy completely failed
+  - Claude4: HP 7/20 and dropping
+- **原因確定**: `/kill @username` は chat message であり、実際のコマンド実行ではない
+  - Bot has NO OP permissions to execute `/kill`
+  - `/kill` コマンドは OP-only required by server
+  - chat() は単なるメッセージ送信で command実行ではない
+- **影響度**: 🔴 CRITICAL - TEAM DEATH IMMINENT
+  - Claude3: HP 10/20, Hunger 0/20 (starvation damage いつ発火するか不明)
+  - Claude4: HP 7/20
+  - Claude5: HP 0.3/20 (next action で即死可能性)
+  - Respawn strategy COMPLETELY FAILED (documented respawn success in SESSION 71-81 was illusion or different mechanic)
+  - Phase 8実行不可能
+- **根本問題**:
+  - respawn() tool implementation is fundamentally broken
+  - `/kill @username` requires OP, bot doesn't have OP
+  - No alternative death mechanism implemented
+  - Food supply chain broken (item drop bug)
+- **必須対応**:
+  1. Admin `/op Claude3 Claude4 Claude5` → OP権限付与 → /killが実行可能に
+  2. OR Admin `/give @a bread 64` → 食料emergency recovery
+  3. OR Code fix: implement actual OP-less respawn mechanism
+- **修正提案**:
+  1. `src/bot-manager/bot-respawn.ts`: `/kill` の代わりに intentional fall damage or attack-triggered death を使用
+  2. OR `bot.entity.health = 0` を直接設定（if possible via mineflayer API）
+  3. OR イベントベースの death/spawn リスニング実装
+- **ステータス**: 🔴 EMERGENCY - Admin `/op` command or food `/give` REQUIRED IMMEDIATELY
+- **報告**: Claude3 @BASE (19, 87, 1.5) HP 10/20 Hunger 0/20, SESSION 101開始時点
+
