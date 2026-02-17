@@ -1420,11 +1420,11 @@ export async function useItemOnBlock(
         }
       }
     } else if (itemName === "flint_and_steel") {
-      // For flint_and_steel, use placeBlock on the target block (ignites nether portal frame)
-      // activateBlock doesn't work on obsidian; placeBlock with proper face vector does
+      // For flint_and_steel, right-click on obsidian to ignite nether portal.
+      // Strategy: equip flint_and_steel, look at block, send block_place packet directly.
       let ignited = false;
 
-      // Try placeBlock with upward face (standard portal ignition on bottom obsidian)
+      // Attempt 1: activateBlock (right-click on obsidian)
       const faceVectors = [
         new Vec3(0, 1, 0),  // top face (most common for bottom obsidian)
         new Vec3(0, 0, 1),  // south face
@@ -1434,33 +1434,73 @@ export async function useItemOnBlock(
       ];
 
       for (const face of faceVectors) {
+        if (ignited) break;
         try {
-          console.error(`[DEBUG] flint_and_steel: trying placeBlock on "${block.name}" face=${face}`);
-          await bot.lookAt(pos.offset(0.5 + face.x * 0.4, 0.5 + face.y * 0.4, 0.5 + face.z * 0.4));
-          await new Promise(resolve => setTimeout(resolve, 100));
-          await bot.placeBlock(block, face);
-          await new Promise(resolve => setTimeout(resolve, 500));
+          const lookTarget = pos.offset(0.5 + face.x * 0.5, 0.5 + face.y * 0.5, 0.5 + face.z * 0.5);
+          console.error(`[DEBUG] flint_and_steel: activateBlock on "${block.name}" face=${face}`);
+          await bot.lookAt(lookTarget);
+          await new Promise(resolve => setTimeout(resolve, 150));
+          await bot.activateBlock(block);
+          await new Promise(resolve => setTimeout(resolve, 600));
 
-          // Check if nether_portal appeared nearby
           const portalBlock = bot.findBlock({
             matching: (b) => b.name === "nether_portal",
             maxDistance: 10,
           });
           if (portalBlock) {
             ignited = true;
-            console.error(`[DEBUG] flint_and_steel: nether_portal ignited! face=${face}`);
-            break;
+            console.error(`[DEBUG] flint_and_steel: nether_portal ignited via activateBlock! face=${face}`);
           }
         } catch (e) {
-          console.error(`[DEBUG] flint_and_steel placeBlock face=${face} failed: ${e}`);
+          console.error(`[DEBUG] flint_and_steel activateBlock face=${face} failed: ${e}`);
         }
       }
 
+      // Attempt 2: direct block_place packet
       if (!ignited) {
-        // Last resort: activateBlock
+        for (const face of faceVectors) {
+          if (ignited) break;
+          try {
+            const faceId = face.y === 1 ? 1 : face.y === -1 ? 0 : face.z === 1 ? 3 : face.z === -1 ? 2 : face.x === 1 ? 5 : 4;
+            console.error(`[DEBUG] flint_and_steel: block_place packet face=${faceId}`);
+            await bot.lookAt(pos.offset(0.5, 1.0, 0.5));
+            await new Promise(resolve => setTimeout(resolve, 100));
+            (bot as any)._client.write('block_place', {
+              hand: 0,
+              location: { x: pos.x, y: pos.y, z: pos.z },
+              direction: faceId,
+              cursorX: 0.5,
+              cursorY: 1.0,
+              cursorZ: 0.5,
+              insideBlock: false,
+            });
+            await new Promise(resolve => setTimeout(resolve, 600));
+
+            const portalBlock = bot.findBlock({
+              matching: (b) => b.name === "nether_portal",
+              maxDistance: 10,
+            });
+            if (portalBlock) {
+              ignited = true;
+              console.error(`[DEBUG] flint_and_steel: nether_portal ignited via block_place! face=${faceId}`);
+            }
+          } catch (e) {
+            console.error(`[DEBUG] flint_and_steel block_place failed: ${e}`);
+          }
+        }
+      }
+
+      // Attempt 3: activateItem (use item while looking at block)
+      if (!ignited) {
         try {
-          await bot.activateBlock(block);
-        } catch (_) { /* ignore */ }
+          await bot.lookAt(pos.offset(0.5, 1.0, 0.5));
+          await new Promise(resolve => setTimeout(resolve, 100));
+          bot.activateItem();
+          await new Promise(resolve => setTimeout(resolve, 600));
+          bot.deactivateItem();
+        } catch (e) {
+          console.error(`[DEBUG] flint_and_steel activateItem failed: ${e}`);
+        }
       }
     } else {
       // For other items, use activateBlock
