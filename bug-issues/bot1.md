@@ -12,6 +12,16 @@
 
 ---
 
+## Session 100 Bug Fix (2026-02-17) - minecraft_respawn() 改善
+
+### [2026-02-17] respawn() /kill コマンド失敗問題
+- **症状**: bot.chat('/kill username') がコマンドではなくチャットメッセージとして送られる
+- **原因**: Mineflayerの bot.chat() は '/kill username' を通常チャットとして扱う場合がある
+- **修正**: `/kill`（引数なし）に変更 + HP変化確認後、効果なしなら落下ダメージにフォールバック
+- **ファイル**: `src/bot-manager/bot-survival.ts` lines 1034-1084
+
+---
+
 ## Session 99 Status Update (2026-02-17) - PHASE 8 ACTIVE - admin blaze_rod x5待ち
 
 ### Online Status
