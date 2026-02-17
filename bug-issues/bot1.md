@@ -12,6 +12,17 @@
 
 ---
 
+## Session 101 Bug Fix (2026-02-17) - liquidCost増加でBASE付近溺死頻発を抑制
+
+### [2026-02-17] BASE付近の水でボットが繰り返し溺死する問題
+- **症状**: BASE(9,93,2)〜crafting_table(21,88,1)間の移動で水中を通り繰り返し溺死
+- **原因**: liquidCost=100では水パスがまだ選ばれる場合があった
+- **修正**: liquidCost=100→10000に増加。水路を実質的に回避
+- **ファイル**: `src/bot-manager/bot-core.ts` line 303
+- **注意**: bots再接続時に有効。現行セッションは再接続まで旧値
+
+---
+
 ## Session 101 Bug Fix (2026-02-17) - chest sync bug 修正
 
 ### [2026-02-17] takeFromChest() 部分成功を失敗判定する問題
