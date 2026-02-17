@@ -12,6 +12,22 @@
 
 ---
 
+## Session 88 Status Update (2026-02-17) - PHASE 8 ACTIVE - BOW ATTACK ADDED
+
+### Code Fix: Bow Attack for ender_crystal (Session 88)
+- **症状**: attack()関数が近接攻撃のみ。End Crystalは塔の上にあり近接不可
+- **修正**: attack()にender_crystal用弓攻撃ロジック追加 (bot-survival.ts:371付近)
+  - bow+arrowがある場合: lookAt→activateItem→1.2s保持→deactivateItem
+  - 弓攻撃失敗時は近接フォールバック
+- **ファイル**: `src/bot-manager/bot-survival.ts`
+
+### Online Status
+- Claude1✅, Claude3✅, Claude7✅ — BASE(9,93,2)待機
+- Claude2,4,5,6 未接続
+- **待機中**: admin blaze_rod x6, bow x7, arrow x256, bread x64, golden_apple x14
+
+---
+
 ## Session 87 Status Update (2026-02-17) - ✅ PHASE 8 READY - AWAITING ADMIN BLAZE_ROD x6
 
 ### Current Situation - PHASE 8 READY, AWAITING ADMIN
