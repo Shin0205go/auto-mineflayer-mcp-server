@@ -1362,64 +1362,75 @@ export async function dismount(managed: ManagedBot): Promise<string> {
 /**
  * Enter a Nether portal and teleport to the Nether/Overworld
  */
-export async function enterPortal(managed: ManagedBot): Promise<string> {
+export async function enterPortal(managed: ManagedBot, portalType?: "nether_portal" | "end_portal"): Promise<string> {
   const bot = managed.bot;
   const startDimension = bot.game.dimension;
 
-  // Find nearest nether_portal block
+  // Determine which portal type to look for
+  // Default: try end_portal first if in overworld near stronghold, otherwise nether_portal
+  const searchTypes = portalType
+    ? [portalType]
+    : ["end_portal", "nether_portal"] as const;
+
+  // Find nearest portal block (end or nether)
   let portalBlock = bot.findBlock({
-    matching: (block) => block.name === "nether_portal",
+    matching: (block) => searchTypes.includes(block.name as any),
     maxDistance: 10,
   });
 
-  // FALLBACK: If portal blocks not detected, search for obsidian frame pattern
+  // FALLBACK: If portal blocks not detected, search for obsidian frame pattern (end_portal_frame for End portal)
   if (!portalBlock) {
-    console.error(`[Portal] nether_portal blocks not detected, searching for obsidian frame...`);
-    const obsidianBlocks = bot.findBlocks({
-      matching: bot.registry.blocksByName["obsidian"]?.id,
+    console.error(`[Portal] Portal blocks not detected, searching for frame...`);
+
+    // Check for end_portal_frame first (End portal in stronghold)
+    const endFrameBlock = bot.findBlock({
+      matching: (block) => block.name === "end_portal_frame",
       maxDistance: 15,
-      count: 50,
     });
+    if (endFrameBlock) {
+      console.error(`[Portal] Found end_portal_frame at (${endFrameBlock.position.x}, ${endFrameBlock.position.y}, ${endFrameBlock.position.z})`);
+      portalBlock = endFrameBlock;
+    } else {
+      // Fallback to nether portal obsidian frame search
+      const obsidianBlocks = bot.findBlocks({
+        matching: bot.registry.blocksByName["obsidian"]?.id,
+        maxDistance: 15,
+        count: 50,
+      });
 
-    // Look for vertical obsidian columns (portal frame pattern)
-    for (const pos of obsidianBlocks) {
-      const block = bot.blockAt(pos);
-      if (!block) continue;
+      // Look for vertical obsidian columns (nether portal frame pattern)
+      for (const pos of obsidianBlocks) {
+        const block = bot.blockAt(pos);
+        if (!block) continue;
 
-      // Check if there are 3+ obsidian blocks vertically stacked (portal frame side)
-      let verticalCount = 1;
-      for (let dy = 1; dy <= 4; dy++) {
-        const above = bot.blockAt(pos.offset(0, dy, 0));
-        if (above?.name === "obsidian") verticalCount++;
-        else break;
-      }
-
-      if (verticalCount >= 3) {
-        // Found a portal frame! Look for the air space inside (where portal blocks should be)
-        // Portal blocks are typically 1 block in from the frame
-        const airOffsets = [
-          new Vec3(1, 1, 0),  // east
-          new Vec3(-1, 1, 0), // west
-          new Vec3(0, 1, 1),  // south
-          new Vec3(0, 1, -1), // north
-        ];
-
-        for (const offset of airOffsets) {
-          const portalPos = pos.plus(offset);
-          const innerBlock = bot.blockAt(portalPos);
-          // Accept both nether_portal (active) or air (frame present but not lit)
-          if (innerBlock && (innerBlock.name === "nether_portal" || innerBlock.name === "air")) {
-            console.error(`[Portal] Found portal frame, targeting position inside: (${portalPos.x}, ${portalPos.y}, ${portalPos.z})`);
-            portalBlock = innerBlock;
-            break;
-          }
+        let verticalCount = 1;
+        for (let dy = 1; dy <= 4; dy++) {
+          const above = bot.blockAt(pos.offset(0, dy, 0));
+          if (above?.name === "obsidian") verticalCount++;
+          else break;
         }
-        if (portalBlock) break;
+
+        if (verticalCount >= 3) {
+          const airOffsets = [
+            new Vec3(1, 1, 0), new Vec3(-1, 1, 0),
+            new Vec3(0, 1, 1), new Vec3(0, 1, -1),
+          ];
+          for (const offset of airOffsets) {
+            const portalPos = pos.plus(offset);
+            const innerBlock = bot.blockAt(portalPos);
+            if (innerBlock && (innerBlock.name === "nether_portal" || innerBlock.name === "air")) {
+              console.error(`[Portal] Found obsidian frame, targeting inside: (${portalPos.x}, ${portalPos.y}, ${portalPos.z})`);
+              portalBlock = innerBlock;
+              break;
+            }
+          }
+          if (portalBlock) break;
+        }
       }
     }
 
     if (!portalBlock) {
-      throw new Error("No nether portal or obsidian frame found within 15 blocks");
+      throw new Error("No end_portal, nether_portal, or portal frame found within 15 blocks");
     }
   }
 
@@ -1428,7 +1439,7 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
   let lowestPortal = portalBlock;
   for (let dy = -1; dy >= -3; dy--) {
     const below = bot.blockAt(portalBlock.position.offset(0, dy, 0));
-    if (below && below.name === "nether_portal") {
+    if (below && (below.name === "nether_portal" || below.name === "end_portal")) {
       lowestPortal = below;
     } else {
       break;
@@ -1437,21 +1448,24 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
 
   console.error(`[Portal] Found portal at (${lowestPortal.position.x}, ${lowestPortal.position.y}, ${lowestPortal.position.z}), bot at (${bot.entity.position.x.toFixed(1)}, ${bot.entity.position.y.toFixed(1)}, ${bot.entity.position.z.toFixed(1)})`);
 
+  // Determine the active portal block name
+  const activePortalName = lowestPortal.name === "end_portal" ? "end_portal" : "nether_portal";
+
   // Check if bot is already inside the portal block
   const botBlockPos = bot.entity.position.floored();
   const blockAtFeet = bot.blockAt(botBlockPos);
-  const alreadyInPortal = blockAtFeet?.name === "nether_portal";
+  const alreadyInPortal = blockAtFeet?.name === activePortalName;
   if (alreadyInPortal) {
-    console.error(`[Portal] Bot is already inside portal block, waiting for dimension change...`);
+    console.error(`[Portal] Bot is already inside ${activePortalName} block, waiting for dimension change...`);
   }
 
   // Temporarily allow stepping on portal blocks (normally avoided to prevent accidental teleport)
-  const portalBlockId = bot.registry.blocksByName["nether_portal"]?.id;
+  const netherPortalId = bot.registry.blocksByName["nether_portal"]?.id;
+  const endPortalId = bot.registry.blocksByName["end_portal"]?.id;
 
   try {
-    if (portalBlockId !== undefined) {
-      bot.pathfinder.movements.blocksToAvoid.delete(portalBlockId);
-    }
+    if (netherPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.delete(netherPortalId);
+    if (endPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.delete(endPortalId);
 
     if (!alreadyInPortal) {
       // Move near the lowest portal block (not ON it, but beside it)
@@ -1460,13 +1474,12 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
 
       // Force walk into the portal block center — retry from multiple angles
       const portalCenter = lowestPortal.position.offset(0.5, 0, 0.5);
-      // Try approaching from different directions (portal could be oriented either way)
       const approaches = [
-        portalCenter,                                           // direct center
-        lowestPortal.position.offset(0.5, 0, -0.5),           // from south
-        lowestPortal.position.offset(0.5, 0, 1.5),            // from north
-        lowestPortal.position.offset(-0.5, 0, 0.5),           // from east
-        lowestPortal.position.offset(1.5, 0, 0.5),            // from west
+        portalCenter,
+        lowestPortal.position.offset(0.5, 0, -0.5),
+        lowestPortal.position.offset(0.5, 0, 1.5),
+        lowestPortal.position.offset(-0.5, 0, 0.5),
+        lowestPortal.position.offset(1.5, 0, 0.5),
       ];
       for (let attempt = 0; attempt < 5; attempt++) {
         const target = approaches[attempt] || portalCenter;
@@ -1479,8 +1492,8 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
 
         // Check if we're inside the portal now
         const currentBlock = bot.blockAt(bot.entity.position.floored());
-        if (currentBlock?.name === "nether_portal") {
-          console.error(`[Portal] Bot entered portal block on attempt ${attempt + 1}`);
+        if (currentBlock?.name === activePortalName) {
+          console.error(`[Portal] Bot entered ${activePortalName} block on attempt ${attempt + 1}`);
           break;
         }
         console.error(`[Portal] Attempt ${attempt + 1}: feet at ${currentBlock?.name}, trying different angle...`);
@@ -1508,19 +1521,17 @@ export async function enterPortal(managed: ManagedBot): Promise<string> {
       const cleanup = () => {
         clearTimeout(timeout);
         bot.removeListener("spawn", onSpawn);
-        // Re-add portal to blocksToAvoid after transition
-        if (portalBlockId !== undefined) {
-          bot.pathfinder.movements.blocksToAvoid.add(portalBlockId);
-        }
+        // Re-add portals to blocksToAvoid after transition
+        if (netherPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.add(netherPortalId);
+        if (endPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.add(endPortalId);
       };
 
       bot.on("spawn", onSpawn);
     });
   } catch (err) {
-    // Re-add portal to blocksToAvoid on failure
-    if (portalBlockId !== undefined) {
-      bot.pathfinder.movements.blocksToAvoid.add(portalBlockId);
-    }
+    // Re-add portals to blocksToAvoid on failure
+    if (netherPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.add(netherPortalId);
+    if (endPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.add(endPortalId);
     const errMsg = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to enter portal: ${errMsg}`);
   }

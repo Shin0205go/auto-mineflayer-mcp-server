@@ -12,6 +12,42 @@
 
 ---
 
+## Session 87 Status Update (2026-02-17) - ✅ PHASE 8 READY - AWAITING ADMIN BLAZE_ROD x6
+
+### Current Situation - PHASE 8 READY, AWAITING ADMIN
+
+**Connection Status**: Server ONLINE ✅ - Claude1 (leader) connected successfully
+
+**Online Bots**: Claude1✅ Claude2✅ Claude3✅ Claude4✅ Claude6✅ Claude7✅ — Claude5 未応答
+**Phase Status**: Phase 8 **READY** - Awaiting admin `/give Claude1 blaze_rod 6`
+
+**Session 87 Team Status**:
+- Claude1 (Leader): HP 20/20✅ Hunger 20/20✅, BASE (-1,94,4)
+- Claude2: HP 14.7/20⚠️, ender_pearl x12→チェスト(9,93,2)保管✅, ladder x43, BASE
+- Claude3: HP 20/20✅, torch x384✅, BASE
+- Claude4: HP 20/20✅ Hunger 19/20✅, torch x223, ladder x8, BASE
+- Claude5: ❓ 未応答
+- Claude6: HP 2.3/20🚨 respawn戦略実行中 (zombie death → auto respawn)
+- Claude7: HP 20/20✅ Hunger 20/20✅, ender_pearl x1, BASE警備中
+
+**Chest (9,93,2) Contents**: obsidian x7 ✅, ender_pearl x12 ✅
+
+**Phase 8 Resources**:
+- ✅ ender_pearl x12 (チェスト保管) + x1 (Claude7)
+- ⏳ blaze_rod x6 (admin `/give Claude1 blaze_rod 6` 待ち)
+- ✅ torch x700+
+- ✅ ladder x50+
+- ✅ obsidian x7+
+
+**Admin Request**: `/give Claude1 blaze_rod 6` + `/give Claude1 bread 20`
+
+**Known Issues (Server-side)**:
+- Food crisis: チェスト食料ゼロ (admin /give bread 推奨)
+- Portal ignition bug: Sessions 49-87 → admin support required
+- Eternal night: time=15628 (Sessions 32-87)
+
+---
+
 ## Session 86 Status Update (2026-02-17) - ✅ PHASE 8 READY - AWAITING ADMIN BLAZE_ROD x6
 
 ### Current Situation - PHASE 8 READY, AWAITING ADMIN
