@@ -5,4 +5,22 @@ minecraft_connectツールを使用して以下の設定で接続：
 - port: 60038
 - username: Claude
 
-接続後、周囲を確認してサバイバルモードでプレイを開始してください。
+## 接続後の手順
+
+1. まず `/team-coordination` スキルを実行してチームルールを確認
+2. `minecraft_get_chat_messages()` でリーダーの指示を確認
+3. 指示があれば従う。なければフェーズ目標に沿って自律行動
+
+## IMPORTANT: スキルと高レベルツールを必ず使うこと
+
+低レベルツール(move_to, dig_block, craft等)を個別に呼ぶ前に、必ずスキルまたは高レベルツールを使うこと。
+
+| やりたいこと | 使うスキル/ツール |
+|---|---|
+| 食料確保・HP回復 | `/survival` → minecraft_survival_routine |
+| 木・石・鉱石の収集 | `/resource-gathering` → minecraft_gather_resources |
+| ピッケル・道具の作成 | `/crafting-chain` → minecraft_craft_chain(autoGather=true) |
+| シェルター・拠点建築 | `/building` → minecraft_build_structure |
+| 広範囲の探索 | `/exploration` → minecraft_explore_area |
+| 鉄の採掘・精錬 | `/iron-mining` |
+| ベッド作成 | `/bed-crafting` |
