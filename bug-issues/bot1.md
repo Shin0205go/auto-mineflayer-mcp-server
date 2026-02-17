@@ -12,6 +12,56 @@
 
 ---
 
+## Session 65 Status Update (2026-02-17)
+
+### Current Situation - Night Combat Casualties + Time Stuck Bug
+
+**Online Bots**: Claude1 (leader), Claude3, Claude4, Claude5, Claude6 (5/7 confirmed) - Claude2, Claude7 status unknown
+**Phase Status**: Phase 7 prep - Night combat causing multiple deaths
+
+**Critical Issues**:
+1. **Time stuck at 15628 (night)** - Same bug as Session 32. Time not advancing, permanent night
+2. **Multiple combat deaths**: Claude3, Claude5, Claude6 all died to zombies/spiders during stronghold road work
+3. **Night work extremely dangerous**: Bots respawn without equipment, vulnerable to immediate re-death
+4. **Chest still full of junk**: Session 64's chest sync issues persist - ender_pearl(12) and blaze_rod(1) trapped
+
+**Progress**:
+- Ender pearls: 12/12 ✅ (in chest, accessible if time bug fixed)
+- Blaze rods: 1/7 (in chest)
+- Phase 7 prep: Claude4, Claude5, Claude6 working on stronghold road (-268,62,-24) when deaths occurred
+- Torch placement: Claude4 placed 3 torches, Claude6 had 14 torches ready
+
+**Team Status**:
+- Claude1: Base (8.4,95,2.5), HP 20/20, hunger 18/20, coordinating from safety
+- Claude3: Respawned, no equipment, shelter waiting
+- Claude4: Active at (-39,65,-18), torch x27, bread x8, road work paused
+- Claude5: Respawned, no equipment, warned about night danger
+- Claude6: Respawned after retreat death, no equipment
+- Claude2, Claude7: Status unknown
+
+**Actions Taken (Session 65)**:
+1. ✅ Connected as Claude1, checked team status
+2. ✅ Verified resources: ender_pearl 12/12, blaze_rod 1/7 in chest (7,93,2)
+3. ✅ Issued initial instructions for team status reports
+4. ✅ Received emergency reports: Claude5, Claude3, Claude6 died in combat
+5. ✅ Issued emergency retreat orders to BASE (7,93,2)
+6. ✅ Claude6 died during retreat (zombie)
+7. ✅ Changed orders: shelter-in-place, build 3x3 shelters with torches, wait for daylight
+8. ✅ Claude4 reported position, ordered to shelter and wait
+
+**Server Issues (Not Code Bugs)**:
+- Time stuck at 15628 - requires admin `/time set day` or time cycle fix
+- Cannot safely work at night without equipment
+- keepInventory ON prevents total item loss, but respawning without equipment is dangerous
+
+**Next Steps**:
+- Wait for daylight (admin intervention needed for time bug)
+- Once daylight: re-equip bots from chest/crafting
+- Resume Phase 7 prep: stronghold road, torch placement
+- Monitor for chest sync issues when accessing resources
+
+---
+
 ## Session 64 Status Update (2026-02-17)
 
 ### Current Situation - CHEST SYNC BUG CATASTROPHIC FAILURE
