@@ -331,6 +331,7 @@ export class BotCore extends EventEmitter {
         bot.chat("/gamerule doMobLoot true");
         bot.chat("/gamerule doEntityDrops true");
         bot.chat("/gamerule doMobSpawning true");
+        bot.chat("/gamerule keepInventory true");
 
         const managedBot: ManagedBot = {
           bot,

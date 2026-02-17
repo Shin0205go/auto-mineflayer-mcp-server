@@ -1419,6 +1419,49 @@ export async function useItemOnBlock(
           console.error(`[DEBUG] activateItem for ${itemName} failed: ${e}`);
         }
       }
+    } else if (itemName === "flint_and_steel") {
+      // For flint_and_steel, use placeBlock on the target block (ignites nether portal frame)
+      // activateBlock doesn't work on obsidian; placeBlock with proper face vector does
+      let ignited = false;
+
+      // Try placeBlock with upward face (standard portal ignition on bottom obsidian)
+      const faceVectors = [
+        new Vec3(0, 1, 0),  // top face (most common for bottom obsidian)
+        new Vec3(0, 0, 1),  // south face
+        new Vec3(0, 0, -1), // north face
+        new Vec3(1, 0, 0),  // east face
+        new Vec3(-1, 0, 0), // west face
+      ];
+
+      for (const face of faceVectors) {
+        try {
+          console.error(`[DEBUG] flint_and_steel: trying placeBlock on "${block.name}" face=${face}`);
+          await bot.lookAt(pos.offset(0.5 + face.x * 0.4, 0.5 + face.y * 0.4, 0.5 + face.z * 0.4));
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await bot.placeBlock(block, face);
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Check if nether_portal appeared nearby
+          const portalBlock = bot.findBlock({
+            matching: (b) => b.name === "nether_portal",
+            maxDistance: 10,
+          });
+          if (portalBlock) {
+            ignited = true;
+            console.error(`[DEBUG] flint_and_steel: nether_portal ignited! face=${face}`);
+            break;
+          }
+        } catch (e) {
+          console.error(`[DEBUG] flint_and_steel placeBlock face=${face} failed: ${e}`);
+        }
+      }
+
+      if (!ignited) {
+        // Last resort: activateBlock
+        try {
+          await bot.activateBlock(block);
+        } catch (_) { /* ignore */ }
+      }
     } else {
       // For other items, use activateBlock
       await bot.activateBlock(block);

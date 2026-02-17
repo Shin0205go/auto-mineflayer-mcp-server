@@ -431,33 +431,41 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
       // Manual crafting for stick: 2 planks → 4 sticks
       if (itemName === "stick") {
-        // Find planks with the HIGHEST count to avoid picking a plank type we don't have enough of
+        // Find the plank type with the highest count (prefer single type with >= 2)
         const allPlanks = inventoryItems.filter(i => i.name.endsWith("_planks"));
-        const availablePlanks = allPlanks.sort((a, b) => b.count - a.count)[0];
-        if (!availablePlanks || availablePlanks.count < 2) {
-          throw new Error(`Cannot craft stick: Need 2 planks, have ${availablePlanks?.count || 0}. Inventory: ${inventory}`);
+        // First try to find a single type with >= 2 planks
+        let availablePlanks = allPlanks.sort((a, b) => b.count - a.count)[0];
+        if (!availablePlanks || totalPlanks < 2) {
+          throw new Error(`Cannot craft stick: Need 2 planks, have ${totalPlanks}. Inventory: ${inventory}`);
         }
 
-        // Get the specific planks item from mcData
-        const planksItem = mcData.itemsByName[availablePlanks.name];
-        if (!planksItem) {
-          throw new Error(`Cannot find item data for ${availablePlanks.name}`);
+        // If best plank count < 2 but totalPlanks >= 2, use a different plank as 2nd ingredient
+        const planksForRecipe = availablePlanks.count >= 2
+          ? [availablePlanks, availablePlanks]
+          : [allPlanks[0], allPlanks[1] || allPlanks[0]]; // use 2 different plank types
+
+        // Get the specific planks item from mcData (use first plank type for recipe)
+        const planksItem = mcData.itemsByName[planksForRecipe[0].name];
+        const planksItem2 = mcData.itemsByName[planksForRecipe[1].name];
+        if (!planksItem || !planksItem2) {
+          throw new Error(`Cannot find item data for planks`);
         }
 
         // Create manual recipe: 2 planks in vertical pattern → 4 sticks
         // Pattern: planks at (0,0) and (0,1) in 2x2 grid
         const manualRecipe = {
           result: { id: item.id, count: 4 },
-          inShape: [[planksItem.id], [planksItem.id]],
-          ingredients: [planksItem.id, planksItem.id],
+          inShape: [[planksItem.id], [planksItem2.id]],
+          ingredients: [planksItem.id, planksItem2.id],
           delta: [
             { id: item.id, count: 4 },
-            { id: planksItem.id, count: -2 }
+            { id: planksItem.id, count: -1 },
+            { id: planksItem2.id, count: planksItem.id === planksItem2.id ? -1 : -1 }
           ],
           requiresTable: false
         };
 
-        console.error(`[Craft] Manual recipe created for stick using ${availablePlanks.name}`);
+        console.error(`[Craft] Manual recipe created for stick using ${planksForRecipe[0].name} + ${planksForRecipe[1].name}`);
         allRecipes = [manualRecipe as any];
       }
 
