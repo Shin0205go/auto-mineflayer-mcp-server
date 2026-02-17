@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import sys,json,os; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); parts=p.replace(os.sep,'/').split('/'); allowed=['src','bug-issues']; exit(0 if any(d in parts for d in allowed) else 2)\" || echo 'Only src/, bug-issues/ editable'",
+            "command": "python3 -c \"import sys,json,os; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); parts=p.replace(os.sep,'/').split('/'); ok=False; idx_src=-1;\\nfor i,d in enumerate(parts):\\n  if d=='src': idx_src=i\\nif idx_src>=0 and idx_src+1<len(parts) and parts[idx_src+1]=='tools': ok=True\\nif 'bug-issues' in parts: ok=True\\nexit(0 if ok else 2)\" || echo 'Only src/tools/, bug-issues/ editable'",
             "statusMessage": "Checking file permissions"
           }
         ]
@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import sys,json; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); exit(0) if p.startswith('src/') else exit(1)\" 2>/dev/null && npm run build --silent 2>/dev/null",
+            "command": "python3 -c \"import sys,json; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); exit(0) if 'src/tools' in p or '/src/tools' in p else exit(1)\" 2>/dev/null && npm run build --silent 2>/dev/null",
             "timeout": 60,
             "statusMessage": "Building after src/ edit"
           }

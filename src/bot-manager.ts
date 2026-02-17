@@ -485,6 +485,10 @@ export class BotManager extends EventEmitter {
     if (!managed) {
       throw new Error(`Bot '${username}' not found`);
     }
+    if (message.startsWith("/")) {
+      console.error(`[Chat] BLOCKED slash command from ${username}: ${message}`);
+      return;
+    }
     managed.bot.chat(message);
   }
 
