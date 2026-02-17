@@ -23,6 +23,14 @@ mkdir -p "$LOG_DIR"
 # ループカウンター
 LOOP=0
 
+# 停滞検知用の状態ファイル
+STATE_FILE="$LOG_DIR/progress_state.txt"
+# 形式: PHASE|STALE_COUNT|LAST_SUMMARY
+# 初期化（ファイルが無ければ作成）
+if [ ! -f "$STATE_FILE" ]; then
+  echo "0|0|" > "$STATE_FILE"
+fi
+
 # Claude子プロセスPID（クリーンアップ用）
 CLAUDE_PID=""
 
@@ -128,6 +136,11 @@ CLAUDE.mdにフェーズ定義・チャットプロトコル・行動原則が�
 
 **重要**: 毎回同じ指示を出すな。チャット履歴を見て状況に合った判断をしろ。
 
+## 禁止事項
+- **adminの/giveコマンドに頼るな。** adminは存在しない。全てのアイテムは自力で入手しろ。
+- 「admin待ち」「admin support required」は禁止。解決できない問題は別のアプローチを試せ。
+- 同じ行動を3回以上繰り返して失敗したら、アプローチを根本的に変えろ。
+
 編集可能: `src/tools/`, `bug-issues/bot1.md` のみ。
 PROMPT
   else
@@ -148,6 +161,39 @@ CLAUDE.mdにフェーズ定義・チャットプロトコル・行動原則が�
 修正したら動作確認（ビルドとコミットはhookが自動でやる）
 編集可能: \`src/tools/\`, \`bug-issues/bot${BOT_ID}.md\` のみ。
 PROMPT
+  fi
+
+  # --- 停滞警告の注入 ---
+  PREV_PHASE=$(cut -d'|' -f1 "$STATE_FILE" 2>/dev/null || echo "0")
+  STALE_COUNT=$(cut -d'|' -f2 "$STATE_FILE" 2>/dev/null || echo "0")
+  PREV_SUMMARY=$(cut -d'|' -f3 "$STATE_FILE" 2>/dev/null || echo "")
+
+  if [ "$STALE_COUNT" -ge 5 ] 2>/dev/null; then
+    cat >> /tmp/minecraft_prompt_bot${BOT_ID}.md << STALE_EOF
+
+## CRITICAL: ${STALE_COUNT}セッション連続でPhase ${PREV_PHASE}のまま停滞中
+
+お前は${STALE_COUNT}回連続で同じPhaseに留まっている。今のアプローチは完全に失敗している。
+前回の状態: ${PREV_SUMMARY}
+
+**即座に以下を実行しろ:**
+1. 今の戦略を完全に捨てろ。同じことを繰り返すな。
+2. 「admin待ち」「/give待ち」は禁止。adminは存在しない。
+3. 問題を別の角度から解決しろ。できないなら前のPhaseに戻ってやり直せ。
+4. bug-issues/bot${BOT_ID}.mdの「admin待ち」記述を削除しろ。
+STALE_EOF
+    echo "🚨 Injected stale alert (${STALE_COUNT} sessions stuck at Phase ${PREV_PHASE})"
+  elif [ "$STALE_COUNT" -ge 3 ] 2>/dev/null; then
+    cat >> /tmp/minecraft_prompt_bot${BOT_ID}.md << STALE_EOF
+
+## WARNING: ${STALE_COUNT}セッション連続でPhase ${PREV_PHASE}のまま
+
+同じPhaseが${STALE_COUNT}回続いている。アプローチを見直せ。
+- 同じ行動を繰り返していないか？
+- 「待ち」状態になっていないか？adminは存在しない。自力で解決しろ。
+- 別の方法を試せ。
+STALE_EOF
+    echo "⚠️  Injected stale warning (${STALE_COUNT} sessions at Phase ${PREV_PHASE})"
   fi
 
   # 前回のログがあれば追加（末尾80行）
@@ -222,6 +268,27 @@ PROMPT
   echo "   - Tools used: $TOOL_COUNT"
   echo "   - Errors: $ERROR_COUNT"
   echo "   - Log: $LOGFILE"
+
+  # --- 進捗チェック（停滞検知） ---
+  # ログからPhase番号を抽出（最後に出てきたPhase N）
+  CURRENT_PHASE=$(grep -oiE "phase\s*[0-9]+" "$LOGFILE" 2>/dev/null | tail -1 | grep -oE "[0-9]+" || echo "0")
+  # 状態ファイルから前回の情報を読み込み
+  PREV_PHASE=$(cut -d'|' -f1 "$STATE_FILE" 2>/dev/null || echo "0")
+  STALE_COUNT=$(cut -d'|' -f2 "$STATE_FILE" 2>/dev/null || echo "0")
+
+  if [ "$CURRENT_PHASE" = "$PREV_PHASE" ]; then
+    STALE_COUNT=$((STALE_COUNT + 1))
+    echo "⚠️  Stale: Phase $CURRENT_PHASE unchanged for $STALE_COUNT sessions"
+  else
+    STALE_COUNT=0
+    echo "✅ Progress: Phase $PREV_PHASE → $CURRENT_PHASE"
+  fi
+
+  # 今回のログから状態サマリーを抽出（最後の5行程度のキーワード）
+  SUMMARY=$(grep -iE "waiting|admin|stuck|failed|Phase|ready|complete" "$LOGFILE" 2>/dev/null | tail -3 | tr '\n' ' ' | cut -c1-200)
+
+  # 状態ファイルを更新
+  echo "${CURRENT_PHASE}|${STALE_COUNT}|${SUMMARY}" > "$STATE_FILE"
 
   # PR作成・マージはStop hookが自動で行う（scripts/hook-stop-auto-pr.sh）
 
