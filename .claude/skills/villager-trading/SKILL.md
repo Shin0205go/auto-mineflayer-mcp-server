@@ -1,8 +1,8 @@
 ---
 name: villager-trading
 description: |
-  Minecraft villager trading guide - professions, best trades, breeding.
-  Use when: Want emeralds, need specific items, setting up trading hall.
+  村人交易ガイド。職業ブロック、おすすめ取引、村人繁殖の方法。
+  Use when: エメラルドが欲しい、村人と取引したい、取引所を作りたい、特定アイテムを村人から入手したい時。
 ---
 
 # 村人取引スキル

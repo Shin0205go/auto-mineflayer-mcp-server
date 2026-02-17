@@ -1,8 +1,8 @@
 ---
 name: potion-brewing
 description: |
-  Minecraft potion brewing guide - recipes and effects.
-  Use when: Need potions, setting up brewing station, combat preparation.
+  ポーション醸造ガイド。醸造台の設置、レシピ一覧、効果の解説。
+  Use when: ポーションを作りたい、醸造台を設置したい、戦闘準備でポーションが必要な時。
 ---
 
 # ポーション醸造スキル

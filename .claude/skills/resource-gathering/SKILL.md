@@ -1,8 +1,9 @@
 ---
 name: resource-gathering
 description: |
-  自動リソース収集スキル。指定したブロックを自動で探索・採掘・回収。
-  Use when: 木材、石、鉱石などの大量収集が必要な時
+  minecraft_gather_resourcesツールで木材・石・鉱石を自動で探索・採掘・回収。find_block→move_to→dig_blockを手動で繰り返す必要なし。
+  ALWAYS use when: 木を集めたい、丸石が必要、鉱石を掘りたい、素材が足りない、oak_log/cobblestone/iron_ore等のブロックを収集する時。
+  個別にfind_block→move_to→dig_blockと呼ぶ代わりに、このスキルを使うこと。
 ---
 
 # リソース自動収集スキル
