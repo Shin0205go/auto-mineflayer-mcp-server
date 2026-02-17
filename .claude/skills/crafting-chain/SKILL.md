@@ -1,8 +1,9 @@
 ---
 name: crafting-chain
 description: |
-  複数段階クラフトスキル。素材から最終製品まで自動でクラフトチェーンを実行。
-  Use when: 道具やアイテムの作成に複数ステップが必要な時
+  minecraft_craft_chainツールで素材収集→中間素材→最終製品まで自動クラフト。autoGather=trueで不足素材も自動収集。
+  ALWAYS use when: ピッケルを作りたい、斧が必要、かまどを作る、松明が欲しい、道具をクラフトしたい時。
+  minecraft_craftを何度も呼ぶ代わりに、このスキルでwooden_pickaxe/stone_pickaxe/iron_pickaxe/furnace/torch等を一発作成。
 ---
 
 # クラフトチェーンスキル

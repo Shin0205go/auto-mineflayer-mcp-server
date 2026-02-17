@@ -1,8 +1,8 @@
 ---
 name: bed-crafting
 description: |
-  Minecraft bed crafting skill - includes sheep hunting and wool collection.
-  Use when: Need to craft a bed, skip the night, or set spawn point.
+  ベッドの作成手順。羊を探して羊毛を集め、板材と組み合わせてベッドをクラフト。
+  Use when: ベッドを作りたい、夜をスキップしたい、スポーン地点を設定したい、羊毛が必要な時。
 ---
 
 # ベッド作成スキル

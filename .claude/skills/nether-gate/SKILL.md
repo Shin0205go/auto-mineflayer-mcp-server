@@ -1,8 +1,8 @@
 ---
 name: nether-gate
 description: |
-  Minecraft Nether portal construction skill.
-  Use when: Need to go to the Nether, collect blaze rods, or find a fortress.
+  ネザーポータルの建設手順。黒曜石の入手から着火までの全工程。
+  Use when: ネザーに行きたい、ネザーポータルを作りたい、黒曜石を集めてポータルを建てる時。
 ---
 
 # ネザーゲート作成スキル
