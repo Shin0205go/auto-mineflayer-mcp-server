@@ -82,6 +82,10 @@ function getBriefStatus(bot: Bot): string {
  * Send a chat message
  */
 export function chat(managed: ManagedBot, message: string): void {
+  if (message.startsWith("/")) {
+    console.error(`[Chat] BLOCKED slash command: ${message}`);
+    return;
+  }
   managed.bot.chat(message);
 }
 

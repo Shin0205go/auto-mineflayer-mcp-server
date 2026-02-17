@@ -70,7 +70,20 @@ export class BotCore extends EventEmitter {
   }
 
   getBot(username: string): import("mineflayer").Bot | null {
-    return this.bots.get(username)?.bot || null;
+    const bot = this.bots.get(username)?.bot || null;
+    if (!bot) return null;
+    // Return a Proxy that blocks dangerous methods
+    const blockedMethods = new Set(["chat", "quit", "end"]);
+    return new Proxy(bot, {
+      get(target, prop, receiver) {
+        if (blockedMethods.has(prop as string)) {
+          return (...args: unknown[]) => {
+            console.error(`[Security] BLOCKED bot.${String(prop)}(${JSON.stringify(args).slice(0, 100)})`);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      }
+    });
   }
 
   getBotByUsername(username: string): ManagedBot | null {
