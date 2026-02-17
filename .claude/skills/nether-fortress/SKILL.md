@@ -1,8 +1,8 @@
 ---
 name: nether-fortress
 description: |
-  Minecraft Nether fortress finding and exploration guide.
-  Use when: Need blaze rods, wither skeleton skulls, exploring the Nether.
+  ネザー要塞の発見と探索ガイド。ブレイズロッド・ウィザースケルトンの頭蓋骨の入手方法。
+  Use when: ネザー要塞を見つけたい、ブレイズロッドが必要、ウィザスケの頭が欲しい時。
 ---
 
 # ネザー要塞探索スキル

@@ -1,8 +1,8 @@
 ---
 name: diamond-mining
 description: |
-  Minecraft diamond mining strategy and techniques.
-  Use when: Need diamonds, have iron pickaxe ready.
+  ダイヤモンド採掘の戦略とテクニック。Y=-59のブランチマイニング、鉄ピッケル以上が必要。
+  Use when: ダイヤモンドが欲しい、最強装備を作りたい、ブランチマイニングのやり方を知りたい時。鉄ピッケル所持が前提。
 ---
 
 # ダイヤモンド採掘スキル

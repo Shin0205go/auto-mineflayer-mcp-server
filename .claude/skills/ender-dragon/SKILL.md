@@ -1,8 +1,8 @@
 ---
 name: ender-dragon
 description: |
-  Minecraft Ender Dragon boss fight guide - preparation and strategy.
-  Use when: Ready for final boss, have all required items.
+  エンダードラゴン討伐ガイド。準備すべきアイテム・装備・戦闘戦略を解説。
+  Use when: エンダードラゴンを倒したい、エンドに行く準備ができた、最終ボス戦に挑む時。
 ---
 
 # エンダードラゴン討伐スキル
