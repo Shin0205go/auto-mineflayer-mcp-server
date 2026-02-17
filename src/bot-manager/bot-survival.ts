@@ -338,6 +338,51 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
     distance = target.position.distanceTo(bot.entity.position);
   }
 
+  // End Crystal strategy: use bow to shoot crystals on top of obsidian pillars (they are high up)
+  if (target.name === "end_crystal") {
+    const heightDiff = target.position.y - bot.entity.position.y;
+    const bow = bot.inventory.items().find(i => i.name === "bow");
+    const arrows = bot.inventory.items().find(i => i.name === "arrow");
+
+    if (heightDiff > 3 && bow && arrows) {
+      console.error(`[Attack] End Crystal is ${heightDiff.toFixed(1)} blocks above — using bow attack`);
+      try {
+        await bot.equip(bow, "hand");
+        let crystalDestroyed = false;
+        for (let shot = 0; shot < 7; shot++) {
+          // Check if crystal still exists
+          const crystalCheck = Object.values(bot.entities).find(e => e.id === target.id);
+          if (!crystalCheck) { crystalDestroyed = true; break; }
+
+          // Aim at crystal center
+          await bot.lookAt(crystalCheck.position.offset(0, crystalCheck.height * 0.5, 0));
+          bot.activateItem();
+          await delay(1200); // Draw bow
+          bot.deactivateItem();
+          await delay(500); // Arrow flight time
+          console.error(`[Attack] Bow shot ${shot + 1}/7 at End Crystal`);
+        }
+
+        // Re-equip melee weapon
+        for (const wn of weaponPriority) {
+          const w = bot.inventory.items().find(i => i.name === wn);
+          if (w) { try { await bot.equip(w, "hand"); } catch (_) {} break; }
+        }
+
+        if (crystalDestroyed) {
+          return `Destroyed End Crystal with bow after ${7} shots`;
+        }
+        // Fall through to melee if bow didn't work (crystal too resilient or moved)
+        console.error(`[Attack] Bow shots done, checking if crystal destroyed...`);
+        const stillExists = Object.values(bot.entities).find(e => e.id === target.id);
+        if (!stillExists) return `Destroyed End Crystal with bow`;
+        // Continue with melee fallback
+      } catch (err) {
+        console.error(`[Attack] Bow attack failed: ${err}, falling back to melee`);
+      }
+    }
+  }
+
   // Move closer if needed
   if (distance > 3) {
     console.error(`[Attack] Target ${target.name} is ${distance.toFixed(1)} blocks away, moving closer...`);

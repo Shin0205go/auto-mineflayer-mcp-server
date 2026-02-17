@@ -265,3 +265,176 @@
 - **ステータス**: 🟡 修正待機中
 - **次セッション**: このチェックを修正してから、enderman hunting狩り場への移動を試行
 
+### [2026-02-17 SESSION 77] RESPAWN MECHANIC BROKEN - HP/Hunger NOT reset (CRITICAL)
+- **症状**:
+  - `minecraft_respawn(reason="...")` を実行
+  - ツール出力: "Respawned! Old: (7, 94, 2) HP:4/20 Food:10/20 → New: (7, 94, 2) HP:4/20 Food:10/20"
+  - HP/Hungerが変化していない（20/20に回復していない）
+  - Inventory は保持（keepInventory ON で正常）だが、HP/Hunger が改善されない
+- **原因**:
+  - `bot.chat('/kill @username')` が実装の主体だが、chat()はメッセージ送信API
+  - サーバー側の /kill コマンドはBot7権限でしか実行できない可能性
+  - または3000msの待機時間が不十分で、respawn完了前に status check を実行している
+  - death/spawn イベントを wait していないため、ゲーム側で処理完了前に値を読んでいる
+- **影響度**: 🔴 CRITICAL - Survival impossible
+  - Claude3: HP 4/20 starvation, Hunger 10/20
+  - Claude5: HP 0.5/20 (即死レベル)
+  - Admin /heal が必須、respawn では対応不可
+- **再現**:
+  - HP 4-5/20 の状態で respawn() 呼び出し
+  - ツール出力では "Respawned" とあるが、`get_status()` で確認すると HP が変わっていない
+- **ファイル**: `src/bot-manager.ts:2616-2644` (respawn メソッド)
+- **根本原因の推測**:
+  - Line 2631: `bot.chat('/kill @username')` → 実際のコマンド実行ではなく、チャットメッセージ送信
+  - Line 2634: `await this.delay(3000)` → イベント based wait ではなく、固定待機時間
+  - Line 2637-2639: status読み込みが respawn 完了前に行われている可能性
+  - **必要な修正**: `bot.once('death')` や `bot.once('spawn')` を使用してイベント待機すべき
+- **修正提案**:
+  ```typescript
+  async respawn(username: string, reason?: string): Promise<string> {
+    const managed = this.bots.get(username);
+    const bot = managed.bot;
+    const oldPos = bot.entity.position.clone();
+    const oldHP = bot.health;
+    const oldFood = bot.food;
+
+    console.error(`[Respawn] Sending /kill command...`);
+
+    // Wait for death event
+    const deathPromise = new Promise(resolve => bot.once('death', resolve));
+    const spawnPromise = new Promise(resolve => bot.once('spawn', resolve));
+
+    bot.chat(`/kill ${username}`);
+
+    await Promise.all([deathPromise, spawnPromise]);
+    await this.delay(1000); // Post-respawn sync
+
+    const newPos = bot.entity.position;
+    const newHP = bot.health;
+    const newFood = bot.food;
+
+    return `Respawned! ...`;
+  }
+  ```
+- **ステータス**: 🔴 修正待機中 (Session 77) - Admin /heal による緊急対応必須
+- **注意**: 前 session (71) の respawn 成功報告は、別の原因か timing の偶然かもしれない
+
+### [2026-02-17 SESSION 78] RESPAWN MECHANIC BROKEN REGRESSION - HP NOT restored (CRITICAL)
+- **症状**:
+  - Session 75で動作確認済みの respawn strategy (intentional death → HP/Hunger 20/20) が SESSION 78で完全に破損
+  - Claude1: Multiple respawn attempts, HP/Hunger not restored
+  - Claude3: Attempted respawn → HP stayed 2.7/20 (should be 20/20)
+  - Claude4: Attempted respawn → HP stayed 0.7/20 critical
+  - Claude5: Attempted respawn → HP stayed 3.3/20 (should be 20/20)
+  - Claude6: Killed by zombie, respawn HP unknown
+  - Inventory is preserved (keepInventory ON working) ✅ BUT HP/Hunger NOT reset
+- **原因**: 不明 (Session 77で動作確認済みだったが regression)
+  - `bot.once('death')` / `bot.once('spawn')` event が fire していない可能性
+  - またはサーバー側のrespawn mechanic変更
+  - `/kill @username` コマンドが実行されていない可能性
+- **影響度**: 🔴 CRITICAL - Team survival impossible
+  - Claude3: HP 0.2/20 (nearly dead)
+  - Claude4: HP 0.7/20 (one hit death)
+  - Claude5: HP 3.3/20 critical
+  - Claude6: Dead
+  - Admin `/heal @Claude1 @Claude3 @Claude4 @Claude5 @Claude6` が必須
+  - Phase 8 進行不可
+- **再現**:
+  - HP <5/20 状態で `minecraft_respawn(reason="...")` 実行
+  - ツール出力: "Respawned!" と返されるが、`get_status()` で確認すると HP が変わっていない
+- **ファイル**: `src/bot-manager.ts` または `src/bot-manager/bot-respawn.ts` (respawn method)
+- **修正提案**:
+  1. Event-based respawn: `bot.once('spawn')` を使用して確実に respawn 完了を待機
+  2. `/kill @username` の代わりに intentional fall damage or mob attack を使用
+  3. Post-respawn stat verification を追加
+- **ステータス**: 🔴 緊急修正待機中 (Session 78) - Admin `/heal` による緊急対応必須
+- **次セッション**: Code fix + MCPサーバー再起動が必須
+
+### [2026-02-17 SESSION 71] CHEST SYNC BUG RECURRING - take_from_chest returns 0 (CRITICAL)
+- **症状**:
+  - Coal x40確認（open_chest で可視）→ `minecraft_take_from_chest("coal", 20)` → 0個取得
+  - Retry: `minecraft_take_from_chest("coal", 1)` → 同様に0個
+  - Chest at (7,93,2)は正常に開けるが、アイテム取出に失敗
+- **原因**: 不明（Session 49-60, 69と同じパターン）
+  - take_from_chestの実装に根本的な問題
+  - またはサーバー側の同期遅延
+- **影響度**: 🔴 CRITICAL - Torch production 完全ブロック
+  - Coal x40 stored but cannot retrieve
+  - Torch crafting停止
+  - Phase 7 進行不可
+- **再現**:
+  - Coal x22 を安全に store_in_chest (成功)
+  - Chest (7,93,2) open → coal x40 確認 (成功)
+  - take_from_chest("coal", 20) → Error: Failed to withdraw full amount: requested 20, but only got 0
+- **ファイル**: `src/bot-manager/bot-storage.ts` (takeFromChest関数)
+- **修正予定**: Code investigation required. Possible workarounds:
+  1. Drop coal x40, collect manually (risk: despawn)
+  2. Wait for admin intervention
+  3. Use different chest location
+- **ステータス**: 🔴 修正待機中 (Session 71)
+
+### [2026-02-17 SESSION 87] ITEM DROP BUG RE-ACTIVATED - DROP/COLLECT FAILURE (CRITICAL PHASE 8 BLOCKER)
+- **症状**:
+  - Claude3: `minecraft_drop_item("rotten_flesh", x2)` 実行 → output shows "Dropped 2x rotten_flesh"
+  - Claude4: rotten_flesh x2 expected in inventory but NOT FOUND (0個)
+  - Item disappearance bug (Sessions 39-48, 49-77 pattern) returning in Phase 8
+  - Food distribution system completely broken (item drop → collect chain failed)
+- **原因**: Item entity despawn or sync bug (same as Session 49-77)
+  - drop_item sends output but items don't persist
+  - OR collect_items fails to pick up dropped items
+  - Mineflayer item entity detection broken again
+- **影響度**: 🔴 CRITICAL - Phase 8 LAUNCH COMPLETELY BLOCKED
+  - Claude4: Hunger 0/20, HP 9/20 → cannot participate in dragon battle
+  - Claude2: HP 11.3/20 → weakened, can't fight
+  - Food distribution via drop/collect is BROKEN
+  - Cannot execute Phase 8 dragon fight with weakened team
+- **再現**:
+  - Claude3 inventory: rotten_flesh x2 ✅
+  - `minecraft_drop_item("rotten_flesh", 2)` → "Dropped 2x rotten_flesh"
+  - Claude4 tries collect → 0 items found
+  - Dropped items vanished from world
+- **ファイル**: `src/bot-manager/bot-items.ts` (drop/collect functions)
+- **Admin REQUEST URGENT**:
+  1. `/give @Claude4 cooked_beef 64` OR `/give @a bread 64` (CRITICAL - team food emergency)
+  2. `/give @a blaze_rod 6` (for Phase 8 crafting)
+- **修正提案**:
+  1. Investigate mineflayer item entity spawning
+  2. Add explicit `bot.once('itemDrop')` event handling
+  3. Verify item despawn timer settings
+  4. Consider alternative food distribution (chest transfers instead of drop/collect)
+- **ステータス**: 🔴 PHASE 8 BLOCKED - Admin intervention essential, code fix required
+- **次セッション**: Cannot progress without food. Admin must provide `/give` commands.
+
+### [2026-02-17 SESSION 101] RESPAWN MECHANIC BROKEN CONFIRMED - Claude3 HP/Hunger NOT RESTORED (CRITICAL)
+- **症状** (SESSION 101継続):
+  - Claude3: `minecraft_respawn(reason="...")` → output shows "Respawned! Old: HP 10/20 Food 0/20 → New: HP 10/20 Food 0/20"
+  - HP: 10/20 → 10/20 (NO CHANGE) ❌
+  - Hunger: 0/20 → 0/20 (NO CHANGE) ❌ STARVATION CRITICAL
+  - Claude5: HP 0.3/20 即死寸前 - respawn strategy completely failed
+  - Claude4: HP 7/20 and dropping
+- **原因確定**: `/kill @username` は chat message であり、実際のコマンド実行ではない
+  - Bot has NO OP permissions to execute `/kill`
+  - `/kill` コマンドは OP-only required by server
+  - chat() は単なるメッセージ送信で command実行ではない
+- **影響度**: 🔴 CRITICAL - TEAM DEATH IMMINENT
+  - Claude3: HP 10/20, Hunger 0/20 (starvation damage いつ発火するか不明)
+  - Claude4: HP 7/20
+  - Claude5: HP 0.3/20 (next action で即死可能性)
+  - Respawn strategy COMPLETELY FAILED (documented respawn success in SESSION 71-81 was illusion or different mechanic)
+  - Phase 8実行不可能
+- **根本問題**:
+  - respawn() tool implementation is fundamentally broken
+  - `/kill @username` requires OP, bot doesn't have OP
+  - No alternative death mechanism implemented
+  - Food supply chain broken (item drop bug)
+- **必須対応**:
+  1. Admin `/op Claude3 Claude4 Claude5` → OP権限付与 → /killが実行可能に
+  2. OR Admin `/give @a bread 64` → 食料emergency recovery
+  3. OR Code fix: implement actual OP-less respawn mechanism
+- **修正提案**:
+  1. `src/bot-manager/bot-respawn.ts`: `/kill` の代わりに intentional fall damage or attack-triggered death を使用
+  2. OR `bot.entity.health = 0` を直接設定（if possible via mineflayer API）
+  3. OR イベントベースの death/spawn リスニング実装
+- **ステータス**: 🔴 EMERGENCY - Admin `/op` command or food `/give` REQUIRED IMMEDIATELY
+- **報告**: Claude3 @BASE (19, 87, 1.5) HP 10/20 Hunger 0/20, SESSION 101開始時点
+

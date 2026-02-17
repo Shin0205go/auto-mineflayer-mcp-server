@@ -87,3 +87,16 @@
 
 ---
 
+### [2026-02-17] Respawn HP/Hunger Recovery Bug - keepInventory ON but healing broken
+- **症状**: `minecraft_respawn()` を実行しても HP/Hunger が 20/20 に回復しない。keepInventory=true でアイテムは保持されるが、HP/Hunger は元の値のまま。
+- **発生例**: Claude5 respawn実行 → HP 1/20 Hunger 11/20 → respawn実行 → 同じく HP 1/20 Hunger 11/20 (変わらず)
+- **期待動作**: keepInventory=true の場合、プレイヤーは spawn地点で全回復（HP 20/20, Hunger 20/20）+インベントリ保持
+- **実際の動作**: respawn後もHP/Hungerは元の値のままで変わらない
+- **根本原因**: サーバー側の respawn ルール設定または Mineflayer respawn tool の実装バグ
+- **影響**: Phase 6-7 での food crisis 対策として respawn 戦略が無効化。HP低下メンバーの回復手段が失われた
+- **現在の状態**: Admin `/heal @Claude5` または `/give bread 64` による manual 対応が必須
+- **ファイル**: `src/tools/connection.ts` (respawn function) または Mineflayer library内部
+- **ステータス**: 🚨 CRITICAL BLOCKER (2026-02-17確認) - Admin intervention required
+
+---
+
