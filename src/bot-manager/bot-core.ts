@@ -300,7 +300,7 @@ export class BotCore extends EventEmitter {
 
         // Increase liquid cost to discourage pathfinding through water (prevents drowning)
         // Default is 1 which treats water same as land. High cost makes pathfinder prefer land.
-        (movements as any).liquidCost = 100;
+        (movements as any).liquidCost = 10000;
 
         // Avoid lava completely (liquidCost alone doesn't distinguish water vs lava)
         const lavaBlock = bot.registry.blocksByName["lava"];
