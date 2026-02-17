@@ -1,8 +1,8 @@
 ---
 name: iron-golem-trap
 description: |
-  Minecraft iron golem farm/trap construction skill.
-  Use when: Need automated iron production, have access to villagers.
+  アイアンゴーレムトラップの建設。村人を利用した鉄の自動生産施設。
+  Use when: 鉄を自動生産したい、ゴーレムトラップを作りたい、村人がいる拠点で大量の鉄が必要な時。
 ---
 
 # アイアンゴーレムトラップ構築スキル
