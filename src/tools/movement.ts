@@ -80,6 +80,34 @@ export async function handleMovementTool(
       const y = args.y as number;
       const z = args.z as number;
 
+      // For long distances (>300 blocks), move in segments to handle chunk loading
+      const pos = botManager.getPosition(username);
+      if (pos) {
+        const dx = x - pos.x;
+        const dy = y - pos.y;
+        const dz = z - pos.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+        if (dist > 300) {
+          // Move in 150-block segments
+          const segmentSize = 150;
+          const steps = Math.ceil(dist / segmentSize);
+          let lastResult = "";
+          for (let i = 1; i <= steps; i++) {
+            const t = i / steps;
+            const ix = pos.x + dx * t;
+            const iz = pos.z + dz * t;
+            const iy = i === steps ? y : (pos.y + dy * t);
+            const segResult = await botManager.moveTo(username, ix, iy, iz);
+            lastResult = segResult;
+            // If we reached the final destination, stop
+            if (i === steps) break;
+            // Continue even if segment failed (terrain may block, try next)
+          }
+          return lastResult;
+        }
+      }
+
       const result = await botManager.moveTo(username, x, y, z);
       return result;
     }
@@ -103,7 +131,7 @@ export async function handleMovementTool(
         }
       }
 
-      await botManager.chat(username, message);
+      botManager.chat(username, message);
       return `Sent message: ${message}`;
     }
 
