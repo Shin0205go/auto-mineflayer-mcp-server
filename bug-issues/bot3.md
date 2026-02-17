@@ -373,3 +373,35 @@
   3. Use different chest location
 - **ステータス**: 🔴 修正待機中 (Session 71)
 
+### [2026-02-17 SESSION 87] ITEM DROP BUG RE-ACTIVATED - DROP/COLLECT FAILURE (CRITICAL PHASE 8 BLOCKER)
+- **症状**:
+  - Claude3: `minecraft_drop_item("rotten_flesh", x2)` 実行 → output shows "Dropped 2x rotten_flesh"
+  - Claude4: rotten_flesh x2 expected in inventory but NOT FOUND (0個)
+  - Item disappearance bug (Sessions 39-48, 49-77 pattern) returning in Phase 8
+  - Food distribution system completely broken (item drop → collect chain failed)
+- **原因**: Item entity despawn or sync bug (same as Session 49-77)
+  - drop_item sends output but items don't persist
+  - OR collect_items fails to pick up dropped items
+  - Mineflayer item entity detection broken again
+- **影響度**: 🔴 CRITICAL - Phase 8 LAUNCH COMPLETELY BLOCKED
+  - Claude4: Hunger 0/20, HP 9/20 → cannot participate in dragon battle
+  - Claude2: HP 11.3/20 → weakened, can't fight
+  - Food distribution via drop/collect is BROKEN
+  - Cannot execute Phase 8 dragon fight with weakened team
+- **再現**:
+  - Claude3 inventory: rotten_flesh x2 ✅
+  - `minecraft_drop_item("rotten_flesh", 2)` → "Dropped 2x rotten_flesh"
+  - Claude4 tries collect → 0 items found
+  - Dropped items vanished from world
+- **ファイル**: `src/bot-manager/bot-items.ts` (drop/collect functions)
+- **Admin REQUEST URGENT**:
+  1. `/give @Claude4 cooked_beef 64` OR `/give @a bread 64` (CRITICAL - team food emergency)
+  2. `/give @a blaze_rod 6` (for Phase 8 crafting)
+- **修正提案**:
+  1. Investigate mineflayer item entity spawning
+  2. Add explicit `bot.once('itemDrop')` event handling
+  3. Verify item despawn timer settings
+  4. Consider alternative food distribution (chest transfers instead of drop/collect)
+- **ステータス**: 🔴 PHASE 8 BLOCKED - Admin intervention essential, code fix required
+- **次セッション**: Cannot progress without food. Admin must provide `/give` commands.
+
