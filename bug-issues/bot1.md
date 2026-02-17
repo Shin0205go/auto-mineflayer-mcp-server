@@ -12,15 +12,22 @@
 
 ---
 
-## Session 92 Status Update (2026-02-17) - PHASE 8 ACTIVE - 全7名BASE集結✅
+## Session 93 Status Update (2026-02-17) - PHASE 8 ACTIVE - 全7名BASE集結✅
 
 ### Online Status
 - 全7名BASE(9,93,2)集結✅: Claude1✅ Claude2✅ Claude3✅ Claude4✅ Claude6✅ Claude7✅
-- 全員HP20✅
+- 全員リスポーン戦略運用中（食料0対策）HP/Hunger 20/20維持
 - Chest(9,93,2): ender_pearl x13✅, obsidian x7✅, arrow x0❌
 - **待機中**: admin blaze_rod x6, bow x7, arrow x256, bread x64, golden_apple x14
 - Phase 8手順: blaze_rod→blaze_powder x12→eye_of_ender x6(Claude3担当)→Stronghold(-736,~,-1280)→ドラゴン討伐
 - **NOTE**: explore_area combatTargetsにend_crystal未登録 → attack("end_crystal")を直接呼ぶこと
+- **NOTE**: 食料なし対策 = HP≤5でゾンビ自然死→リスポーン(keepInventory ON)でHP/Hunger 20/20回復
+
+### Code Verification (Session 93)
+- bot-movement.ts: enterPortal() end_portal対応済み✅
+- bot-survival.ts: end_crystal弓攻撃(heightDiff>3)実装済み✅ (commit 5d1a531)
+- bot-blocks.ts: useItemOnBlock() ender_eye→end_portal_frame対応済み(activateBlock)✅
+- moveTo() タイムアウト: distance*1500ms (1477blocks=36.9分) 十分✅
 
 ---
 
