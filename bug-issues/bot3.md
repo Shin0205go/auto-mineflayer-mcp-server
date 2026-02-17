@@ -319,6 +319,37 @@
 - **ステータス**: 🔴 修正待機中 (Session 77) - Admin /heal による緊急対応必須
 - **注意**: 前 session (71) の respawn 成功報告は、別の原因か timing の偶然かもしれない
 
+### [2026-02-17 SESSION 78] RESPAWN MECHANIC BROKEN REGRESSION - HP NOT restored (CRITICAL)
+- **症状**:
+  - Session 75で動作確認済みの respawn strategy (intentional death → HP/Hunger 20/20) が SESSION 78で完全に破損
+  - Claude1: Multiple respawn attempts, HP/Hunger not restored
+  - Claude3: Attempted respawn → HP stayed 2.7/20 (should be 20/20)
+  - Claude4: Attempted respawn → HP stayed 0.7/20 critical
+  - Claude5: Attempted respawn → HP stayed 3.3/20 (should be 20/20)
+  - Claude6: Killed by zombie, respawn HP unknown
+  - Inventory is preserved (keepInventory ON working) ✅ BUT HP/Hunger NOT reset
+- **原因**: 不明 (Session 77で動作確認済みだったが regression)
+  - `bot.once('death')` / `bot.once('spawn')` event が fire していない可能性
+  - またはサーバー側のrespawn mechanic変更
+  - `/kill @username` コマンドが実行されていない可能性
+- **影響度**: 🔴 CRITICAL - Team survival impossible
+  - Claude3: HP 0.2/20 (nearly dead)
+  - Claude4: HP 0.7/20 (one hit death)
+  - Claude5: HP 3.3/20 critical
+  - Claude6: Dead
+  - Admin `/heal @Claude1 @Claude3 @Claude4 @Claude5 @Claude6` が必須
+  - Phase 8 進行不可
+- **再現**:
+  - HP <5/20 状態で `minecraft_respawn(reason="...")` 実行
+  - ツール出力: "Respawned!" と返されるが、`get_status()` で確認すると HP が変わっていない
+- **ファイル**: `src/bot-manager.ts` または `src/bot-manager/bot-respawn.ts` (respawn method)
+- **修正提案**:
+  1. Event-based respawn: `bot.once('spawn')` を使用して確実に respawn 完了を待機
+  2. `/kill @username` の代わりに intentional fall damage or mob attack を使用
+  3. Post-respawn stat verification を追加
+- **ステータス**: 🔴 緊急修正待機中 (Session 78) - Admin `/heal` による緊急対応必須
+- **次セッション**: Code fix + MCPサーバー再起動が必須
+
 ### [2026-02-17 SESSION 71] CHEST SYNC BUG RECURRING - take_from_chest returns 0 (CRITICAL)
 - **症状**:
   - Coal x40確認（open_chest で可視）→ `minecraft_take_from_chest("coal", 20)` → 0個取得
