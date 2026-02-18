@@ -12,6 +12,29 @@
 
 ---
 
+## Session 108 (2026-02-18) - bucket取得バグとポータルフレーム問題
+
+### [2026-02-18] bucket on lava/water → lava_bucket/water_bucket取得失敗
+- **症状**: `use_item_on_block(bucket, lava)` → "Used bucket on lava but lava_bucket not found"
+- **原因**: activateBlock()がsequence:0固定で送信→サーバーに拒否される可能性。_genericPlaceはliquid blockに対して動作しない
+- **修正**: bot-blocks.ts のAttempt1をbot.placeBlock()に変更（sequenceを正しく管理）。Attempt2を_genericPlaceに変更
+- **ファイル**: `src/bot-manager/bot-blocks.ts` lines 1275-1295
+- **状態**: コード修正・ビルド済みだがMCPサーバー再起動で反映必要
+
+### [2026-02-18] ネザーポータルフレーム高さ不足
+- **症状**: flint_and_steelで着火してもnether_portalブロックが生成されない
+- **原因**: フレーム(7-10,106-109,-3)の内側が2段（y=107-108）のみ。最小要件は内側3段（2x3）
+- **修正**: 上辺に(7-10,110,-3)のobsidian x4を追加すれば解決
+- **ファイル**: ゲーム内の建築作業
+- **必要アイテム**: obsidian x4（地下(-9,37,11)のlavaプール付近に大量）、diamond_pickaxe（作成済み）、water_bucket（バグ修正後）
+
+### [2026-02-18] flint_and_steel着火のblocl_placeパケット修正
+- **症状**: Attempt2で直接block_placeパケット送信（sequence:0固定）
+- **修正**: _genericPlaceに変更してsequenceを正しく管理
+- **ファイル**: `src/bot-manager/bot-blocks.ts` line 1459付近
+
+---
+
 ## Session 101 Bug Fix (2026-02-17) - liquidCost増加でBASE付近溺死頻発を抑制
 
 ### [2026-02-17] BASE付近の水でボットが繰り返し溺死する問題
