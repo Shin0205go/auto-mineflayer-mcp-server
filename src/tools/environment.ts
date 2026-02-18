@@ -1,4 +1,5 @@
 import { botManager } from "../bot-manager/index.js";
+import { Vec3 } from "vec3";
 
 export const environmentTools = {
   minecraft_check_infrastructure: {
@@ -40,6 +41,21 @@ export const environmentTools = {
         }
       },
       required: ["block_name"],
+    },
+  },
+
+  minecraft_check_portal_frame: {
+    description: "Check nether portal frame integrity by inspecting each block position. Reports which obsidian blocks are present/missing and what blocks are in the interior.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        x1: { type: "number", description: "X of bottom-left corner" },
+        y1: { type: "number", description: "Y of bottom row" },
+        x2: { type: "number", description: "X of bottom-right corner" },
+        y2: { type: "number", description: "Y of top row" },
+        z:  { type: "number", description: "Z coordinate of portal" },
+      },
+      required: ["x1", "y1", "x2", "y2", "z"],
     },
   },
 
@@ -311,6 +327,53 @@ export async function handleEnvironmentTool(
       diagnostics.push(`💡 Run with auto_fix=true to attempt automatic fixes`);
 
       return diagnostics.join("\n");
+    }
+
+    case "minecraft_check_portal_frame": {
+      const { x1, y1, x2, y2, z } = _args as { x1: number; y1: number; x2: number; y2: number; z: number };
+      const bot = botManager.getBot(username);
+      if (!bot) throw new Error("Bot not connected");
+
+      const lines: string[] = [`Portal Frame Check (x=${x1}-${x2}, y=${y1}-${y2}, z=${z}):`];
+
+      // Bottom row
+      lines.push("Bottom row:");
+      for (let x = x1; x <= x2; x++) {
+        const b = bot.blockAt(new Vec3(x, y1, z));
+        lines.push(`  (${x},${y1},${z}): ${b?.name ?? "unknown"}`);
+      }
+
+      // Top row
+      lines.push("Top row:");
+      for (let x = x1; x <= x2; x++) {
+        const b = bot.blockAt(new Vec3(x, y2, z));
+        lines.push(`  (${x},${y2},${z}): ${b?.name ?? "unknown"}`);
+      }
+
+      // Left column (excluding corners)
+      lines.push("Left column:");
+      for (let y = y1 + 1; y <= y2 - 1; y++) {
+        const b = bot.blockAt(new Vec3(x1, y, z));
+        lines.push(`  (${x1},${y},${z}): ${b?.name ?? "unknown"}`);
+      }
+
+      // Right column (excluding corners)
+      lines.push("Right column:");
+      for (let y = y1 + 1; y <= y2 - 1; y++) {
+        const b = bot.blockAt(new Vec3(x2, y, z));
+        lines.push(`  (${x2},${y},${z}): ${b?.name ?? "unknown"}`);
+      }
+
+      // Interior
+      lines.push("Interior:");
+      for (let y = y1 + 1; y <= y2 - 1; y++) {
+        for (let x = x1 + 1; x <= x2 - 1; x++) {
+          const b = bot.blockAt(new Vec3(x, y, z));
+          lines.push(`  (${x},${y},${z}): ${b?.name ?? "unknown"}`);
+        }
+      }
+
+      return lines.join("\n");
     }
 
     default:
