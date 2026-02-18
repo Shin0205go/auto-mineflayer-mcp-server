@@ -485,3 +485,59 @@
 - **次ステップ**: Cannot proceed without admin intervention
 - **報告**: Claude3, Claude4 SESSION 106 - (2026-02-17)
 
+### [2026-02-18 SESSION 124] ITEM PERSISTENCE BUG - DROP/CRAFT SYNC CORRUPTION (CRITICAL)
+- **症状**:
+  - `minecraft_drop_item("dirt", 64)` → output: "Dropped 64x dirt"
+  - Inventory immediately after shows: 0 dirt ✅
+  - BUT: After `minecraft_craft("birch_planks", 4)`, inventory suddenly shows: dirt x64 x5, cobblestone x64 x6 (ghost items)
+  - Items that were dropped 30 seconds ago mysteriously reappear after unrelated craft operation
+- **原因**: Severe client-server sync corruption
+  - Possible: Item entities not actually deleted, just hidden
+  - Possible: Inventory state cached incorrectly
+  - Possible: Craft operation triggers inventory refresh that reveals old state
+- **影響度**: 🔴 CRITICAL - Inventory management completely unreliable
+  - Dropped items may or may not actually delete
+  - True inventory state unknown
+  - Resource tracking impossible
+- **再現**:
+  1. `minecraft_drop_item("dirt", 64)` - shows dropped
+  2. `minecraft_get_inventory()` - dirt = 0 ✅
+  3. `minecraft_craft("stick", 8)` - unrelated operation
+  4. `minecraft_get_inventory()` - dirt suddenly reappears as x64 x5!
+- **ファイル**: `src/bot-manager/bot-items.ts` (drop_item, inventory tracking)
+- **修正提案**:
+  - Explicit inventory refresh after drop: `bot.once('windowClose')` event
+  - Or verify dropped item entities exist in world: `bot.entities.filter(e => e.name === itemType)`
+  - Or use chest storage instead of floor drops
+- **ステータス**: 🔴 CRITICAL - SESSION 124 active discovery
+- **報告**: Claude3 SESSION 124 @ Portal frame (8,107,-3) coordinates
+
+### [2026-02-18 SESSION 124] NETHER PORTAL BLOCK GENERATION BUG - UNRESOLVED (SESSIONS 49-124)
+- **症状** (SESSION 124 CONFIRMED):
+  - Obsidian frame exists: 16 blocks located at (7-10, 106-109, -3) and (7-10, 107-110, -3)
+  - nether_portal blocks: NOT GENERATED (should be purple glowing blocks inside frame)
+  - `minecraft_enter_portal(x=8, y=107, z=-3)` fails: "No nether_portal or portal frame found within 15 blocks"
+  - Claims from SESSION 123 "Claude2 IN NETHER" but portal not accessible now
+- **原因**: Server-side block generation bug
+  - obsidian frame detection works (can find 16 blocks)
+  - But server doesn't generate nether_portal blocks inside frame
+  - Likely: `setblock nether_portal[axis=x]` not executed server-side
+  - OR: Portal requires specific conditions (flint_and_steel lighting) that aren't triggering
+- **影響度**: 🔴 CRITICAL - PHASE 8 COMPLETELY BLOCKED
+  - Nether portal is required for blaze_rod x7 acquisition
+  - Without Nether access: cannot complete Phase 6 or Phase 8
+  - Team cannot proceed past Phase 7 (Torch production)
+- **再現**:
+  1. Navigate to obsidian frame at (8,107,-3)
+  2. `minecraft_enter_portal()` → Error: No nether_portal found
+  3. Try `minecraft_use_item_on_block("flint_and_steel", 8, 107, -3)` → No effect
+  4. Check `minecraft_find_block("nether_portal")` → Returns 0 blocks
+- **ファイル**: Server-side (not code issue)
+- **必須修正**: Admin `/setblock 8 107 -3 nether_portal[axis=x]` (and adjacent 3 blocks)
+- **修正提案**:
+  - If server block generation working: send explicit `/setblock` to fill portal
+  - If mineflayer API missing: add server command fallback
+  - If flint_and_steel required: verify it triggers portal generation (test separately)
+- **ステータス**: 🔴 UNRESOLVED - Session 49 to 124, no progress. Admin server fix REQUIRED.
+- **報告**: Claude3 SESSION 124 - confirmed obsidian exists, portal blocks missing
+
