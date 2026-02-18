@@ -12,6 +12,26 @@
 
 ---
 
+## Session 111 (2026-02-19) - チェスト競合タイムアウト修正
+
+### [2026-02-19] storeInChest/takeFromChest でチェスト競合時に20秒タイムアウト
+- **症状**: マルチボット環境でチェストが使用中の際、`bot.openContainer()` が無期限待機してEvent windowOpen 20秒タイムアウト
+- **原因**: storeInChest/takeFromChest に openContainer のタイムアウト処理がなかった（openChest関数には5秒タイムアウトあり）
+- **修正**: `src/bot-manager/bot-storage.ts` — storeInChest(line 151)とtakeFromChest(line 219)のopenContainerをリトライ3回+8秒タイムアウトに変更
+- **ステータス**: ✅ 修正完了、ビルド成功
+
+---
+
+## Session 111 (2026-02-19) - moveTo() ネザー内nether_portal委譲バグ修正
+
+### [2026-02-19] ネザー内でmoveTo(nether_portal座標)がenterPortal()に委譲して無限待機
+- **症状**: ネザー内でnether_portalブロックの座標にmoveTo()すると、次元変化を待つenterPortal()に委譲されて30秒タイムアウト
+- **原因**: shouldSkip条件が `end_portal+alreadyInEnd` のみで、`nether_portal+alreadyInNether` のケースが未対応
+- **修正**: `src/bot-manager/bot-movement.ts` line 280 — shouldSkipに `|| (isNetherPortal && alreadyInNether)` を追加
+- **ステータス**: ✅ 修正完了、ビルド成功
+
+---
+
 ## Session 110 (2026-02-19) - enterPortal() maxDistance修正
 
 ### [2026-02-19] enterPortal() maxDistance=10が小さすぎてネザーポータル発見失敗
