@@ -12,6 +12,18 @@
 
 ---
 
+## Session 110 (2026-02-18) - enterPortal()タイムアウト問題
+
+### [2026-02-18] moveTo(nether_portal座標) → タイムアウト
+- **症状**: ボットがすでにネザーにいる状態で、nether_portalブロックの座標にmoveTo()すると30秒タイムアウト
+- **原因**: moveTo()はターゲットがnether_portalブロックなら無条件でenterPortal()に委譲。enterPortal()はdimension変化を待つが、同じdimensionにいるためspawnイベントが発火しない
+- **影響**: ネザー内でポータル近くへの移動が全て失敗する
+- **修正**: bot-manager/bot-movement.ts（編集禁止ファイル）を要修正。moveTo()でportalブロックをターゲットにする場合、現在のdimensionとportal typeを照合して同じならenterPortal()をスキップすべき
+- **回避策**: ネザーポータルの座標を直接指定せず、ポータルの隣の座標(z=-4等)を指定して通常移動する
+- **ファイル**: `src/bot-manager/bot-movement.ts` lines 272-282
+
+---
+
 ## Session 108 (2026-02-18) - bucket取得バグとポータルフレーム問題
 
 ### [2026-02-18] bucket on lava/water → lava_bucket/water_bucket取得失敗

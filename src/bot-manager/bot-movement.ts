@@ -1468,21 +1468,74 @@ export async function enterPortal(managed: ManagedBot, portalType?: "nether_port
     if (endPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.delete(endPortalId);
 
     if (!alreadyInPortal) {
-      // Move near the lowest portal block (not ON it, but beside it)
-      const goal = new goals.GoalNear(lowestPortal.position.x, lowestPortal.position.y, lowestPortal.position.z, 1);
-      await bot.pathfinder.goto(goal);
+      // Determine portal axis (nether_portal has state.axis = "x" or "z")
+      // axis "x" = portal faces east/west, enter from north/south (Z direction)
+      // axis "z" = portal faces north/south, enter from east/west (X direction)
+      const portalState = lowestPortal.getProperties() as any;
+      const portalAxis = portalState?.axis as string | undefined;
+      console.error(`[Portal] Portal axis: ${portalAxis}`);
 
-      // Force walk into the portal block center — retry from multiple angles
-      const portalCenter = lowestPortal.position.offset(0.5, 0, 0.5);
-      const approaches = [
-        portalCenter,
-        lowestPortal.position.offset(0.5, 0, -0.5),
-        lowestPortal.position.offset(0.5, 0, 1.5),
-        lowestPortal.position.offset(-0.5, 0, 0.5),
-        lowestPortal.position.offset(1.5, 0, 0.5),
-      ];
+      // Approach positions based on portal axis
+      // For axis "x": portal opening faces Z direction → approach from Z±
+      // For axis "z": portal opening faces X direction → approach from X±
+      // For end_portal: no axis, try all directions
+      let approaches: Vec3[];
+      const px = lowestPortal.position.x + 0.5;
+      const py = lowestPortal.position.y;
+      const pz = lowestPortal.position.z + 0.5;
+
+      if (portalAxis === "x") {
+        // Enter from Z direction (north/south)
+        approaches = [
+          new Vec3(px, py, pz),           // center
+          new Vec3(px, py, pz - 1),       // approach from south
+          new Vec3(px, py, pz + 1),       // approach from north
+          new Vec3(px, py, pz - 0.5),
+          new Vec3(px, py, pz + 0.5),
+        ];
+      } else if (portalAxis === "z") {
+        // Enter from X direction (east/west)
+        approaches = [
+          new Vec3(px, py, pz),           // center
+          new Vec3(px - 1, py, pz),       // approach from east
+          new Vec3(px + 1, py, pz),       // approach from west
+          new Vec3(px - 0.5, py, pz),
+          new Vec3(px + 0.5, py, pz),
+        ];
+      } else {
+        // Unknown axis or end_portal: try all directions
+        approaches = [
+          new Vec3(px, py, pz),
+          new Vec3(px, py, pz - 1),
+          new Vec3(px, py, pz + 1),
+          new Vec3(px - 1, py, pz),
+          new Vec3(px + 1, py, pz),
+        ];
+      }
+
+      // First: use GoalBlock to move directly onto the portal block
+      try {
+        const goalBlock = new goals.GoalBlock(lowestPortal.position.x, lowestPortal.position.y, lowestPortal.position.z);
+        await bot.pathfinder.goto(goalBlock);
+        await new Promise(r => setTimeout(r, 500));
+        const currentBlock = bot.blockAt(bot.entity.position.floored());
+        if (currentBlock?.name === activePortalName) {
+          console.error(`[Portal] Bot entered ${activePortalName} via GoalBlock`);
+        }
+      } catch (e) {
+        console.error(`[Portal] GoalBlock failed: ${e}, trying GoalNear`);
+        const goal = new goals.GoalNear(lowestPortal.position.x, lowestPortal.position.y, lowestPortal.position.z, 1);
+        await bot.pathfinder.goto(goal);
+      }
+
+      // Force walk into the portal block center — retry from axis-appropriate angles
       for (let attempt = 0; attempt < 5; attempt++) {
-        const target = approaches[attempt] || portalCenter;
+        const currentBlock = bot.blockAt(bot.entity.position.floored());
+        if (currentBlock?.name === activePortalName) {
+          console.error(`[Portal] Bot is in ${activePortalName} block on attempt ${attempt}`);
+          break;
+        }
+        const target = approaches[attempt] || new Vec3(px, py, pz);
         await bot.lookAt(target);
         bot.setControlState("forward", true);
         bot.setControlState("sprint", false);
@@ -1490,13 +1543,7 @@ export async function enterPortal(managed: ManagedBot, portalType?: "nether_port
         bot.setControlState("forward", false);
         await new Promise(r => setTimeout(r, 300));
 
-        // Check if we're inside the portal now
-        const currentBlock = bot.blockAt(bot.entity.position.floored());
-        if (currentBlock?.name === activePortalName) {
-          console.error(`[Portal] Bot entered ${activePortalName} block on attempt ${attempt + 1}`);
-          break;
-        }
-        console.error(`[Portal] Attempt ${attempt + 1}: feet at ${currentBlock?.name}, trying different angle...`);
+        console.error(`[Portal] Attempt ${attempt + 1}: feet at ${bot.blockAt(bot.entity.position.floored())?.name}, trying different angle...`);
       }
     }
 
