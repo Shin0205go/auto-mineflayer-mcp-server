@@ -275,9 +275,11 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   if (targetBlock && (targetBlock.name === "nether_portal" || targetBlock.name === "end_portal")) {
     const currentDim = String(bot.game.dimension);
     const isEndPortal = targetBlock.name === "end_portal";
+    const isNetherPortal = targetBlock.name === "nether_portal";
     const alreadyInEnd = currentDim.includes("end");
-    // Skip enterPortal() only if end_portal is targeted while already in the End dimension
-    const shouldSkip = (isEndPortal && alreadyInEnd);
+    const alreadyInNether = currentDim.includes("nether");
+    // Skip enterPortal() if already in the same dimension as the portal target
+    const shouldSkip = (isEndPortal && alreadyInEnd) || (isNetherPortal && alreadyInNether);
     if (!shouldSkip) {
       console.error(`[Move] Target is a ${targetBlock.name}, delegating to enterPortal()...`);
       try {
