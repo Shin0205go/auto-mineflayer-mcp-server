@@ -86,6 +86,21 @@
 
 ---
 
+## Session 110 Status Update (2026-02-18) - PHASE 8 ACTIVE - ネザー入場済み、blaze_rod収集中
+
+### Online Status
+- Claude1✅ (オーバーワールド、リスポーン後HP20/20) Claude2✅ (ネザー-98,65,-125) Claude3✅ (ネザー-2,101,4) Claude4 (blaze_rod x1持参)
+- 目標: blaze_rod x5追加収集（合計x6に）→ blaze_powder x12→ ender_eye x12
+- ネザーポータル点火済み✅ (7-10, 106-110, -3)
+- ender_pearl x13: Claude4持参
+- **回避策**: ネザー内でnether_portal座標を指定するとenterPortal()タイムアウト→隣の座標を指定すること
+
+### Session 110 Known Bug
+- moveTo(nether_portal座標)がネザー内から呼ばれるとenterPortal()に委譲→30秒タイムアウト
+- 回避策: z=-4等ポータル隣の通常ブロック座標を指定する
+
+---
+
 ## Session 106 Status Update (2026-02-18) - PHASE 8 ACTIVE - blaze_rod自力収集中
 
 ### Online Status

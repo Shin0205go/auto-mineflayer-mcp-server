@@ -1,4 +1,5 @@
 import { botManager } from "../bot-manager/index.js";
+import { Vec3 } from "vec3";
 
 export const movementTools = {
   minecraft_get_position: {
@@ -79,6 +80,25 @@ export async function handleMovementTool(
       const x = args.x as number;
       const y = args.y as number;
       const z = args.z as number;
+
+      // Guard: if target block is a portal but bot is already in that dimension,
+      // skip enterPortal() delegation to avoid 30-second timeout.
+      // (bot-movement.ts moveTo() delegates to enterPortal() unconditionally)
+      {
+        const managed = botManager.getBotByUsername(username);
+        if (managed) {
+          const bot = managed.bot;
+          const targetPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
+          const targetBlock = bot.blockAt(targetPos);
+          const dim = bot.game.dimension as string;
+          if (targetBlock?.name === "nether_portal" && dim.includes("nether")) {
+            return `Skipped enterPortal(): bot already in nether dimension. Move to an adjacent non-portal coordinate instead.`;
+          }
+          if (targetBlock?.name === "end_portal" && dim.includes("end")) {
+            return `Skipped enterPortal(): bot already in end dimension. Move to an adjacent non-portal coordinate instead.`;
+          }
+        }
+      }
 
       // For long distances (>50 blocks), move in small segments to handle chunk loading
       // Pathfinder can only navigate within loaded chunks, so small steps allow
