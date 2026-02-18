@@ -270,14 +270,23 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   console.error(`[Move] From (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)}) to (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
 
   // Check if target position is a portal block — delegate to enterPortal()
+  // Only if the portal would take us to a DIFFERENT dimension (avoid infinite loop in same dimension)
   const targetBlock = bot.blockAt(targetPos);
   if (targetBlock && (targetBlock.name === "nether_portal" || targetBlock.name === "end_portal")) {
-    console.error(`[Move] Target is a ${targetBlock.name}, delegating to enterPortal()...`);
-    try {
-      return await enterPortal(managed);
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      return `Failed to enter portal at (${x}, ${y}, ${z}): ${errMsg}` + getBriefStatus(managed);
+    const currentDim = String(bot.game.dimension);
+    const isEndPortal = targetBlock.name === "end_portal";
+    const alreadyInEnd = currentDim.includes("end");
+    // Skip enterPortal() only if end_portal is targeted while already in the End dimension
+    const shouldSkip = (isEndPortal && alreadyInEnd);
+    if (!shouldSkip) {
+      console.error(`[Move] Target is a ${targetBlock.name}, delegating to enterPortal()...`);
+      try {
+        return await enterPortal(managed);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[Move] enterPortal() failed: ${errMsg}, falling back to normal pathfinding`);
+        // Fall through to normal pathfinding
+      }
     }
   }
 
@@ -1375,7 +1384,7 @@ export async function enterPortal(managed: ManagedBot, portalType?: "nether_port
   // Find nearest portal block (end or nether)
   let portalBlock = bot.findBlock({
     matching: (block) => searchTypes.includes(block.name as any),
-    maxDistance: 10,
+    maxDistance: 20,
   });
 
   // FALLBACK: If portal blocks not detected, search for obsidian frame pattern (end_portal_frame for End portal)
@@ -1385,7 +1394,7 @@ export async function enterPortal(managed: ManagedBot, portalType?: "nether_port
     // Check for end_portal_frame first (End portal in stronghold)
     const endFrameBlock = bot.findBlock({
       matching: (block) => block.name === "end_portal_frame",
-      maxDistance: 15,
+      maxDistance: 20,
     });
     if (endFrameBlock) {
       console.error(`[Portal] Found end_portal_frame at (${endFrameBlock.position.x}, ${endFrameBlock.position.y}, ${endFrameBlock.position.z})`);
@@ -1394,7 +1403,7 @@ export async function enterPortal(managed: ManagedBot, portalType?: "nether_port
       // Fallback to nether portal obsidian frame search
       const obsidianBlocks = bot.findBlocks({
         matching: bot.registry.blocksByName["obsidian"]?.id,
-        maxDistance: 15,
+        maxDistance: 20,
         count: 50,
       });
 

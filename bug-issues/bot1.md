@@ -12,6 +12,16 @@
 
 ---
 
+## Session 110 (2026-02-19) - enterPortal() maxDistance修正
+
+### [2026-02-19] enterPortal() maxDistance=10が小さすぎてネザーポータル発見失敗
+- **症状**: ネザー内でポータルが10ブロック以上離れていると「No nether_portal found within 15 blocks」エラー
+- **原因**: findBlock() maxDistance=10、fallback obsidianフレーム検索も15ブロックで不十分
+- **修正**: `src/bot-manager/bot-movement.ts` 全maxDistanceを10→20、15→20に拡大
+- **ステータス**: ✅ 修正完了、ビルド成功
+
+---
+
 ## Session 110 (2026-02-18) - enterPortal()タイムアウト問題
 
 ### [2026-02-18] moveTo(nether_portal座標) → タイムアウト
