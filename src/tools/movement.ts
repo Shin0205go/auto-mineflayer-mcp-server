@@ -91,9 +91,7 @@ export async function handleMovementTool(
           const targetPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
           const targetBlock = bot.blockAt(targetPos);
           const dim = bot.game.dimension as string;
-          if (targetBlock?.name === "nether_portal" && dim.includes("nether")) {
-            return `Skipped enterPortal(): bot already in nether dimension. Move to an adjacent non-portal coordinate instead.`;
-          }
+          // nether_portal is bidirectional (overworld↔nether), so never skip for nether_portal
           if (targetBlock?.name === "end_portal" && dim.includes("end")) {
             return `Skipped enterPortal(): bot already in end dimension. Move to an adjacent non-portal coordinate instead.`;
           }
