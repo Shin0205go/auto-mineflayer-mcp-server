@@ -768,7 +768,13 @@ export async function minecraft_explore_area(
 
       // Categorize target type to avoid false matches
       const knownBiomes = ["plains", "forest", "taiga", "desert", "savanna", "jungle", "swamp", "mountains", "ocean", "river", "beach", "snowy", "ice", "mushroom", "nether", "end"];
-      const knownEntities = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "cat", "ocelot", "parrot", "wolf", "llama", "turtle", "panda", "fox", "bee", "axolotl", "frog", "goat", "zombie", "skeleton", "spider", "creeper", "enderman"];
+      const knownEntities = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "cat", "ocelot", "parrot", "wolf", "llama", "turtle", "panda", "fox", "bee", "axolotl", "frog", "goat", "zombie", "skeleton", "spider", "creeper", "enderman", "blaze", "ghast", "wither_skeleton", "zombified_piglin", "magma_cube", "hoglin", "piglin"];
+      // Nether structure aliases: map to detectable blocks
+      const netherStructureAliases: Record<string, string> = {
+        "nether_fortress": "nether_bricks",
+        "fortress": "nether_bricks",
+      };
+      const structureBlockTarget = target && netherStructureAliases[target.toLowerCase()];
 
       const isBiomeSearch = target && knownBiomes.some(b => target.toLowerCase().includes(b));
       const isEntitySearch = target && knownEntities.some(e => target.toLowerCase().includes(e) || e.includes(target.toLowerCase()));
@@ -782,10 +788,16 @@ export async function minecraft_explore_area(
       }
 
       // Check for target block (only if not searching for entity)
+      // For structure aliases (e.g. nether_fortress → nether_bricks), search the mapped block
       if (target && !isEntitySearch) {
-        const blockResult = botManager.findBlock(username, target, 16);
+        const blockToSearch = structureBlockTarget || target;
+        const blockResult = botManager.findBlock(username, blockToSearch, 16);
         if (!blockResult.includes("No") && !blockResult.includes("not found")) {
-          findings.push(`${target} block at current location`);
+          findings.push(`${target} found at current location (${blockToSearch} detected)`);
+          if (structureBlockTarget) {
+            // Found the structure! Return immediately with coordinates
+            return `Found ${target} structure! Detected ${structureBlockTarget} at (${x}, ${startPos.y}, ${z}). Navigate here to explore. Findings: ${findings.join(", ")}`;
+          }
         }
       }
 
