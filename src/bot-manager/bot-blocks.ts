@@ -1268,34 +1268,42 @@ export async function useItemOnBlock(
       const expectedBucket = (block.name === "water" || block.name === "flowing_water") ? "water_bucket" : "lava_bucket";
       let collected = false;
 
-      // Attempt 1: Use _genericPlace on the liquid block (sends proper protocol packet)
+      // Attempt 1: activateItem (use_item packet) - primary method for bucket on liquid
+      // In Minecraft, buckets on liquid work by right-clicking in the air while looking at the liquid
       try {
-        console.log(`[DEBUG] Attempt 1: _genericPlace on ${block.name}`);
+        console.log(`[DEBUG] Attempt 1: activateItem (use_item) while looking at ${block.name}`);
         await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await (bot as any)._genericPlace(block, new Vec3(0, 1, 0), { swingArm: 'right' });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 300));
+        bot.activateItem(false); // main hand - sends use_item packet
+        await new Promise(resolve => setTimeout(resolve, 2000));
         collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
-        console.error(`[DEBUG] _genericPlace attempt: collected=${collected}`);
+        console.error(`[DEBUG] activateItem (Attempt 1): collected=${collected}`);
       } catch (e) {
-        console.error(`[DEBUG] _genericPlace for bucket collection failed: ${e}`);
+        console.error(`[DEBUG] activateItem failed: ${e}`);
         await new Promise(resolve => setTimeout(resolve, 500));
         collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
         if (collected) {
-          console.log(`[DEBUG] _genericPlace errored but bucket collected successfully`);
+          console.log(`[DEBUG] activateItem errored but bucket collected successfully`);
         }
       }
 
-      // Attempt 2: activateBlock on the liquid block
+      // Attempt 2: bot.placeBlock on the liquid block directly (correct method for 1.21+)
       if (!collected) {
         try {
-          console.error(`[DEBUG] Attempt 2: activateBlock on ${block.name}...`);
-          await bot.activateBlock(block);
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          console.error(`[DEBUG] Attempt 2: bot.placeBlock on liquid ${block.name}...`);
+          await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+          await new Promise(resolve => setTimeout(resolve, 200));
+          await bot.placeBlock(block, new Vec3(0, 1, 0));
+          await new Promise(resolve => setTimeout(resolve, 1500));
           collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
-          console.error(`[DEBUG] activateBlock attempt: collected=${collected}`);
+          console.error(`[DEBUG] bot.placeBlock on liquid: collected=${collected}`);
         } catch (e) {
-          console.error(`[DEBUG] activateBlock failed: ${e}`);
+          console.error(`[DEBUG] bot.placeBlock on liquid failed: ${e}`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+          collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
+          if (collected) {
+            console.log(`[DEBUG] bot.placeBlock errored but bucket collected successfully`);
+          }
         }
       }
 
@@ -1313,6 +1321,64 @@ export async function useItemOnBlock(
           console.error(`[DEBUG] activateItem attempt: collected=${collected}`);
         } catch (e) {
           console.error(`[DEBUG] activateItem failed: ${e}`);
+        }
+      }
+
+      // Attempt 4: use_item packet with different look angle
+      if (!collected) {
+        try {
+          console.error(`[DEBUG] Attempt 4: use_item packet while looking at liquid top surface...`);
+          await bot.lookAt(pos.offset(0.5, 1.0, 0.5)); // Look at top surface
+          await new Promise(resolve => setTimeout(resolve, 300));
+          bot.activateItem(false); // false = main hand
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
+          console.error(`[DEBUG] use_item (Attempt 4) attempt: collected=${collected}`);
+        } catch (e) {
+          console.error(`[DEBUG] direct use_item_on failed: ${e}`);
+        }
+      }
+
+      // Attempt 5: Direct block_place packet on liquid block (1.21.3+ with worldBorderHit)
+      if (!collected) {
+        try {
+          console.error(`[DEBUG] Attempt 5: Direct block_place packet on liquid block...`);
+          await bot.lookAt(pos.offset(0.5, 1.0, 0.5));
+          await new Promise(resolve => setTimeout(resolve, 300));
+          // For 1.21.3+, block_place needs worldBorderHit field
+          (bot as any)._client.write('block_place', {
+            location: pos,
+            direction: 1, // top face
+            hand: 0,
+            cursorX: 0.5,
+            cursorY: 1.0,
+            cursorZ: 0.5,
+            insideBlock: false,
+            sequence: 0,
+            worldBorderHit: false
+          });
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
+          console.error(`[DEBUG] block_place (Attempt 5) attempt: collected=${collected}`);
+        } catch (e) {
+          console.error(`[DEBUG] block_place Attempt 5 failed: ${e}`);
+        }
+      }
+
+      // Attempt 6: Move bot INTO the liquid block position and use activateItem
+      if (!collected) {
+        try {
+          console.error(`[DEBUG] Attempt 6: Move into liquid and use activateItem...`);
+          // Move very close (same Y level as liquid)
+          await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+          await new Promise(resolve => setTimeout(resolve, 200));
+          // Try activateItem from close range
+          bot.activateItem(false);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          collected = !!bot.inventory.items().find(i => i.name === expectedBucket);
+          console.error(`[DEBUG] Attempt 6: collected=${collected}`);
+        } catch (e) {
+          console.error(`[DEBUG] Attempt 6 failed: ${e}`);
         }
       }
     } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
@@ -1441,11 +1507,11 @@ export async function useItemOnBlock(
           await bot.lookAt(lookTarget);
           await new Promise(resolve => setTimeout(resolve, 150));
           await bot.activateBlock(block);
-          await new Promise(resolve => setTimeout(resolve, 600));
+          await new Promise(resolve => setTimeout(resolve, 1500));
 
           const portalBlock = bot.findBlock({
             matching: (b) => b.name === "nether_portal",
-            maxDistance: 10,
+            maxDistance: 20,
           });
           if (portalBlock) {
             ignited = true;
@@ -1456,36 +1522,85 @@ export async function useItemOnBlock(
         }
       }
 
-      // Attempt 2: direct block_place packet
+      // Attempt 2: direct block_place packet (on adjacent block, not the target block itself)
       if (!ignited) {
-        for (const face of faceVectors) {
+        // Try clicking on adjacent air block inside the portal frame
+        const adjacentOffsets = [
+          { offset: new Vec3(0, -1, 0), face: 1 },  // block below, top face
+          { offset: new Vec3(1, 0, 0), face: 4 },   // block to east, west face
+          { offset: new Vec3(-1, 0, 0), face: 5 },  // block to west, east face
+          { offset: new Vec3(0, 0, 1), face: 2 },   // block to south, north face
+          { offset: new Vec3(0, 0, -1), face: 3 },  // block to north, south face
+        ];
+        for (const adj of adjacentOffsets) {
           if (ignited) break;
           try {
-            const faceId = face.y === 1 ? 1 : face.y === -1 ? 0 : face.z === 1 ? 3 : face.z === -1 ? 2 : face.x === 1 ? 5 : 4;
-            console.error(`[DEBUG] flint_and_steel: block_place packet face=${faceId}`);
-            await bot.lookAt(pos.offset(0.5, 1.0, 0.5));
-            await new Promise(resolve => setTimeout(resolve, 100));
-            (bot as any)._client.write('block_place', {
-              hand: 0,
-              location: { x: pos.x, y: pos.y, z: pos.z },
-              direction: faceId,
-              cursorX: 0.5,
-              cursorY: 1.0,
-              cursorZ: 0.5,
-              insideBlock: false,
-            });
-            await new Promise(resolve => setTimeout(resolve, 600));
+            const adjPos = pos.plus(adj.offset);
+            const adjBlock = bot.blockAt(adjPos);
+            // Only use solid blocks as reference (not air or portal)
+            if (adjBlock && adjBlock.name !== "air" && adjBlock.name !== "nether_portal") {
+              console.error(`[DEBUG] flint_and_steel: block_place on adjacent "${adjBlock.name}" at (${adjPos.x},${adjPos.y},${adjPos.z}) face=${adj.face}`);
+              await bot.lookAt(pos.offset(0.5, 1.0, 0.5));
+              await new Promise(resolve => setTimeout(resolve, 100));
+              (bot as any)._client.write('block_place', {
+                hand: 0,
+                location: { x: adjPos.x, y: adjPos.y, z: adjPos.z },
+                direction: adj.face,
+                cursorX: 0.5,
+                cursorY: 0.5,
+                cursorZ: 0.5,
+                insideBlock: false,
+                sequence: 0,
+                worldBorderHit: false,
+              });
+              await new Promise(resolve => setTimeout(resolve, 1500));
 
-            const portalBlock = bot.findBlock({
-              matching: (b) => b.name === "nether_portal",
-              maxDistance: 10,
-            });
-            if (portalBlock) {
-              ignited = true;
-              console.error(`[DEBUG] flint_and_steel: nether_portal ignited via block_place! face=${faceId}`);
+              const portalBlock = bot.findBlock({
+                matching: (b) => b.name === "nether_portal",
+                maxDistance: 20,
+              });
+              if (portalBlock) {
+                ignited = true;
+                console.error(`[DEBUG] flint_and_steel: nether_portal ignited via block_place on adjacent! face=${adj.face}`);
+              }
             }
           } catch (e) {
             console.error(`[DEBUG] flint_and_steel block_place failed: ${e}`);
+          }
+        }
+        // Fallback: original approach (block_place on target block itself)
+        if (!ignited) {
+          for (const face of faceVectors) {
+            if (ignited) break;
+            try {
+              const faceId = face.y === 1 ? 1 : face.y === -1 ? 0 : face.z === 1 ? 3 : face.z === -1 ? 2 : face.x === 1 ? 5 : 4;
+              console.error(`[DEBUG] flint_and_steel: block_place (fallback) face=${faceId}`);
+              await bot.lookAt(pos.offset(0.5, 1.0, 0.5));
+              await new Promise(resolve => setTimeout(resolve, 100));
+              (bot as any)._client.write('block_place', {
+                hand: 0,
+                location: { x: pos.x, y: pos.y, z: pos.z },
+                direction: faceId,
+                cursorX: 0.5,
+                cursorY: 1.0,
+                cursorZ: 0.5,
+                insideBlock: false,
+                sequence: 0,
+                worldBorderHit: false,
+              });
+              await new Promise(resolve => setTimeout(resolve, 1500));
+
+              const portalBlock = bot.findBlock({
+                matching: (b) => b.name === "nether_portal",
+                maxDistance: 20,
+              });
+              if (portalBlock) {
+                ignited = true;
+                console.error(`[DEBUG] flint_and_steel: nether_portal ignited via block_place fallback! face=${faceId}`);
+              }
+            } catch (e) {
+              console.error(`[DEBUG] flint_and_steel block_place fallback failed: ${e}`);
+            }
           }
         }
       }

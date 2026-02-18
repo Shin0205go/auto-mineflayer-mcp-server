@@ -28,10 +28,18 @@
 - **ファイル**: ゲーム内の建築作業
 - **必要アイテム**: obsidian x4（地下(-9,37,11)のlavaプール付近に大量）、diamond_pickaxe（作成済み）、water_bucket（バグ修正後）
 
-### [2026-02-18] flint_and_steel着火のblocl_placeパケット修正
-- **症状**: Attempt2で直接block_placeパケット送信（sequence:0固定）
-- **修正**: _genericPlaceに変更してsequenceを正しく管理
-- **ファイル**: `src/bot-manager/bot-blocks.ts` line 1459付近
+### [2026-02-18] flint_and_steelのblock_placeパケットにworldBorderHit欠落（Session 109修正済み）
+- **症状**: flint_and_steelで着火してもnether_portalが生成されない（Sessions 49-108以降継続）
+- **原因**: MC 1.21.4のblock_placeパケットには`worldBorderHit: false`と`sequence: 0`が必須だが欠けていた
+- **修正**: bot-blocks.ts の両block_placeパケットに`sequence: 0, worldBorderHit: false`追加
+- **ファイル**: `src/bot-manager/bot-blocks.ts` lines 1545-1553, 1578-1588
+- **状態**: 修正・ビルド済み。ただしポータル点火成功の主因は別（フレームの欠損ブロック）
+
+### [2026-02-18] ネザーポータルフレーム欠損ブロック（Session 109解決済み）
+- **症状**: フレーム完成に見えてもポータルが点火しない
+- **原因**: (10,108,-3)のobsidianが欠けていた（計14ブロック中1ブロック不足）
+- **修正**: diamond_pickaxeで他のobsidianを再利用して(10,108,-3)に配置→点火成功
+- **教訓**: フレーム検証は全14座標を個別に確認すること。視覚的確認は不十分
 
 ---
 
