@@ -298,6 +298,60 @@
     const oldHP = bot.health;
     const oldFood = bot.food;
 
+### [SESSION 124-125] NETHER RESPAWN BROKEN - HP NOT RESET (CRITICAL - Phase 8 Blocker)
+- **症状**:
+  - Fall damage in Nether → respawn triggered (bot returns to spawn)
+  - BUT: HP 4.2/20 → respawn → HP **4.2/20 (回復しない！)**
+  - Hunger: 17/20 のまま変わらない
+  - Memory SESSION 123 claim "Claude3: HP 12→20/20 via fall respawn in Nether" **is FALSE/outdated**
+- **原因**:
+  - Nether respawn point restore がHP reset を skip している可能性
+  - または bot.health/bot.food のNether内での同期が broken
+  - `bot.on("death")` → auto-respawn は機能するが、HP/Hunger の完全復帰が失敗
+- **影響度**: 🔴 CRITICAL - Phase 8 IMPOSSIBLE
+  - Claude3 stuck in Nether HP 4.2/20, cannot exit portal
+  - Cannot approach Blaze to farm rods (will die from mob damage)
+  - respawn strategy (fall damage) doesn't recover HP/Hunger in Nether
+  - **Conclusion: Nether respawn mechanic is BROKEN for Nether dimension**
+- **ファイル**:
+  - `src/bot-manager/bot-core.ts:628-666` (death handler, doesn't wait for spawn event)
+  - `src/bot-manager/bot-survival.ts` (if any Nether-specific respawn)
+- **修正必要**:
+  1. bot.once('spawn') イベント wait を追加してHP/Hunger復帰を確認
+  2. Nether内での health/food synchronization を fix
+  3. または fallback: Overworld respawnに強制する
+
+### [SESSION 124-125] PORTAL EXIT BROKEN - enter_portal() fails in Nether (CRITICAL - Phase 8 Blocker)
+- **症状**:
+  - Bot in Nether (-2, 108, 9), portal frame at (8, 107, -3)
+  - `minecraft_find_block("nether_portal")` → Found nether_portal at (8, 107, -3) ✅
+  - `minecraft_move_to(x=8, y=108, z=-3)` → Reached destination (6.6, 105, -1.7)
+  - `minecraft_enter_portal()` → **FAILED: "No end_portal, nether_portal, or portal frame found within 15 blocks"**
+- **原因**:
+  - enterPortal() maxDistance=10 but `move_to` reached (6.6, 105, -1.7) which is 22.8m away from actual portal
+  - enter_portal() findBlock() search range too small (10 blocks)
+  - OR: Portal block detection is failing despite find_block success
+- **影響度**: 🔴 CRITICAL - Nether exit BLOCKED
+  - Cannot return to Overworld to get food
+  - Stuck in Nether with HP 4.2/20, no food, no exit
+  - **Conclusion: Nether exit mechanism is BROKEN**
+- **ファイル**: `src/bot-manager/bot-movement.ts:1376-1379`
+  - `maxDistance: 10` is too small
+  - Fallback obsidian frame search has maxDistance 15 but might not be triggered properly
+- **修正**:
+  1. Increase maxDistance from 10 → 15+ in findBlock(nether_portal)
+  2. Improve fallback frame detection (current logic may fail)
+  3. OR: Add explicit portal re-entry method for Nether exit
+
+### [SESSION 124-125] CONCLUSION: Phase 8 EXECUTION IMPOSSIBLE
+- **Multiple Critical Bugs Confirmed**:
+  1. ✅ Nether respawn HP reset broken
+  2. ✅ Portal exit enter_portal() blocked
+  3. ✅ Chest sync broken (cannot get food)
+- **Cumulative Effect**: Claude3 stuck in Nether, cannot escape, cannot survive
+- **Recommendation**: Code fixes MUST be applied before Phase 8 can proceed
+- **Affected**: All 3 systems that Phase 8 depends on
+
     console.error(`[Respawn] Sending /kill command...`);
 
     // Wait for death event
