@@ -344,3 +344,25 @@
 
 **Impact:** Phase 6 (Nether + Ender Dragon) is now unblocked!
 
+
+---
+
+### [2026-02-18] ネザーポータルテレポート不可 (継続調査中)
+- **症状**: ネザーポータルブロックが6個存在し、ポータル内に立っているがテレポートが発生しない
+  - `find_block("nether_portal")` → 6個発見（-2,-1 x 101-103 z=3）
+  - `get_surroundings()` → 「足の位置: nether_portal」「頭上: nether_portal」で確実にポータル内にいる
+  - `move_to(nether_portal座標)` → 30秒タイムアウト後「Portal teleport timeout」
+- **調査内容**:
+  1. `enterPortal()` 関数は `bot.on("spawn", ...)` でdimension changeを待機
+  2. MC 1.21.4では `spawn` イベントではなく `respawn` パケットでdimension change通知の可能性
+  3. `(bot as any)._client?.on("respawn", ...)` を追加して修正試みた
+  4. `mcp-ws-server.ts` に `minecraft_enter_portal` ケースを追加（未登録だった）
+- **修正内容** (2026-02-18):
+  1. `src/bot-manager/bot-movement.ts`: `enterPortal()` に `_client.respawn` パケット監視を追加
+  2. `src/mcp-ws-server.ts`: `minecraft_enter_portal` ケースと tools定義を追加
+  3. ビルド成功（エラーなし）
+- **残存問題**: 修正後も同じタイムアウト。サーバー側でネザーへのテレポートが完全に無効化されている疑い
+  - `server.properties` の `allow-nether=true` 設定確認が必要
+  - または管理者による `/execute in minecraft:the_nether run tp Claude2 0 64 0` が必要
+- **ファイル**: `src/bot-manager/bot-movement.ts`, `src/mcp-ws-server.ts`
+
