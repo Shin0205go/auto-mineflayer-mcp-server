@@ -12,13 +12,21 @@
 
 ---
 
+## Session 112 (2026-02-19) - チェスト競合リトライ修正（openChest関数）
+
+### [2026-02-19] openChest() でチェスト競合時に即座にエラーを返す問題
+- **症状**: `minecraft_open_chest` ツールがマルチボット環境でチェストを開けず「Cannot open chest. It may be in use by another player」エラーを即返す
+- **原因**: openChest()のタイムアウト後は隣接チェスト(ダブルチェスト用)しか試みず、時間を置いたリトライがなかった
+- **修正**: `src/bot-manager/bot-storage.ts` — openChest()に3回リトライ+2秒待機を追加。moveTo()のnether_portal判定も修正(shouldSkipにisNetherPortal&&alreadyInNetherを追加)
+- **ステータス**: ✅ 修正完了、ビルド成功
+
 ## Session 111 (2026-02-19) - チェスト競合タイムアウト修正
 
 ### [2026-02-19] storeInChest/takeFromChest でチェスト競合時に20秒タイムアウト
 - **症状**: マルチボット環境でチェストが使用中の際、`bot.openContainer()` が無期限待機してEvent windowOpen 20秒タイムアウト
 - **原因**: storeInChest/takeFromChest に openContainer のタイムアウト処理がなかった（openChest関数には5秒タイムアウトあり）
 - **修正**: `src/bot-manager/bot-storage.ts` — storeInChest(line 151)とtakeFromChest(line 219)のopenContainerをリトライ3回+8秒タイムアウトに変更
-- **ステータス**: ✅ 修正完了、ビルド成功
+- **ステータス**: ✅ 修正完了、ビルド成功（ただしSession 112でコード未適用を発見し再修正）
 
 ---
 
