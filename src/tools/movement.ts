@@ -115,10 +115,21 @@ export async function handleMovementTool(
           const segmentSize = 30;
           const steps = Math.ceil(dist / segmentSize);
           let lastResult = "";
+          // Track starting dimension to detect accidental portal teleport
+          const managed0 = botManager.getBotByUsername(username);
+          const startDim = managed0?.bot.game.dimension as string | undefined;
           for (let i = 1; i <= steps; i++) {
             // Recompute direction from current position each step
             const curPos = botManager.getPosition(username);
             if (!curPos) break;
+            // Abort if dimension changed (accidental portal teleport)
+            if (startDim !== undefined) {
+              const managed1 = botManager.getBotByUsername(username);
+              const curDim = managed1?.bot.game.dimension as string | undefined;
+              if (curDim !== undefined && curDim !== startDim) {
+                return `Stopped: dimension changed from ${startDim} to ${curDim} during movement (accidental portal teleport). Current position: (${Math.round(curPos.x)}, ${Math.round(curPos.y)}, ${Math.round(curPos.z)})`;
+              }
+            }
             const rdx = x - curPos.x;
             const rdy = y - curPos.y;
             const rdz = z - curPos.z;
