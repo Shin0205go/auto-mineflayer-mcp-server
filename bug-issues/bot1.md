@@ -4,6 +4,65 @@
 
 ---
 
+## Session 140 (2026-02-20) - Portal建設再開: Bucket消失バグ発生
+
+### [2026-02-20] CRITICAL BUG: Bucket x2 完全消失（inventory + chest両方から消失）
+
+**症状**:
+- Claude1がbucket x2をchest(9,96,4)にstore
+- storeInChest成功メッセージ確認✅
+- Claude2がchestを開く→bucket見えず❌
+- Claude1が再度chest確認→bucket無し❌
+- Claude1のinventory確認→bucket無し❌ (以前は所持していた)
+- **結論**: bucket x2が完全に消失。inventoryとchest両方から消えた
+
+**経緯**:
+1. Session 139終了時、chest(9,96,4)にbucket x2存在確認
+2. Session 140開始時、Claude1がbucket x2をinventory所持確認
+3. Claude1 → chest(9,96,4)にbucket x2をstore → 成功メッセージ
+4. Claude2 → chest(9,96,4)を開く → bucket見えず（chest sync bug疑い）
+5. Claude1 → chest(9,96,4)再確認 → bucket無し（完全消失確認）
+6. Claude1 → inventory確認 → bucket無し（inventoryからも消失）
+
+**影響**:
+- obsidian生成（water + lava）が実行不可
+- 代替策: iron_ingot x3でbucket x1を新規作成（実行済み）
+- 代替策2: Claude2がdiamond_pickaxeで(-9,37,11)から直接obsidian x9採掘（実行中）
+
+**根本原因**:
+- 不明。Chest sync bugの可能性大
+- storeInChestは成功したが、server-side同期失敗？
+- アイテムがvoidに消えた可能性
+
+**対策**:
+- 重要アイテムは複数箇所に分散保管
+- Chest sync問題は既知バグ。item dropでの直接受け渡しを推奨
+
+**ステータス**: ⚠️ 調査継続中。Session 140ではbucket新規作成で対応
+
+### [2026-02-20] Session 140進捗
+
+**実行内容**:
+- 新Portal建設再開 (15,90,10)
+- obsidian x9入手戦略: Claude2がdiamond_pickaxeで(-9,37,11)から直接採掘
+- wheat farm建設: Claude3が試行→drowning死亡→中断
+- Portal site準備: Claude4が(15,90,10)でplatform建設中
+
+**チーム状況**:
+- **Claude1**: BASE (9,96,4), HP 16/20, Hunger 9/20, bucket x1新規作成済み
+- **Claude2**: obsidian採掘中 (-9,37,11方面), HP 20/20, diamond_pickaxe装備
+- **Claude3**: BASE待機、respawn後HP/Hunger 20/20
+- **Claude4**: Portal site (15,90,10)でplatform建設中
+
+**Next**:
+- Claude2 → obsidian x9採掘完了→BASEへ運搬
+- Claude4 → Portal site準備完了
+- 全員 → obsidian x10でPortal frame建設→点火→Nether突入
+
+**ステータス**: 🔄 Session 140進行中
+
+---
+
 ## Session 139 (2026-02-20) - NEW PORTAL建設開始
 
 ### [2026-02-20] Session 139 SUMMARY: Obsidian採掘戦略失敗、Portal最小構成発見
