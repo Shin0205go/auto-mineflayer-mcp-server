@@ -483,7 +483,11 @@ export async function dropItem(bot: Bot, itemName: string, count?: number): Prom
  * Equip best available armor
  */
 export async function equipArmor(bot: Bot): Promise<string> {
-  const armorPriority = ["netherite", "diamond", "iron", "chainmail", "gold", "leather"];
+  // In Nether, prioritize gold armor to prevent Piglin aggression
+  const isNether = bot.game.dimension === "the_nether";
+  const armorPriority = isNether
+    ? ["gold", "netherite", "diamond", "iron", "chainmail", "leather"]
+    : ["netherite", "diamond", "iron", "chainmail", "gold", "leather"];
   const armorSlots = {
     helmet: "head",
     chestplate: "torso",

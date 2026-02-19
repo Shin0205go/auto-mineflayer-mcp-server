@@ -4,6 +4,22 @@
 
 ---
 
+## Session 138 (2026-02-20) - Phase 8 Nether探索継続
+
+### [2026-02-20] Gold armor priority fix committed
+- **症状**: Nether内でgold armorが優先装備されず、Piglinに攻撃されるリスク
+- **修正**: `src/bot-manager/bot-items.ts` line 487 — `bot.game.dimension === "the_nether"` チェックを追加し、Nether内ではgold armor最優先に変更
+- **ステータス**: ✅ 修正完了、コミット準備中
+- **ファイル**: `src/bot-manager/bot-items.ts:485-490`
+
+### [2026-02-20] Phase 8状況確認
+- **Claude2/3**: Nether探索中（blaze_rod x5目標）
+- **Claude4**: BASE待機、ender_pearl x11 + ender_eye x2所持
+- **Claude1**: リーダー、チーム指示＋バグ修正専任
+- **目標**: blaze_rod x5入手→ender_eye x10作成→Stronghold (-736,~,-1280)→end_portal起動→ドラゴン討伐
+
+---
+
 ## Session 115 (2026-02-19) - storeInChest/takeFromChest リトライ実装（再修正）
 
 ### [2026-02-19] Session 114の修正が実際に反映されていなかった
