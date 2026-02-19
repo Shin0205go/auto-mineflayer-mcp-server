@@ -33,16 +33,34 @@ fi
 
 # Claude子プロセスPID（クリーンアップ用）
 CLAUDE_PID=""
+TAIL_PID=""
+
+# claude と全子プロセス（LSP, MCP server等）を確実にkill
+kill_claude() {
+  local pid=$1
+  if [ -z "$pid" ]; then return; fi
+  if kill -0 $pid 2>/dev/null; then
+    # 子プロセス（LSP, MCP server等）を先にkill
+    pkill -P $pid 2>/dev/null || true
+    kill $pid 2>/dev/null || true
+    sleep 2
+    # まだ残ってたら強制kill
+    pkill -9 -P $pid 2>/dev/null || true
+    kill -9 $pid 2>/dev/null || true
+    wait $pid 2>/dev/null || true
+  fi
+}
 
 # クリーンアップ関数
 cleanup() {
   echo ""
   echo "🛑 [$BOT_NAME] Shutting down..."
-  if [ ! -z "$CLAUDE_PID" ] && kill -0 $CLAUDE_PID 2>/dev/null; then
-    pkill -P $CLAUDE_PID 2>/dev/null || true
-    kill $CLAUDE_PID 2>/dev/null || true
-    wait $CLAUDE_PID 2>/dev/null || true
+  # tail -f を停止
+  if [ ! -z "$TAIL_PID" ] && kill -0 $TAIL_PID 2>/dev/null; then
+    kill $TAIL_PID 2>/dev/null || true
   fi
+  # claude と子プロセスをkill
+  kill_claude "$CLAUDE_PID"
   echo "🏁 [$BOT_NAME] Self-improvement loop stopped"
   echo "📊 Completed $LOOP loops"
   echo "📁 Logs saved in: $LOG_DIR/"
@@ -218,10 +236,18 @@ STALE_EOF
   # 環境変数でMCPサーバーに設定を渡す
   export BOT_USERNAME="$BOT_NAME"
   export ENABLE_VIEWER="${ENABLE_VIEWER:-false}"
-  cat /tmp/minecraft_prompt_bot${BOT_ID}.md | claude --dangerously-skip-permissions \
+
+  # NOTE: ファイルリダイレクトで直接claude PIDを取得する
+  # パイプライン(| tee)だと$!がteeのPIDになり、claudeをkillできないバグがあった
+  touch "$LOGFILE"
+  claude --dangerously-skip-permissions \
     --print \
-    --model $MODEL 2>&1 | tee "$LOGFILE" &
+    --model $MODEL < /tmp/minecraft_prompt_bot${BOT_ID}.md > "$LOGFILE" 2>&1 &
   CLAUDE_PID=$!
+
+  # ターミナルにもログを表示（tail -f）
+  tail -f "$LOGFILE" 2>/dev/null &
+  TAIL_PID=$!
 
   # Wait up to 1800 seconds (30 minutes)
   EXIT_CODE=0
@@ -236,17 +262,19 @@ STALE_EOF
     WAITED=$((WAITED + 1))
   done
 
-  # Kill if still running (プロセスグループごと)
+  # tail -f を停止
+  if [ ! -z "$TAIL_PID" ] && kill -0 $TAIL_PID 2>/dev/null; then
+    kill $TAIL_PID 2>/dev/null || true
+  fi
+  TAIL_PID=""
+
+  # Kill if still running
   if kill -0 $CLAUDE_PID 2>/dev/null; then
-    echo "" | tee -a "$LOGFILE"
-    echo "⏱️  Timeout reached (15 minutes), stopping..." | tee -a "$LOGFILE"
-    pkill -P $CLAUDE_PID 2>/dev/null || true
-    kill $CLAUDE_PID 2>/dev/null || true
-    sleep 2
-    # まだ残ってたら強制kill
-    pkill -9 -P $CLAUDE_PID 2>/dev/null || true
-    kill -9 $CLAUDE_PID 2>/dev/null || true
-    wait $CLAUDE_PID 2>/dev/null || true
+    echo ""
+    echo "⏱️  Timeout reached (30 minutes), stopping..."
+    echo "" >> "$LOGFILE"
+    echo "⏱️  Timeout reached (30 minutes), stopping..." >> "$LOGFILE"
+    kill_claude $CLAUDE_PID
     EXIT_CODE=124
   fi
   CLAUDE_PID=""
@@ -255,7 +283,7 @@ STALE_EOF
   if [ ${EXIT_CODE:-0} -eq 0 ]; then
     echo "✅ Completed successfully"
   elif [ ${EXIT_CODE:-0} -eq 124 ]; then
-    echo "⏱️  Timeout (15 minutes) - moving to next loop"
+    echo "⏱️  Timeout (30 minutes) - moving to next loop"
   else
     echo "❌ Exited with code ${EXIT_CODE:-0}"
   fi

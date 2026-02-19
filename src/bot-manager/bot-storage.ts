@@ -148,7 +148,27 @@ export async function storeInChest(
   // Wait a moment if chest was recently used (prevent timing issues)
   await new Promise(resolve => setTimeout(resolve, 1000));
 
-  const chest = await bot.openContainer(chestBlock);
+  // Retry openContainer with timeout to handle multi-bot chest access
+  let chest: any;
+  let retryCount = 0;
+  const maxRetries = 3;
+  while (retryCount < maxRetries) {
+    try {
+      chest = await Promise.race([
+        bot.openContainer(chestBlock),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Chest open timeout")), 8000))
+      ]);
+      break;
+    } catch (err) {
+      retryCount++;
+      if (retryCount >= maxRetries) {
+        throw new Error(`Failed to open chest after ${maxRetries} retries: ${err}`);
+      }
+      console.error(`[Storage] Chest open failed (attempt ${retryCount}/${maxRetries}), retrying in 2s...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+
   const storeCount = count || item.count;
   const actualCount = Math.min(storeCount, item.count);
 
@@ -202,12 +222,32 @@ export async function takeFromChest(
   // Wait a moment if chest was recently used (prevent timing issues)
   await new Promise(resolve => setTimeout(resolve, 1000));
 
-  const chest = await bot.openContainer(chestBlock);
+  // Retry openContainer with timeout to handle multi-bot chest access
+  let chest: any;
+  let retryCount = 0;
+  const maxRetries = 3;
+  while (retryCount < maxRetries) {
+    try {
+      chest = await Promise.race([
+        bot.openContainer(chestBlock),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Chest open timeout")), 8000))
+      ]);
+      break;
+    } catch (err) {
+      retryCount++;
+      if (retryCount >= maxRetries) {
+        throw new Error(`Failed to open chest after ${maxRetries} retries: ${err}`);
+      }
+      console.error(`[Storage] Chest open failed (attempt ${retryCount}/${maxRetries}), retrying in 2s...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+
   const items = chest.containerItems();
 
-  const item = items.find(i => i.name === itemName);
+  const item = items.find((i: any) => i.name === itemName);
   if (!item) {
-    const chestContents = items.map(i => `${i.name}(${i.count})`).join(", ") || "empty";
+    const chestContents = items.map((i: any) => `${i.name}(${i.count})`).join(", ") || "empty";
     chest.close();
     throw new Error(`No ${itemName} in chest. Chest contains: ${chestContents}`);
   }

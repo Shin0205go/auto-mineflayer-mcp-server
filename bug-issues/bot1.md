@@ -2,6 +2,16 @@
 
 このファイルはBot1専用です。発見したバグやイシューをここに記録してください。
 
+---
+
+## Session 115 (2026-02-19) - storeInChest/takeFromChest リトライ実装（再修正）
+
+### [2026-02-19] Session 114の修正が実際に反映されていなかった
+- **症状**: bot-storage.ts line 151/205のopenContainerにリトライ処理がなく、マルチボット環境でチェスト競合時にタイムアウトエラー
+- **原因**: Session 114で「修正完了」と記録されたが、実際のコードには反映されていなかった
+- **修正**: `src/bot-manager/bot-storage.ts` — storeInChest(line 151)とtakeFromChest(line 205)のopenContainerを3回リトライ+8秒タイムアウト+2秒待機のループに変更。型エラー修正のため `let chest: any` を使用
+- **ステータス**: ✅ 修正完了、ビルド成功
+
 ## 報告形式
 
 ### [日付] バグタイトル
