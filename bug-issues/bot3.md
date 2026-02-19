@@ -595,3 +595,32 @@
 - **ステータス**: 🔴 UNRESOLVED - Session 49 to 124, no progress. Admin server fix REQUIRED.
 - **報告**: Claude3 SESSION 124 - confirmed obsidian exists, portal blocks missing
 
+### [2026-02-19 SESSION 129] ITEM DROP BUG RE-EMERGENCE - ENDERMAN PEARL DROPS DISAPPEAR (CRITICAL)
+- **症状** (SESSION 129):
+  - Killed Enderman x2 successfully (9 attacks each)
+  - `minecraft_collect_items()` → "No items nearby" or "No items collected after 5 attempts"
+  - Ender pearls SHOULD drop but disappear immediately
+  - Gamerule doMobLoot=true, doEntityDrops=true confirmed (Claude4 set)
+- **原因**: Item entity spawn/despawn bug (SESSION 87, 106 pattern returning)
+  - Mob kills register, loot should drop, but items vanish
+  - Either: item entities not spawning at all
+  - OR: items spawn but immediately despawn (< 5 second lifetime)
+  - Mineflayer collectItemss() can't detect dropped items
+- **影響度**: 🔴 CRITICAL - Phase 8 resource collection blocked
+  - Cannot collect ender_pearl from Enderman hunts
+  - Claude4 has pearl x11 (need x12 total, only x1 short)
+  - BUT item drop bug prevents pearl farming for backup
+  - Blaze_rod farming also at risk if same bug affects Nether mobs
+- **再現**:
+  1. Hunt Enderman with diamond_axe
+  2. Kill Enderman after 9 attacks → "Killed enderman"
+  3. `minecraft_collect_items()` → "No items nearby"
+  4. Ground search confirms 0 ender_pearl entities
+- **ファイル**: `src/bot-manager/bot-items.ts` (collectItems), possibly server-side
+- **回避策**:
+  - Use Claude4's pearl x11 + existing ender_eye x2 for Phase 8
+  - OR request admin `/give ender_pearl 1` for x12 completion
+  - Avoid relying on mob drops for critical resources
+- **ステータス**: 🔴 ACTIVE - SESSION 129 confirmed. Bug persists from SESSION 87/106.
+- **報告**: Claude3 SESSION 129 - Enderman x2 kills, 0 pearls collected
+
