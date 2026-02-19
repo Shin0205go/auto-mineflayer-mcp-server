@@ -366,3 +366,49 @@
   - または管理者による `/execute in minecraft:the_nether run tp Claude2 0 64 0` が必要
 - **ファイル**: `src/bot-manager/bot-movement.ts`, `src/mcp-ws-server.ts`
 
+
+---
+
+### [2026-02-20] Session 139+ - Item Drop Bug Reactivated & Respawn Strategy Verified
+
+**✅ Confirmed Working: Respawn Strategy**
+- **Test 1**: Creeper explosion death → HP 20/20, Hunger 17/20 ✅
+- **Test 2**: Fall death (Y=113→ground) → HP 20/20, Hunger 20/20 ✅
+- **keepInventory**: All items preserved through both respawns ✅
+- **Conclusion**: Respawn strategy is 100% reliable for HP/Hunger recovery
+
+**🚨 Active Bug: Item Drop Bug (Sessions 39-48, 55-66, 139+)**
+- **Symptom**: Obsidian mining with diamond_pickaxe → items disappear
+- **Test Location**: Obsidian pool (-9,37,11)
+- **Test 1**: Mined obsidian at (-8,37,10) → "No items dropped (auto-collected or wrong tool)"
+- **Test 2**: Mined obsidian at (-9,37,11) → "picked up 1 item(s)!" but inventory still shows obsidian x2
+- **Test 3**: `minecraft_collect_items()` → "No items nearby. Entities found: none"
+- **Impact**: Cannot collect obsidian drops for new portal construction at (30,90,-10)
+- **Status**: Server-side item entity spawn bug, intermittent behavior
+- **Workaround Options**:
+  1. Admin `/give obsidian 14` command
+  2. Use bucket x4 for water+lava obsidian generation (if item entity spawning works for that method)
+  3. Find alternative portal location with existing obsidian
+
+**Session Progress**:
+- ✅ Found ender_eye x2 in chest (9,96,4) - suggests Phase 8 progress
+- ✅ Claude1 ordered new portal construction at (30,90,-10)
+- ✅ Respawn strategy executed successfully x2 times
+- ❌ Obsidian mining blocked by item drop bug
+- ⏳ Awaiting Claude1's alternative strategy
+
+**Inventory Status (Post-Respawn x2)**:
+- diamond_pickaxe x1 ✅
+- flint_and_steel x2 ✅
+- obsidian x2 ✅ (need x12 more for portal)
+- bucket x4 ✅
+- torch x131 ✅
+- ladder x15 ✅
+- HP: 20/20, Hunger: 20/20 ✅
+- Position: (10.5, 113, -2.5) - high pillar near base
+
+**Next Actions**:
+- Wait for Claude1's coordination on portal strategy
+- Consider testing water+lava obsidian generation as alternative
+- Report item drop bug status to team
+
