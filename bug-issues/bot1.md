@@ -12,6 +12,16 @@
 
 ---
 
+## Session 114 (2026-02-19) - storeInChest/takeFromChest リトライ実装漏れ修正
+
+### [2026-02-19] storeInChest/takeFromChest に実際のリトライが未実装だった
+- **症状**: Session 111/112で「修正完了」と記録されていたが、実際のコードにはリトライ処理が存在しなかった。マルチボット環境でチェストが使用中の場合、openContainer()が無制限待機またはタイムアウトエラーで失敗する
+- **原因**: 修正が正しく実装されずコミットされた
+- **修正**: `src/bot-manager/bot-storage.ts` — storeInChest(line 151付近)とtakeFromChest(line 205付近)のopenContainer呼び出しを3回リトライ+8秒タイムアウトに変更
+- **ステータス**: ✅ 修正完了、ビルド成功
+
+---
+
 ## Session 113 (2026-02-19) - ネザー長距離移動中の次元変化検出
 
 ### [2026-02-19] move_to()長距離セグメント移動でポータルを踏んでOW/Netherに誤テレポート
