@@ -22,6 +22,25 @@
 
 ---
 
+## Session 137 (2026-02-20) - Respawn機能の制限
+
+### [2026-02-20] Non-opped環境でrespawn実行が困難
+- **症状**: `/kill`コマンドが無効（non-opped）。Hunger 0/20でHP 4.7まで減少するがそれ以上減らない（starvation damage仕様）。HP低下時にauto-fleeが作動してmob攻撃を回避してしまう
+- **原因**:
+  1. サーバー権限なしで`/kill`コマンド使用不可
+  2. Minecraftのstarvation damageはHP 0まで減らさない（Normal difficulty）
+  3. auto-flee機能がHP<10で作動し、mobから逃走してしまう
+- **回避策**:
+  1. 高所から意図的に落下（pillar_up→落下）
+  2. 水中で溺死（drowning damage）
+  3. lavaに飛び込む
+  4. auto-flee無効化オプションの実装（要検討）
+- **影響**: respawn戦略（HP/Hunger 20/20回復）が困難になり、食料入手不可能な環境でのサバイバルが極めて困難
+- **ステータス**: ⚠️ 回避策のみ。根本的な解決には`minecraft_respawn(method="fall"|"drown"|"lava")`のような実装が必要
+- **ファイル**: `src/bot-manager/bot-core.ts`（auto-flee）, `src/tools/combat.ts`（respawn）
+
+---
+
 ## Session 114 (2026-02-19) - storeInChest/takeFromChest リトライ実装漏れ修正
 
 ### [2026-02-19] storeInChest/takeFromChest に実際のリトライが未実装だった
