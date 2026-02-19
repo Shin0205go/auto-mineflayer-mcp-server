@@ -282,11 +282,12 @@ export class BotCore extends EventEmitter {
           if (block) movements.scafoldingBlocks.push(block.id);
         }
 
-        // Movement options
-        movements.allowFreeMotion = true;
-        movements.allowParkour = true;
+        // Movement options - NETHER SAFETY: disable risky movements in the_nether
+        const isNether = bot.game.dimension === "the_nether";
+        movements.allowFreeMotion = !isNether; // Nether: false (prevent lava jumps)
+        movements.allowParkour = !isNether; // Nether: false (prevent gap jumps over lava)
         movements.allowSprinting = true;
-        movements.maxDropDown = 4;
+        movements.maxDropDown = isNether ? 1 : 4; // Nether: max 1 block drop to avoid cliffs
 
         // Don't break blocks that would cause issues
         movements.dontMineUnderFallingBlock = true;
@@ -402,6 +403,27 @@ export class BotCore extends EventEmitter {
               collectorId: collector.id,
               itemId: collected.id,
             });
+          }
+        });
+
+        // Dimension change (portal teleport) - update pathfinder safety settings
+        let lastDimension = bot.game.dimension;
+        bot.on("spawn", () => {
+          const newDimension = bot.game.dimension;
+          if (newDimension !== lastDimension) {
+            lastDimension = newDimension;
+            console.error(`[BotManager] Dimension changed to ${newDimension}, updating pathfinder safety settings...`);
+
+            const movements = bot.pathfinder.movements;
+            const isNether = newDimension === "the_nether";
+
+            // NETHER SAFETY: Restrict risky movements to prevent lava deaths and cliff falls
+            movements.allowFreeMotion = !isNether;
+            movements.allowParkour = !isNether;
+            movements.maxDropDown = isNether ? 1 : 4;
+
+            bot.pathfinder.setMovements(movements);
+            console.error(`[BotManager] Pathfinder updated for ${newDimension}: allowFreeMotion=${movements.allowFreeMotion}, allowParkour=${movements.allowParkour}, maxDropDown=${movements.maxDropDown}`);
           }
         });
 

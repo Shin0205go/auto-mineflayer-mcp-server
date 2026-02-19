@@ -3437,3 +3437,57 @@ Zombie death workaround remains the only reliable HP/Hunger recovery method.
 - Approved staged movement approach for long-distance Nether travel
 
 **Code Status**: No bugs reported. All tools functioning normally.
+
+---
+
+## Session 131 - Nether Safety Critical Bug Fix
+
+### Problem Analysis
+**Root Cause**: `allowFreeMotion=true` and `allowParkour=true` in Nether dimension
+- Pathfinder attempts risky jumps over lava gaps
+- Pathfinder allows multi-block drops → cliff falls → death
+- Settings configured only at initial spawn, NOT updated on dimension change
+
+### Deaths Observed
+- Claude1: fell from high place (Nether)
+- Claude2: lava swim x2, zombie death x1
+- Claude4: lava swim + fall from high place x2
+
+### Code Fix Applied
+**File**: `src/bot-manager/bot-core.ts`
+
+1. **Initial spawn settings** (lines 285-290):
+   ```typescript
+   const isNether = bot.game.dimension === "the_nether";
+   movements.allowFreeMotion = !isNether; // Nether: false
+   movements.allowParkour = !isNether; // Nether: false
+   movements.maxDropDown = isNether ? 1 : 4; // Nether: max 1 block
+   ```
+
+2. **Dimension change handler** (after line 407):
+   ```typescript
+   bot.on("spawn", () => {
+     if (newDimension !== lastDimension) {
+       // Update pathfinder safety for Nether
+       movements.allowFreeMotion = !isNether;
+       movements.allowParkour = !isNether;
+       movements.maxDropDown = isNether ? 1 : 4;
+       bot.pathfinder.setMovements(movements);
+     }
+   });
+   ```
+
+### Expected Result
+- Nether: No parkour jumps, no free motion, max 1-block drops
+- Overworld/End: Normal movement (allowFreeMotion=true, maxDropDown=4)
+- Settings auto-update on portal teleport
+
+### Testing Required
+- Restart MCP server (`npm run build`)
+- Enter Nether portal
+- Verify pathfinder uses safe settings in Nether
+- Verify lava/cliff deaths減少
+
+### Status
+✅ Code committed
+⏳ Awaiting MCP server restart for validation
