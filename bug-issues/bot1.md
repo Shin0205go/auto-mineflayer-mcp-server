@@ -4271,3 +4271,55 @@ const armorPriority = isNether
 - **Admin Dependency**: Claude3 mentioned "admin配布待ち" - reinforced NO ADMIN policy.
 - **Respawn Strategy**: Proven effective for HP/Hunger recovery in food-scarce environment.
 
+
+---
+
+## Session 139 (2026-02-20) - NEW Portal Strategy & MCP Server Restart
+
+### Session Start
+- **Date**: 2026-02-20
+- **Objective**: Build NEW Portal at (15,90,10) → Enter Nether → Get blaze_rod x5
+- **OLD Portal Status**: ABANDONED after 90+ sessions of failure
+
+### Leadership Actions
+1. ✅ Connected and issued NEW Portal construction orders
+2. ✅ Coordinated water+lava obsidian generation strategy (item drop bug workaround)
+3. ✅ Monitored team progress: Claude2 lava collection, Claude4 portal frame, Claude3 support
+4. ✅ **Bucket bug confirmed active** - Claude2 reported bucket→lava failed to produce lava_bucket
+5. ✅ **MCP server restart executed** - Applied bucket bug fix from bot-blocks.ts
+6. ✅ **Strategy pivot**: Claude2 proposed OLD Portal obsidian mining → NEW Portal relocation
+
+### Critical Decision: OLD Portal Obsidian Relocation
+- **Problem**: Bucket bug prevented water+lava obsidian generation
+- **Discovery**: Claude2 found natural obsidian all lava-adjacent (dangerous)
+- **Solution**: Mine obsidian x14 from OLD Portal frame (7-10,106-110,-3) → Move to NEW Portal (15,90,10)
+- **Advantage**: OLD Portal obsidian is safe (no lava), already mined/placed in perfect frame
+- **Status**: ✅ Strategy approved, team mobilized
+
+### Team Coordination
+- **Claude2**: diamond_pickaxe holder, obsidian mining lead
+- **Claude3**: Support and collection
+- **Claude4**: Portal frame construction support, no diamond_pickaxe
+- **Respawns**: Multiple deaths (lava, fall, skeleton) - all recovered via respawn strategy
+
+### MCP Server Restart
+- **Reason**: Bucket bug fix in bot-blocks.ts (lines 1264-1400+) needed server reload
+- **Execution**: 
+  1. Warned all bots 30 seconds in advance
+  2. `pkill -f "node dist/mcp-ws-server.js"`
+  3. `npm run start:mcp-ws-server &`
+  4. Verified new PID 19278
+- **Result**: ✅ Server restarted successfully
+- **Note**: Bucket fix may now work, but OLD Portal strategy eliminates need for testing
+
+### Current Plan
+1. Claude2 mines OLD Portal obsidian x14 with diamond_pickaxe
+2. Claude3/Claude4 collect and transport to (15,90,10)
+3. Build NEW Portal 4×5 frame
+4. Light with flint_and_steel
+5. Enter Nether → Blaze hunt → blaze_rod x5
+
+### Session Status at Time of Writing
+- **In Progress**: OLD Portal obsidian mining
+- **Team Online**: Claude1✅ Claude2✅ Claude3✅ Claude4✅
+- **Phase 8 Progress**: Portal construction phase
