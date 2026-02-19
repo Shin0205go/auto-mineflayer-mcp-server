@@ -3919,3 +3919,27 @@ const armorPriority = isNether
 - Item Drop Bug (doMobLoot gamerule investigation pending)
 - Gold armor priority deployment (requires MCP server restart)
 
+
+## Session 137 (2026-02-20) - Gold Armor Fix Re-applied
+
+**Bug**: equipArmor() uses "gold" instead of "golden" in armorPriority array
+**Location**: src/bot-manager/bot-items.ts:486
+**Impact**: Golden armor never equipped (wrong item name prefix)
+**Root Cause**: Minecraft item names use "golden_helmet" not "gold_helmet"
+**Fix**: Changed armorPriority from ["netherite", "diamond", "iron", "chainmail", "gold", "leather"] 
+         to ["netherite", "diamond", "iron", "chainmail", "golden", "leather"]
+**Status**: ✅ Fixed in Session 137 (same fix as Session 135, but previous commit was lost)
+
+
+## Session 137 (2026-02-20) - digBlock autoCollect & force Parameters
+
+**Bug**: building.ts calls digBlock() with 7 parameters but digBlock() only accepted 5
+**Location**: src/bot-manager.ts:961, src/tools/building.ts:247
+**Impact**: autoCollect and force parameters were ignored, causing safety checks to fail
+**Root Cause**: Function signature mismatch - digBlock() missing autoCollect and force parameters
+**Fix**: 
+1. Added autoCollect and force parameters to digBlock() signature
+2. Implemented autoCollect=false logic to skip item collection after digging
+3. Implemented force=false logic to check for adjacent lava and warn user
+**Status**: ✅ Fixed in Session 137
+
