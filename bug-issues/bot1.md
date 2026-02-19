@@ -3977,3 +3977,79 @@ const armorPriority = isNether
 **Hypothesis**: Server-side plugin or network latency causing item entity delays/despawn
 **Next Step**: Claude2/Claude3 field test with iron_ore/coal_ore mining + inventory check
 **Status**: 🔍 Investigation complete, awaiting field test confirmation
+
+---
+
+## Session 137 (2026-02-20) - Gold Armor Bug再修正（Session 135の修正コミット漏れ）
+
+### [2026-02-20] Session 135のGold Armor修正が実際にコミットされていなかった
+- **症状**: Session 135で修正完了と記録されたが、src/bot-manager/bot-items.ts line 486のarmorPriorityが元のまま（iron > gold）で、ネザーでPiglin攻撃を受ける
+- **原因**: Session 135の修正がgit commitされなかった
+- **修正**: `src/bot-manager/bot-items.ts` line 485-490 — equipArmor()にdimension checkを追加し、Netherではgold > ironの優先度に変更
+```typescript
+const isNether = bot.game.dimension === "the_nether";
+const armorPriority = isNether
+  ? ["netherite", "diamond", "gold", "iron", "chainmail", "leather"]
+  : ["netherite", "diamond", "iron", "chainmail", "gold", "leather"];
+```
+- **ステータス**: ✅ 修正完了、ビルド成功
+- **Note**: Session 135, 136で同じ問題が記録されており、この修正は3回目。今回は確実にコミットする
+
+
+---
+
+## Session 137 Summary (2026-02-20)
+
+### Leadership Actions
+1. ✅ Connected and assessed critical team situation (Claude1 HP 4.7/20 Hunger 0/20)
+2. ✅ Executed Respawn strategy → HP/Hunger 20/20 full recovery
+3. ✅ **CRITICAL BUG FIX**: Gold Armor priority bug re-applied (Session 135 fix was uncommitted)
+4. ✅ Phase 8 strategy finalized: 1) Enderman x1 hunt 2) Nether Blaze x5 hunt (village search cancelled)
+5. ✅ Verified Claude4 holds ender_pearl x11 + ender_eye x2 (keepInventory working)
+6. ✅ Directed Claude3 to Enderman exploration (minecraft_explore_area in progress)
+7. ✅ Claude2 successfully entered Nether (Portal bug resolved after 37+ sessions!)
+
+### Bug Fixes This Session
+**Gold Armor Priority in Nether (Re-fix)**:
+- **Problem**: Session 135's fix was never committed. Bots still equipped iron > gold in Nether.
+- **Root Cause**: Previous sessions (135, 136) recorded "fix complete" but code was not committed.
+- **Solution**: Re-applied dimension check in `src/bot-manager/bot-items.ts` lines 485-490:
+  ```typescript
+  const isNether = bot.game.dimension === "the_nether";
+  const armorPriority = isNether
+    ? ["netherite", "diamond", "gold", "iron", "chainmail", "leather"]
+    : ["netherite", "diamond", "iron", "chainmail", "gold", "leather"];
+  ```
+- **Status**: ✅ Fixed, ✅ Built successfully, ✅ Recorded in bug-issues/bot1.md
+- **Note**: This is the 3rd attempt to fix this bug. Session 135, 136 fixes were lost.
+
+### Team Status at Session End
+- **Claude1**: HP 20/20, Hunger 20/20, Position(-14,90,-2), stone_sword equipped
+- **Claude2**: Nether entry success✅, Position(-1,108,10), NO gold armor⚠️, Overworld return ordered
+- **Claude3**: Enderman exploration in progress (minecraft_explore_area radius=100 target="enderman")
+- **Claude4**: HP 15.3/20 Hunger 17/20, **ender_pearl x11 + ender_eye x2 SECURED✅**, returning to BASE
+
+### Phase 8 Progress
+- ✅ Strategy finalized: Enderman x1 → Nether Blaze x5 (village search cancelled)
+- ✅ ender_pearl: x11/12 (Claude4 holding, +1 needed)
+- ✅ ender_eye: x2/12 (Claude4 holding, +10 needed)
+- ⏳ blaze_rod: x0/5 (correct calculation: ender_eye x10 = blaze_powder x10 = blaze_rod x5)
+- ⏳ Claude3 Enderman hunt in progress
+- ⏳ Gold armor acquisition pending (needed for safe Nether exploration)
+
+### Breakthroughs This Session
+1. **Portal Bug Resolved**: Claude2 successfully entered Nether after 37+ sessions of portal issues
+2. **keepInventory Verified**: Multiple respawns confirmed all items preserved (Claude1, Claude2, Claude3, Claude4)
+3. **Phase 8 Deadlock Broken**: 4-session stagnation resolved with new strategy
+
+### Action Items for Next Session
+1. **PRIORITY**: Acquire gold armor (gold_ore mining → smelting → craft gold_helmet/boots)
+2. **Claude3**: Complete Enderman hunt → ender_pearl x12 achieved
+3. **Nether Blaze Hunt**: Equip Claude2/Claude3 with gold armor → Blaze spawner (267,73,-88) exploration
+4. **Final Push**: blaze_rod x5 → craft ender_eye x10 → Stronghold → End Portal → Ender Dragon
+
+### Critical Lessons Learned
+- **Git Commit Discipline**: Bug fixes MUST be committed immediately. 3 sessions wasted on same gold armor bug.
+- **Admin Dependency**: Claude3 mentioned "admin配布待ち" - reinforced NO ADMIN policy.
+- **Respawn Strategy**: Proven effective for HP/Hunger recovery in food-scarce environment.
+
