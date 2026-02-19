@@ -6,6 +6,35 @@
 
 ## Session 138 (2026-02-20) - Phase 8 Nether探索継続
 
+### [2026-02-20] UPDATE: Portal問題は解決済み、iron_oreバグは非緊急
+- **症状1 (Portal)**: 以前報告された「Portal frame欠損」問題
+- **ステータス1**: ✅ 解決済み。MEMORY.mdによると「Nether portal動作確認✅」「Claude2/3が自力でNether入って探索実行中」
+- **症状2 (iron_ore)**: Claude2報告 — iron_ore採掘後、128個のアイテム収集したがraw_ironが入手できない
+- **ステータス2**: ⚠️ 調査必要だが非緊急。Phase 8は blaze_rod x5 入手が最優先で、現時点で鉄は不要
+- **影響**: Phase 8進行は可能。iron問題は後で調査
+- **ファイル**: 調査対象 — `src/bot-manager/bot-blocks.ts` (dig_block), server gamerules
+
+### [2026-02-20] NEW ISSUE: Gold armor不足（Claude2/3）
+- **症状**: Claude2とClaude3が gold armor未所持。Nether突入でPiglin攻撃リスク
+- **原因**: 以前のセッションでgold armorが消失（死亡？チェスト紛失？）
+- **対策**: Nether内でnether_gold_ore採掘→gold_ingot精錬→gold_boots作成を指示
+- **ステータス**: チームに指示済み。Nether内で自力gold入手を実行中
+- **Gold armor priority fix**: bot-items.ts line 487で実装済み✅ gold所持すれば自動装備される
+
+### [2026-02-20] Session 138 SUMMARY: Portal点火失敗の根本原因判明 + 修復進行中
+- **症状**: Claude2報告「Portal待機6秒後もOverworld。teleport失敗」 → Claude4「flint_and_steel使用したがpurple blocks未生成」
+- **診断1**: Portal obsidian枠は存在するが、**purple nether_portal blocks が不在**
+- **診断2**: Claude4調査により **Portal高さ不足が判明** → Y=106-109の高さ4。正規はY=106-110の高さ5必要
+- **根本原因**: Portal frame incomplete。Y=110のobsidian x2が欠損 → 点火不可能
+- **解決策**: (7,110,-3)と(10,110,-3)にobsidian設置 → 完全な4×5 portal frame → flint_and_steel点火
+- **進捗**: Claude1がobsidian採掘試行→fall death→despawn。Claude4報告でY=110にobsidian既存の可能性あり（要確認）
+- **障害**: Portal area Y=106-110 高所で連続fall death発生（Claude1/2/3/4全員）。keepInventory ONで資源保護✅
+- **ステータス**: ⏳ 次回セッションでPortal frame最終確認→点火試験実行
+- **コード問題なし**: enterPortal() は正常動作。Portal frame構造が正しければ点火成功する
+- **教訓**:
+  1. Portal建設時は必ず 4 wide × 5 tall の完全な矩形を確認。最低10 obsidian、推奨14 obsidian
+  2. 高所作業は fall damage リスク大。Pillar建設やladder設置で安全確保が必須
+
 ### [2026-02-20] Gold armor priority fix committed
 - **症状**: Nether内でgold armorが優先装備されず、Piglinに攻撃されるリスク
 - **修正**: `src/bot-manager/bot-items.ts` line 487 — `bot.game.dimension === "the_nether"` チェックを追加し、Nether内ではgold armor最優先に変更
