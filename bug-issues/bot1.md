@@ -3862,3 +3862,60 @@ const armorPriority = isNether
 5. Return to BASE → craft blaze_powder x10 + ender_eye x10
 6. Proceed to Stronghold (-736,~,-1280)
 
+
+---
+
+### Session 136 - Critical Issues & Strategy Change (2026-02-20)
+
+**Leadership Actions**:
+1. ✅ Connected and assessed Phase 8 status (4 sessions stuck)
+2. ✅ **CRITICAL BUG RE-FIX**: Gold armor priority bug (Nether dimension check) - Previous Session 135 fix was NOT committed
+3. ✅ **STRATEGY CHANGE**: Nether exploration halted → Village trading for Ender Pearls
+
+**Bug Fix Details - Gold Armor Priority (RE-APPLIED)**:
+- **Problem**: Session 135 fix was not committed to git
+- **Root Cause**: `src/bot-manager/bot-items.ts` line 486 had no dimension check
+- **Solution Re-applied**: Added Nether dimension check to prioritize gold > iron armor
+- **File Modified**: `src/bot-manager/bot-items.ts` lines 485-492
+- **Status**: ✅ Fixed, ✅ Built successfully, ⏳ Awaiting deployment
+
+**Item Drop Bug Investigation**:
+- **Reports**: Claude2 "birch_log消失", Claude4 "動物狩りでdrops消失"
+- **Code Analysis**: 
+  - ✅ attack() and fight() already call collectNearbyItems() (bot-survival.ts lines 463, 697)
+  - ✅ collectNearbyItems() implementation exists (bot-items.ts line 21-105)
+- **Hypothesis**: Server config issue (doMobLoot=false or doTileDrops=false)
+- **Status**: 🔍 Awaiting Claude4's /gamerule doMobLoot test result
+
+**Team Status (Crisis)**:
+- Claude1: HP 20/20, no food, bug fixing
+- Claude2: HP 12.3/20, Hunger 10/20⚠️, no food, survival_routine failed (animals/chests/crops not found)
+- Claude3: **DIED in Nether (lava)** → respawned, no equipment, night, shelter standby
+- Claude4: **Respawn strategy** (zombie contact HP 11→≤4→respawn→20/20)
+
+**Phase 8 Root Cause Analysis**:
+1. **4 Sessions Stuck** - Same approach repeated (Nether spawner 267,73,-88 unreachable due to maze)
+2. **High Nether Risk** - Multiple deaths (lava, cliffs, maze), Nether safety fix (commit 2d1a4b0) insufficient
+3. **Food Crisis** - Item Drop Bug prevents animal hunting → entire team starving
+
+**CRITICAL STRATEGY CHANGE**:
+- ❌ **OLD**: Nether exploration for Blaze spawner (failed 4+ attempts, high casualties)
+- ✅ **NEW**: Village exploration → Villager trading for Ender Pearls
+  - Claude4 already has ender_pearl x11 ✅
+  - Target: Find village → Trade with Cleric (4-7 emeralds → 1 ender_pearl)
+  - Emerald source: Trade with Farmers (wheat/carrots), Toolsmiths (iron), etc.
+  - **Advantage**: Lower risk, no Nether navigation required
+
+**Next Actions**:
+1. Resolve food crisis (fishing rods, chest exploration)
+2. Claude3 return to BASE, re-equip
+3. Claude4 complete respawn, standby at BASE
+4. Execute village exploration (minecraft_explore_area target="village")
+5. Establish villager trading hall
+6. Acquire emeralds → trade for additional ender_pearls
+7. Return to original Phase 8 plan: craft ender_eye, locate Stronghold, defeat Dragon
+
+**Bugs to Monitor**:
+- Item Drop Bug (doMobLoot gamerule investigation pending)
+- Gold armor priority deployment (requires MCP server restart)
+
