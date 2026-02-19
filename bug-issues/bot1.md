@@ -3491,3 +3491,79 @@ Zombie death workaround remains the only reliable HP/Hunger recovery method.
 ### Status
 ✅ Code committed
 ⏳ Awaiting MCP server restart for validation
+
+---
+
+## Session 131 - MCP Server Restart & Nether Safety Validation
+
+### Actions Taken
+1. **MCP Server Restart**: Killed PID 39175, restarted with latest build (PID 80687)
+2. **Nether Safety Fix Applied**: commit 2d1a4b0 now active
+   - allowFreeMotion=false in Nether
+   - allowParkour=false in Nether
+   - maxDropDown=1 in Nether
+3. **Team Instructions**: Issued Phase 8 tasks via chat
+4. **MEMORY.md Updated**: Added Session 131 status, blaze spawner coords (267,73,-88)
+
+### Team Status
+- **Claude1**: Overworld (13.5,93,-9.3), monitoring & leadership
+- **Claude2**: Nether (52.7,89.9,-32.3), moving to spawner (230 blocks remaining), Hunger 13/20⚠️
+- **Claude3**: Nether, moving to spawner (267,73,-88)
+- **Claude4**: Nether, reconnecting after MCP restart, gamerules set ✅
+
+### Phase 8 Progress
+- ✅ Portal working (Claude2,3,4 all in Nether)
+- ✅ Blaze spawner located at (267,73,-88)
+- ⏳ blaze_rod x0 → target x6
+- ⏳ Team converging on spawner location
+
+### Code Status
+**No new bugs reported.** Awaiting validation of Nether safety fix through team movement results.
+
+### Next Steps
+1. Monitor chat for spawner arrival + blaze combat results
+2. After blaze_rod x6 collected → instruct blaze_powder craft
+3. After blaze_powder x12 → instruct ender_eye craft
+4. After ender_eye x12 → instruct Stronghold movement (-736,~,-1280)
+
+### Chat Status Update (23:35)
+- **Claude2**: Nether(53,89,-32), HP 18.5/20, Hunger 13/20, online ✅, respawn予定
+- **Claude3**: Nether(205.6,75.4,-67.8), HP 11.3/20⚠️, Hunger 4/20❌, spawnerまで80ブロック, 到達優先
+- **Claude4**: 応答なし（再接続後から音信不通）
+
+### Current Situation
+Claude3がblaze spawner到達間近。HP/Hunger低いがkeepInventory ONのため、spawner到達後respawnでリカバリー可能。Claude4の状況確認必要。
+
+
+### Session 131 Final Summary (23:40)
+
+**Leadership Actions Completed**:
+1. ✅ MCP server restart (PID 80687) - Nether safety fix (commit 2d1a4b0) applied
+2. ✅ Phase 8 task clarification: blaze_rod x5 required (ender_eye x2 already crafted)
+3. ✅ Team coordination: Issued spawner convergence orders
+4. ✅ MEMORY.md updated with Session 131 status
+
+**Team Progress**:
+- Blaze spawner located: (267,73,-88) ✅
+- Claude3: Reached spawner, engaged blaze combat, died → respawn ✅
+- Claude2: Nether entry in progress
+- Claude4: BASE area, respawn strategy pending
+
+**Phase 8 Status**:
+- ⏳ blaze_rod x0 → target x5
+- ✅ ender_pearl x11 (Claude4 inventory)
+- ✅ ender_eye x2 (Claude4 inventory)
+- ⏳ Team regrouping for blaze hunting
+
+**Code Status**:
+- Nether safety fix validation: Claude3 death = blaze combat, not pathfinder fall ✅
+- No new bugs reported
+- All systems operational
+
+**Next Session**:
+1. Team respawn → HP/Hunger 20/20
+2. Converge at blaze spawner (267,73,-88)
+3. Hunt blazes for blaze_rod x5
+4. Craft blaze_powder x10 + ender_eye x10
+5. Move to Stronghold (-736,~,-1280)
+
