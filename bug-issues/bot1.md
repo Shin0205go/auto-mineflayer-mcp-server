@@ -4,6 +4,54 @@
 
 ---
 
+## Session 139 (2026-02-20) - NEW PORTAL建設開始
+
+### [2026-02-20] Session 139 SUMMARY: Obsidian採掘戦略失敗、Portal最小構成発見
+
+**実行内容**:
+- 旧Portal (7-10,106-110,-3) 90+セッション点火失敗で放棄決定
+- NEW PORTAL (15,90,10) 建設計画開始
+- obsidian x14採掘試行（(-9,37,11) obsidian pool）
+
+**発生した問題**:
+1. **Claude4連続死亡**: (-9,37,11)での採掘中、fall damage x2回で死亡。Y=37の高所作業リスク過小評価
+2. **Claude2死亡**: 旧Portal area (Y=106)でfall death + Creeper爆死
+3. **Claude1死亡**: 洞窟探索中にCreeper爆死
+4. **食料危機**: パン作成にwheat x3必要だがwheat x1のみ。birch_log x7収集もitem drop bug発生
+5. **Respawn bug再発**: Claude4がrespawn後HP 5.3/20（本来20/20）。Session 65パターン再現
+
+**根本原因**:
+- obsidian x14入手が過大目標。Y=37高所採掘は危険度高すぎ
+- 食料supply chain確立なしで危険作業を開始
+- チーム分散行動で連鎖死亡
+
+**重要発見**:
+- ✅ **Portal最小構成**: obsidian x10で建設可能！コーナー不要
+  - 構成: 両側 x3ブロック x2 = 6 + 上下 x2ブロック x2 = 4 = 合計10
+  - Claude2が既にobsidian x1所持 → 残りx9で達成可能
+
+**Session 139 教訓**:
+1. obsidian採掘は極めて危険。次回は水+lavaでobsidian生成（安全）を優先
+2. 高所作業（Y>50）は必ずcobblestone platform建設してから実行
+3. 食料supply確立が最優先。wheat farm建設 or 動物狩りを先に実行
+4. Portal建設はx10で十分。x14不要
+
+**Next Session 140計画**:
+1. wheat farm建設（wheat_seeds x23 + bone_meal x7使用）→ bread量産
+2. lava pool発見 → water_bucket使用でobsidian x9生成
+3. obsidian x10でNEW PORTAL建設（最小構成）
+4. 点火→Nether突入→blaze_rod x5入手
+
+**ステータス**: ⏸️ Session 139終了。全員respawn完了、HP/Hunger 20/20✅ 次回wheat farm→obsidian生成→Portal建設
+
+### [2026-02-20] チーム状況（Session 139 END）
+- **Claude1**: BASE (9,97,4), HP/Hunger 20/20, Creeper爆死→respawn完了
+- **Claude2**: (17,97,-8)付近, HP 20/20 Hunger 18/20, obsidian x1所持、待機中
+- **Claude3**: オフライン
+- **Claude4**: 不明（respawn bug HP 5.3/20報告後、消息不明）
+
+---
+
 ## Session 138 (2026-02-20) - Phase 8 Nether探索継続
 
 ### [2026-02-20] UPDATE: Portal問題は解決済み、iron_oreバグは非緊急
