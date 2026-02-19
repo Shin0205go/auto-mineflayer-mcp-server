@@ -3567,3 +3567,166 @@ Claude3がblaze spawner到達間近。HP/Hunger低いがkeepInventory ONのた�
 4. Craft blaze_powder x10 + ender_eye x10
 5. Move to Stronghold (-736,~,-1280)
 
+
+### Session 132 Summary (2026-02-20 00:30)
+
+**Leadership Actions**:
+1. ✅ Team coordination: Issued Phase 8 continuation orders
+2. ✅ Strategy pivot: Authorized respawn cycle strategy for blaze_rod collection
+3. ⚠️ BASE chest issue discovered: (9,93,2) not found, alternate chest at (-13,94,33) has no equipment
+4. ✅ Respawn HP bug documented: Some respawns result in HP 9/20 instead of 20/20 (intermittent)
+
+**Team Progress**:
+- Claude4: Nether(145,65,-60), 130 blocks from spawner, advancing steadily ✅
+- Claude3: Multiple respawns, attempting Nether entry
+- Claude2: Nether entry completed, advancing to spawner
+- Claude1: Monitoring, experienced respawn HP bug (3.4/20 → normal 20/20 on retry)
+
+**Phase 8 Status**:
+- ⏳ blaze_rod x0 → target x5 (no collection yet)
+- ✅ ender_pearl x11 (Claude4 inventory, keepInventory confirmed)
+- ✅ ender_eye x2 (Claude4 inventory, keepInventory confirmed)
+- ⏳ Team converging on spawner (267,73,-88)
+
+**Issues Discovered**:
+1. **BASE chest missing**: Original chest at (9,93,2) not found. Alternate chest at (-13,94,33) found but contains only cobblestone/coal/dirt, no weapons/armor.
+2. **Respawn HP inconsistency**: Sometimes respawn results in HP 9/20 or 3.4/20 instead of expected 20/20. Appears intermittent - Claude1 got 20/20 on second respawn. Not critical due to respawn cycle strategy.
+3. **Nether navigation difficulty**: "Path blocked" errors frequent in Nether, requiring段階移動 (step-by-step movement)
+
+**Code Status**:
+- Nether safety fix (commit 2d1a4b0) operational
+- No code changes needed this session
+- Respawn strategy working as designed (keepInventory preserving critical items)
+
+**Next Actions**:
+1. Claude4 to reach spawner (130 blocks remaining)
+2. Team to execute blaze combat → respawn → repeat cycle
+3. Collect blaze_rod x5
+4. Return to BASE, craft blaze_powder x10 + ender_eye x10
+5. Proceed to Stronghold
+
+
+
+### Session 133 Summary (2026-02-20 00:50)
+
+**Leadership Actions**:
+1. ✅ Connected as Claude1, issued Phase 8 continuation orders
+2. ✅ Team coordination: Assigned Claude4 as solo blaze hunter, Claude2/3 to standby
+3. ✅ Strategic pivot: Reduced team chaos by focusing single-bot effort
+4. ⚠️ BASE infrastructure check: No chest found at (9,93,2), crafting_table at (6,106,-5) confirmed, chest at (-13,90,32) found but empty
+
+**Team Progress**:
+- Claude4: Nether spawner approach, multiple position reports (145m → 97m from spawner), respawn cycle initiated for HP/Hunger recovery ✅
+- Claude3: Multiple deaths (Drowned, Blaze fireball, Creeper), attempted Nether entry
+- Claude2: Multiple deaths (fall damage x3, lava), successfully entered Nether, attempted independent Fortress exploration (corrected by leader)
+- Claude1: Monitoring, BASE infrastructure survey
+
+**Phase 8 Status**:
+- ⏳ blaze_rod x0 → target x5 (no collection yet)
+- ✅ ender_pearl x11 (Claude4 inventory, keepInventory confirmed)
+- ✅ ender_eye x2 (Claude4 inventory, keepInventory confirmed)
+- ⏳ Claude4 approaching spawner (97 blocks remaining before respawn cycle)
+- ⏳ Team coordination improved (solo hunter strategy reducing casualties)
+
+**Communication Issues**:
+- 2+ minutes of team silence after Claude4 respawn announcement
+- No responses to leader's status check requests
+- Possible causes: Team deep in autonomous execution, connection issues, or intensive combat/movement
+
+**Code Status**:
+- No new bugs discovered
+- Nether pathfinding still challenging (frequent "Path blocked" requiring step-by-step movement)
+- Respawn cycle strategy working as designed
+
+**Next Actions**:
+1. Await team communication recovery
+2. Claude4 to complete respawn → Nether re-entry → spawner arrival
+3. Execute blaze hunting (target: blaze_rod x5)
+4. Craft blaze_powder x10 + ender_eye x10
+5. Proceed to Stronghold (-736,~,-1280)
+
+
+### Session 133 Update (2026-02-20 continued)
+
+**NEW CRITICAL BUGS**:
+1. **stone_pickaxe crafting failure**: Error "missing ingredient" despite having stick x4+ and cobblestone x250+. Crafting attempts fail repeatedly. May be related to inventory slot organization or crafting table distance.
+2. **wheat harvesting bug**: dig_block on mature wheat (age 7/7) returns only wheat_seeds, no wheat item. Prevents bread production.
+3. **Item crafting sync issues**: oak_planks/stick crafting shows "Item not in inventory after crafting" errors but items eventually appear in inventory with reduced quantities.
+
+**Portal Breakthrough** 🎉:
+- Claude2 discovered: move_to(8,108,-3) triggers automatic Nether teleport to (-3,108,11)
+- 37+ session portal bug RESOLVED
+- Return via respawn strategy successful
+
+**Team Status**:
+- Claude1: HP 20/20, stuck on pickaxe crafting bug
+- Claude2: HP 20/20, BASE waiting, flint_and_steel x2, torch x133, portal-ready
+- Claude3: Unknown (last report: birch_log discovery for lumber)
+- Claude4: HP 20/20, BASE waiting, Phase 8 resources protected (pearl x11, eye x2, book x1, torch x287)
+
+**Next Actions**:
+1. Resolve pickaxe crafting bug or find alternative approach
+2. Acquire iron tools for team
+3. Execute coordinated Nether blaze_rod hunt with full team
+
+---
+
+### Session 134 Bug Investigation (2026-02-20)
+
+**Bug #1: stone_pickaxe crafting failure - ROOT CAUSE FOUND**
+
+Location: `src/bot-manager/bot-crafting.ts` lines 722-751
+
+The validation logic after manual recipe creation checks for `needsPlanks` and `needsSticks` but this only works for wooden tools. Stone tools use cobblestone, not planks, so the validation fails and returns "No compatible recipe found".
+
+The manual recipe IS created correctly at line 633-706, but then the validation at lines 722-751 rejects it because it's looking for planks.
+
+**Fix**: The validation should be skipped for manual recipes (allRecipes.length === 1 from toolRecipes section), OR the validation should check for the actual materials (cobblestone, iron_ingot, diamond) instead of only planks.
+
+
+**Fix Applied**: Modified validation logic to skip for manual recipes (stone/iron/diamond tools). Manual recipes already validate materials, so they can be used directly. The wooden tool validation is now only applied when we have multiple recipes from recipesAll().
+
+Code change: `src/bot-manager/bot-crafting.ts` lines 710-756
+- Added check: `if (allRecipes.length === 1 && allRecipes[0].requiresTable !== undefined)`
+- Manual recipes use `compatibleRecipe = allRecipes[0]` directly
+- Wooden tool validation only runs for multiple recipes
+
+**Status**: Fixed ✅ Build successful ✅ Ready for testing
+
+
+---
+
+### Session 134 Summary (2026-02-20)
+
+**Leadership Actions**:
+1. ✅ Connected and issued Phase 8 continuation orders
+2. ✅ **CRITICAL BUG FIX**: stone_pickaxe crafting validation bug resolved
+3. ✅ Team coordination: Ordered BASE standby during bug investigation
+
+**Bug Fix Details**:
+- **Problem**: stone_pickaxe crafting failed with "No compatible recipe found" despite having cobblestone x250+ and stick x4+
+- **Root Cause**: Validation logic at lines 722-751 only checked for planks/sticks, rejecting stone tool manual recipes
+- **Solution**: Added manual recipe bypass - if allRecipes.length === 1 from toolRecipes section, use directly without validation
+- **File Modified**: `src/bot-manager/bot-crafting.ts` lines 710-756
+- **Status**: ✅ Fixed, ✅ Built successfully, ⏳ Awaiting MCP server restart for deployment
+
+**Team Status**:
+- Claude1: HP 20/20, bug fix completed, awaiting server restart
+- Claude2: HP 16/20, Hunger 13/20, BASE standby, flint_and_steel x2, torch x133
+- Claude3: HP 20/20, Hunger 20/20, BASE (6.9,96,-1.5), diamond_axe equipped ✅
+- Claude4: HP 20/20, Hunger 20/20, BASE (10,92,4), **Phase 8 resources secured**: ender_pearl x11 ✅, ender_eye x2 ✅, book x1, torch x287, bow x2, bucket x1
+
+**Phase 8 Status**:
+- ⏳ blaze_rod x0 → target x5 (no collection progress this session)
+- ✅ ender_pearl x11 (Claude4, keepInventory confirmed across multiple deaths)
+- ✅ ender_eye x2 (Claude4, keepInventory confirmed)
+- ⏳ Team at BASE, ready for coordinated Nether expedition after server restart
+
+**Next Actions**:
+1. Human to restart MCP server (npm run start:mcp-ws) to apply stone_pickaxe fix
+2. Test stone_pickaxe crafting with Claude3 or other team member
+3. Equip team with stone/iron tools
+4. Resume coordinated Nether blaze_rod hunt (target: x5 blaze_rod)
+5. Craft blaze_powder x10 + ender_eye x10
+6. Proceed to Stronghold (-736,~,-1280)
+
