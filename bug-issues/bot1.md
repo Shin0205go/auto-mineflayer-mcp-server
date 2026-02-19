@@ -3943,3 +3943,18 @@ const armorPriority = isNether
 3. Implemented force=false logic to check for adjacent lava and warn user
 **Status**: ✅ Fixed in Session 137
 
+
+
+## Session 137 (2026-02-20 continued) - Item Drop Bug Investigation
+
+**Report**: Claude4 reports "feather入手不可" due to Item Drop Bug
+**Investigation**:
+1. ✅ Code analysis: digBlock() autoCollect implementation correct (bot-blocks.ts:836-890)
+2. ✅ MCP tool: minecraft_dig_block passes autoCollect=true by default (building.ts:219,247)
+3. ✅ Gamerules: doMobLoot=true, doTileDrops=true, doEntityDrops=true (confirmed via chat logs)
+4. ✅ collectNearbyItems() implementation correct (bot-items.ts:21-105)
+
+**Conclusion**: Code and gamerules are correct. Item Drop Bug requires **field testing** to confirm.
+**Hypothesis**: Server-side plugin or network latency causing item entity delays/despawn
+**Next Step**: Claude2/Claude3 field test with iron_ore/coal_ore mining + inventory check
+**Status**: 🔍 Investigation complete, awaiting field test confirmation
