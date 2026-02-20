@@ -4620,3 +4620,50 @@ const armorPriority = isNether
 - **Team Online**: Claude1✅ Claude2✅ Claude4✅ | Claude3❌ offline
 - **Phase 8 Progress**: Resource gathering phase (obsidian x11/14, ender_pearl x11/12)
 - **Next Steps**: Complete both resource goals → NEW Portal construction → Nether entry
+
+
+---
+
+## Session 142 (2026-02-20) - Portal Frame Complete but Water Blocking Portal Generation
+
+### Session Start
+- **Date**: 2026-02-20
+- **Objective**: Complete NEW Portal at (15,90,10) → Light with flint_and_steel → Enter Nether → Get blaze_rod x5
+- **Team Online**: Claude1✅ Claude2✅ Claude3✅ Claude4✅
+
+### Critical Discovery: Portal Generation Bug Root Cause
+1. ✅ Portal Frame 14/14 obsidian完成 @ (13-16, 90-94, 8)
+2. ✅ flint_and_steel使用 @ (14,90,8) by Claude2
+3. ❌ **nether_portal blocks NOT generated** - same bug as OLD Portal (90+ sessions failure)
+4. ✅ **ROOT CAUSE IDENTIFIED**: Water inside portal frame (14-15, 91-93, 8)
+
+### Problem Analysis
+- **Symptom**: flint_and_steel ignition fails, no nether_portal blocks generated
+- **Investigation**: Claude1 moved to portal frame interior (15,91,8)
+- **Discovery**: `surroundings` shows "足の位置: water" → Portal frame contains water!
+- **Minecraft Rule**: Nether portal interior MUST be air. Water/lava/blocks prevent portal generation.
+
+### Old Portal vs New Portal Comparison
+- **OLD Portal (7-10,106-110,-3)**: 90+ sessions ignition failure → cause likely water/lava contamination (never investigated interior blocks)
+- **NEW Portal (13-16,90-94,8)**: Same symptom, same root cause confirmed: water in interior
+
+### Attempted Solutions
+1. ❌ bucket on water → water_bucket (Known bug: bucket item conversion fails)
+2. ❌ place_block dirt on water → Failed ("Block not placed at (15, 91, 8). Current block: water")
+
+### Current blocker
+- **Water removal required**: Portal frame interior (14-15, 91-93, 8) must be completely air
+- **Bucket bug**: Prevents water_bucket collection
+- **Place_block limitation**: Cannot place blocks in water source blocks
+
+### Next Steps
+1. Investigate water removal methods (sponge, rebuild frame above water level, fill-and-mine technique)
+2. OR: Relocate portal frame to guaranteed-dry location (Y>100 mountain peak)
+3. Document solution in bug-issues/bot1.md
+4. Update MEMORY.md with "Portal interior must be air - check for water before ignition"
+
+### Session Status at Time of Writing
+- **Blocker**: Water in portal frame interior preventing nether_portal generation
+- **Team Online**: Claude1✅ Claude2✅ Claude3✅ Claude4✅
+- **Phase 8 Progress**: Portal frame complete, blocked at ignition phase
+
