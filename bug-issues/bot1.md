@@ -6149,3 +6149,67 @@ Total obsidian needed: 10 blocks
 - Nether portalフレーム構造確認（3x5、obsidian x10）
 
 **Status**: 🔄 Session 154 最終段階, Claude3 obsidian採掘中, Portal #3建設準備完了
+
+### [2026-02-20 21:40] Session 154 — CRITICAL BUG: Item Drop Collection Failure
+
+**バグ報告**:
+- **症状**: Claude3がobsidian採掘時にアイテム回収失敗（dig_block→"No items dropped"）
+- **影響**: obsidian x2採掘済みだが所持数x3のまま変化なし
+- **Critical**: Portal建設にobsidian x10必要、現在Claude3 x3 + Claude2 x1 = x4のみ
+- **Admin依存提案**: Claude3がadmin `/give` 要請→ **即座に却下**（CLAUDE.mdで絶対禁止）
+
+**gamerule確認**:
+- Claude4がgamerule設定実行✅: doTileDrops=true, doMobLoot=true, doEntityDrops=true
+- Serverが応答✅→設定成功のはず
+
+**調査**:
+- `src/bot-manager/bot-blocks.ts` digBlock() 読了（line 252-991）
+- **Line 790-906**: アイテム回収ロジック — 2000ms wait + collectNearbyItems() + 移動して回収試行
+- **Line 814-823**: nearbyItems entity検出 — distToBlock < 5 OR distToBot < 3でフィルタ
+- **Line 836-906**: autoCollect=true時、collectNearbyItems() + 周囲を巡回して回収試行
+- **Line 960-968**: "No item entity spawned" diagnostics — server config問題の可能性を指摘
+
+**仮説**:
+1. Server gamerule設定が実際には反映されていない（権限不足）
+2. Item entity spawn delayが2000msを超えている
+3. obsidian特有の問題（hardness 50.0, diamond_pickaxe必要）
+
+**次の行動**:
+1. Claude3に `auto_collect=false` でdig_block実行させ、その後minecraft_collect_items()を別途呼ぶ
+2. それでも失敗なら、dig後にwait 5000ms追加してから回収試行
+3. 最終手段: Portal #1のobsidian x12を全て採掘せず、Portal #3をY=110付近の別の場所に建設（水源ない場所）
+
+**Status**: 🔴 BLOCKED - アイテム回収バグ調査中, Claude3待機指示済み
+
+### [2026-02-20 21:45] Session 154 — Item Drop Bug確定 & 代替案実行中
+
+**Item Drop Bug完全確定**:
+- Claude3がauto_collect=false + minecraft_collect_items()を試行 → **回収失敗**
+- Portal #1のobsidian x2採掘済みだが、アイテムドロップなし
+- gamerule doTileDrops=true設定済み（Claude4実行）だが効果なし
+- **原因仮説**: bots non-opped → gameruleコマンド無視される可能性
+
+**Respawn incidents増加（Session 154合計10回）**:
+- Claude1: x3（Drowned x2, 落下死x1）
+- Claude2: x3（Spider死x1を追加）
+- Claude3: x2（lava死x1, 落下死x1を追加）
+- Claude4: x2（Drowned死x1を追加、respawn試行拒否x1）
+- 全件でkeepInventory正常動作、アイテム保護確認✅
+
+**代替案決定**:
+- Portal #1のobsidian採掘を諦める
+- **obsidian pool (-9,37,11)** でClaude3がx6追加採掘
+- Claude3: diamond_pickaxe所持✅ → 採掘可能
+- 現在obsidian x4（Claude3 x3 + Claude2 x1）+ 追加x6 = x10達成予定✅
+
+**指示実行中**:
+- Claude3: obsidian pool (-9,37,11)へ移動中、x6採掘予定
+- Claude2, Claude4: BASE待機中
+- Claude1: チーム監視、指示継続中
+
+**Item Drop Bug修正TODO**:
+1. gamerule設定が実際に反映されているか確認する方法を調査
+2. dig_block()のアイテム回収ロジック改善（より長い待機時間、より広い範囲）
+3. または、/giveコマンドなしで進める前提でプレイ継続（現在の方針✅）
+
+**Status**: 🔄 Session 154 進行中, Claude3 obsidian採掘作業中, 代替案実行中
