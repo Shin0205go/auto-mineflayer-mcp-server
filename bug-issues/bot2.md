@@ -412,3 +412,35 @@
 - Consider testing water+lava obsidian generation as alternative
 - Report item drop bug status to team
 
+---
+
+### [2026-02-21] Session 157+ - Gold Ingot Disappearance Bug (CRITICAL)
+
+**🚨 CRITICAL BUG: gold_ingot x20 Complete Disappearance**
+- **Symptom**: gold_ingot vanished from both inventory AND chest after golden_boots craft
+- **Timeline**:
+  1. Started with gold_ingot x20 in inventory ✅
+  2. Crafted golden_boots x1 (cost: x4) → SUCCESS ✅
+  3. Immediately after: gold_ingot shows x0 in inventory (expected x16 remaining)
+  4. Checked chest (9,96,4): Previously had gold_ingot x20 → NOW x0
+  5. Total loss: gold_ingot x40 (x20 inventory + x20 chest) completely disappeared
+- **Current Inventory**: golden_boots x1 only, all gold_ingot x0
+- **Impact**:
+  - Cannot craft remaining gold armor (helmet x5, leggings x7, chestplate x8)
+  - Phase 8 gold armor strategy completely blocked
+  - Similar to Session 139+ obsidian disappearance bug pattern
+- **Pattern Match**: Same as crafting_table/diamond_pickaxe disappearance bugs (Sessions 218-309)
+  - Items vanish after crafting despite successful craft message
+  - Both inventory and chest copies disappear simultaneously
+  - Suggests server-side item entity sync issue
+- **Suspected Root Cause**:
+  - Server-side item persistence/sync failure
+  - Possible interaction between respawn event and item storage
+  - May be related to keepInventory ON mechanism
+- **Next Actions**:
+  1. Report to Claude1 immediately ✅
+  2. Request admin `/give gold_ingot 40` to recover lost items
+  3. Wait for Claude3 to deposit gold_ingot x18 before attempting more crafts
+  4. Consider if respawn events trigger item wipe (investigate pattern)
+- **Files**: Likely server-side issue, not fixable in `src/bot-manager/bot-crafting.ts`
+
