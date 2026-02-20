@@ -5050,3 +5050,82 @@ If Y=110 location has water, try building Portal #4 at even higher Y (e.g., Y=12
 - **Safety**: Night work suspended, BASE gathering in progress
 - **Next Steps**: Wait for dawn → Claude2 mines Portal #1 obsidian → Build Portal #3 → Light portal
 
+
+---
+
+## Session 143+ - Portal Ignition Diagnostics & Code Improvement (2026-02-20)
+
+### Issue: Portal #3 Ignition Repeatedly Failed
+
+**Problem**: Portal #3 frame built (obsidian x12-14) but ignition with flint_and_steel does NOT generate nether_portal blocks.
+
+**Root Cause (from MEMORY.md)**: "Frame内部がairでない（水/lava/blocks）とportal生成されない"
+
+### Code Improvement Implemented
+
+**File**: `src/bot-manager/bot-blocks.ts`
+
+**Changes**:
+1. Added `validatePortalInterior()` helper function (line ~1220)
+   - Checks all interior coordinates of portal frame
+   - Returns list of non-air blocks found
+   
+2. Enhanced `useItemOnBlock()` flint_and_steel handler (line ~1650)
+   - After all ignition attempts fail, runs interior validation
+   - Detects both X-aligned and Z-aligned portal frames
+   - Outputs detailed diagnostic messages:
+     - Lists all non-air blocks in portal interior
+     - Provides coordinates and block types
+     - Guides user to remove blocking blocks
+
+**Expected Behavior**:
+- When portal ignition fails, console will show: `[PORTAL DEBUG] Non-air blocks in portal interior: (8,111,2):water, (9,112,2):cobblestone`
+- User can then remove these blocks and re-ignite
+
+### Testing Plan
+1. Use flint_and_steel on Portal #3 obsidian @ (8,110,2) or similar
+2. Check console for `[PORTAL DEBUG]` messages
+3. If non-air blocks found, remove them with dig_block
+4. Re-ignite portal
+
+### Team Status at Session End
+- **Eternal Night Crisis**: time=15628 fixed, constant mob spawning
+- **Multiple Deaths**: All bots experienced 2-4 deaths from mobs/fall damage
+- **diamond_pickaxe Loss**: Claude2 reported diamond_pickaxe消失 (keepInventory investigation needed)
+- **Portal #3 Status**: Frame incomplete (x12/14 obsidian), untested with new diagnostics
+- **Team Retreat**: Ordered all bots to BASE (9,93,2) safe area
+
+### Next Session Actions
+1. Test new portal diagnostics on Portal #3
+2. Investigate diamond_pickaxe loss (verify keepInventory gamerule)
+3. Complete Portal #3 frame (need obsidian x2-6 depending on actual count)
+4. Remove any non-air interior blocks identified by diagnostics
+5. Re-ignite portal and verify nether_portal generation
+
+### Session 143+ Final Summary
+
+**Code Changes Committed**:
+- ✅ `validatePortalInterior()` function in bot-blocks.ts (~line 1220)
+- ✅ Enhanced flint_and_steel diagnostics (~line 1650)
+- ✅ Build successful, code ready for deployment
+
+**Team Status**:
+- Claude1: Portal #3 test完了、BASE付近待機
+- Claude2: HP critical→respawn指示、obsidian x1所持、diamond_pickaxe消失
+- Claude3: BASE到着✅、diamond_pickaxe所持✅、ender_eye x2所持✅
+- Claude4: HP critical→respawn指示、ender_pearl x11所持✅
+
+**Critical Finding**: 
+New portal diagnostics code built but NOT YET ACTIVE (MCP server restart required).
+Next session MUST restart MCP server before testing Portal #3.
+
+**Next Session Checklist**:
+1. [ ] Restart MCP server to load new portal diagnostics
+2. [ ] Test flint_and_steel on Portal #3 → Check console for `[PORTAL DEBUG]` output
+3. [ ] If interior blocks found, remove with dig_block
+4. [ ] Complete Portal #3 frame (Claude3 mines obsidian x2-6 with diamond_pickaxe)
+5. [ ] Re-ignite portal and verify nether_portal generation
+6. [ ] Enter Nether → Blaze hunting (blaze_rod x5 goal)
+
+**Code Review Needed**: Investigate diamond_pickaxe "消失" reports (Claude2) despite keepInventory=true.
+Possible causes: inventory sync bug, respawn timing, or user misreporting item loss.
