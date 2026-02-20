@@ -6419,3 +6419,29 @@ minecraft_enter_portal: { tags: ["movement", "portal", "nether", "teleport", "tr
 5. Nether entry → Blaze Fortress → blaze_rod x5
 6. Continue to ender_eye crafting (Step 4)
 
+
+
+## Session 157 - CRITICAL: gold_ingot消失バグ
+
+**発生時刻**: 2026-02-21 Session 157
+**症状**: Claude2がgolden_boots x1作成後、gold_ingot x20が全消失
+**詳細**:
+- Claude2: BASEチェスト(9,96,4)からgold_ingot x20を取得
+- golden_boots x1 (x4必要) をクラフト
+- 残りx16が消失（インベントリにもチェストにもない）
+- 消失確認: チェスト確認時にgold_ingot無し
+
+**推定原因**:
+- minecraft_craft()のアイテムロス
+- チェスト取得/預託のデシンク
+- クラフト中のインベントリ管理バグ
+
+**影響**:
+- gold armor作成が停滞
+- Phase 8 Step 3 (blaze_rod入手) が遅延
+
+**Next Action**:
+- Claude3のgold_ingot x18確保最優先
+- コード調査: src/tools/crafting.ts minecraft_craft()
+- インベントリ管理のログ確認
+
