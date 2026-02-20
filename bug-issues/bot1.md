@@ -5570,3 +5570,108 @@ Possible causes: inventory sync bug, respawn timing, or user misreporting item l
 **Status**: SOLUTION IMPLEMENTED ✅
 **Expected outcome**: 100% drop success rate with proper scaffolding
 
+
+---
+
+## Session 149 (2026-02-20) - Obsidian Pool Backup Plan
+
+### Obsidian Pool予備採掘プラン
+
+**Location**: (-9,37,11) — lava pool上に水で生成されたobsidian
+
+**Current Status (Session 149)**:
+- **Portal #3建設必要数**: obsidian x14
+- **確保済み**: BASE chest x7 + Claude3所持 x1 = x8/14
+- **不足**: x6
+- **Portal #1からの採掘**: Claude3作業中（目標x6）
+
+**Backup Plan** (Portal #1で不足した場合):
+1. **担当**: Claude2 or Claude4（diamond_pickaxe装備済みの者）
+2. **必要ツール**: diamond_pickaxe x1, cobblestone x64 (足場用), torch x20
+3. **座標**: (-9,37,11)付近のlava pool上部
+4. **手順**:
+   - Y=37まで安全に降下（pillar_upの逆、階段掘り推奨）
+   - Obsidian poolを目視確認
+   - 採掘前に**真下にcobblestone足場設置必須**（item落下防止）
+   - 周囲に安全足場設置（lava落下防止）
+   - 1ブロックずつ慎重に採掘
+   - 採掘後すぐにcollect_items()
+   - 不足分x6-x7を採掘してBASE帰還
+
+**Safety Considerations**:
+- Y=37は深い洞窟レベル→mob spawn危険
+- Lava pool上での作業→fall into lava risk
+- 松明で周囲を明るくしてmob spawn抑制
+- 足場は常にcobblestoneで確保
+- 1ブロック採掘ごとにHP/Hunger確認
+
+**Status**: PLAN DOCUMENTED ✅
+**Activation Trigger**: Claude3がPortal #1でx6未満しか採掘できなかった場合
+
+
+---
+
+## Session 149 (continued) - Portal #3建設タスク割り振り
+
+### Portal #3建設計画
+
+**Location**: (8-11,109-113,2) @ Y=110
+**Status**: Platform完成✅、水なし確認済み✅
+
+**Building Sequence**:
+
+#### Phase 1: Obsidian確保 (IN PROGRESS)
+- Claude3: Portal #1でobsidian x6採掘中
+- BASE chest: obsidian x7既存
+- 目標: 合計x14確保
+
+#### Phase 2: Frame建設 (PENDING)
+**担当**: Claude3
+**手順**:
+1. BASE chestからobsidian x14を取得
+2. Portal #3建設地 (8-11,109-113,2)へ移動
+3. Y=110プラットフォーム上でframe建設:
+   ```
+   Frame構造 (5x4 portal):
+   O O O O  ← Y=113 (top)
+   O . . O  ← Y=112
+   O . . O  ← Y=111
+   O . . O  ← Y=110
+   O O O O  ← Y=109 (bottom)
+   
+   X座標: 8-11 (width 4)
+   Z座標: 2 (depth 1)
+   ```
+4. 14ブロック設置順序:
+   - Bottom: (8,109,2), (9,109,2), (10,109,2), (11,109,2) — 4個
+   - Left: (8,110,2), (8,111,2), (8,112,2) — 3個
+   - Right: (11,110,2), (11,111,2), (11,112,2) — 3個
+   - Top: (8,113,2), (9,113,2), (10,113,2), (11,113,2) — 4個
+   - Total: 14個
+
+#### Phase 3: Interior Validation (PENDING)
+**担当**: Claude4 (補助)
+**手順**:
+1. Frame内部座標を確認:
+   - Interior: (9,110-112,2), (10,110-112,2) — 計6ブロック
+2. 各座標がair（水/lava/blocks無し）を目視確認
+3. 非airブロックがあれば即座に報告→除去
+
+#### Phase 4: 点火+Diagnostics (PENDING)
+**担当**: Claude1
+**手順**:
+1. flint_and_steelでframe内部を着火
+2. Diagnostics code (validatePortalInterior()) 自動実行
+3. 成功: nether_portal blocks生成確認
+4. 失敗: console出力のblocking blocks座標を確認→Phase 3に戻る
+
+#### Phase 5: Portal Test (PENDING)
+**担当**: 全員
+**手順**:
+1. Claude1がportalに入ってNether転送確認
+2. 成功したらBASE帰還
+3. 他メンバーも順次テスト
+
+**Status**: TASK ALLOCATION DOCUMENTED ✅
+**Next**: Claude3のobsidian採掘完了待ち
+
