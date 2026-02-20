@@ -6729,3 +6729,29 @@ Session 158初: ender_eye(2), ender_pearl(12), book(1), ... gold_ingot消失
 - Claude4に(33,1,20)採掘継続指示済み
 - bot-storage.ts調査予定（takeFromChest/storeInChest同期処理）
 
+
+---
+
+## Session 159 (2026-02-21) - Smelting Bug修正
+
+### Smelting Bug対策（Session 158報告分）
+
+**問題**:
+- raw_iron x3精錬 → iron_ingot x2のみ（x1消失、再現率100%）
+- Claude2, Claude4で確認済み
+
+**原因仮説**:
+1. waitTime不足: furnace startup時間 + 最終アイテム完了時間が考慮されていない
+2. furnace.takeOutput()が精錬完了前に呼ばれている可能性
+
+**修正内容**:
+1. **bot-crafting.ts line 1795**: waitTimeに+5秒のbuffer追加
+   - 変更前: `smeltCount * 10000`
+   - 変更後: `smeltCount * 10000 + 5000` （furnace startup + 最終完了バッファ）
+
+2. **bot-crafting.ts line 1807**: デバッグログ追加
+   - furnace.outputItem()のcount報告をログ出力
+   - 次回再現時に原因特定可能
+
+**Status**: 修正完了、次Sessionで動作確認予定
+
