@@ -6552,3 +6552,81 @@ minecraft_enter_portal: { tags: ["movement", "portal", "nether", "teleport", "tr
 **ビルド**: ✅ 成功 (Session 158)
 
 **検証予定**: 次回のgold armor作成時にitem disappearanceが再発しないか確認
+
+
+## Session 158b (2026-02-21 continued) - Smelting Bug発見
+
+### [CRITICAL BUG] raw_iron精錬で1個消失
+
+**症状**:
+- Claude2: raw_iron x3精錬 → iron_ingot x2のみ取得（x1消失）
+- Claude4: raw_iron x3精錬 → iron_ingot x2のみ取得（x1消失）
+- 通常、raw_iron:iron_ingot = 1:1 のはず
+- 再現率: 2/2（100%）
+
+**影響**:
+- iron_pickaxe作成にiron_ingot x3必要 → 追加採掘が必須に
+- gold_ore採掘まで遅延発生
+
+**対策**:
+- 短期: raw_iron x4-5を精錬してiron_ingot x3確保（余裕を見る）
+- 長期: bot-crafting.ts の smelt() 処理を調査・修正必要
+
+**調査項目**:
+1. furnace.takeOutput() のアイテム回収ロジック
+2. furnace内のスロット確認（余剰アイテムがfurnace内に残ってる？）
+3. Mineflayer smelt APIのバグ可能性
+
+**Status**: 調査中、次Sessionで修正予定
+
+
+---
+
+## Session 158c (2026-02-21 Final) - iron_pickaxe作成完了✅、gold_ore採掘準備中
+
+### Session 158 Final Status
+
+**達成事項**:
+1. ✅ **iron_ingot問題解決**: Claude2 & Claude4が自律的にiron_ore x3採掘完了
+2. ✅ **iron_pickaxe作成完了**: Claude4がiron_ingot x3使用してiron_pickaxe作成✅
+3. ✅ **チェスト確認**: gold_ingot x18（Claude3預託済み）確認✅
+4. ✅ **ender_pearl確認**: ender_pearl x12 & ender_eye x2確保済み✅
+
+**発見したバグ**:
+- **Smelting Bug**: raw_iron x3精錬 → iron_ingot x2のみ（x1消失、再現率100%）
+  - Claude2, Claude4で確認
+  - 原因: bot-crafting.ts line 1796の待機時間不足？または furnace.takeOutput() のバグ？
+  - 対策: raw_iron x4-5を精錬してiron_ingot x3確保（余裕を見る）
+  
+- **Furnace Detection Bug**: Claude1がfurnace 8.7m先に存在するのに「No furnace found within 32 blocks」エラー
+  - bot-crafting.ts line 1671-1682のfindBlock()ロジック問題？
+  - 次Session調査必要
+
+**現在のブロッカー**:
+- 夜間（time=15628固定）+ 敵mob多数 → 移動危険
+- Claude4: クリーパー被弾で死亡→respawn完了、iron_pickaxe保持確認待ち
+- Claude1: furnaceへアクセス困難（道なし、周囲andesite壁）
+
+**次Session優先タスク**:
+1. **URGENT**: Claude4がiron_pickaxe所持確認
+2. 朝まで待機 OR 松明で安全確保
+3. Claude4 → (33,1,20)へ移動 → deepslate_gold_ore x6-8採掘（smelting bugで余裕を見る）
+4. raw_gold精錬 → gold_ingot x6-8入手
+5. gold_ingot x24達成（チェストx18 + 新規x6） → gold armor 1セット作成
+6. gold armor装備 → Nether突入 → blaze_rod x5入手（Phase 8 Step 3完了）
+
+**Team Status (Session End)**:
+- Claude1: @ (-0.2, 90, -2.3), HP 18/20 Hunger 9/20, raw_iron x6所持、furnaceアクセス困難
+- Claude2: 状況不明（チャット応答なし）
+- Claude3: 状況不明（チャット応答なし）
+- Claude4: respawn後、iron_pickaxe保持確認待ち、BASE待機指示済み
+
+**Resources Status**:
+- gold_ingot x18: BASE chest (9,96,4)✅
+- ender_pearl x12: BASE chest✅
+- ender_eye x2: Claude4所持中
+- iron_pickaxe x1: Claude4所持中✅（要確認）
+- raw_iron x6: Claude1所持中（未精錬）
+
+**Status**: 🟡 iron_pickaxe作成完了✅、gold_ore採掘は次Session朝に実行予定
+
