@@ -6871,3 +6871,16 @@ let furnaceBlock = bot.findBlock({
 
 **Status**: 🚨 調査中、代替策実行中
 
+
+## Session 161 (2026-02-21) - CRITICAL Bug
+
+### gold_ingot消失バグ再発
+- **症状**: takeFromChest(gold_ingot, x11) 実行後、チェスト内のgold_ingot x11が完全に消失
+- **検証**: 
+  1. open_chest: gold_ingot(11) 確認
+  2. takeFromChest実行 → エラー「Requested 11 but got 0」
+  3. 再度open_chest → gold_ingot完全に消失
+- **仮説**: chest.withdraw()は内部で成功したが、Mineflayerインベントリに反映されず、アイテムがvoidに消えた
+- **影響**: gold_ingot x11 LOST, armor作成に必要な x19不足
+- **対策**: raw_gold追加採掘が必要
+

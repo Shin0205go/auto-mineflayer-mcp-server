@@ -267,7 +267,8 @@ export async function takeFromChest(
   }
 
   // Wait for inventory to sync (multi-bot chest access needs more time)
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  // Extended from 1.5s to 3s to prevent item void bug
+  await new Promise(resolve => setTimeout(resolve, 3000));
 
   // Verify items were actually withdrawn
   const inventoryAfter = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
@@ -276,8 +277,22 @@ export async function takeFromChest(
 
   // Only throw if zero items were withdrawn (partial success is acceptable due to sync delays)
   if (withdrawnCount === 0) {
+    // DO NOT close chest before retry — keep it open to prevent server rollback
+    console.error(`[Storage] CRITICAL: Zero items withdrawn after 3s wait. Waiting additional 2s before giving up...`);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Final verification
+    const inventoryFinal = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
+    const finalWithdrawn = inventoryFinal - inventoryBefore;
+
+    if (finalWithdrawn === 0) {
+      chest.close();
+      throw new Error(`Failed to withdraw any ${itemName} from chest after 5s total wait. Requested ${actualCount} but got 0. ITEM MAY BE LOST IN VOID.`);
+    }
+
+    console.error(`[Storage] Recovery: ${finalWithdrawn}x ${itemName} appeared after extended wait.`);
     chest.close();
-    throw new Error(`Failed to withdraw any ${itemName} from chest. Requested ${actualCount} but got 0.`);
+    return `Took ${finalWithdrawn}x ${itemName} from chest (requested ${actualCount}, delayed sync). Inventory: ${bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ")}`;
   }
 
   chest.close();
