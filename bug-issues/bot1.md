@@ -4,6 +4,43 @@
 
 ---
 
+## Session 158 (2026-02-21) - チェストsyncバグ修正、iron_ore採掘再開
+
+### [2026-02-21] Session 158 開始状況
+
+**開始時状態**:
+- Claude1: Online✅ リーダー、BASE付近
+- Claude2: Online✅ HP 13.3/20, golden_boots x1所持
+- Claude3: Online✅ respawn中、gold_ingot x18所持
+- Claude4: Online✅ HP 6/20, ender_pearl x12 + ender_eye x2所持✅
+
+**Session 158 主要イベント**:
+1. **CRITICAL発見**: BASEチェスト確認→iron_ingot x0❌、gold_ingot x18✅のみ
+2. 全員にiron_ore x3緊急採掘指示
+3. Claude1: stick x4チェスト預託→**chest sync bug発覚**（他ボットに見えない）
+4. 夜間＋装備なし→Claude2/3死亡→全員シェルター待機指示
+5. Claude1: HP 7/20危機→戦略的respawn実行✅
+6. **バグ修正実施**:
+   - gold_ingot x20消失バグ記録（bot1.md）
+   - chest sync bug調査→bot-storage.ts修正（deposit後1.5秒待機追加）
+7. Claude2/3: 代替策として各自で木材採取→stick作成指示
+8. Claude4: respawn完了→BASE移動中、pearl+eye保持確認
+
+**コード修正**:
+- `src/bot-manager/bot-storage.ts:175-177` - chest.deposit()後にclose()前の1.5秒待機追加
+- マルチボット環境でのチェスト同期問題の根本対策
+
+**次Session優先タスク**:
+1. Claude2/3: stick作成→stone_pickaxe作成→iron_ore x3採掘
+2. Claude4: BASEチェストにpearl x12 + eye x2預託
+3. iron_ingot x3達成→iron_pickaxe作成
+4. gold_ore採掘→gold armor作成（**クラフト時に他ボットを10+ blocks離す**）
+5. Nether突入→blaze_rod x5入手
+
+**ステータス**: 🔄 バグ修正完了、iron_ore採掘準備中（チーム応答待ち）
+
+---
+
 ## Session 157 (2026-02-21) - iron_pickaxe作成、gold armor製造開始
 
 ### [2026-02-21] Session 157 開始状況
@@ -36,7 +73,32 @@
 3. gold armor一式craft→Claude3装備
 4. Portal #3でNether突入→blaze_rod x5入手（Phase 8 Step 3）
 
-**ステータス**: 🔄 iron_pickaxe作成完了、gold ore採掘作業中
+**🚨 CRITICAL BUG - gold_ingot x20消失事件**:
+- **症状**: Claude2がgolden_bootsクラフト後、gold_ingot x20が完全消失（チェスト+全員のインベントリから検出不可）
+- **原因仮説**:
+  1. マルチボット環境でのアイテムドロップ競合: クラフト時にアイテムが地面にドロップ→近くの別ボットが自動回収→元のボットのインベントリに戻らない
+  2. クラフト完了前のインベントリ同期タイミング問題
+  3. 複数回のクラフト失敗でgold_ingot消費のみ発生、成果物なし
+- **コード調査結果**:
+  - bot-crafting.ts:1595 でエラーメッセージが「他のボットが回収した可能性」を示唆
+  - クラフト後の待機時間は2.5秒（1534行）+ ドロップアイテム回収3.5秒（1585行）= 計6秒
+  - しかしマルチボット環境では不十分な可能性
+- **Workaround（Session 158で実施予定）**:
+  1. gold armor作成時は**クラフト担当ボット以外を10+ blocks離す**
+  2. クラフト前に`/team-coordination`で他ボットに待機指示
+  3. クラフト完了後にインベントリ確認→失敗したら即座に周囲のボットのインベントリチェック
+
+**🚨 NEW BUG - Chest sync issue (Session 158)**:
+- **症状**: Claude1がstick x4をチェスト(9,96,4)に預託したが、Claude2/3には見えない
+- **原因仮説**: マルチボット環境でのチェストアクセス競合。deposit()後のサーバー同期完了前に別ボットがチェスト開くと、変更が反映されない可能性
+- **コード調査結果**:
+  - bot-storage.ts:175 `chest.deposit(item.type, null, actualCount);`
+  - bot-storage.ts:176 `chest.close();` 即座にクローズ
+  - deposit()とclose()の間に待機なし
+- **修正案**: deposit()後、close()前に1-2秒待機追加
+- **Workaround**: 各ボットが自力で木材採取→stick作成（Session 158で実施中）
+
+**ステータス**: 🔄 iron_ore採掘準備中（Claude2/3が木材採取中）、Claude4がBASE移動中
 
 ---
 
