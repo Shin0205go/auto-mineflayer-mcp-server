@@ -6445,3 +6445,48 @@ minecraft_enter_portal: { tags: ["movement", "portal", "nether", "teleport", "tr
 - コード調査: src/tools/crafting.ts minecraft_craft()
 - インベントリ管理のログ確認
 
+
+## Session 158 - gold_ingot消失バグ調査
+
+**調査開始**: 2026-02-21 Session 158
+**関連コード**: src/bot-manager/bot-crafting.ts craftItem()
+
+**調査結果**:
+- Line 1521-1522: クラフト後に2.5秒待機処理が既に存在
+- コメント: "BUGFIX: Increased from 1500ms to 2500ms to fix item disappearance bug"
+- しかし、Session 157でgolden_boots作成時にgold_ingot x20消失が発生
+
+**根本原因の仮説**:
+1. **待機時間不足**: 2.5秒では不十分。サーバー側のアイテム同期に時間がかかる
+2. **window操作タイミング**: bot.closeWindow()後の待機が300msのみ（line 1528-1529）
+3. **複数回クラフト時の累積**: countパラメータでループクラフト時に各反復での待機が必要
+
+**修正案**:
+1. クラフト後の待機時間を2.5秒→5秒に延長
+2. window close後の待機を300ms→1000msに延長
+3. ループクラフト時の各反復でも同様の待機を確保
+
+**Next Action**: 修正実施後、テストとしてgolden_boots再作成（Session 158での検証）
+
+**修正実施 (Session 158)**:
+1. **bot-storage.ts line 277-282**: 部分的withdrawal時に警告ログ追加
+   - withdrawnCount < actualCount の場合に console.error で警告
+   - クラフト失敗の早期検出を可能に
+
+2. **bot-crafting.ts line 1520-1522**: クラフト後待機時間延長
+   - 2500ms → 4000ms (+1.5秒)
+   - 理由: crafting table window操作での同期遅延対策
+
+3. **bot-crafting.ts line 1526-1529**: window close後待機時間延長
+   - 300ms → 1000ms (+0.7秒)
+   - 理由: window close直後のアイテム転送完了待ち
+
+4. **bot-crafting.ts line 1531-1534**: 追加同期待機延長
+   - 2500ms → 3500ms (+1秒)
+   - 理由: player inventory crafting時の同期遅延対策
+
+**合計待機時間**: 5秒 → 8.5秒 (+3.5秒)
+
+**ビルド**: ✅ 成功 (Session 158)
+
+**検証予定**: 次回のgold armor作成時にitem disappearanceが再発しないか確認
