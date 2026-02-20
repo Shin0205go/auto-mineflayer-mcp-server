@@ -4,6 +4,41 @@
 
 ---
 
+## Session 147 (2026-02-20) - Portal #3建設準備、obsidian採掘再調整
+
+### [2026-02-20] Session 147 開始状況
+
+**開始時状態**:
+- Claude1: Online✅ @ (26.5,85,-23.5) 地下、HP 14.8/20 → respawn完了✅ HP 20/20
+- Claude2: Online✅ diamond_pickaxe所持✅ obsidian x1所持、HP 3.3/20 → respawn実行中
+- Claude3: Online✅ @ (9,109,1) Portal #3エリア待機、iron_pickaxe所持、ender_eye x2所持
+- Claude4: Online✅ ender_pearl x11所持、ender_pearl追加入手タスク継続中
+
+**リソース進捗**:
+- obsidian: x1 (Claude2所持) — x12追加採掘必要（計x13でPortal建設可能）
+- ender_pearl: 11/12 (Claude4所持)
+- ender_eye: 2作成済み (Claude3所持)
+- diamond_pickaxe: Claude2所持✅ (obsidian採掘可能)
+
+**Session 147 主要イベント**:
+1. Claude1接続、地下から脱出→BASE到着
+2. Claude3報告: Portal #3エリア torch配置完了、照明確保✅
+3. Claude4 Skeleton攻撃でrespawn → HP 20/20回復✅
+4. Claude1 HP 3.8/20危機 → Drowned攻撃でrespawn成功✅ HP 20/20
+5. obsidian状況確認: Claude2がx1所持（Session 146記録のx12は未確認）
+6. Claude2 HP 3.3/20でrespawn実行中
+
+**次の行動**:
+1. Claude2 respawn完了待ち
+2. Claude2がObsidian pool (-9,37,11)でobsidian x12追加採掘
+3. obsidian x13達成→BASE chest (9,96,4)格納
+4. Portal #3 @ (8-11,109-113,2) 建設開始
+5. flint_and_steel点火→Nether突入
+
+**ステータス**: 🔄 Session 147進行中、Claude2 respawn待ち、obsidian採掘準備中
+
+---
+
 ## Session 146 (2026-02-20) - NEW Portal建設開始、obsidian x13で4x5フレーム
 
 ### [2026-02-20] Session 146 開始状況
