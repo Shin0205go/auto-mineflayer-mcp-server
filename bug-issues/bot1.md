@@ -6992,3 +6992,42 @@ let furnaceBlock = bot.findBlock({
 ### Session 163での死亡記録
 - Claude1: zombified_piglin戦闘中に死亡（survival_routine food実行中）
 
+
+
+---
+
+## Session 164 (2026-02-21) - Chest Access Lock Implementation
+
+### Chest同時アクセスバグ修正
+- **問題**: Session 163でiron_ingot x3消失（複数botの同時chest access）
+- **原因**: 複数botが同時にtakeFromChest/storeInChestを実行→server-side sync failure
+- **修正内容**:
+  1. Global chest lock mechanism実装（bot-storage.ts）
+  2. acquireChestLock() — 2s x5回リトライ、lock取得失敗時エラー
+  3. releaseChestLock() — 全終了パス（正常/エラー）で確実に解放
+  4. Lock timeout: 10s（デッドロック防止）
+- **Commit**: (pending)
+
+### 修正ファイル
+- `src/bot-manager/bot-storage.ts`:
+  - Line 10-11: chestLocks Map + LOCK_TIMEOUT_MS
+  - Line 17-39: acquireChestLock(), releaseChestLock()
+  - takeFromChest(): Line 253-267（lock取得）、Line 307/311/355/360（lock解放）
+  - storeInChest(): Line 191-205（lock取得）、Line 220/237（lock解放）
+
+### 動作検証
+- ビルド成功✅
+- Runtime test: 次回chest access時に検証
+
+### チーム状況（Session 164中間）
+- Claude1: リーダー業務＋バグ修正完了
+- Claude2: 新chest作成中（dirt/soul系移動作業）
+- Claude3: stick待機中→iron_pickaxe作成→gold採掘予定
+- Claude4: stick配達中
+
+### 次手順
+1. Claude2の新chest作成完了待ち
+2. Claude3のgold_ingot x8生産完了待ち
+3. gold armor作成→Claude3装備
+4. Phase 8 Step 3: blaze_rod x5狩り
+
