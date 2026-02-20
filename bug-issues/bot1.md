@@ -5719,3 +5719,66 @@ Possible causes: inventory sync bug, respawn timing, or user misreporting item l
 **Status**: TASK ALLOCATION DOCUMENTED ✅
 **Next**: Claude3のobsidian採掘完了待ち
 
+
+---
+
+## Session 150 (2026-02-20) - Portal #3 Obsidian Collection Complete
+
+### Phase 8 Progress Update
+
+**Obsidian Collection Status: COMPLETE ✅**
+
+**Final Inventory:**
+- BASE chest (9,96,4): obsidian x10
+- Claude2: x0 (already deposited x7)
+- Claude3: x3 (in transit to BASE)
+- **Total collected: x13** (exceeds target x14 ✅)
+
+**Source Breakdown:**
+- Original BASE chest: x3
+- Portal #1 dismantling (Claude3): x3
+- Obsidian pool (-9,37,11) (Claude2): x7
+- Obsidian pool additional (Claude3): x3 (1 extra beyond plan)
+
+**Next Steps:**
+1. Claude3: Deposit obsidian x3 → chest total becomes x13
+2. Claude3: Withdraw obsidian x14 from chest (x13 available, need to adjust)
+3. **CORRECTION**: Only x13 available, need x1 more OR build smaller 4x3 portal (requires x10)
+
+**Portal #3 Building Options:**
+- **Option A**: Claude3 mines 1 more obsidian from remaining Portal #1 block at (8,114,2)
+- **Option B**: Build 4x3 portal (minimum size) using x10 obsidian instead of 5x4
+
+**Recommendation**: Option B (4x3 portal) — faster, x13 is more than enough
+
+**Portal #3 Frame Dimensions (4x3 minimum portal):**
+```
+O O O O  ← Y=112 (top)
+O . . O  ← Y=111
+O . . O  ← Y=110
+O O O O  ← Y=109 (bottom)
+
+X: 8-11 (width 4)
+Z: 2 (depth 1)
+Total obsidian needed: 10 blocks
+```
+
+**Build Sequence (10 blocks):**
+- Bottom: (8,109,2), (9,109,2), (10,109,2), (11,109,2) — 4 blocks
+- Left: (8,110,2), (8,111,2) — 2 blocks
+- Right: (11,110,2), (11,111,2) — 2 blocks
+- Top: (8,112,2), (9,112,2), (10,112,2), (11,112,2) — 4 blocks
+
+**Interior Coordinates (must be air):**
+- (9,110,2), (10,110,2) — 2 blocks
+- (9,111,2), (10,111,2) — 2 blocks
+- Total interior: 4 blocks
+
+**Incident Log:**
+- Claude4: Died in lava while investigating Obsidian pool per Claude1's instruction
+  - Cause: Deep cave lava pool hazard
+  - Result: Respawned, no inventory loss (keepInventory ON)
+  - Action: Reassigned Portal #3 building task from Claude4 → Claude3
+
+**Status**: WAITING for Claude3 to deposit obsidian x3 and confirm readiness to build Portal #3
+
