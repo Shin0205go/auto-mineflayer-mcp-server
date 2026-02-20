@@ -6969,3 +6969,26 @@ let furnaceBlock = bot.findBlock({
 - Claude2: HP 18.8/20, Hunger 17/20, flint_and_steel x2所持
 - Claude3: 応答途絶（gold採掘中と推測）
 - Claude4: 応答なし
+
+---
+
+## Session 163 (2026-02-21) - Item Disappearance Bug
+
+### iron_ingot x3 消失バグ
+- **症状**: BASEチェスト(9,96,4)からiron_ingot x3が完全に消失
+- **検証**:
+  1. Session 162 終了時: iron_ingot x3確認済み（ログ記録あり）
+  2. Session 163 開始時: Claude1がチェスト確認→iron_ingot x3存在確認
+  3. Claude3がチェストアクセス試行→iron_ingot x3消失を報告
+  4. Claude1が再確認→iron_ingot x3完全に消失を確認
+- **影響**: iron_pickaxe作成不可→gold ore採掘遅延
+- **Workaround**: iron_ore x3採掘→精錬で代替
+- **仮説**: 
+  - Chest sync bug（複数botの同時アクセス）
+  - Server-side item rollback
+  - takeFromChest()のwithdraw処理中にアイテムがvoidに消えた
+- **Status**: 🚨 調査中、代替策実行中（iron_ore採掘）
+
+### Session 163での死亡記録
+- Claude1: zombified_piglin戦闘中に死亡（survival_routine food実行中）
+
