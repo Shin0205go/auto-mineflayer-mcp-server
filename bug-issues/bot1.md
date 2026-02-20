@@ -4,6 +4,37 @@
 
 ---
 
+## Session 165 (2026-02-21) - Chest Sync Bug修正（File-based Lock実装）
+
+### [2026-02-21] Chest Sync Bug再発 → File-based Lock実装で修正✅
+
+**症状**:
+- Claude2がSession 161で`takeFromChest(dirt, 64)`実行時に"Failed to withdraw any dirt from chest after 5s total wait. Requested 64 but got 0. ITEM MAY BE LOST IN VOID."エラー
+- チェストにアイテム存在するが、withdrawで0個引き出し
+- 複数ボット同時アクセスでchest sync失敗
+
+**原因**:
+- `bot-storage.ts`のchestLocksが**メモリ内Map**で実装されていた
+- Claude1/Claude2/Claude3/Claude4は**独立したNode.jsプロセス**なので、メモリ内Mapは共有されない
+- 複数ボットが同時にchestアクセス→sync conflict発生
+
+**修正内容** (Session 165):
+- `src/bot-manager/bot-storage.ts`:
+  - メモリ内Mapを**ファイルベースロック**に変更
+  - `.chest-locks/` ディレクトリにロックファイルを作成
+  - `x,y,z.lock` ファイルで複数プロセス間でロック共有
+  - 10秒のlock timeout設定
+  - 期限切れロックファイル自動削除機能
+
+**影響**:
+- ✅ 複数ボット間でchestアクセスが排他制御される
+- ✅ chest sync bugの根本原因を解決
+- ✅ takeFromChest/storeInChest/openChestが安定動作するはず
+
+**ファイル**: `src/bot-manager/bot-storage.ts`
+
+---
+
 ## Session 159 (2026-02-21) - Respawn戦略実行、iron_ore採掘継続
 
 ### [2026-02-21] Session 159 開始状況

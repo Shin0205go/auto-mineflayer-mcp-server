@@ -1,36 +1,71 @@
 import { Vec3 } from "vec3";
 import type { ManagedBot } from "./types.js";
 import pkg from "mineflayer-pathfinder";
+import fs from "fs";
+import path from "path";
 const { goals } = pkg;
 
 /**
- * Global chest access lock to prevent multi-bot sync bugs
- * Key: "x,y,z" chest position, Value: timestamp of lock acquisition
+ * File-based chest lock directory (shared across all bot processes)
  */
-const chestLocks = new Map<string, number>();
+const LOCK_DIR = path.join(process.cwd(), ".chest-locks");
 const LOCK_TIMEOUT_MS = 10000; // 10s max lock duration
 
+// Ensure lock directory exists
+if (!fs.existsSync(LOCK_DIR)) {
+  fs.mkdirSync(LOCK_DIR, { recursive: true });
+}
+
 /**
- * Acquire lock for chest access
+ * Acquire lock for chest access using file system
  * Returns true if lock acquired, false if chest is locked by another bot
  */
 function acquireChestLock(x: number, y: number, z: number): boolean {
   const lockKey = `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
+  const lockFile = path.join(LOCK_DIR, `${lockKey}.lock`);
   const now = Date.now();
 
   // Clean up expired locks
-  const expiredLocks = Array.from(chestLocks.entries())
-    .filter(([_, timestamp]) => now - timestamp > LOCK_TIMEOUT_MS);
-  expiredLocks.forEach(([key, _]) => chestLocks.delete(key));
-
-  // Check if chest is currently locked
-  if (chestLocks.has(lockKey)) {
-    return false; // Chest is locked
+  try {
+    const files = fs.readdirSync(LOCK_DIR);
+    files.forEach(file => {
+      const filePath = path.join(LOCK_DIR, file);
+      try {
+        const stats = fs.statSync(filePath);
+        if (now - stats.mtimeMs > LOCK_TIMEOUT_MS) {
+          fs.unlinkSync(filePath);
+          console.error(`[Storage] Cleaned up expired lock: ${file}`);
+        }
+      } catch (err) {
+        // Ignore errors (file may have been deleted by another process)
+      }
+    });
+  } catch (err) {
+    console.error(`[Storage] Failed to clean up locks: ${err}`);
   }
 
-  // Acquire lock
-  chestLocks.set(lockKey, now);
-  return true;
+  // Check if lock file exists
+  if (fs.existsSync(lockFile)) {
+    try {
+      const stats = fs.statSync(lockFile);
+      if (now - stats.mtimeMs < LOCK_TIMEOUT_MS) {
+        return false; // Chest is locked and lock is still valid
+      }
+      // Lock expired, delete it
+      fs.unlinkSync(lockFile);
+    } catch (err) {
+      // File may have been deleted, treat as unlocked
+    }
+  }
+
+  // Acquire lock by creating file
+  try {
+    fs.writeFileSync(lockFile, now.toString());
+    return true;
+  } catch (err) {
+    console.error(`[Storage] Failed to acquire lock for ${lockKey}: ${err}`);
+    return false;
+  }
 }
 
 /**
@@ -38,7 +73,14 @@ function acquireChestLock(x: number, y: number, z: number): boolean {
  */
 function releaseChestLock(x: number, y: number, z: number): void {
   const lockKey = `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
-  chestLocks.delete(lockKey);
+  const lockFile = path.join(LOCK_DIR, `${lockKey}.lock`);
+  try {
+    if (fs.existsSync(lockFile)) {
+      fs.unlinkSync(lockFile);
+    }
+  } catch (err) {
+    console.error(`[Storage] Failed to release lock for ${lockKey}: ${err}`);
+  }
 }
 
 /**
