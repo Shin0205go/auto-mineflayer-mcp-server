@@ -6755,3 +6755,95 @@ Session 158初: ender_eye(2), ender_pearl(12), book(1), ... gold_ingot消失
 
 **Status**: 修正完了、次Sessionで動作確認予定
 
+
+---
+
+## Session 160 (2026-02-21) - furnace検出バグ修正、gold_ore採掘継続
+
+### [2026-02-21] Session 160 開始状況
+
+**開始時状態**:
+- Claude1: HP 7.2/20 Hunger 0/20（餓死寸前）→ survival_routine → HP 20/20✅
+- Claude2: BASE待機中、gold_ingot x16所持✅
+- Claude3: gold_ore採掘中 (34,4,31)、gold_ore x89発見✅
+- Claude4: BASE待機中、raw_gold x20予備保持中
+
+**重要発見**:
+- ✅ **ender_pearl x12消失は誤報** → BASEチェスト (9,96,4) 確認済み
+- ✅ ender_eye x2も確認済み
+
+**Session 160 バグ修正**:
+
+#### 🐛 minecraft_smelt furnace検出バグ（Session 159報告）
+
+**症状**:
+- furnaceが(20,88,1)に存在するのに"No furnace found within 32 blocks"エラー
+- 精錬できずブロッカーになっていた
+
+**原因**:
+- `bot-crafting.ts:1671-1680`でfurnace検索が`mcData.blocksByName.furnace?.id`のみ
+- Minecraftではfurnaceが稼働中は`lit_furnace`にブロックタイプが変わる
+- lit_furnaceを検索対象に含めていなかった
+
+**修正内容** (bot-crafting.ts:1671-1681):
+```typescript
+// 修正前
+let furnaceBlock = bot.findBlock({
+  matching: mcData.blocksByName.furnace?.id,
+  maxDistance: 4,
+});
+
+// 修正後
+const furnaceIds = [
+  mcData.blocksByName.furnace?.id,
+  mcData.blocksByName.lit_furnace?.id
+].filter(id => id !== undefined);
+
+let furnaceBlock = bot.findBlock({
+  matching: (block) => furnaceIds.includes(block.type),
+  maxDistance: 4,
+});
+```
+
+同様に32ブロック範囲検索も修正。
+
+**Status**: ✅ 修正完了、次回smelt時に改善される
+
+**次手順**:
+1. Claude3 gold_ore採掘完了待ち
+2. raw_gold精錬 → gold_ingot x24確保
+3. gold armor作成＆装備
+4. Nether → blaze_rod x5狩り（Phase 8 Step 3）
+
+---
+
+## 🎉🎉🎉 BREAKTHROUGH - NETHER PORTAL WORKING (Session 160)
+
+### [2026-02-21] PORTAL #3 稼働確認✅✅✅
+
+**歴史的瞬間**:
+- Claude2が Portal #3 @ (9-10,111-113,2) でnether_portal blocks x6生成を確認✅
+- 90+ sessionsの苦闘（Session 1-154）が遂に報われた
+- Phase 8 Step 3 (blaze_rod x5狩り) 実行可能に！
+
+**Portal #3仕様**:
+- 座標: (9,111,2) base座標、Y=110-114高さ
+- フレーム: obsidian x14完成済み
+- nether_portal blocks: x6稼働中✅
+- 点火: flint_and_steel成功（Session 155）
+
+**Root Cause (Session 142判明)**:
+- Portal frame内部に水/lava/blocksがあるとnether_portal生成されない
+- Y>100高所建設で水を回避→成功
+
+**診断コード (Session 143追加)**:
+- validatePortalInterior() がnon-air blocks検出
+- 点火失敗時にブロッキング要素を座標付きで出力
+- これで90+ sessionのデバッグ悪夢が解決
+
+**Phase 8進捗**:
+- ✅ Step 1: Portal完成＆点火
+- ✅ Step 2: ender_pearl x12達成
+- 🔄 Step 3: blaze_rod x5入手（NOW POSSIBLE!）
+- ⏳ Step 4: Stronghold→ドラゴン討伐
+
