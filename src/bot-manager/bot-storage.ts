@@ -4,6 +4,44 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 
 /**
+ * Global chest access lock to prevent multi-bot sync bugs
+ * Key: "x,y,z" chest position, Value: timestamp of lock acquisition
+ */
+const chestLocks = new Map<string, number>();
+const LOCK_TIMEOUT_MS = 10000; // 10s max lock duration
+
+/**
+ * Acquire lock for chest access
+ * Returns true if lock acquired, false if chest is locked by another bot
+ */
+function acquireChestLock(x: number, y: number, z: number): boolean {
+  const lockKey = `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
+  const now = Date.now();
+
+  // Clean up expired locks
+  const expiredLocks = Array.from(chestLocks.entries())
+    .filter(([_, timestamp]) => now - timestamp > LOCK_TIMEOUT_MS);
+  expiredLocks.forEach(([key, _]) => chestLocks.delete(key));
+
+  // Check if chest is currently locked
+  if (chestLocks.has(lockKey)) {
+    return false; // Chest is locked
+  }
+
+  // Acquire lock
+  chestLocks.set(lockKey, now);
+  return true;
+}
+
+/**
+ * Release lock for chest access
+ */
+function releaseChestLock(x: number, y: number, z: number): void {
+  const lockKey = `${Math.floor(x)},${Math.floor(y)},${Math.floor(z)}`;
+  chestLocks.delete(lockKey);
+}
+
+/**
  * Open a chest and list its contents
  * Handles double chests by trying adjacent blocks if needed
  */
@@ -145,6 +183,22 @@ export async function storeInChest(
     await bot.pathfinder.goto(goal);
   }
 
+  // Acquire chest lock to prevent multi-bot sync bugs
+  let lockAcquired = acquireChestLock(chestPos.x, chestPos.y, chestPos.z);
+  let lockRetries = 0;
+  while (!lockAcquired && lockRetries < 5) {
+    console.error(`[Storage] Chest (${chestPos.x},${chestPos.y},${chestPos.z}) is locked by another bot. Waiting 2s... (retry ${lockRetries+1}/5)`);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    lockAcquired = acquireChestLock(chestPos.x, chestPos.y, chestPos.z);
+    lockRetries++;
+  }
+
+  if (!lockAcquired) {
+    throw new Error(`Failed to acquire chest lock after ${lockRetries} retries. Chest may be in use by another bot.`);
+  }
+
+  console.error(`[Storage] Lock acquired for chest (${chestPos.x},${chestPos.y},${chestPos.z}) by ${bot.username}`);
+
   // Wait a moment if chest was recently used (prevent timing issues)
   await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -162,6 +216,7 @@ export async function storeInChest(
     } catch (err) {
       retryCount++;
       if (retryCount >= maxRetries) {
+        releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
         throw new Error(`Failed to open chest after ${maxRetries} retries: ${err}`);
       }
       console.error(`[Storage] Chest open failed (attempt ${retryCount}/${maxRetries}), retrying in 2s...`);
@@ -174,6 +229,7 @@ export async function storeInChest(
 
   await chest.deposit(item.type, null, actualCount);
   chest.close();
+  releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
 
   const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
   return `Stored ${actualCount}x ${itemName} in chest at (${chestBlock.position.x}, ${chestBlock.position.y}, ${chestBlock.position.z}). Inventory: ${newInventory}`;
@@ -219,6 +275,22 @@ export async function takeFromChest(
     await bot.pathfinder.goto(goal);
   }
 
+  // Acquire chest lock to prevent multi-bot sync bugs
+  let lockAcquired = acquireChestLock(chestPos.x, chestPos.y, chestPos.z);
+  let lockRetries = 0;
+  while (!lockAcquired && lockRetries < 5) {
+    console.error(`[Storage] Chest (${chestPos.x},${chestPos.y},${chestPos.z}) is locked by another bot. Waiting 2s... (retry ${lockRetries+1}/5)`);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    lockAcquired = acquireChestLock(chestPos.x, chestPos.y, chestPos.z);
+    lockRetries++;
+  }
+
+  if (!lockAcquired) {
+    throw new Error(`Failed to acquire chest lock after ${lockRetries} retries. Chest may be in use by another bot.`);
+  }
+
+  console.error(`[Storage] Lock acquired for chest (${chestPos.x},${chestPos.y},${chestPos.z}) by ${bot.username}`);
+
   // Wait a moment if chest was recently used (prevent timing issues)
   await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -249,6 +321,7 @@ export async function takeFromChest(
   if (!item) {
     const chestContents = items.map((i: any) => `${i.name}(${i.count})`).join(", ") || "empty";
     chest.close();
+    releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
     throw new Error(`No ${itemName} in chest. Chest contains: ${chestContents}`);
   }
 
@@ -263,6 +336,7 @@ export async function takeFromChest(
     await chest.withdraw(item.type, null, actualCount);
   } catch (err) {
     chest.close();
+    releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
     throw new Error(`Failed to withdraw from chest: ${err}`);
   }
 
@@ -287,15 +361,18 @@ export async function takeFromChest(
 
     if (finalWithdrawn === 0) {
       chest.close();
+      releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
       throw new Error(`Failed to withdraw any ${itemName} from chest after 5s total wait. Requested ${actualCount} but got 0. ITEM MAY BE LOST IN VOID.`);
     }
 
     console.error(`[Storage] Recovery: ${finalWithdrawn}x ${itemName} appeared after extended wait.`);
     chest.close();
+    releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
     return `Took ${finalWithdrawn}x ${itemName} from chest (requested ${actualCount}, delayed sync). Inventory: ${bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ")}`;
   }
 
   chest.close();
+  releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
 
   // Additional wait for full inventory sync before returning
   await new Promise(resolve => setTimeout(resolve, 500));

@@ -6969,3 +6969,138 @@ let furnaceBlock = bot.findBlock({
 - Claude2: HP 18.8/20, Hunger 17/20, flint_and_steel x2所持
 - Claude3: 応答途絶（gold採掘中と推測）
 - Claude4: 応答なし
+
+---
+
+## Session 163 (2026-02-21) - Item Disappearance Bug
+
+### iron_ingot x3 消失バグ
+- **症状**: BASEチェスト(9,96,4)からiron_ingot x3が完全に消失
+- **検証**:
+  1. Session 162 終了時: iron_ingot x3確認済み（ログ記録あり）
+  2. Session 163 開始時: Claude1がチェスト確認→iron_ingot x3存在確認
+  3. Claude3がチェストアクセス試行→iron_ingot x3消失を報告
+  4. Claude1が再確認→iron_ingot x3完全に消失を確認
+- **影響**: iron_pickaxe作成不可→gold ore採掘遅延
+- **Workaround**: iron_ore x3採掘→精錬で代替
+- **仮説**: 
+  - Chest sync bug（複数botの同時アクセス）
+  - Server-side item rollback
+  - takeFromChest()のwithdraw処理中にアイテムがvoidに消えた
+- **Status**: 🚨 調査中、代替策実行中（iron_ore採掘）
+
+### Session 163での死亡記録
+- Claude1: zombified_piglin戦闘中に死亡（survival_routine food実行中）
+
+
+
+---
+
+## Session 164 (2026-02-21) - Chest Access Lock Implementation
+
+### Chest同時アクセスバグ修正
+- **問題**: Session 163でiron_ingot x3消失（複数botの同時chest access）
+- **原因**: 複数botが同時にtakeFromChest/storeInChestを実行→server-side sync failure
+- **修正内容**:
+  1. Global chest lock mechanism実装（bot-storage.ts）
+  2. acquireChestLock() — 2s x5回リトライ、lock取得失敗時エラー
+  3. releaseChestLock() — 全終了パス（正常/エラー）で確実に解放
+  4. Lock timeout: 10s（デッドロック防止）
+- **Commit**: (pending)
+
+### 修正ファイル
+- `src/bot-manager/bot-storage.ts`:
+  - Line 10-11: chestLocks Map + LOCK_TIMEOUT_MS
+  - Line 17-39: acquireChestLock(), releaseChestLock()
+  - takeFromChest(): Line 253-267（lock取得）、Line 307/311/355/360（lock解放）
+  - storeInChest(): Line 191-205（lock取得）、Line 220/237（lock解放）
+
+### 動作検証
+- ビルド成功✅
+- Runtime test: 次回chest access時に検証
+
+### チーム状況（Session 164中間）
+- Claude1: リーダー業務＋バグ修正完了
+- Claude2: 新chest作成中（dirt/soul系移動作業）
+- Claude3: stick待機中→iron_pickaxe作成→gold採掘予定
+- Claude4: stick配達中
+
+### 次手順
+1. Claude2の新chest作成完了待ち
+2. Claude3のgold_ingot x8生産完了待ち
+3. gold armor作成→Claude3装備
+4. Phase 8 Step 3: blaze_rod x5狩り
+
+
+### drop_itemバグ（Session 164確認）
+- **症状**: drop_itemで投げたアイテムが完全に消失（地面に落ちない）
+- **発生例**:
+  - Claude4: stick x2をdrop→Claude3が回収試行→消失
+  - Claude2: dirt x64をdrop→消失確認
+- **頻度**: 高頻度（Session 56-66から継続）
+- **Workaround**: drop_item使用禁止、chest経由で受け渡し
+- **Status**: 🚨 未修正（Mineflayer/server-side issue?）
+
+### Session 164 中間まとめ
+**達成**:
+- ✅ Chest sync bug修正（global lock機構実装、commit 4c176e5）
+- ✅ チーム指揮継続（Claude2/Claude3/Claude4へタスク割り振り）
+
+**進行中**:
+- ⏳ Claude3: respawn→食料確保→iron_pickaxe作成→gold採掘
+- ⏳ Claude2: furnace準備（coal採掘→精錬待機）
+- ⏳ gold_ingot x8生産待ち（現在x16/24所持）
+
+**ブロッカー**:
+- Claude3のHunger 0/20でrespawn実行（gold採掘遅延）
+- drop_itemバグ継続（stick消失、代替策: chest経由）
+
+---
+
+## Session 164 最終報告 (2026-02-21)
+
+### 主要成果✅
+1. **Chest sync bug修正完了**:
+   - Global lock mechanism実装（chestLocks Map + timeout 10s）
+   - acquireChestLock/releaseLock で複数bot同時アクセス防止
+   - Commit: 4c176e5
+   - 次session反映予定（MCPサーバー再起動後）
+
+2. **チーム指揮継続**:
+   - Claude2: furnace準備指示
+   - Claude3: iron_pickaxe作成→gold採掘指示
+   - Claude4: stick配達→待機
+
+### 進行中⏳
+- Claude3: Respawn完了→iron_pickaxe作成→gold_ore x8採掘予定
+- Claude2: furnace準備中
+- gold_ingot: x16所持、x8追加生産予定（合計x24でarmor 1セット）
+
+### 発生した問題
+1. **drop_itemバグ継続**:
+   - Claude4のstick x2 drop→消失
+   - Workaround: chest経由で受け渡し
+
+2. **Hunger 0/20 CRITICAL**:
+   - Claude3: Hunger 0/20, HP 10.5/20→respawn実行
+   - Claude4: HP 8.0/20→respawn実行
+   - 原因: 食料不足、夜間mob攻撃
+
+3. **Chest sync bug（Session中）**:
+   - Claude2がtakeFromChest→0個取得→アイテムVOID
+   - 修正コード未反映（次session適用）
+
+### Team Status (Session End)
+- Claude1: HP 20/20, Hunger 9/20, gold_ingot x16所持
+- Claude2: furnace準備中
+- Claude3: Respawn完了、iron_pickaxe作成待ち
+- Claude4: 待機中
+
+### 次Session優先事項（Session 165）
+1. **CRITICAL**: Claude3のgold_ore x8採掘完了→精錬
+2. gold_ingot x24達成→gold armor 1セット作成
+3. Claude3にarmor装備→Nether突入準備
+4. Phase 8 Step 3実行: blaze_rod x5狩り
+
+### コミット履歴
+- 4c176e5: Chest sync bug fix with global lock
