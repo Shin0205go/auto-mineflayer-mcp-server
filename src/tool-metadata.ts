@@ -47,6 +47,7 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
   // Movement
   minecraft_get_position: { tags: ["info", "position", "location", "coordinates"], category: "info", priority: 7 },
   minecraft_move_to: { tags: ["movement", "move", "travel", "goto"], category: "movement", priority: 7 },
+  minecraft_enter_portal: { tags: ["movement", "portal", "nether", "teleport", "travel"], category: "movement", priority: 8 },
 
   // Combat & Survival
   minecraft_get_status: { tags: ["info", "status", "health", "hunger", "hp"], category: "info", priority: 9 },

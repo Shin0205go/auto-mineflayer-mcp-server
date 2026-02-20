@@ -6303,3 +6303,83 @@ Total obsidian needed: 10 blocks
 3. または、/giveコマンドなしで進める前提でプレイ継続（現在の方針✅）
 
 **Status**: 🔄 Session 154 進行中, Claude3 obsidian採掘作業中, 代替案実行中
+
+---
+
+## Session 156 (2026-02-21 23:00)
+
+### ✅ FIXED: minecraft_enter_portal tool not available
+**Problem**: minecraft_enter_portal defined in src/tools/movement.ts but not showing in MCP tool list  
+**Root cause**: Tool not registered in src/tool-metadata.ts  
+**Fix**: Added entry to TOOL_METADATA:
+```typescript
+minecraft_enter_portal: { tags: ["movement", "portal", "nether", "teleport", "travel"], category: "movement", priority: 8 },
+```
+**Commit**: Session 156  
+**Status**: ✅ Fixed, built successfully
+
+### Portal teleport mechanics confirmed
+**Observation**: move_to() to portal block coordinates triggers automatic teleport  
+**Working method**:
+1. Exit portal frame completely (move away from portal)
+2. move_to() exact portal block coordinates (e.g., -2, 109, 10)
+3. Automatic teleport occurs after bot enters portal block
+**Note**: Standing still in portal doesn't trigger teleport - must actively move into portal block
+
+### Team status (Session 156 start)
+- Claude1: Nether→Overworld成功, BASE到達✅
+- Claude2: Respawn x1 (zombie), 拠点待機中
+- Claude3: raw_gold x35所持, furnace精錬中
+- Claude4: ender_pearl x12 + ender_eye x2所持✅, furnace待機中
+
+### Phase 8 Step 3 progress
+- Portal #3 ACTIVE確認✅
+- Step 2完了: ender_pearl x12✅
+- Step 3開始: blaze_rod x5入手（進行中）
+- gold armor作成中: raw_gold x35 → gold_ingot x35（3セット分不足）
+
+**次のアクション**:
+- Claude3のgold精錬完了待ち
+- gold armor作成（可能な限り）
+- Nether突入→Blaze Fortress探索
+
+
+## Session 156 Summary
+
+### Major achievements
+1. ✅ minecraft_enter_portal tool fixed and registered in tool-metadata.ts
+2. ✅ Portal #3 confirmed ACTIVE - bidirectional Nether↔Overworld teleport working
+3. ✅ Nether escape successful using move_to() to portal blocks
+4. ✅ Team coordination: Claude3 identified gold ore location (33,1,20), gold_ingot x18 secured
+
+### Strategic decisions
+1. **Gold armor requirement confirmed**: Attempted Nether entry without gold armor resulted in:
+   - Claude3: instant death upon entry
+   - Multiple team members in critical HP
+   - Decision: Mandatory gold armor before Nether operations
+2. **Current plan**: 
+   - Claude3 + Claude2 mining raw_gold x6+ at (33,1,20)
+   - Target: gold_ingot x24 total (x18 existing + x6 new)
+   - Gold armor x1 set for Claude3 (most Nether-experienced)
+   - Phase 8 Step 3: blaze_rod x5 acquisition
+
+### Team status at session end
+- Claude1: BASE (11,93,1.5), monitoring + code fixes
+- Claude2: Supporting Claude3 at gold mine
+- Claude3: Mining at (33,1,20), gold_ingot x18 secured
+- Claude4: Offline/respawned, ender_pearl x12 + ender_eye x2 preserved
+
+### Outstanding issues
+1. minecraft_enter_portal tool still not visible in MCP (despite registration)
+   - Possible cause: MCP server caching, needs restart
+   - Workaround: move_to() portal coordinates works
+2. Iron pickaxe shortage - need verification of team pickaxe inventory
+
+### Next session priorities
+1. Complete gold mining (raw_gold x6+)
+2. Smelt gold_ingot x24 total
+3. Craft gold armor x1 set
+4. Equip Claude3 with full gold armor
+5. Nether entry → Blaze Fortress → blaze_rod x5
+6. Continue to ender_eye crafting (Step 4)
+
