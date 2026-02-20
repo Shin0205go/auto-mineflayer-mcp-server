@@ -5384,3 +5384,90 @@ Possible causes: inventory sync bug, respawn timing, or user misreporting item l
 - NOT a bug
 - Total confirmed: Claude2 x1 + Claude3 x5 = x6/14 secured
 - Claude2 mining x8 more for total x14
+
+---
+
+## Session 144 (2026-02-20) - Item Drop Bug on Obsidian Mining
+
+### CRITICAL: Obsidian Does NOT Drop When Mined
+
+**Reporter**: Claude2
+**Timestamp**: Session 144, 2026-02-20
+
+**Symptom**:
+- Claude2 mined obsidian at (9,114,2) with diamond_pickaxe equipped ✅
+- **NO items dropped** - ground completely empty after mining
+- `minecraft_collect_items()` returned "No items nearby"
+- Inventory obsidian count unchanged (x1 before, x1 after)
+
+**Confirmed Details**:
+1. **Correct tool**: diamond_pickaxe equipped (verified via `get_surroundings` showing "hand: diamond_pickaxe")
+2. **Tool requirement met**: obsidian requires diamond_pickaxe or better ✅
+3. **No visual drop**: Claude2 confirmed no items visible on ground immediately after mining
+4. **Gamerule fix attempted**: FAILED - doTileDrops setting had no effect
+
+**Hypotheses**:
+1. **Non-opped bot limitation**: Bots may not receive item drops from certain blocks when not opped
+2. **Server-side issue**: Minecraft server may have additional restrictions on block drops
+3. **Mineflayer bug**: Item collection may fail for obsidian specifically
+4. **Chunk/region issue**: Specific coordinates may have drop restrictions
+
+**Workaround**:
+- Use EXISTING obsidian blocks from Portal #1 (7-10,110,2) instead of mining new ones
+- Portal #1 has x7 obsidian blocks already placed - can be mined and collected
+
+**Status**: UNRESOLVED - root cause unknown
+**Priority**: HIGH - blocks obsidian collection for Portal #3
+**Next Steps**: 
+1. Test if Portal #1 obsidian blocks drop items when mined
+2. If bug persists, investigate server configuration
+3. Check if other blocks have same issue (iron_ore, diamond_ore, etc.)
+
+
+---
+
+## Session 144 Summary - Obsidian Collection & Bucket Bug
+
+### Achievements ✅
+1. **Obsidian x7 secured** in BASE chest (9,96,4)
+   - Claude3: x5
+   - Claude4: x1  
+   - Claude2: x1
+2. **Team coordination improved** - All 4 bots (Claude1-4) connected and working together
+3. **Respawn strategy validated** - keepInventory ON保護でdiamond_pickaxe/ender_pearl等保持成功
+
+### Critical Issues ❌
+1. **Item Drop Bug (PARTIAL RESOLUTION)**:
+   - **Claude2**: diamond_pickaxe装備でobsidian採掘→drop x0 ❌
+   - **Claude3**: diamond_axe装備でobsidian採掘→drop x0 ✅ (EXPECTED - axe cannot mine obsidian)
+   - **Root Cause**: Claude3's case was NOT a bug - obsidian requires diamond_pickaxe or better
+   - **Remaining Issue**: Claude2's diamond_pickaxe drop bug still unresolved
+
+2. **Bucket→Water_Bucket Conversion Bug (RECURRING)**:
+   - **Claude4**: bucket x1でwater (8,89,4)にuse実行→変換されず❌
+   - **Session**: 125+ 既知bug再発
+   - **Impact**: Cannot generate obsidian via lava + water method
+   - **Status**: UNRESOLVED - requires code fix in bot-blocks.ts
+
+3. **Eternal Night Danger**:
+   - time=15628固定（non-opped bots cannot /time set）
+   - 夜間移動で全員が繰り返しSkeleton/Zombie死
+   - Claude2: 落下死 x2
+   - Claude3: Skeleton死 x2  
+   - Claude4: 落下死 x1
+
+### Current Status
+- **Obsidian**: x7/10 (need x3 more for minimum portal size)
+- **Diamond_pickaxe**: Claude2所持 x1 (team's only pickaxe)
+- **Ender_pearl**: Claude4 x11
+- **Ender_eye**: Claude3 x2
+
+### Next Session Plan
+1. **Fix bucket bug** - Investigate bot-blocks.ts useItemOnBlock() for bucket handling
+2. **Portal #1 obsidian recovery** - Claude2 diamond_pickaxeで既存obsidian x7採掘
+3. **Portal #3 construction** - obsidian x10確保後、(8-11,109-113,2) @ Y=110で建設→点火
+
+### Code Tasks for Claude1
+- [ ] Investigate bucket→water_bucket conversion in src/bot-manager/bot-blocks.ts
+- [ ] Review dig_block autoCollect logic for obsidian-specific issues
+- [ ] Consider safer night-time navigation strategies
