@@ -7031,3 +7031,76 @@ let furnaceBlock = bot.findBlock({
 3. gold armor作成→Claude3装備
 4. Phase 8 Step 3: blaze_rod x5狩り
 
+
+### drop_itemバグ（Session 164確認）
+- **症状**: drop_itemで投げたアイテムが完全に消失（地面に落ちない）
+- **発生例**:
+  - Claude4: stick x2をdrop→Claude3が回収試行→消失
+  - Claude2: dirt x64をdrop→消失確認
+- **頻度**: 高頻度（Session 56-66から継続）
+- **Workaround**: drop_item使用禁止、chest経由で受け渡し
+- **Status**: 🚨 未修正（Mineflayer/server-side issue?）
+
+### Session 164 中間まとめ
+**達成**:
+- ✅ Chest sync bug修正（global lock機構実装、commit 4c176e5）
+- ✅ チーム指揮継続（Claude2/Claude3/Claude4へタスク割り振り）
+
+**進行中**:
+- ⏳ Claude3: respawn→食料確保→iron_pickaxe作成→gold採掘
+- ⏳ Claude2: furnace準備（coal採掘→精錬待機）
+- ⏳ gold_ingot x8生産待ち（現在x16/24所持）
+
+**ブロッカー**:
+- Claude3のHunger 0/20でrespawn実行（gold採掘遅延）
+- drop_itemバグ継続（stick消失、代替策: chest経由）
+
+---
+
+## Session 164 最終報告 (2026-02-21)
+
+### 主要成果✅
+1. **Chest sync bug修正完了**:
+   - Global lock mechanism実装（chestLocks Map + timeout 10s）
+   - acquireChestLock/releaseLock で複数bot同時アクセス防止
+   - Commit: 4c176e5
+   - 次session反映予定（MCPサーバー再起動後）
+
+2. **チーム指揮継続**:
+   - Claude2: furnace準備指示
+   - Claude3: iron_pickaxe作成→gold採掘指示
+   - Claude4: stick配達→待機
+
+### 進行中⏳
+- Claude3: Respawn完了→iron_pickaxe作成→gold_ore x8採掘予定
+- Claude2: furnace準備中
+- gold_ingot: x16所持、x8追加生産予定（合計x24でarmor 1セット）
+
+### 発生した問題
+1. **drop_itemバグ継続**:
+   - Claude4のstick x2 drop→消失
+   - Workaround: chest経由で受け渡し
+
+2. **Hunger 0/20 CRITICAL**:
+   - Claude3: Hunger 0/20, HP 10.5/20→respawn実行
+   - Claude4: HP 8.0/20→respawn実行
+   - 原因: 食料不足、夜間mob攻撃
+
+3. **Chest sync bug（Session中）**:
+   - Claude2がtakeFromChest→0個取得→アイテムVOID
+   - 修正コード未反映（次session適用）
+
+### Team Status (Session End)
+- Claude1: HP 20/20, Hunger 9/20, gold_ingot x16所持
+- Claude2: furnace準備中
+- Claude3: Respawn完了、iron_pickaxe作成待ち
+- Claude4: 待機中
+
+### 次Session優先事項（Session 165）
+1. **CRITICAL**: Claude3のgold_ore x8採掘完了→精錬
+2. gold_ingot x24達成→gold armor 1セット作成
+3. Claude3にarmor装備→Nether突入準備
+4. Phase 8 Step 3実行: blaze_rod x5狩り
+
+### コミット履歴
+- 4c176e5: Chest sync bug fix with global lock
