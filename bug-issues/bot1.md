@@ -7162,3 +7162,78 @@ let furnaceBlock = bot.findBlock({
 
 ### コミット履歴
 - 4c176e5: Chest sync bug fix with global lock
+
+
+---
+
+## Session 167 進行中 (2026-02-21)
+
+### 🚨 CRITICAL: ender_pearl x12 消失疑惑
+
+**発生状況**:
+- MEMORY.md Session 167記載: "ender_pearl x12 — 確保済み✅（BASEチェスト保管済み）"
+- 現実: BASEチェスト(9,96,4)にender_pearl存在せず
+- Claude1インベントリにも存在せず（respawn後）
+- 32ブロック範囲内に他のchestなし
+
+**考えられる原因**:
+1. Claude4が所持中でチェスト保管していない
+2. Respawn時にkeepInventory ONでもender_pearlのみ消失？
+3. Chest sync bugの残存影響
+
+**対応中**:
+- Claude4へインベントリ全報告要求（チャット送信済み）
+- ender_pearl再取得が必要な場合、Enderman狩り再開
+
+**影響**:
+- Phase 8 Step 3: ender_eye x10作成にender_pearl x10必要
+- 現在ender_eye x2のみ → 追加でx10必要 → ender_pearl x10必須
+
+**Next Action**:
+- Claude4応答待ち
+- 応答なし/所持していない場合 → Enderman狩り指示
+
+### Phase 8 Step 3 進捗
+
+**実行中**:
+- ✅ Claude3: Gold armor全装備でNether突入成功
+- ⏳ Claude3: Nether fortress探索→blaze_rod x5狩り中
+- 🚨 ender_pearl x12所在不明（上記参照）
+
+**チーム状況**:
+- Claude1: BASE(8.3,95.9,1.5), HP 20/20, リーダー業務
+- Claude2: 応答なし（オフライン？）
+- Claude3: Nether, blaze_rod狩り実行中
+- Claude4: 応答なし（ender_pearl所在確認中）
+
+
+
+
+### pillar_up失敗バグ修正（Session 167）
+
+**症状**:
+- pillar_up呼び出しで "Failed to pillar up. No blocks placed." エラー
+- 発生状況: ladderの上にいる時（位置 (1.5, 86.0, 5.5)）
+- cobblestone x1051所持にも関わらず失敗
+
+**根本原因**:
+- bot-movement.ts:650 isNonSolid()関数にladderが含まれていない
+- ladderを「solid ground」と誤認→blockBelow探索でladder選択→placeBlock失敗→blocksPlaced=0
+
+**修正内容**:
+```typescript
+// bot-movement.ts line 650-654
+const isNonSolid = (name: string) => {
+  return name === "air" || name === "cave_air" || name === "void_air" ||
+         name === "water" || name === "lava" || name.includes("sign") ||
+         name.includes("torch") || name.includes("carpet") || name === "snow" ||
+         name.includes("ladder") || name.includes("vine");  // ← 追加
+};
+```
+
+**修正ファイル**:
+- src/bot-manager/bot-movement.ts: line 650-654
+
+**検証**: 次回ladder上でpillar_up実行時に確認
+
+
