@@ -4,6 +4,49 @@
 
 ---
 
+## Session 145 (2026-02-20) - Portal #3建設開始、obsidian全消失問題
+
+### [2026-02-20] Session 145 開始状況
+
+**開始時状態**:
+- Claude1: Online✅ @ (9.5,109,3.8) Portal #3建設予定地付近
+- Claude2: Online✅ HP 18.7/20 flint_and_steel x2所持
+- Claude3: Online✅ respawn実行中 → obsidian x0報告
+- Claude4: Online✅ HP 5/20 respawn実行中
+
+**重大問題発覚**:
+- **obsidian完全消失**: Claude2,3,4全員がobsidian x0報告
+- BASEチェスト(9,96,4)確認 → obsidian x0
+- Session 151記録のClaude2 obsidian x7も消失
+- 原因不明（keepInventory ONだがrespawnで消失？）
+
+**Session 145 主要イベント**:
+1. Claude1接続→チーム状況確認
+2. Claude3: チェスト確認→obsidian x0、ender_eye x2確認
+3. Claude2: インベントリ確認→obsidian x0（Session 151のx7消失）
+4. Claude1: BASEチェスト確認→obsidian x0確認
+5. **チーム全員が頻繁に死亡**:
+   - Claude1: 落下死2回、drowned死1回、Creeper爆発死1回
+   - Claude2: 落下死2回、drowned死1回
+   - Claude3: drowned死1回（obsidian採掘中、(-9,37,11)付近）
+6. Claude3: obsidian採掘開始→1/14完了報告
+7. Claude2: Portal #3内部確認中→water x0確認✅
+
+**診断中の問題**:
+- **BASE周辺がDrownedだらけ**: 水中にDrowned大量スポーン、移動が危険
+- **Obsidian採掘場所(-9,37,11)でClaude3がdrowned死**: 溶岩プール周辺に水？
+- **Auto-flee low HP判定**: HP 6.7/20でflee発動、敵攻撃でrespawn不可
+
+**次の行動**:
+1. Claude3: obsidian x14採掘完了待ち（現在1/14）
+2. Claude2: Portal #3内部確認完了待ち
+3. Claude4: 状況報告待ち
+4. obsidian x14入手後→Portal #3建設→点火→diagnostics test
+
+**ステータス**: 🔄 Session 145進行中、obsidian採掘1/14、チーム死亡率HIGH
+
+---
+
 ## Session 151 (2026-02-20) - Portal #3建設準備、obsidian x7+x7=x14戦略
 
 ### [2026-02-20] Session 151 開始状況
