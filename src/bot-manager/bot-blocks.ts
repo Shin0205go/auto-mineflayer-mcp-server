@@ -1216,6 +1216,66 @@ export async function activateBlock(
 }
 
 /**
+ * Validate nether portal interior for non-air blocks
+ * Returns array of non-air block descriptions found inside portal frame
+ */
+function validatePortalInterior(bot: any, frameBlocks: Vec3[]): string[] {
+  if (frameBlocks.length < 10) {
+    return [`[PORTAL DEBUG] Frame too small (${frameBlocks.length} blocks), need at least 10 obsidian for valid portal`];
+  }
+
+  // Detect portal orientation by checking if frame blocks share X or Z coordinates
+  const xCoords = [...new Set(frameBlocks.map(b => b.x))];
+  const zCoords = [...new Set(frameBlocks.map(b => b.z))];
+
+  // Portal is X-aligned if it has 2 distinct X coords (portal spans X axis)
+  // Portal is Z-aligned if it has 2 distinct Z coords (portal spans Z axis)
+  const isXAligned = xCoords.length === 2 && zCoords.length >= 3;
+  const isZAligned = zCoords.length === 2 && xCoords.length >= 3;
+
+  if (!isXAligned && !isZAligned) {
+    return [`[PORTAL DEBUG] Cannot determine portal orientation. X coords: ${xCoords.length}, Z coords: ${zCoords.length}`];
+  }
+
+  // Get interior bounds
+  const minX = Math.min(...frameBlocks.map(b => b.x));
+  const maxX = Math.max(...frameBlocks.map(b => b.x));
+  const minY = Math.min(...frameBlocks.map(b => b.y));
+  const maxY = Math.max(...frameBlocks.map(b => b.y));
+  const minZ = Math.min(...frameBlocks.map(b => b.z));
+  const maxZ = Math.max(...frameBlocks.map(b => b.z));
+
+  const nonAirBlocks: string[] = [];
+
+  // Check interior coordinates (excluding frame edges)
+  if (isXAligned) {
+    // Portal spans X axis, interior is between the two X coordinates
+    const interiorX = minX + 1;
+    for (let y = minY + 1; y < maxY; y++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        const block = bot.blockAt(new Vec3(interiorX, y, z));
+        if (block && block.name !== "air" && block.name !== "nether_portal") {
+          nonAirBlocks.push(`(${interiorX},${y},${z}):${block.name}`);
+        }
+      }
+    }
+  } else if (isZAligned) {
+    // Portal spans Z axis, interior is between the two Z coordinates
+    const interiorZ = minZ + 1;
+    for (let y = minY + 1; y < maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const block = bot.blockAt(new Vec3(x, y, interiorZ));
+        if (block && block.name !== "air" && block.name !== "nether_portal") {
+          nonAirBlocks.push(`(${x},${y},${interiorZ}):${block.name}`);
+        }
+      }
+    }
+  }
+
+  return nonAirBlocks;
+}
+
+/**
  * Use an item on a block (bucket on water/lava, flint_and_steel, bone_meal, etc.)
  */
 export async function useItemOnBlock(
@@ -1615,6 +1675,38 @@ export async function useItemOnBlock(
           bot.deactivateItem();
         } catch (e) {
           console.error(`[DEBUG] flint_and_steel activateItem failed: ${e}`);
+        }
+      }
+
+      // Portal interior validation diagnostics - run after all ignition attempts fail
+      if (!ignited) {
+        console.error(`[PORTAL DEBUG] Portal ignition FAILED after all attempts. Running interior validation...`);
+
+        // Find nearby obsidian blocks to detect portal frame
+        const nearbyObsidian: Vec3[] = [];
+        for (let dx = -5; dx <= 5; dx++) {
+          for (let dy = -5; dy <= 5; dy++) {
+            for (let dz = -5; dz <= 5; dz++) {
+              const checkPos = pos.offset(dx, dy, dz);
+              const checkBlock = bot.blockAt(checkPos);
+              if (checkBlock?.name === "obsidian") {
+                nearbyObsidian.push(checkPos);
+              }
+            }
+          }
+        }
+
+        if (nearbyObsidian.length >= 10) {
+          const nonAirBlocks = validatePortalInterior(bot, nearbyObsidian);
+          if (nonAirBlocks.length > 0) {
+            console.error(`[PORTAL DEBUG] Non-air blocks found in portal interior (${nonAirBlocks.length}):`);
+            nonAirBlocks.forEach(blockInfo => console.error(`  - ${blockInfo}`));
+            console.error(`[PORTAL DEBUG] Remove these blocks with dig_block, then re-ignite with flint_and_steel.`);
+          } else {
+            console.error(`[PORTAL DEBUG] Portal interior is clear (all air). Ignition failure cause unknown.`);
+          }
+        } else {
+          console.error(`[PORTAL DEBUG] Found ${nearbyObsidian.length} obsidian blocks nearby (need ≥10 for portal frame).`);
         }
       }
     } else {

@@ -5140,3 +5140,65 @@ Possible causes: inventory sync bug, respawn timing, or user misreporting item l
 
 **NOTE**: Portal diagnostics code (Session 143+) inactive - requires MCP server restart
 
+
+## Session 2026-02-20 - Portal Diagnostics Code Investigation
+
+### Finding: validatePortalInterior() DOES NOT EXIST
+
+**Investigation**: Session 143+ bug log claims "validatePortalInterior() function added to bot-blocks.ts line ~1220"
+**Reality**: grep search confirms NO validatePortalInterior function exists anywhere in src/
+
+**Current flint_and_steel implementation** (bot-blocks.ts lines 1488-1619):
+- Tries 3 methods: activateBlock on faces, block_place on adjacent blocks, activateItem
+- Checks if nether_portal blocks appeared within 20 blocks
+- Does NOT validate portal interior for non-air blocks (water/lava/dirt/etc.)
+- Does NOT provide diagnostic output when ignition fails
+
+**Consequence**: 
+- Portal #1 failed 90+ sessions (unknown cause)
+- Portal #2 failed (water in interior discovered manually by Claude2/3)
+- No automated way to detect WHY portal ignition fails
+
+**Action Required**:
+- Add validatePortalInterior() helper function to detect non-air blocks in portal frame interior
+- Call this function AFTER all flint_and_steel ignition attempts fail
+- Output diagnostic: list all non-air blocks found with coordinates
+- Guide user to remove blocking blocks before re-ignition
+
+
+### Code Fix Implemented: validatePortalInterior() + Diagnostics
+
+**File**: `src/bot-manager/bot-blocks.ts`
+
+**Changes**:
+1. Added `validatePortalInterior(bot, frameBlocks)` helper function (line ~1222)
+   - Detects portal orientation (X-aligned vs Z-aligned)
+   - Scans interior coordinates for non-air blocks
+   - Returns array of blocking block descriptions: "(x,y,z):block_name"
+
+2. Added portal diagnostics in flint_and_steel section (after line 1679)
+   - Runs AFTER all 3 ignition attempts fail
+   - Searches 11x11x11 cube around ignition point for obsidian blocks
+   - If ≥10 obsidian found, calls validatePortalInterior()
+   - Outputs to console:
+     - List of non-air blocks in portal interior with coordinates
+     - Guidance to remove blocks with dig_block
+     - If interior is clear, reports "cause unknown"
+
+**Expected Output** (when portal ignition fails):
+```
+[PORTAL DEBUG] Portal ignition FAILED after all attempts. Running interior validation...
+[PORTAL DEBUG] Non-air blocks found in portal interior (3):
+  - (8,111,2):water
+  - (9,112,2):dirt
+  - (10,111,3):cobblestone
+[PORTAL DEBUG] Remove these blocks with dig_block, then re-ignite with flint_and_steel.
+```
+
+**Build Status**: ✅ Compiled successfully (npm run build)
+
+**Next Steps**:
+1. Test on Portal #3 after Claude3 completes obsidian mining
+2. If diagnostics work, this solves the 90+ session Portal #1/#2 debug nightmare
+3. Update MEMORY.md to note this fix is NOW ACTIVE (unlike Session 143 claim)
+
