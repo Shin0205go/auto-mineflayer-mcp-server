@@ -6847,3 +6847,27 @@ let furnaceBlock = bot.findBlock({
 - 🔄 Step 3: blaze_rod x5入手（NOW POSSIBLE!）
 - ⏳ Step 4: Stronghold→ドラゴン討伐
 
+
+## [Session 160] CRITICAL BUG - gold_ingot x19 消失
+
+**症状**:
+- BASEチェスト(9,96,4)内のgold_ingot x19が完全消失
+- minecraft_open_chest()で確認: gold_ingot項目なし
+- minecraft_take_from_chest()失敗: "got 0"
+
+**Timeline**:
+1. Session開始時: gold_ingot x19確認済み（open_chest結果）
+2. 途中経過: チェストに他アイテム追加/削除なし
+3. 再確認: gold_ingot消失、他アイテムは残存
+
+**推測原因**: Chest sync bug再発
+- 複数ボットが同時にchest操作？
+- サーバー再起動なし
+- アイテム数が変動するタイミングで消失？
+
+**Workaround**:
+- Claude3/Claude2がgold_ore採掘中→新規gold_ingot入手で回避
+- BASEチェスト満杯問題あり→別chest使用推奨
+
+**Status**: 🚨 調査中、代替策実行中
+
