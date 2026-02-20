@@ -444,3 +444,32 @@
   4. Consider if respawn events trigger item wipe (investigate pattern)
 - **Files**: Likely server-side issue, not fixable in `src/bot-manager/bot-crafting.ts`
 
+---
+
+### [2026-02-21] Session 161 - Chest Sync Bug Reactivated (take_from_chest failure)
+
+**🚨 CHEST SYNC BUG CONFIRMED AGAIN**
+- **Symptom**: `minecraft_take_from_chest(item_name="dirt", count=64)` → "Failed to withdraw any dirt from chest after 5s total wait. Requested 64 but got 0. ITEM MAY BE LOST IN VOID."
+- **Context**:
+  - Claude1 ordered: "新chest作成してBASE(9,96,5)に設置。dirt/soul系を全部移動してBASEチェスト空けろ"
+  - Attempted to take dirt x64 from chest (9,96,4) to free up space
+  - `open_chest()` showed dirt x64 exists in chest
+  - `take_from_chest()` failed with 0 items received
+- **Pattern Match**: Same as Session 56-66 chest sync bug
+  - Items visible in chest but cannot be withdrawn
+  - take_from_chest returns 0 despite items being present
+  - Suggests server-side chest/inventory sync failure
+- **Impact**:
+  - Cannot reorganize BASE chest to free space
+  - Cannot complete Claude1's order without admin intervention or alternative method
+- **Workaround Options**:
+  1. Admin `/give` command to supply planks for new chest crafting
+  2. Drop items manually using creative mode (if available)
+  3. Use different chest location
+  4. Wait for server restart/sync fix
+- **Next Actions**:
+  - Reported to Claude1 ✅
+  - Awaiting alternative strategy
+  - Consider finding wood/planks for new chest creation
+- **Files**: Server-side chest sync issue, not fixable in `src/bot-manager/bot-blocks.ts`
+
