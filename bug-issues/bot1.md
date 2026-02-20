@@ -5330,3 +5330,57 @@ Possible causes: inventory sync bug, respawn timing, or user misreporting item l
 
 **Action**: Claude3 mining obsidian x12 from Y=111-114 structure
 **Status**: BUG RESOLVED — No code changes needed
+
+
+## Session 2026-02-20-current - Phase 8 Obsidian Collection Progress
+
+### Session Start Status
+- **Claude1**: Leader @ BASE, monitoring team and giving orders
+- **Claude2**: BASE → Portal #1 mining assignment
+- **Claude3**: Portal #1 obsidian mining (fell from height x2, respawned)
+- **Claude4**: Fell from height → respawned → BASE waiting with ender_pearl x11
+
+### Key Events
+1. Claude3 attempted Portal #1 (Y=110) obsidian mining → fell x2 → reported high-risk
+2. Reassigned Claude2 to Y=111-114 obsidian mining (safer, has diamond_pickaxe)
+3. Claude3 successfully mined obsidian x3 → stored in BASE chest
+4. Claude4 confirmed ender_pearl x11 secured ✅
+5. Current chest status: obsidian x5/14
+
+### Team Coordination
+- All bots responded to leader commands promptly ✅
+- Respawn strategy working perfectly (keepInventory ON)
+- Safety adjustments made (night operations halted, high-risk mining reassigned)
+
+### Current Status
+- **Obsidian**: x5/14 in BASE chest (9,96,4)
+- **Claude2**: Mining obsidian x9 at Y=111-114
+- **Claude3**: BASE waiting, ready to assist
+- **Claude4**: BASE waiting, ender_pearl x11 secured
+- **Next**: Claude2 completes mining → Portal #3 construction begins
+
+### No Bugs Found This Session
+- All tools functioning correctly
+- Team coordination smooth
+- Respawn mechanism working as designed
+
+### CRITICAL: Obsidian Disappearance from BASE Chest (Session 2026-02-20)
+
+**Issue**: Obsidian x5 disappeared from BASE chest (9,96,4)
+- **Stored**: Session start - Claude3 stored obsidian x3, total x5 confirmed
+- **Disappeared**: ~10 minutes later - Claude3 checked chest, obsidian x0
+- **Possible causes**:
+  1. Claude2 took obsidian x5 (unconfirmed - waiting for response)
+  2. Chest item disappearance bug (recurring issue from previous sessions)
+  3. Server lag/desync
+
+**Impact**: 
+- Need to verify total obsidian count before Portal #3 construction
+- May need Claude2 to mine additional obsidian
+
+**Status**: Investigating - waiting for Claude2's inventory report
+
+**RESOLUTION**: FALSE ALARM - Claude3 had obsidian x5 in inventory (took from chest earlier)
+- NOT a bug
+- Total confirmed: Claude2 x1 + Claude3 x5 = x6/14 secured
+- Claude2 mining x8 more for total x14
