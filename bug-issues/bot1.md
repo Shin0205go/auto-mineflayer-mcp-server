@@ -4,6 +4,66 @@
 
 ---
 
+## Session 159 (2026-02-21) - Respawn戦略実行、iron_ore採掘継続
+
+### [2026-02-21] Session 159 開始状況
+
+**開始時状態**:
+- Claude1: Online✅ HP 8/20 Hunger 3/20（餓死寸前）
+- Claude2: Online✅ HP 4.5/20 Hunger 0/20（餓死寸前）
+- Claude3: Online✅ Nether内、Blaze spawner (271,53,-158)へ向かっている
+- Claude4: Offline/応答なし（ender_pearl x12 + ender_eye x2預託済み✅）
+
+**Session 159 主要イベント**:
+1. 接続直後チェック→BASEチェストに食料ゼロ🚨
+2. Claude2 HP 4.5/20 Hunger 0/20で緊急要請
+3. 周辺に動物なし→respawn戦略を決定（餓死→即座HP 20/20 Hunger 20/20回復）
+4. Claude1 respawn戦略実行→Skeleton射撃で死亡→HP 20/20回復✅
+5. Claude2 respawn完了✅ HP 19.2/20 Hunger 16/20
+6. **Claude3 lava死亡🚨** → gold armor喪失（2回目）
+7. Claude4応答なし→チェスト確認でender_pearl x12 + ender_eye x2預託完了✅と判断
+8. Claude2にiron_ore x3採掘指示→Y=0-16深層探索中
+
+**チェスト状況 @ (9,96,4)**:
+- ender_pearl x12✅
+- ender_eye x2✅
+- gold_ingot x0❌（Claude3所持のx18消失、gold armor lava喪失）
+- iron_ingot x0❌
+- 食料 x0❌
+
+**主要進捗**:
+1. ✅ Claude2 iron_pickaxe x1作成成功（iron_ingot x3所持していた）
+2. ✅ Claude3 Nether到達、gold armor装備済み、Blaze spawner (271,53,-158)へ向かっている
+3. ✅ Claude4 ender_pearl x12 + ender_eye x2チェスト確認済み
+4. ✅ Claude1 raw_iron x7採掘（iron_ore vein @ 20,2,-30付近）
+
+**現在のブロッカー**:
+- Claude2がiron_pickaxe所持中 @ (5,60,1)、BASEへ移動中（path blocked）
+- minecraft_smelt furnace検出バグ🚨 - furnaceが20,88,1にあるのに"No furnace found"エラー
+- chest sync bug再発（Claude4報告）
+
+**minecraft_smelt furnace検出バグ🚨**:
+- **症状**: furnaceが(20,88,1)に存在するのに"No furnace found within 32 blocks"エラー
+- **調査**: bot-crafting.ts:1671-1680でmcData.blocksByName.furnace?.idで検索
+- **原因仮説**: lit_furnace vs furnace状態の違い、またはmcData初期化問題
+- **回避策**: Claude2がすでにiron_ingot x3所持→iron_pickaxe作成済み✅
+
+**chest sync bug再発🚨**:
+- **症状**: ender_pearl x12がチェスト(9,96,4)から消失（数分前には確認できていた）
+- **Session 158修正**: deposit()後1.5秒待機追加したが不十分
+- **追加調査必要**: withdraw()時の同期問題、またはマルチボット同時アクセス時の競合
+
+**次Session優先タスク**:
+1. **CRITICAL**: chest (9,96,4)でender_pearl x12再確認（消失原因調査）
+2. Claude2→iron_pickaxe預託待ち（Position 5,60,1からBASE移動中）
+3. Claude1→iron_pickaxe取得→gold_ore採掘 @ (33,1,20)
+4. gold_ingot x24→gold armor作成
+5. Claude3→blaze_rod x5入手完了待ち（Nether進行中）
+
+**ステータス**: 🔄 Session 159終了、iron_pickaxe預託待ち、Claude3 Blaze狩り中
+
+---
+
 ## Session 158 (2026-02-21) - チェストsyncバグ修正、iron_ore採掘再開
 
 ### [2026-02-21] Session 158 開始状況
@@ -6629,4 +6689,43 @@ minecraft_enter_portal: { tags: ["movement", "portal", "nether", "teleport", "tr
 - raw_iron x6: Claude1所持中（未精錬）
 
 **Status**: 🟡 iron_pickaxe作成完了✅、gold_ore採掘は次Session朝に実行予定
+
+
+---
+
+## Session 158 (2026-02-21 継続)
+
+### 🚨 CRITICAL BUG: gold_ingot x18 完全消失
+
+**発生状況**:
+- Session 157終了時: gold_ingot x18 @ BASE chest (9,96,4) 確認済み
+- Session 158開始時: チェスト確認 → gold_ingot x0個 ❌
+- 同時期にender_eye x2がClaude4からチェストに預託成功（同じチェスト操作は動作）
+
+**チェスト内容変化**:
+```
+Session 157末: gold_ingot(18), ender_pearl(12), book(1), ...
+Session 158初: ender_eye(2), ender_pearl(12), book(1), ... gold_ingot消失
+```
+
+**仮説**:
+1. Session境界でのチェスト同期バグ（MCPサーバー再起動時）
+2. Minecraftサーバー側のチェストデータ破損
+3. takeFromChest/storeInChest実装のバグ（Session 157でClaude2がgold_ingot操作）
+
+**影響**:
+- Phase 8 Step 3完全ブロック
+- gold armor作成不可（gold_ingot x24必要 → x0所持）
+
+**Workaround**:
+- Claude4がiron_pickaxe所持中✅
+- (33,1,20)でgold_ore再採掘 → raw_gold x24入手で代替可能
+
+**再発防止**:
+- 重要アイテムは複数チェストに分散保管
+- Session終了時にインベントリ所持も検討
+
+**Action**:
+- Claude4に(33,1,20)採掘継続指示済み
+- bot-storage.ts調査予定（takeFromChest/storeInChest同期処理）
 
