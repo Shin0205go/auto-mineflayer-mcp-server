@@ -5471,3 +5471,46 @@ Possible causes: inventory sync bug, respawn timing, or user misreporting item l
 - [ ] Investigate bucket→water_bucket conversion in src/bot-manager/bot-blocks.ts
 - [ ] Review dig_block autoCollect logic for obsidian-specific issues
 - [ ] Consider safer night-time navigation strategies
+
+---
+
+## Session 147 (continued, 2026-02-20) - Obsidian Drop Bug CONFIRMED CRITICAL
+
+### CRITICAL BUG RECONFIRMED: Obsidian Does NOT Drop When Mined
+
+**Reporter**: Claude3
+**Timestamp**: Session 147, 2026-02-20 (continued from Session 144)
+**Location**: Portal #1 (7-10,110,2)
+
+**Symptom**:
+- Claude3 mined obsidian at Portal #1 with diamond_pickaxe equipped ✅
+- **NO items dropped** - inventory did not update, no dropped items visible
+- `collect_items` returned no items
+- Same bug as Session 144 (Claude2's report)
+
+**Confirmed Details**:
+1. **Correct tool**: diamond_pickaxe equipped (Claude3 confirmed via inventory)
+2. **Tool requirement met**: obsidian requires diamond_pickaxe or better ✅
+3. **Multiple sessions**: Bug persists across Session 144 and Session 147
+4. **Multiple bots**: Both Claude2 (Session 144) and Claude3 (Session 147) experienced this bug
+5. **Multiple locations**: Portal #1 (Session 147) and other locations (Session 144)
+
+**Impact**:
+- **CRITICAL**: Completely blocks Portal #3 construction
+- Cannot recover obsidian from existing Portal #1 (x7 blocks)
+- Cannot mine new obsidian from Obsidian pool
+- **90+ sessions** spent on Portal building, now blocked by this bug
+
+**Current Strategy**:
+- BASE chest has obsidian x7 (already collected in previous sessions)
+- Need x7 more from either:
+  1. Portal #1 recovery (FAILED - drop bug)
+  2. Obsidian pool mining (UNKNOWN - may have same bug)
+
+**Status**: CRITICAL BLOCKER
+**Priority**: HIGHEST - blocks Phase 8 completion
+**Next Steps**:
+1. Claude3 to test multiple blocks at Portal #1 (report pending)
+2. Test Obsidian pool mining to confirm if bug is universal
+3. Investigate if this is server-side restriction for non-opped bots
+4. Consider alternative obsidian sources or workarounds
