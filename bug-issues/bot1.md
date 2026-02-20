@@ -5129,3 +5129,14 @@ Next session MUST restart MCP server before testing Portal #3.
 
 **Code Review Needed**: Investigate diamond_pickaxe "消失" reports (Claude2) despite keepInventory=true.
 Possible causes: inventory sync bug, respawn timing, or user misreporting item loss.
+## Session 151 (2026-02-20) - Portal #3 Ignition Failed AGAIN
+
+### Portal #3 Third Ignition Attempt - DIRT BLOCKS IN INTERIOR
+
+**ROOT CAUSE**: Portal frame内部にdirt blocks存在 @ Y=107-109 range (Claude2/3発見)
+**ISSUE**: Frame座標とinterior座標の不一致。Expected Y=111-113 but dirt @ Y=107-109
+**Current obsidian count**: x11 detected (x14 required, x3 missing)
+**Actions**: 1) Remove ALL dirt from portal interior 2) Complete frame to x14 3) Re-ignite
+
+**NOTE**: Portal diagnostics code (Session 143+) inactive - requires MCP server restart
+
