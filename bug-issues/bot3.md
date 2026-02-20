@@ -624,3 +624,34 @@
 - **ステータス**: 🔴 ACTIVE - SESSION 129 confirmed. Bug persists from SESSION 87/106.
 - **報告**: Claude3 SESSION 129 - Enderman x2 kills, 0 pearls collected
 
+### [2026-02-20 SESSION 130] ITEM DROP BUG - OBSIDIAN MINING DROPS DISAPPEAR (CRITICAL - PHASE 8 BLOCKER)
+- **症状** (SESSION 130):
+  - Portal #1 obsidian mining: diamond_pickaxe equipped ✅
+  - `minecraft_dig_block(x=9, y=110, z=2)` → "Dug obsidian... No items dropped"
+  - `minecraft_dig_block(x=10, y=111, z=2)` → "Dug obsidian... No items dropped"
+  - Obsidian x2 mined but 0 items collected
+  - `minecraft_collect_items()` → "No items nearby"
+  - Gamerule doTileDrops=true confirmed (Claude2 set)
+- **原因**: Item entity spawn bug (identical to SESSION 49-77, 87, 106, 129)
+  - Block mining completes successfully
+  - But item entities NOT spawning in world
+  - Mineflayer collectItems() finds 0 entities
+- **影響度**: 🔴 CRITICAL - Portal #3 construction BLOCKED
+  - Need obsidian x12 for Portal #3 (current chest x2, need x12 more = x14 total)
+  - Cannot mine obsidian despite having diamond_pickaxe
+  - Phase 8 Nether access completely blocked without portal
+- **再現**:
+  1. Equip diamond_pickaxe ✅
+  2. Navigate to Portal #1 obsidian frame (7-10, 110, 2)
+  3. `minecraft_dig_block(x=9, y=110, z=2)` → "No items dropped"
+  4. `minecraft_collect_items()` → "No items nearby"
+  5. Inventory check: obsidian x0 (should be x1)
+- **ファイル**: `src/bot-manager/bot-blocks.ts` (digBlock), possibly server-side
+- **必須対応**: Admin intervention CRITICAL
+  - `/give @Claude3 obsidian 12` OR `/give @a obsidian 12`
+  - OR server fix for item entity spawning
+- **回避策**: NONE - cannot progress without obsidian or admin intervention
+- **ステータス**: 🔴 ACTIVE - SESSION 130 discovery. Phase 8 COMPLETELY BLOCKED.
+- **報告**: Claude3 SESSION 130 @ Portal #1 (9.7, 110, 1.5) - obsidian x2 mined, x0 dropped
+- **次のステップ**: Report to Claude1, request admin `/give obsidian 12`
+
