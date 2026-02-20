@@ -5919,3 +5919,118 @@ Total obsidian needed: 10 blocks
   - 慎重な移動
 
 **Current Status**: Claude3 Portal #1へ移動中、安全確保後にobsidian x7採掘予定
+
+---
+
+## Session 152 — 2026-02-20
+
+### Issue: pillar_up tool failing with cobblestone in inventory
+
+**Symptoms**:
+- minecraft_pillar_up(height=12) fails with "No blocks placed"
+- Inventory contains cobblestone x60, x64, x64, x50, x63, x64 (total 989 blocks per get_surroundings)
+- Error: "Failed to pillar up. No blocks placed. Check: 1) Have scaffold blocks? 2) Solid ground below? 3) Open space above?"
+
+**Investigation**:
+- pillarUp() in bot-movement.ts line 604: scaffoldCount = 0 despite cobblestone presence
+- isScaffoldBlock() function (line 588-598): checks bot.registry.blocksByName[cleanName].boundingBox === "block"
+- Possible issue: cobblestone boundingBox check failing or registry lookup issue
+
+**Next steps**:
+1. Add debug logging to isScaffoldBlock() to see why cobblestone is excluded
+2. Check if bot.registry.blocksByName["cobblestone"] exists and its properties
+3. Verify boundingBox value for cobblestone
+
+**Workaround**: Direct place_block usage for Portal #3 construction (no pillar needed)
+
+---
+
+## Session 153 — 2026-02-20
+
+### Team Status @ Session Start
+- Claude1: HP 3.7/20 Hunger 0/20 @ (5.14,70,-2.3) → respawn x1 → HP 20/20✅
+- Claude2: HP 5.2/20 Hunger 0/20 respawn待ち → respawn成功 → HP 20/20✅
+- Claude3: respawn完了✅ HP/Hunger 20/20, obsidian x2所持, diamond_pickaxe x1✅
+- Claude4: Nether (-1.3,73,2.7) → Overworld確認, HP 19/20, ender_pearl x10✅
+
+### Phase 8 Progress - Portal #3 Construction
+**Goal**: Portal #3 (8-11,109-113,2) @ Y=110 construction → ignition → diagnostics → Nether entry
+
+**Obsidian Status**:
+- Claude3所持: x2
+- Portal #1残存: x7（採掘予定）
+- 合計期待値: x9
+- **不足: x1**
+
+**Task Allocation**:
+1. Claude3: Portal #1 (8,110,2) obsidian x5以上採掘 → Portal #3へ運搬
+2. Claude4: Portal #3建設地(8-11,109-113,2)へpillar up移動
+3. Claude2: Portal #3 frame内部(9-10,110-111,2) air確認 → 非air block除去
+4. Claude1: チーム監視、バグ修正
+
+### Key Events
+1. Claude1接続→チーム状況確認→respawn x1（HP 3.7/20 critical）
+2. Claude4報告: Overworld @ (-1.3,73,2.7), Portal #3へ移動開始
+3. Claude3: Creeper爆発死 → respawn → HP 20/20回復
+4. Claude2: Y=113到達成功✅, Portal #3 frame至近到達
+5. Claude3: 落下死x2（Portal #1移動中）→ 戦略変更
+6. **戦略変更**: Portal #1採掘危険 → Obsidian pool(-9,37,11)でlava+water方式 obsidian x5生成
+7. Claude4: Y=79/111到達報告, pillar up継続中
+8. Claude1: 落下死x1（dig_block降下中）→ respawn失敗（HP 15/20 healthy扱い）
+9. Claude2: 再接続、Portal #3 frame内部確認作業開始
+
+### Critical Discovery
+- Claude2: Portal #3 frame内部にcobblestone blocks発見報告（座標確認中）
+- Portal generation bug ROOT CAUSE: Frame内部が非airだとportal生成失敗（MEMORY.md記録）
+- **対策**: 内部4座標(9-10,110-111,2)のair確認必須 → 非air除去
+
+### pillar_up Success Report
+- Claude4: Y=72 → Y=79到達成功（Session 152のpillar_upバグ発生せず）
+- Claude2: Y=113到達成功（pillar up or alternative method）
+- **推測**: pillar_upバグは条件次第で発生、または既に修正済み
+
+### Current Status (Session 153 in progress)
+- Claude1: BASE (9,97,4) HP 15/20 Hunger 16/20, 監視中
+- Claude2: Portal #3 frame内部確認中（応答待ち）
+- Claude3: Obsidian pool(-9,37,11)移動中（応答待ち）
+- Claude4: Y=79/111 pillar up中（応答待ち）
+
+**Next Steps**:
+1. Claude2: frame内部air確認完了報告待ち
+2. Claude3: obsidian x5生成→採掘完了報告待ち
+3. Claude4: Y=111到達報告待ち
+4. obsidian x10入手後→Portal #3フレーム建設→点火→diagnostics
+
+**Incidents**:
+- 全員頻繁に死亡: Claude1 x2, Claude2 x1, Claude3 x3, Claude4 x0
+- Respawn strategy正常動作✅: 全員HP/Hunger 20/20回復確認
+
+**Status**: 🔄 Session 153 in progress, チーム作業中, 報告待機中
+
+### Latest Updates (Session 153 continued)
+- Claude3: obsidian pool到達✅ @ (-9,36,11), obsidian x2所持, 追加x6採掘指示（合計x8必要）
+- Claude2: Portal #3到達✅ @ (10.9,108,0.8), obsidian検出 (9,110,2)(8,110,2)(8,111,2) → 落下死 → respawn成功 → Portal #3再移動中
+- Claude4: Y=79/111到達報告, pillar up継続中（応答待ち）
+- Claude1: BASE監視中, HP 10/20, Session 153記録更新完了
+
+**obsidian Status Update**:
+- Claude3所持: x2
+- 採掘目標: x8（追加x6採掘必要）
+- 必要数: x10
+- 戦略: obsidian pool @ (-9,37,11)でlava+water方式生成→採掘
+
+**Critical Task Reminder**:
+- Portal #3 frame内部4座標(9,110,2)(10,110,2)(9,111,2)(10,111,2)のair確認必須
+- 非air block発見時→除去必須（Portal generation bug対策）
+
+**Team Response Status**:
+- 最終確認チャット送信 → 応答なし
+- 各ボット独立作業継続中と推定
+
+**Next Session Action Items**:
+1. Claude3: obsidian x8採掘完了確認
+2. Claude2: Portal #3 frame内部air確認完了確認
+3. Claude4: Y=111到達確認
+4. 全タスク完了後→Portal #3フレーム建設→点火→diagnostics
+
+**Status**: 🔄 Session 153 終盤, チーム作業継続中, 次Session引き継ぎ準備完了
