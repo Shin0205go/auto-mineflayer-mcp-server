@@ -655,3 +655,30 @@
 - **報告**: Claude3 SESSION 130 @ Portal #1 (9.7, 110, 1.5) - obsidian x2 mined, x0 dropped
 - **次のステップ**: Report to Claude1, request admin `/give obsidian 12`
 
+### [2026-02-21 SESSION 131] CHEST SYNC BUG - ENDER_EYE x2 CANNOT BE RETRIEVED (RECURRING BUG)
+- **症状** (SESSION 131):
+  - Chest (9,96,4): `minecraft_open_chest()` → ender_eye x2 confirmed visible ✅
+  - `minecraft_take_from_chest("ender_eye", 2)` → Error: "Failed to withdraw any ender_eye... requested 2 but got 0"
+  - Items visible in chest but cannot be retrieved
+  - Same pattern as SESSION 49-77, 71, 87, 106 chest sync bugs
+- **原因**: Chest item transfer sync bug (persistent across 80+ sessions)
+  - take_from_chest() implementation has fundamental flaw
+  - OR server-side sync delay prevents item transfer
+  - Mineflayer chest window update not syncing properly
+- **影響度**: 🟡 MEDIUM - ender_eye x2 stuck in chest
+  - Cannot retrieve ender_eye x2 for Phase 8 inventory safety
+  - BUT not critical since eyes still exist in chest (not lost to void)
+  - Can use eyes later when chest bug resolved
+- **再現**:
+  1. Navigate to chest (9,96,4)
+  2. `minecraft_open_chest(x=9, y=96, z=4)` → ender_eye x2 visible
+  3. `minecraft_take_from_chest("ender_eye", 2)` → 0 items transferred
+  4. Inventory check: ender_eye x0
+- **ファイル**: `src/bot-manager/bot-storage.ts` (takeFromChest function)
+- **回避策**:
+  - Leave ender_eye x2 in chest (safer than risking void loss)
+  - Focus on other tasks (food, blaze_rod hunting)
+  - Wait for code fix or alternative retrieval method
+- **ステータス**: 🔴 RECURRING BUG - No fix since SESSION 49. Admin awareness needed.
+- **報告**: Claude3 SESSION 131 @ BASE (8.5,95.9,1.6)
+
