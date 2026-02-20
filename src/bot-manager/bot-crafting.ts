@@ -1667,16 +1667,21 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
   const minecraftData = await import("minecraft-data");
   const mcData = minecraftData.default(bot.version);
 
-  // Find a furnace nearby
+  // Find a furnace nearby (both furnace and lit_furnace)
+  const furnaceIds = [
+    mcData.blocksByName.furnace?.id,
+    mcData.blocksByName.lit_furnace?.id
+  ].filter(id => id !== undefined);
+
   let furnaceBlock = bot.findBlock({
-    matching: mcData.blocksByName.furnace?.id,
+    matching: (block) => furnaceIds.includes(block.type),
     maxDistance: 4,
   });
 
   // If not nearby, search wider and move to it
   if (!furnaceBlock) {
     const farFurnace = bot.findBlock({
-      matching: mcData.blocksByName.furnace?.id,
+      matching: (block) => furnaceIds.includes(block.type),
       maxDistance: 32,
     });
 
@@ -1705,7 +1710,7 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
 
       // Re-check nearby
       furnaceBlock = bot.findBlock({
-        matching: mcData.blocksByName.furnace?.id,
+        matching: (block) => furnaceIds.includes(block.type),
         maxDistance: 4,
       });
     }
