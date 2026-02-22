@@ -60,6 +60,11 @@
 
 **対応**: Claude1が調査中
 
+**修正済み** (autofix-1): water_bucket on lava の特別ケースを追加。
+`useItemOnBlock`で`water_bucket`かつ対象ブロックが`lava`/`flowing_lava`の場合、
+`activateItem()`を直接lavaに向けて使用するよう修正（`bot.placeBlock`を使わない）。
+ファイル: `src/bot-manager/bot-blocks.ts`
+
 ## 2026-02-16: 溶岩隣接ブロックが採掘できない（force flag未実装）
 
 **症状**: 黒曜石の下に溶岩がある場合、`force=true`を指定しても採掘エラー

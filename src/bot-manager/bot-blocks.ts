@@ -1441,6 +1441,37 @@ export async function useItemOnBlock(
           console.error(`[DEBUG] Attempt 6 failed: ${e}`);
         }
       }
+    } else if (itemName === "water_bucket" && (block.name === "lava" || block.name === "flowing_lava")) {
+      // Special case: water_bucket on lava source → right-click lava directly to place water (creates obsidian)
+      // Must NOT use placeBlock on adjacent solid blocks, as that can incorrectly collect the lava.
+      console.log(`[DEBUG] water_bucket on lava: using activateItem directly on lava block at (${x},${y},${z})`);
+      let placed = false;
+      for (let attempt = 0; attempt < 3 && !placed; attempt++) {
+        try {
+          await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+          await new Promise(resolve => setTimeout(resolve, 300));
+          bot.activateItem(false);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          // Success if water_bucket is consumed (now holds empty bucket, or no bucket)
+          const held = bot.heldItem;
+          placed = !held || held.name === "bucket";
+          // Also check if lava block was replaced (obsidian or water nearby)
+          if (!placed) {
+            const blockNow = bot.blockAt(pos);
+            if (blockNow && blockNow.name !== "lava" && blockNow.name !== "flowing_lava") {
+              placed = true; // lava was replaced by water/obsidian
+            }
+          }
+          console.error(`[DEBUG] water_bucket on lava attempt ${attempt + 1}: placed=${placed}, held=${held?.name}`);
+        } catch (e) {
+          console.error(`[DEBUG] water_bucket on lava attempt ${attempt + 1} failed: ${e}`);
+        }
+      }
+      if (placed) {
+        return `Placed water on lava at (${x},${y},${z}) - obsidian may have formed`;
+      } else {
+        return `⚠️ WARNING: Could not place water_bucket on lava at (${x},${y},${z}). Try moving closer.`;
+      }
     } else if (itemName === "water_bucket" || itemName === "lava_bucket") {
       // For placing water/lava, we need to right-click a SOLID block's face.
       // Use bot.placeBlock(solidBlock, faceVector) which handles protocol correctly.

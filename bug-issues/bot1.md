@@ -7308,4 +7308,6 @@ const isNonSolid = (name: string) => {
 
 **検証**: 次回ladder上でpillar_up実行時に確認
 
+**修正済み** (autofix-1: isNonSolid()にladder/vine追加)
+
 
