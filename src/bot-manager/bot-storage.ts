@@ -269,12 +269,45 @@ export async function storeInChest(
   const storeCount = count || item.count;
   const actualCount = Math.min(storeCount, item.count);
 
-  await chest.deposit(item.type, null, actualCount);
+  // Record inventory before deposit for verification
+  const invCountBefore = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
+
+  try {
+    await chest.deposit(item.type, null, actualCount);
+  } catch (err) {
+    chest.close();
+    releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
+    throw new Error(`Failed to deposit into chest: ${err}`);
+  }
+
+  // Wait for inventory sync
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  // Verify items were actually removed from inventory (i.e., deposit succeeded)
+  const invCountAfter = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
+  const storedCount = invCountBefore - invCountAfter;
+
+  if (storedCount === 0) {
+    // Deposit may have failed silently - wait a bit more and check again
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    const invCountFinal = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
+    const storedCountFinal = invCountBefore - invCountFinal;
+    if (storedCountFinal === 0) {
+      chest.close();
+      releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
+      throw new Error(`Deposit of ${actualCount}x ${itemName} may have failed: inventory unchanged after 3s wait. Items may not have been stored.`);
+    }
+    chest.close();
+    releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
+    const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
+    return `Stored ${storedCountFinal}x ${itemName} in chest at (${chestBlock.position.x}, ${chestBlock.position.y}, ${chestBlock.position.z}) (delayed sync). Inventory: ${newInventory}`;
+  }
+
   chest.close();
   releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
 
   const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
-  return `Stored ${actualCount}x ${itemName} in chest at (${chestBlock.position.x}, ${chestBlock.position.y}, ${chestBlock.position.z}). Inventory: ${newInventory}`;
+  return `Stored ${storedCount}x ${itemName} in chest at (${chestBlock.position.x}, ${chestBlock.position.y}, ${chestBlock.position.z}). Inventory: ${newInventory}`;
 }
 
 /**
@@ -350,6 +383,7 @@ export async function takeFromChest(
     } catch (err) {
       retryCount++;
       if (retryCount >= maxRetries) {
+        releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
         throw new Error(`Failed to open chest after ${maxRetries} retries: ${err}`);
       }
       console.error(`[Storage] Chest open failed (attempt ${retryCount}/${maxRetries}), retrying in 2s...`);

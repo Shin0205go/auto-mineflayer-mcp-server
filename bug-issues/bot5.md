@@ -32,6 +32,8 @@
 - **回避策**: チェストから取り出す代わりに、自分で黒曜石4個を作成する（溶岩+水バケツ）。
 - **修正予定**: `src/tools/crafting.ts` または `src/bot-manager/bot-items.ts` のチェスト操作関連コードを調査。
 - **ファイル**: `src/tools/crafting.ts`, `src/bot-manager/bot-items.ts`
+- **関連修正 (2026-02-22, autofix-1)**: `takeFromChest` でチェストopen失敗時にロックが解放されないバグを修正。
+  チェストアクセス競合時のデッドロックリスクを低減。ファイル: `src/bot-manager/bot-storage.ts`
 
 ---
 

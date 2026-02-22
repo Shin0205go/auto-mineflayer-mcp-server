@@ -475,7 +475,12 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         const allPlanks = inventoryItems.filter(i => i.name.endsWith("_planks"));
         const availablePlanks = allPlanks.sort((a, b) => b.count - a.count)[0];
         if (!availablePlanks || availablePlanks.count < 4) {
-          throw new Error(`Cannot craft crafting_table: Need 4 planks, have ${availablePlanks?.count || 0}. Inventory: ${inventory}`);
+          // Check if we have 4+ planks total (mixed types)
+          if (totalPlanks >= 4) {
+            const plankBreakdown = allPlanks.map(p => `${p.name}(${p.count})`).join(", ");
+            throw new Error(`Cannot craft crafting_table: Need 4 planks of the SAME type. Have ${totalPlanks} total across mixed types: ${plankBreakdown}. Craft more planks of a single type from logs.`);
+          }
+          throw new Error(`Cannot craft crafting_table: Need 4 planks, have ${totalPlanks} total. Craft planks from logs first. Inventory: ${inventory}`);
         }
 
         const planksItem = mcData.itemsByName[availablePlanks.name];

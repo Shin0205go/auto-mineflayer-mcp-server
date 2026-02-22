@@ -122,6 +122,11 @@
 
 **対応**: 調査予定
 
+**部分修正 (2026-02-22, autofix-1)**: `availablePlanks.count < 4` の場合に混合plank typeを持っている場合は
+その旨を明確に示すエラーメッセージを出力するよう改善。`birch_planks x9` がある場合の
+"missing ingredient" はMineflayer/mcData互換性問題のため未解決。
+ファイル: `src/bot-manager/bot-crafting.ts`
+
 ## 2026-02-16: インベントリフルエラー - アイテムを捨てても空きスロットが増えない
 
 **症状**: `minecraft_take_from_chest` が "Bot inventory is full" エラーを繰り返す
@@ -524,6 +529,9 @@
   - Food distribution system BROKEN
   - Team cannot get food from chests (sync disconnect)
   - Death by starvation risk if no admin `/give bread`
+- **部分修正 (2026-02-22, autofix-1)**: `storeInChest` にインベントリ検証を追加。
+  deposit後にインベントリが変化しない場合はエラーをスローするよう改善（サイレント失敗を防止）。
+  サーバー側のチェストsyncバグ自体は未解決。ファイル: `src/bot-manager/bot-storage.ts`
 
 ### Current Status (Session 41 FINAL)
 - **Phase 6**: Pearl 12/12✅ (チェスト保管完了), Blaze rod 1/7❌ (need 6 more)
