@@ -397,6 +397,14 @@ export async function useItem(bot: Bot, itemName?: string): Promise<string> {
  * Drop items from inventory (handles multiple stacks)
  */
 export async function dropItem(bot: Bot, itemName: string, count?: number): Promise<string> {
+  // Close any open window before tossing - Mineflayer's toss() uses currentWindow's slot
+  // numbering, so if a chest is open the slot range [27-63] won't match player inventory
+  if (bot.currentWindow) {
+    console.error(`[Drop] Closing open window (${bot.currentWindow.type}) before tossing to avoid slot range mismatch`);
+    bot.closeWindow(bot.currentWindow);
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+
   const items = bot.inventory.items().filter(i => i.name === itemName);
   if (items.length === 0) {
     const inventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ") || "empty";

@@ -651,6 +651,11 @@ export async function digBlock(
     }
 
     const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+    // Snapshot full inventory for accurate "what was collected" reporting
+    const inventorySnapshotBefore = new Map<string, number>();
+    for (const item of bot.inventory.items()) {
+      inventorySnapshotBefore.set(item.name, (inventorySnapshotBefore.get(item.name) || 0) + item.count);
+    }
     // Count ALL stacks of the expected item, not just the first one
     const specificItemBefore = expectedDrop
       ? bot.inventory.items().filter(i => i.name === expectedDrop).reduce((sum, i) => sum + i.count, 0)
@@ -913,10 +918,19 @@ export async function digBlock(
     }
 
     if (pickedUp > 0 || specificItemGained > 0) {
-      const itemDetail = specificItemGained > 0
-        ? ` (${expectedDrop} x${specificItemGained})`
-        : "";
-      return `Dug ${blockName} with ${heldItem} and picked up ${Math.max(pickedUp, specificItemGained)} item(s)${itemDetail}!` + getBriefStatus(username);
+      if (specificItemGained > 0) {
+        return `Dug ${blockName} with ${heldItem} and picked up ${specificItemGained} ${expectedDrop}!` + getBriefStatus(username);
+      } else {
+        // Picked up items, but NOT the expected drop — show what was actually collected
+        const actuallyGained: string[] = [];
+        for (const item of bot.inventory.items()) {
+          const before = inventorySnapshotBefore.get(item.name) || 0;
+          const gained = item.count - before;
+          if (gained > 0) actuallyGained.push(`${item.name} x${gained}`);
+        }
+        const gainedStr = actuallyGained.length > 0 ? actuallyGained.join(", ") : `${pickedUp} item(s)`;
+        return `Dug ${blockName} with ${heldItem} but ${expectedDrop} did NOT drop! Collected nearby: ${gainedStr}. Server may have item drops disabled (doTileDrops/doMobLoot).` + getBriefStatus(username);
+      }
     }
 
     // Check if we expected drops but got none

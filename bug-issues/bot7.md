@@ -107,6 +107,10 @@
 3. インベントリ確認 → obsidianなし、cobblestone +2
 
 **対応**: 調査予定
+**根本原因**: obsidian がサーバー側でドロップされない（doTileDrops/doMobLoot 設定）。しかし、`dig_block` は周辺に落ちていた cobblestone を収集し "picked up 2 item(s)!" と表示するため、ボットが obsidian を取得したと誤認していた。
+**修正済み (autofix-5, 2026-02-22)**: `digBlock()` の戻りメッセージを改善。期待するアイテムが得られず他のアイテムを収集した場合は、実際に収集したアイテムを明示し「obsidian did NOT drop! Collected nearby: cobblestone x2」のように警告するよう変更。ボットが誤認しなくなる。ファイル: `src/bot-manager/bot-blocks.ts`
+
+**修正済み**
 
 ## 2026-02-16: crafting_table クラフトが "missing ingredient" エラー
 
