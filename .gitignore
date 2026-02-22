@@ -1,7 +1,10 @@
 node_modules/
 dist/
 *.log
+*.out
 .env
 .DS_Store
 learning/
+agent_logs/
+.claude/worktrees/
 shared-board.txt

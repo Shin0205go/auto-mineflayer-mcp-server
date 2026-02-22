@@ -3,12 +3,18 @@ import type { ManagedBot } from "./types.js";
 import pkg from "mineflayer-pathfinder";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 const { goals } = pkg;
 
 /**
  * File-based chest lock directory (shared across all bot processes)
+ * Use project root (relative to this file) instead of process.cwd()
+ * because Claude Desktop launches with cwd=/ which causes ENOENT
  */
-const LOCK_DIR = path.join(process.cwd(), ".chest-locks");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, "..", "..");
+const LOCK_DIR = path.join(PROJECT_ROOT, ".chest-locks");
 const LOCK_TIMEOUT_MS = 10000; // 10s max lock duration
 
 // Ensure lock directory exists

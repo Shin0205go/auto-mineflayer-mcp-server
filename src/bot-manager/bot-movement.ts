@@ -3,7 +3,7 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 const { GoalBlock } = goals;
 import type { ManagedBot } from "./types.js";
-import { isHostileMob } from "./minecraft-utils.js";
+import { isHostileMob, checkGroundBelow } from "./minecraft-utils.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -385,6 +385,12 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     // No standable candidate found or all failed - fall through to pathfinder
     // Pathfinder with canDig may be able to dig its way there
     console.error(`[Move] No standable candidate succeeded, falling through to pathfinder for (${x}, ${y}, ${z})`);
+  }
+
+  // SAFETY CHECK: Verify ground exists at destination
+  const groundCheck = checkGroundBelow(bot, x, y, z, 10);
+  if (!groundCheck.safe && groundCheck.fallDistance >= 10) {
+    console.error(`[Move] WARNING: No solid ground at destination (${x}, ${y}, ${z}), fall distance: ${groundCheck.fallDistance} blocks`);
   }
 
   // SAFETY CHECK: If target is significantly lower, prevent fall damage

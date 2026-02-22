@@ -1,4 +1,5 @@
 import type { Bot } from "mineflayer";
+import { Vec3 } from "vec3";
 
 // ========== Dynamic Entity/Block Helpers ==========
 // These use bot.registry for version-correct data instead of hardcoded lists
@@ -127,6 +128,55 @@ export function isFuelItem(itemName: string): boolean {
 /** Check if block is a bed */
 export function isBedBlock(blockName: string): boolean {
   return blockName.includes("_bed");
+}
+
+/** Check for nearby hostile mobs and recommend action */
+export function checkDangerNearby(bot: Bot, dangerRadius: number = 8): {
+  dangerous: boolean;
+  nearestHostile: { name: string; distance: number } | null;
+  hostileCount: number;
+  recommendation: "flee" | "fight" | "safe";
+} {
+  const hostiles = Object.values(bot.entities)
+    .filter(e => e && e !== bot.entity && isHostileMob(bot, e.name?.toLowerCase() || ""))
+    .map(e => ({
+      name: e.name || "unknown",
+      distance: e.position.distanceTo(bot.entity.position),
+    }))
+    .filter(h => h.distance <= dangerRadius)
+    .sort((a, b) => a.distance - b.distance);
+
+  if (hostiles.length === 0) {
+    return { dangerous: false, nearestHostile: null, hostileCount: 0, recommendation: "safe" };
+  }
+
+  const nearest = hostiles[0];
+  // Creepers: always flee (explosion danger)
+  const hasCreeper = hostiles.some(h => h.name === "creeper");
+  // 3+ hostiles: flee to avoid being overwhelmed
+  const recommendation: "flee" | "fight" = (hasCreeper || hostiles.length >= 3) ? "flee" : "fight";
+
+  return {
+    dangerous: true,
+    nearestHostile: nearest,
+    hostileCount: hostiles.length,
+    recommendation,
+  };
+}
+
+/** Check if there is solid ground below a position */
+export function checkGroundBelow(bot: Bot, x: number, y: number, z: number, maxFallCheck: number = 4): {
+  safe: boolean;
+  fallDistance: number;
+} {
+  for (let dy = 1; dy <= maxFallCheck; dy++) {
+    const block = bot.blockAt(new Vec3(Math.floor(x), Math.floor(y) - dy, Math.floor(z)));
+    if (block && block.name !== "air" && block.name !== "cave_air" && block.name !== "void_air") {
+      // Fall distance of 3 or less = no damage
+      return { safe: dy <= 3, fallDistance: dy - 1 };
+    }
+  }
+  return { safe: false, fallDistance: maxFallCheck };
 }
 
 /** Check if block is solid and can be used as scaffold */
