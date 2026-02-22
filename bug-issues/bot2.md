@@ -443,6 +443,9 @@
   3. Wait for Claude3 to deposit gold_ingot x18 before attempting more crafts
   4. Consider if respawn events trigger item wipe (investigate pattern)
 - **Files**: Likely server-side issue, not fixable in `src/bot-manager/bot-crafting.ts`
+- **修正済み (autofix-3, 2026-02-22)**: `golden_boots` / `golden_helmet` / `golden_chestplate` / `golden_leggings` の手動レシピを `armorRecipes` フォールバックに追加。`recipesAll()` が失敗しても手動レシピで確実にクラフトできるようになった。ファイル: `src/bot-manager/bot-crafting.ts` (armorRecipes object)
+
+**修正済み**
 
 ---
 

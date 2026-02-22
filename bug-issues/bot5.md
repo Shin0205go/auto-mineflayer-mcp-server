@@ -34,6 +34,9 @@
 - **ファイル**: `src/tools/crafting.ts`, `src/bot-manager/bot-items.ts`
 - **関連修正 (2026-02-22, autofix-1)**: `takeFromChest` でチェストopen失敗時にロックが解放されないバグを修正。
   チェストアクセス競合時のデッドロックリスクを低減。ファイル: `src/bot-manager/bot-storage.ts`
+- **修正済み (autofix-3, 2026-02-22)**: 座標未指定時の `findBlock` 検索範囲を 6→4 ブロックに縮小。インタラクション範囲内のチェストのみ対象とすることで、離れた別チェストを誤って選択するリスクを低減。座標を必ず指定するよう促すエラーメッセージも改善。ファイル: `src/bot-manager/bot-storage.ts`
+
+**修正済み**
 
 ---
 

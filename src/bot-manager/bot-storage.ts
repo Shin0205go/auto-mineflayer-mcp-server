@@ -206,15 +206,16 @@ export async function storeInChest(
       throw new Error(`No chest at (${x}, ${y}, ${z}). Found: ${chestBlock?.name || "nothing"}`);
     }
   } else {
-    // Search wider range (6 blocks) so we can navigate to the chest
+    // Search within interaction range only (4 blocks) to avoid mixing up nearby chests.
+    // Always specify coordinates if multiple chests are nearby.
     chestBlock = bot.findBlock({
       matching: (block) => block.name.includes("chest"),
-      maxDistance: 6,
+      maxDistance: 4,
     });
   }
 
   if (!chestBlock) {
-    throw new Error("No chest within 6 blocks. Move closer to a chest or specify coordinates.");
+    throw new Error("No chest within 4 blocks. Move closer to a chest or specify coordinates (x, y, z) to target a specific chest.");
   }
 
   // Find item in inventory
@@ -339,15 +340,16 @@ export async function takeFromChest(
       throw new Error(`No chest at (${x}, ${y}, ${z}). Found: ${chestBlock?.name || "nothing"}`);
     }
   } else {
-    // Search wider range (6 blocks) so we can navigate to the chest
+    // Search within interaction range only (4 blocks) to avoid mixing up nearby chests.
+    // Always specify coordinates if multiple chests are nearby.
     chestBlock = bot.findBlock({
       matching: (block) => block.name.includes("chest"),
-      maxDistance: 6,
+      maxDistance: 4,
     });
   }
 
   if (!chestBlock) {
-    throw new Error("No chest within 6 blocks. Move closer to a chest or specify coordinates.");
+    throw new Error("No chest within 4 blocks. Move closer to a chest or specify coordinates (x, y, z) to target a specific chest.");
   }
 
   // Move closer to chest to ensure we're within interaction range (1.5 blocks)
