@@ -56,7 +56,7 @@
 
 ---
 
-### [2026-02-16] stick クラフトで birch_planks を使わず dark_oak_planks を選択 ✅ **PARTIALLY FIXED**
+### [2026-02-16] stick クラフトで birch_planks を使わず dark_oak_planks を選択 ✅ **FIXED**
 - **症状**: インベントリに `birch_planks x50` がある状態で `minecraft_craft(item_name="stick", count=2)` を実行すると、"missing ingredient" エラーになる。
 - **エラーメッセージ**: `Failed to craft stick from birch_planks: Error: missing ingredient. Try crafting planks from logs first`
 - **原因**:
@@ -65,15 +65,14 @@
   3. マニュアルレシピの条件`allRecipes.length === 0`に到達していない
   4. つまり、有効なレシピが存在しないのにrecipesAllが何かを返している（Mineflayer/mcDataのバグの可能性）
 - **影響**: stickが作成できず、石ツール作成に支障。ただし既にダイヤ装備があるため優先度は低い。
-- **修正内容(試みられたが失敗)**:
-  - マニュアルレシピ作成箇所で最も数量が多い planks を選択するロジックを追加（line 417-418）
-  - ただし、このコードパスに到達しないため無効
-- **修正案**:
-  - bot.recipesAll()の戻り値をフィルタして有効なレシピだけを使用する
-  - または、stick クラフトの場合は常にマニュアルレシピを使用するように条件を変更
-  - または、bot.recipesFor()で個別にレシピ確認を試みる
-- **ファイル**: `src/bot-manager/bot-crafting.ts` (line 405-444)
-- **ステータス**: 🔴 未解決 (2026-02-16確認)
+- **修正内容**:
+  - `src/bot-manager/bot-crafting.ts` (lines 355-469): `stick` と `crafting_table` は `recipesAll()` の結果を無視し、常にマニュアルレシピを使用するよう変更
+  - 最も数量の多い planks タイプを自動選択（`sort()` で最大数のものを使用）
+  - `simpleWoodenRecipes` リストで stick/crafting_table を特別扱いし、確実にクラフト可能に
+- **ファイル**: `src/bot-manager/bot-crafting.ts` (lines 355-469)
+- **ステータス**: ✅ FIXED (autofix-4, 2026-02-22)
+
+**修正済み**
 
 ### [2026-02-17] stick クラフト bug - GIT MERGE CONFLICT FOUND ✅ **FIXED**
 - **症状**: dark_oak_planks x4 を持っているのに stick craft が失敗

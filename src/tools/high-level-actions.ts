@@ -78,12 +78,13 @@ export async function minecraft_gather_resources(
 
         console.error(`[GatherResources] Found ${item.name} at (${x}, ${y}, ${z})`);
 
-        // Safety check: Skip if bot is high up AND target block is also high up
-        // Allow mining underground blocks even if bot starts at high altitude
+        // Safety check: Skip only if target is far above bot (floating island / sky structure)
+        // Y=80 threshold was too low and broke surface gathering when base is at high altitude (e.g. Y=96+)
+        // Now only skip if target is more than 40 blocks above the bot (unlikely to be a reachable surface resource)
         const botPos = botManager.getPosition(username);
-        if (botPos && botPos.y > 80 && y > 80) {
-          console.error(`[GatherResources] Skipping block at Y=${y} - both bot (Y:${botPos.y}) and target are high. Descend first.`);
-          continue; // Skip this block, try finding another lower one
+        if (botPos && y - botPos.y > 40) {
+          console.error(`[GatherResources] Skipping block at Y=${y} - target is ${(y - botPos.y).toFixed(0)} blocks above bot (Y:${botPos.y.toFixed(0)}), likely floating/sky structure.`);
+          continue; // Skip this block, try finding another reachable one
         }
 
         // Move to the block

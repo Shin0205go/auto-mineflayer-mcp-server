@@ -7310,4 +7310,31 @@ const isNonSolid = (name: string) => {
 
 **修正済み** (autofix-3, 2026-02-22): `src/bot-manager/bot-movement.ts` line 650-654 に `name.includes("ladder") || name.includes("vine")` を追加。ビルド成功確認済み。
 
+---
+
+## [2026-02-22] minecraft_gather_resources が高所ベース(Y>80)でサーフェス資源収集に失敗するバグ (autofix-4修正)
+
+### 症状
+- ベース拠点が Y=96〜113 の高所にある状態で `minecraft_gather_resources` を呼ぶと、近くのサーフェスブロック（oak_log, cobblestone等）が全てスキップされて収集できない
+- ログ: `[GatherResources] Skipping block at Y=98 - both bot (Y:96) and target are high. Descend first.`
+
+### 根本原因
+- `src/tools/high-level-actions.ts` の gather_resources ループ内の安全チェック（line 84）:
+  ```typescript
+  if (botPos && botPos.y > 80 && y > 80) { continue; }
+  ```
+- Y=80 は低すぎる閾値。山岳地形でのベース拠点（Y=80以上が普通）で、同じくY>80のサーフェスブロック全てをスキップしてしまう
+
+### 修正内容
+- 条件を「ターゲットがボットより40ブロック以上高い場合のみスキップ」に変更:
+  ```typescript
+  if (botPos && y - botPos.y > 40) { continue; }
+  ```
+- これにより、高所ベースからの通常サーフェス採掘が可能になる
+- 空中に浮いているブロック（ボットより40ブロック以上高い）は引き続きスキップ
+
+### 修正ファイル
+- `src/tools/high-level-actions.ts` (gather_resources 関数内、line ~84)
+
+**修正済み** (autofix-4, 2026-02-22): ビルド成功確認済み。
 
