@@ -200,14 +200,15 @@ export async function storeInChest(
       throw new Error(`No chest at (${x}, ${y}, ${z}). Found: ${chestBlock?.name || "nothing"}`);
     }
   } else {
+    // Search wider range (6 blocks) so we can navigate to the chest
     chestBlock = bot.findBlock({
       matching: (block) => block.name.includes("chest"),
-      maxDistance: 4,
+      maxDistance: 6,
     });
   }
 
   if (!chestBlock) {
-    throw new Error("No chest within 4 blocks. Place a chest first.");
+    throw new Error("No chest within 6 blocks. Move closer to a chest or specify coordinates.");
   }
 
   // Find item in inventory
@@ -332,14 +333,15 @@ export async function takeFromChest(
       throw new Error(`No chest at (${x}, ${y}, ${z}). Found: ${chestBlock?.name || "nothing"}`);
     }
   } else {
+    // Search wider range (6 blocks) so we can navigate to the chest
     chestBlock = bot.findBlock({
       matching: (block) => block.name.includes("chest"),
-      maxDistance: 4,
+      maxDistance: 6,
     });
   }
 
   if (!chestBlock) {
-    throw new Error("No chest within 4 blocks.");
+    throw new Error("No chest within 6 blocks. Move closer to a chest or specify coordinates.");
   }
 
   // Move closer to chest to ensure we're within interaction range (1.5 blocks)
@@ -463,21 +465,27 @@ export async function takeFromChest(
 export async function listChest(managed: ManagedBot): Promise<string> {
   const bot = managed.bot;
 
-  // Find nearby chest (within interaction range)
+  // Find nearby chest (within 32 blocks, navigate if needed)
   const chestBlock = bot.findBlock({
     matching: (block) => block.name.includes("chest"),
-    maxDistance: 4,
+    maxDistance: 32,
   });
 
   if (!chestBlock) {
-    return "No chest found within 4 blocks. Move closer to a chest first.";
+    return "No chest found within 32 blocks.";
   }
 
   const pos = chestBlock.position;
   const distance = bot.entity.position.distanceTo(pos);
 
+  // Navigate to chest if too far
   if (distance > 4) {
-    return `Chest found at (${pos.x}, ${pos.y}, ${pos.z}) but too far (${distance.toFixed(1)}m). Move closer first.`;
+    const GoalGetToBlock = goals.GoalGetToBlock;
+    try {
+      await bot.pathfinder.goto(new GoalGetToBlock(pos.x, pos.y, pos.z));
+    } catch (_) {
+      return `Chest found at (${pos.x}, ${pos.y}, ${pos.z}) but cannot reach it (${distance.toFixed(1)} blocks away).`;
+    }
   }
 
   // Wait a moment to prevent timing issues

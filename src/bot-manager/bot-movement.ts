@@ -650,7 +650,8 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
   const isNonSolid = (name: string) => {
     return name === "air" || name === "cave_air" || name === "void_air" ||
            name === "water" || name === "lava" || name.includes("sign") ||
-           name.includes("torch") || name.includes("carpet") || name === "snow";
+           name.includes("torch") || name.includes("carpet") || name === "snow" ||
+           name.includes("ladder") || name.includes("vine");
   };
 
   let hasGround = false;
