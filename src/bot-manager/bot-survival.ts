@@ -1031,11 +1031,32 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
   console.error(`[Respawn] Intentional death requested. Reason: ${reason || "unspecified"}`);
   console.error(`[Respawn] Before: HP=${oldHP}, Food=${oldFood}, Pos=(${oldPos.x.toFixed(1)}, ${oldPos.y.toFixed(1)}, ${oldPos.z.toFixed(1)})`);
 
+  // Listen for death event BEFORE sending /kill
+  const deathPromise = new Promise<void>((resolve) => {
+    bot.once("death", () => resolve());
+  });
+
   // Use /kill command
   bot.chat(`/kill ${managed.username}`);
 
-  // Wait for death and respawn
-  await delay(3000);
+  // Wait for death event (max 5s)
+  await Promise.race([deathPromise, delay(5000)]);
+
+  // Call bot.respawn() to click the "Respawn" button and actually respawn
+  try {
+    bot.respawn();
+  } catch (_) {
+    // ignore if already respawned
+  }
+
+  // Wait for spawn event (confirms respawn completed)
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(resolve, 5000);
+    bot.once("spawn", () => { clearTimeout(timeout); resolve(); });
+  });
+
+  // Brief wait for server to sync HP/Food after respawn
+  await delay(1000);
 
   // Check new status
   const newPos = bot.entity.position;

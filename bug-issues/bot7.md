@@ -241,6 +241,9 @@
 - しかしminecraft_store_in_chestは「No chest within 4 blocks」と返す
 - 回避策: minecraft_drop_itemを使用してチェスト付近にアイテムをドロップ
 - **更新**: 2回目の試行で成功。チェストに非常に近い位置（1ブロック以内）から実行する必要がある可能性
+- **修正済み (2026-02-22, autofix-2)**: 検索範囲を4ブロックから6ブロックに拡大。`listChest` も32ブロック検索 + 自動ナビゲーションに改善。ファイル: `src/bot-manager/bot-storage.ts`
+
+**修正済み**
 
 **Phase 4達成**: Claude2からstick x2受取→iron_pickaxe作成成功
 - iron_pickaxe + iron_sword 所持完了
