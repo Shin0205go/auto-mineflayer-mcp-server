@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.js",
@@ -60,6 +62,7 @@
     "@types/ws": "^8.18.1",
     "nodemon": "^3.1.11",
     "pm2": "^6.0.14",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^4.0.18"
   }
 }

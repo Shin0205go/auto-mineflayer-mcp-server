@@ -17,5 +17,5 @@
     "resolveJsonModule": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/agent/claude-agent.ts", "src/agent/dev-agent.ts"]
+  "exclude": ["node_modules", "dist", "src/agent/claude-agent.ts", "src/agent/dev-agent.ts", "tests", "vitest.config.ts"]
 }
