@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "mineflayer": {
-      "command": "node",
+      "command": "/opt/homebrew/opt/node@20/bin/node",
       "args": ["dist/index.js"],
       "env": {
         "MC_HOST": "localhost",

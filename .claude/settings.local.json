@@ -106,7 +106,22 @@
       "Bash(bash:*)",
       "Bash(echo:*)",
       "Bash(xargs:*)",
-      "Bash(/Users/shingo/Develop/auto-mineflayer-mcp-server/scripts/hook-stop-auto-pr.sh:*)"
+      "Bash(/Users/shingo/Develop/auto-mineflayer-mcp-server/scripts/hook-stop-auto-pr.sh:*)",
+      "Bash(git fetch:*)",
+      "WebFetch(domain:mikhail.io)",
+      "WebFetch(domain:leehanchung.github.io)",
+      "WebFetch(domain:www.buildcamp.io)",
+      "WebFetch(domain:alexop.dev)",
+      "Bash(diffstat:*)",
+      "Bash(git status:*)",
+      "Bash(for i in 1 2 3 4 5 6 7; do echo \"Removing bot$i worktree...\" && git worktree remove --force /Users/shingo/Develop/auto-mineflayer-bot$i 2>&1; done)",
+      "Bash(git branch:*)",
+      "Bash(env | grep -iE 'claude|anthropic|mcp' 2>/dev/null)",
+      "Bash(/opt/homebrew/opt/node@20/bin/node:*)",
+      "Bash(brew list:*)",
+      "Bash(brew uninstall:*)",
+      "Bash(sudo rm:*)",
+      "Bash(head:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
@@ -114,57 +129,13 @@
     "mineflayer"
   ],
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "curl -s 'http://localhost:3847/thinking?state=processing&message=考え中...' > /dev/null 2>&1 || true"
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
-        "matcher": "",
+        "matcher": "Edit|Write|NotebookEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "curl -s 'http://localhost:3847/thinking?state=executing&message=実行中...' > /dev/null 2>&1 || true"
-          }
-        ]
-      }
-    ],
-    "SubagentStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "curl -s 'http://localhost:3847/thinking?state=searching&message=調査中...' > /dev/null 2>&1 || true"
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "curl -s 'http://localhost:3847/thinking?state=error&message=エラー発生' > /dev/null 2>&1 || true"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "curl -s 'http://localhost:3847/thinking?state=idle&message=待機中' > /dev/null 2>&1 || true"
+            "command": "/Users/shingo/Develop/auto-mineflayer-mcp-server/scripts/hook-bot-readonly.sh"
           }
         ]
       }

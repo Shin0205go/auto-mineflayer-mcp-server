@@ -1,4 +1,5 @@
 import { botManager } from "../bot-manager/index.js";
+import { checkDangerNearby } from "../bot-manager/minecraft-utils.js";
 
 /**
  * High-level, task-oriented Minecraft actions
@@ -21,15 +22,43 @@ export async function minecraft_gather_resources(
     const targetCount = item.count;
     let attempts = 0;
     const maxAttempts = targetCount * 3; // Allow multiple attempts per item
+    let consecutiveFailures = 0;
+    let currentMaxDistance = maxDistance;
 
     console.error(`[GatherResources] Target: ${item.name} x${targetCount}`);
 
     while (collected < targetCount && attempts < maxAttempts) {
       attempts++;
 
+      // Retry strategy: after 3 consecutive failures, change approach
+      if (consecutiveFailures >= 3) {
+        const oldDist = currentMaxDistance;
+        currentMaxDistance = Math.min(currentMaxDistance * 1.5, 128);
+        console.error(`[GatherResources] 3 consecutive failures — expanding search radius: ${oldDist} → ${currentMaxDistance}`);
+        consecutiveFailures = 0;
+      }
+
       try {
+        // Danger check before mining
+        const bot = botManager.getBot(username);
+        if (bot) {
+          const danger = checkDangerNearby(bot, 8);
+          if (danger.dangerous) {
+            console.error(`[GatherResources] Danger detected: ${danger.hostileCount} hostile(s), nearest: ${danger.nearestHostile?.name} at ${danger.nearestHostile?.distance.toFixed(1)}m, action: ${danger.recommendation}`);
+            if (danger.recommendation === "flee") {
+              await botManager.flee(username, 20);
+              consecutiveFailures++;
+              continue;
+            } else {
+              // Fight the nearest hostile before mining
+              await botManager.attack(username, danger.nearestHostile!.name);
+              await botManager.collectNearbyItems(username);
+            }
+          }
+        }
+
         // Find the block
-        const findResult = botManager.findBlock(username, item.name, maxDistance);
+        const findResult = botManager.findBlock(username, item.name, currentMaxDistance);
 
         if (findResult.includes("No") || findResult.includes("not found")) {
           console.error(`[GatherResources] No more ${item.name} found within ${maxDistance} blocks`);
@@ -87,9 +116,11 @@ export async function minecraft_gather_resources(
 
         if (gained > 0) {
           collected += gained;
+          consecutiveFailures = 0;
           console.error(`[GatherResources] Collected ${gained} ${item.name}, total: ${collected}/${targetCount}`);
         } else {
-          console.error(`[GatherResources] No items gained, may need correct tool`);
+          consecutiveFailures++;
+          console.error(`[GatherResources] No items gained (failures: ${consecutiveFailures}), may need correct tool`);
         }
 
         // Small delay between mining operations
@@ -458,6 +489,31 @@ export async function minecraft_survival_routine(
   const results: string[] = [];
 
   if (selectedPriority === "food") {
+    // Danger check: handle hostiles before gathering food
+    const bot = botManager.getBot(username);
+    if (bot) {
+      const danger = checkDangerNearby(bot, 8);
+      if (danger.dangerous) {
+        console.error(`[SurvivalRoutine] Danger before food gathering: ${danger.hostileCount} hostile(s), nearest: ${danger.nearestHostile?.name} at ${danger.nearestHostile?.distance.toFixed(1)}m`);
+        if (danger.recommendation === "flee") {
+          try {
+            const fleeResult = await botManager.flee(username, 20);
+            results.push(`Fled from ${danger.nearestHostile?.name}: ${fleeResult}`);
+          } catch (err) {
+            results.push(`Flee failed: ${err}`);
+          }
+        } else {
+          try {
+            const fightResult = await botManager.attack(username, danger.nearestHostile!.name);
+            results.push(`Cleared threat ${danger.nearestHostile?.name}: ${fightResult}`);
+            await botManager.collectNearbyItems(username);
+          } catch (err) {
+            results.push(`Fight failed: ${err}`);
+          }
+        }
+      }
+    }
+
     // Find and hunt animals for food - increased radius to 128 blocks for better coverage
     // Check for ALL entities (don't filter by "passive" since it's not a valid entity type)
     const nearbyEntities = botManager.findEntities(username, undefined, 128);

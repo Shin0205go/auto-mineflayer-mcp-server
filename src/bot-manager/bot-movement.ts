@@ -3,7 +3,7 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 const { GoalBlock } = goals;
 import type { ManagedBot } from "./types.js";
-import { isHostileMob } from "./minecraft-utils.js";
+import { isHostileMob, checkGroundBelow } from "./minecraft-utils.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -387,6 +387,12 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     console.error(`[Move] No standable candidate succeeded, falling through to pathfinder for (${x}, ${y}, ${z})`);
   }
 
+  // SAFETY CHECK: Verify ground exists at destination
+  const groundCheck = checkGroundBelow(bot, x, y, z, 10);
+  if (!groundCheck.safe && groundCheck.fallDistance >= 10) {
+    console.error(`[Move] WARNING: No solid ground at destination (${x}, ${y}, ${z}), fall distance: ${groundCheck.fallDistance} blocks`);
+  }
+
   // SAFETY CHECK: If target is significantly lower, prevent fall damage
   // Pathfinder handles moderate height changes with digging/towers (maxDropDown=4)
   // Only block extreme drops (>50 blocks) where pathfinder would likely fail or time out
@@ -650,7 +656,8 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
   const isNonSolid = (name: string) => {
     return name === "air" || name === "cave_air" || name === "void_air" ||
            name === "water" || name === "lava" || name.includes("sign") ||
-           name.includes("torch") || name.includes("carpet") || name === "snow";
+           name.includes("torch") || name.includes("carpet") || name === "snow" ||
+           name.includes("ladder") || name.includes("vine");
   };
 
   let hasGround = false;
