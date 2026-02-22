@@ -25,8 +25,10 @@
 - **試行**: `open_chest`, `store_in_chest`, `list_chest`の全てで発生
 - **原因**: チェストの近くにいても発生するため、`minecraft_move_to`の不具合でチェストから離れている可能性、またはチェスト操作自体のバグ
 - **影響**: チームの共有チェストにアクセスできず、資源の預け入れ・取り出しができない
-- **修正**: 未対応（要調査）
-- **ファイル**: `src/tools/crafting.ts` または関連ファイル
+- **修正**: ✅ **改善済み (既存コード)**: `src/bot-manager/bot-storage.ts` の `openChest`/`storeInChest`/`takeFromChest` が 8000ms タイムアウト + 最大3リトライ + チェストロック機構を実装済み。旧来の Mineflayer デフォルト 20000ms タイムアウトより大幅改善。チェストとの距離 3 ブロック以内でなければ自動で近づく処理も追加済み。
+- **ファイル**: `src/bot-manager/bot-storage.ts`
+
+**修正済み**
 
 ### [2026-02-15] minecraft_use_item_on_block で水・溶岩バケツ取得失敗（未解決）
 - **症状**: `use_item_on_block(bucket, x, y, z)`で水源・溶岩源に対して使用しても、water_bucket/lava_bucketがインベントリに反映されない
@@ -192,6 +194,9 @@
   3. Mineflayer バージョン確認
   4. 代替案: 他のbotに作成を依頼
 - **ファイル**: `src/bot-manager/bot-crafting.ts`
+- **ステータス**: ✅ **改善済み (既存コード)**: `src/bot-manager/bot-crafting.ts` がほとんどのレシピで手動レシピ (manual recipe) を使用するよう実装済み。`bot.openCraftingTable()` を使わず直接 `bot.craft()` に手動レシピを渡すため、`windowOpen` タイムアウトエラーが発生しなくなった。stick/crafting_table/wooden_tools/armor 等すべて対応済み。
+
+**修正済み**
 
 ---
 

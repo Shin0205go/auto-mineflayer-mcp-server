@@ -194,7 +194,9 @@
 - **回避策**:
   - dark_oak_planks を捨てて、birch_planks のみにする
   - または手動で板材を統一してから再試行
-- **ステータス**: ⚠️ 未修正 - クラフトレシピ選択ロジックの調査が必要
+- **ステータス**: ✅ **修正済み (autofix-4, 2026-02-22)**: `src/bot-manager/bot-crafting.ts` の crafting_table 手動レシピで、全 planks を `filter(i => i.name.endsWith("_planks"))` で抽出し、`sort((a,b) => b.count - a.count)` で最も数が多い planks 種を優先選択するよう修正。birch_planks x19 が dark_oak_planks x5 より優先される。
+
+**修正済み**
 
 ## [2026-02-16] bone_meal crafting fails with item pickup disabled error
 
@@ -216,7 +218,9 @@
   1. `bot-crafting.ts` の `craft()` 関数末尾に自動で `collectItems()` を追加
   2. または、クラフト失敗時にドロップしたアイテムを自動回収する処理を追加
 - **ファイル**: `src/bot-manager/bot-crafting.ts`
-- **ステータス**: ⚠️ 未修正 - 回避策（collect_items）で対応可能
+- **ステータス**: ✅ **修正済み (既存コード)**: `src/bot-manager/bot-crafting.ts` の craft() 関数がすでに、クラフト後にアイテムがインベントリに入らない場合、自動的に `collectNearbyItems()` を呼び出す処理を実装済み (lines 1582-1600)。crafted item が地面に落ちても自動回収される。
+
+**修正済み**
 
 ## [2026-02-16] wheat harvest sync bug - items disappear from inventory
 

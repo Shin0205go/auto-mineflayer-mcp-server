@@ -7,6 +7,46 @@ import { checkDangerNearby } from "../bot-manager/minecraft-utils.js";
  */
 
 /**
+ * Map from ore/block names to the items they drop when mined.
+ * Mining iron_ore gives raw_iron (not iron_ore), so inventory checks must use the drop name.
+ */
+const BLOCK_DROP_MAP: Record<string, string[]> = {
+  // Overworld ores
+  iron_ore: ["raw_iron"],
+  deepslate_iron_ore: ["raw_iron"],
+  gold_ore: ["raw_gold"],
+  deepslate_gold_ore: ["raw_gold"],
+  copper_ore: ["raw_copper"],
+  deepslate_copper_ore: ["raw_copper"],
+  coal_ore: ["coal"],
+  deepslate_coal_ore: ["coal"],
+  diamond_ore: ["diamond"],
+  deepslate_diamond_ore: ["diamond"],
+  emerald_ore: ["emerald"],
+  deepslate_emerald_ore: ["emerald"],
+  lapis_ore: ["lapis_lazuli"],
+  deepslate_lapis_ore: ["lapis_lazuli"],
+  redstone_ore: ["redstone"],
+  deepslate_redstone_ore: ["redstone"],
+  // Nether ores
+  nether_gold_ore: ["gold_nugget"],
+  nether_quartz_ore: ["quartz"],
+  ancient_debris: ["ancient_debris"],
+  // Other common blocks whose drop name differs
+  grass_block: ["dirt"],
+  gravel: ["gravel", "flint"],
+  clay: ["clay_ball"],
+};
+
+/**
+ * Get possible drop item names for a given block name.
+ * Returns [blockName] (i.e., same name) if no mapping found.
+ */
+function getDropNames(blockName: string): string[] {
+  return BLOCK_DROP_MAP[blockName] ?? [blockName];
+}
+
+/**
  * Gather specific resources by finding, mining, and collecting blocks
  * Loops until target count is reached or no more blocks are found
  */
@@ -95,8 +135,12 @@ export async function minecraft_gather_resources(
         }
 
         // Check inventory before mining
+        // Ores drop different items (iron_ore→raw_iron, coal_ore→coal, etc.)
+        // so we track ALL possible drop names to correctly measure gain.
+        const dropNames = getDropNames(item.name);
         const invBefore = botManager.getInventory(username);
-        const beforeCount = invBefore.find(i => i.name === item.name)?.count || 0;
+        const countBefore = (name: string) => invBefore.find(i => i.name === name)?.count || 0;
+        const beforeCount = dropNames.reduce((sum, n) => sum + countBefore(n), 0);
 
         // Dig the block
         const digResult = await botManager.digBlock(username, Math.floor(x), Math.floor(y), Math.floor(z));
@@ -110,15 +154,18 @@ export async function minecraft_gather_resources(
         // Collect nearby items
         await botManager.collectNearbyItems(username);
 
-        // Check inventory after mining
+        // Check inventory after mining (check all possible drop names)
         const invAfter = botManager.getInventory(username);
-        const afterCount = invAfter.find(i => i.name === item.name)?.count || 0;
+        const countAfter = (name: string) => invAfter.find(i => i.name === name)?.count || 0;
+        const afterCount = dropNames.reduce((sum, n) => sum + countAfter(n), 0);
         const gained = afterCount - beforeCount;
 
         if (gained > 0) {
           collected += gained;
           consecutiveFailures = 0;
-          console.error(`[GatherResources] Collected ${gained} ${item.name}, total: ${collected}/${targetCount}`);
+          const dropsStr = dropNames.length > 1 || dropNames[0] !== item.name
+            ? ` (drops: ${dropNames.join("/")})` : "";
+          console.error(`[GatherResources] Collected ${gained} from ${item.name}${dropsStr}, total: ${collected}/${targetCount}`);
         } else {
           consecutiveFailures++;
           console.error(`[GatherResources] No items gained (failures: ${consecutiveFailures}), may need correct tool`);
