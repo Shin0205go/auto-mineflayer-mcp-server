@@ -800,12 +800,19 @@ export async function digBlock(
 
     // Find nearby item entities - check distance to BOTH blockPos AND bot position
     // Item entities sometimes have delayed/incorrect position updates
+    // Use comprehensive detection matching collectNearbyItems logic (entity name varies by server)
     const nearbyItems = bot.nearestEntity(entity => {
-      if (entity.name === 'item' && entity.position && bot.entity.position) {
+      if (entity && entity !== bot.entity && entity.position && bot.entity.position) {
+        const isItem = (
+          entity.name === "item" ||
+          entity.displayName === "Item" ||
+          entity.displayName === "Dropped Item" ||
+          entity.type === "object"
+        );
+        if (!isItem) return false;
         const distToBlock = entity.position.distanceTo(blockPos);
         const distToBot = entity.position.distanceTo(bot.entity.position);
         // Accept items within 5 blocks of block OR within 3 blocks of bot
-        // (in case item spawned slightly away or server has weird positioning)
         return distToBlock < 5 || distToBot < 3;
       }
       return false;

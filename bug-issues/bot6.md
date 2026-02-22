@@ -23,6 +23,12 @@
 - `src/tools/crafting.ts` (smelt)
 - `src/bot-manager/index.ts` (アイテム収集ロジック)
 
+**修正済み (2026-02-22, autofix-2)**:
+1. `dig_block`: `nearestEntity` 検出ロジックを拡張。`entity.name === 'item'` のみから `displayName === 'Item'`、`displayName === 'Dropped Item'`、`type === 'object'` を含む包括的な検出に変更。ファイル: `src/bot-manager/bot-blocks.ts`
+2. `smelt`: アイテムが転送されなかった場合に `collectNearbyItems()` を自動呼び出し。回収後に再チェックして成功/失敗を報告。ファイル: `src/bot-manager/bot-crafting.ts`
+
+**修正済み**
+
 ## 2026-02-15: 水バケツバグ
 
 ### 現象

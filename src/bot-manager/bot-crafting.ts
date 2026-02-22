@@ -1841,8 +1841,22 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
       const debugInfo = ` [Expected: ${expectedOutputName}, InInventory: ${inventoryHasOutput}${inventoryHasOutput ? ` (${outputCount}x)` : ''}, Gained: ${actualGained}/${totalGained}]`;
 
       if (actualGained === 0 && totalGained > 0) {
-        // Items were smelted but didn't enter inventory - they must have dropped or there's a transfer issue
-        console.error(`[Smelt] WARNING: ${expectedOutputName} not transferred to inventory after smelting - may need manual collection`);
+        // Items were smelted but didn't enter inventory - they must have dropped on ground
+        console.error(`[Smelt] WARNING: ${expectedOutputName} not transferred to inventory after smelting - attempting auto-collect...`);
+        try {
+          const { collectNearbyItems } = await import("./bot-items.js");
+          await collectNearbyItems(managed);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (collectErr) {
+          console.error(`[Smelt] collectNearbyItems failed: ${collectErr}`);
+        }
+        // Re-check after collect attempt
+        const afterCollect = bot.inventory.items().find(i => i.name === expectedOutputName);
+        const countAfterCollect = afterCollect?.count || 0;
+        if (countAfterCollect > countBefore) {
+          const finalInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
+          return `Smelted ${smeltCount}x ${itemName} (collected from ground). Inventory: ${finalInventory}`;
+        }
         return `Smelted ${smeltCount}x ${itemName} (WARNING: ${totalGained}x ${expectedOutputName} may not have entered inventory - try minecraft_collect_items()). Inventory: ${newInventory}${debugInfo}`;
       }
     }
