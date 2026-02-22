@@ -7308,6 +7308,6 @@ const isNonSolid = (name: string) => {
 
 **検証**: 次回ladder上でpillar_up実行時に確認
 
-**修正済み** (autofix-1: isNonSolid()にladder/vine追加)
+**修正済み** (autofix-3, 2026-02-22): `src/bot-manager/bot-movement.ts` line 650-654 に `name.includes("ladder") || name.includes("vine")` を追加。ビルド成功確認済み。
 
 
