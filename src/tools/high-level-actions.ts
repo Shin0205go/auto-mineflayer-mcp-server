@@ -379,12 +379,15 @@ export async function minecraft_craft_chain(
                 const sourceInInv = inventory.find(i => i.name === sourceItem);
 
                 if (!sourceInInv || sourceInInv.count < neededCount) {
-                  // Need to gather the source material first
+                  // Need to gather the source material first.
+                  // Raw items (raw_iron, raw_gold, raw_copper) are drops, not blocks —
+                  // gather_resources must mine the ore block to obtain them.
                   const needToGather = neededCount - (sourceInInv?.count || 0);
-                  console.error(`[CraftChain] Need to gather ${needToGather}x ${sourceItem} first`);
+                  const gatherBlock = rawToOreBlock[sourceItem] || sourceItem;
+                  console.error(`[CraftChain] Need to gather ${needToGather}x ${sourceItem} (mining ${gatherBlock})`);
                   const gatherResult = await minecraft_gather_resources(
                     username,
-                    [{ name: sourceItem, count: needToGather }],
+                    [{ name: gatherBlock, count: needToGather }],
                     32
                   );
                   results.push(`Gathered for smelting: ${gatherResult}`);
@@ -425,13 +428,15 @@ export async function minecraft_craft_chain(
   };
 
   /**
-   * Smelting recipes: output -> input
+   * Smelting recipes: output -> smeltable input item
+   * In Minecraft 1.17+, ore blocks drop raw_* items when mined (iron_ore→raw_iron, etc.)
+   * so the smeltable source is the raw_* form, not the ore block itself.
    */
   const smeltingRecipes: Record<string, string> = {
-    // Ores to ingots
-    "iron_ingot": "iron_ore",
-    "gold_ingot": "gold_ore",
-    "copper_ingot": "copper_ore",
+    // Ores to ingots (raw_* form — what mining produces in 1.17+)
+    "iron_ingot": "raw_iron",
+    "gold_ingot": "raw_gold",
+    "copper_ingot": "raw_copper",
     // Other smelting
     "glass": "sand",
     "stone": "cobblestone",
@@ -444,6 +449,17 @@ export async function minecraft_craft_chain(
     "cooked_rabbit": "rabbit",
     "cooked_cod": "cod",
     "cooked_salmon": "salmon",
+  };
+
+  /**
+   * Mapping from raw drop item to the ore block that must be mined to obtain it.
+   * Raw items (raw_iron etc.) are drops, not mineable blocks, so gather_resources
+   * must target the ore block instead.
+   */
+  const rawToOreBlock: Record<string, string> = {
+    "raw_iron": "iron_ore",
+    "raw_gold": "gold_ore",
+    "raw_copper": "copper_ore",
   };
 
   /**

@@ -99,9 +99,14 @@ export async function handleEnvironmentTool(
         results.push(`🔨 Crafting Table: None nearby`);
       }
 
-      // Check for nearby furnaces
+      // Check for nearby furnaces (both unlit and lit/active)
+      // When a furnace is actively smelting its block state becomes "lit_furnace",
+      // so we must search for both names to avoid false "not found" reports.
       try {
-        const furnace = await botManager.findBlock(username, "furnace", maxDistance);
+        let furnace = await botManager.findBlock(username, "furnace", maxDistance);
+        if (!furnace || furnace.includes("No ") || furnace.includes("not found")) {
+          furnace = await botManager.findBlock(username, "lit_furnace", maxDistance);
+        }
         if (furnace && !furnace.includes("No ") && !furnace.includes("not found")) {
           results.push(`🔥 Furnace: ${furnace}`);
         } else {
