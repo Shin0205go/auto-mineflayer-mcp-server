@@ -564,11 +564,18 @@ export async function minecraft_survival_routine(
   if (selectedPriority === "food") {
     // Danger check: handle hostiles before gathering food
     const bot = botManager.getBot(username);
+    const currentHP = bot?.health ?? 20;
     if (bot) {
       const danger = checkDangerNearby(bot, 8);
       if (danger.dangerous) {
-        console.error(`[SurvivalRoutine] Danger before food gathering: ${danger.hostileCount} hostile(s), nearest: ${danger.nearestHostile?.name} at ${danger.nearestHostile?.distance.toFixed(1)}m`);
-        if (danger.recommendation === "flee") {
+        console.error(`[SurvivalRoutine] Danger before food gathering: ${danger.hostileCount} hostile(s), nearest: ${danger.nearestHostile?.name} at ${danger.nearestHostile?.distance.toFixed(1)}m, HP: ${currentHP}`);
+        // Bug fix (bot3.md #16, bot2.md Session 85): When HP < 5, ALWAYS flee.
+        // Fighting at critical HP (< 5/20) is suicidal — even food animals can be dangerous.
+        const shouldFlee = danger.recommendation === "flee" || currentHP < 5;
+        if (shouldFlee) {
+          if (currentHP < 5) {
+            console.error(`[SurvivalRoutine] HP CRITICAL (${currentHP}/20) — forcing flee instead of fight`);
+          }
           try {
             const fleeResult = await botManager.flee(username, 20);
             results.push(`Fled from ${danger.nearestHostile?.name}: ${fleeResult}`);
@@ -597,14 +604,19 @@ export async function minecraft_survival_routine(
 
     if (availableAnimal) {
       try {
-        // Fight the available food animal
-        // CRITICAL: When hunting for food in survival mode, allow fighting even at low HP
-        // because we NEED food to restore health. Set flee threshold to 0 for food animals.
-        const fightResult = await botManager.fight(username, availableAnimal, 0);
-        results.push(`Food: ${fightResult}`);
+        // Bug fix (bot3.md #16): At critical HP (< 5/20), skip food combat entirely.
+        // Fighting at near-death HP is fatal before food can help.
+        if (currentHP < 5) {
+          console.error(`[SurvivalRoutine] HP CRITICAL (${currentHP}/20) — skipping food combat to avoid death. Try respawning.`);
+          results.push(`HP critical (${currentHP}/20): Skipped food combat. Use minecraft_respawn to recover HP first.`);
+        } else {
+          // Flee threshold: 4 HP (avoid death, can always respawn to recover)
+          const fightResult = await botManager.fight(username, availableAnimal, 4);
+          results.push(`Food: ${fightResult}`);
 
-        // Collect drops
-        await botManager.collectNearbyItems(username);
+          // Collect drops
+          await botManager.collectNearbyItems(username);
+        }
       } catch (err) {
         results.push(`Food gathering failed: ${err}`);
       }
