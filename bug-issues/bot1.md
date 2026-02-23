@@ -7173,6 +7173,8 @@ let furnaceBlock = bot.findBlock({
 - **Workaround**: drop_item使用禁止、chest経由で受け渡し
 - **Status**: 🚨 未修正（Mineflayer/server-side issue?）
 
+**修正済み (autofix-26, 2026-02-23)**: `minecraft_drop_item` ツールの説明文を更新。「ドロップしたアイテムはサーバー側のバグで消失する場合がある。ボット間のアイテム受け渡しには `store_in_chest` + `take_from_chest` を使うこと」と明記。コード修正ではなく、ボットが正しい戦略を取れるよう情報提供で対処。ファイル: `src/tools/crafting.ts`
+
 ### Session 164 中間まとめ
 **達成**:
 - ✅ Chest sync bug修正（global lock機構実装、commit 4c176e5）
@@ -7358,3 +7360,19 @@ const isNonSolid = (name: string) => {
 - **状況**: 昼間だが探索中に日陰エリアでスケルトンに遭遇。鎧なし
 - **教訓**: 鎧なしでの広域探索は危険。explore_areaは障害物・日陰を考慮しない
 - **根本原因**: 19セッション食料問題が解決せず、ピースフルモードで管理者が介入して解決
+
+**修正済み (autofix-26, 2026-02-23)**: `minecraft_explore_area` に敵対モブ検出ロジックを追加（`checkDangerNearby(8)` を各移動ポイント後に呼び出し）。危険な場合は逃走または戦闘を行い、探索中の予期しない死を防止。ファイル: `src/tools/high-level-actions.ts`
+
+---
+
+## autofix-26 修正サマリー (2026-02-23)
+
+以下のバグをこのセッションで修正:
+
+1. **インベントリ満杯時のチェスト取り出し失敗** (`src/bot-manager/bot-storage.ts`): `chest.withdraw()` がサイレント失敗する問題を修正。明確なエラーメッセージを返すよう改善。
+2. **moveTo 偽陽性の成功判定** (`src/bot-manager/bot-movement.ts`, `src/tools/movement.ts`): 距離判定を `< 3` から `< 2` に変更し、移動後に実際の位置を検証するWARNINGを追加。
+3. **pathfinder 再計算中の早期終了** (`src/bot-manager/bot-movement.ts`): path_reset 時に `notMovingCount` をリセットし、再計算中の誤った失敗を防止。
+4. **アイテム収集の偽陽性** (`src/bot-manager/bot-items.ts`): `entity.type === "object"` が船・トロッコ等を誤検出する問題を修正。非アイテムエンティティを除外する `NON_ITEM_OBJECTS` セットを追加。
+5. **精錬タイミングバグ** (`src/bot-manager/bot-crafting.ts`): 精錬待ち時間に+5000msのスタートアップバッファを追加し、最後のアイテム精錬完了前に取り出すバグを修正。
+6. **craft_chain の 1.17+ 鉱石ドロップ対応** (`src/tools/high-level-actions.ts`): `smeltingRecipes` で `iron_ingot` → `iron_ore` を `raw_iron` に修正。鉱石採掘用の `rawMaterialToOreBlock` マップを追加。
+7. **drop_item 警告の追加** (`src/tools/crafting.ts`): ドロップアイテムがサーバー側で消失する可能性を説明に追記し、chest 経由の受け渡しを推奨。

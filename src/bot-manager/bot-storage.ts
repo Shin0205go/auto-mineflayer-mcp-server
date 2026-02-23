@@ -414,6 +414,18 @@ export async function takeFromChest(
   const takeCount = count || item.count;
   const actualCount = Math.min(takeCount, item.count);
 
+  // Check if player inventory has space to receive items.
+  // Mineflayer's chest.withdraw() silently fails (no error, no items transferred) when
+  // player inventory is full. This was causing misleading "ITEM MAY BE LOST IN VOID" errors.
+  // 36 slots = 9 hotbar + 27 main inventory. Each distinct stack occupies 1 slot.
+  const usedSlots = bot.inventory.items().length;
+  const MAX_INVENTORY_SLOTS = 36;
+  if (usedSlots >= MAX_INVENTORY_SLOTS) {
+    chest.close();
+    releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
+    throw new Error(`Cannot take ${itemName} from chest: inventory is full (${usedSlots}/${MAX_INVENTORY_SLOTS} slots used). Drop or store some items first to make room.`);
+  }
+
   // Record inventory before withdrawal for verification
   const inventoryBefore = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
   console.error(`[Storage] Before withdrawal: ${itemName} count in inventory = ${inventoryBefore}`);

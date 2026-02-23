@@ -48,7 +48,7 @@ export const craftingTools = {
   },
 
   minecraft_drop_item: {
-    description: "Drop items from inventory",
+    description: "Drop items from inventory. WARNING: Dropped items may disappear on some servers due to item entity sync issues. For reliable item transfer between bots, use minecraft_store_in_chest + minecraft_take_from_chest instead.",
     inputSchema: {
       type: "object" as const,
       properties: {

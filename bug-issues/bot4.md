@@ -175,6 +175,10 @@
 - **関連**: 同じ移動システムの問題が [2026-02-16] minecraft_move_to not updating position でも報告されており、Claude1が修正済み。しかし、この問題は別の原因（pathfinding の経路探索失敗）と思われる。
 - **ステータス**: ⚠️ 未修正 - pathfinding システムの調査が必要
 
+**修正済み (autofix-26, 2026-02-23)**:
+1. `src/bot-manager/bot-movement.ts`: checkInterval の成功判定を `currentDist < 3` から `currentDist < 2` に変更。GoalNear(range=2) と一致させ、開始位置が目標3ブロック以内の場合に移動せず即座に成功と判定するバグを修正。
+2. `src/tools/movement.ts`: moveTo() 成功後に実際の位置を検証し、目標から5ブロック以上離れている場合は WARNING を追加。ボットが位置を確認して再試行できるようになった。
+
 ## [2026-02-16] crafting_table recipe fails with wrong plank type
 
 - **症状**: `minecraft_craft("crafting_table")` が "missing ingredient" エラーで失敗。birch_planks x19 を所持しているのに、dark_oak_planks を使おうとしてエラーになる。

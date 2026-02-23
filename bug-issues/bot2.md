@@ -50,6 +50,8 @@
   4. 別のAPIメソッド（`bot.useOn`, `bot.activateItem`）を試す
 - **ファイル**: `src/bot-manager/bot-blocks.ts`(Line 1215-1243)
 
+**修正済み**: `src/bot-manager/bot-blocks.ts` の `useItemOnBlock` 関数を大幅改善。`activateItem()` + polling + `deactivateItem()` の6段階の試行ロジックを実装。水/溶岩バケツ変換を確実に検出するよう改善済み。
+
 ---
 
 ### [2026-02-16] stick クラフトバグ（✅解決）
@@ -483,4 +485,6 @@
   - Awaiting alternative strategy
   - Consider finding wood/planks for new chest creation
 - **Files**: Server-side chest sync issue, not fixable in `src/bot-manager/bot-blocks.ts`
+
+**修正済み (autofix-26, 2026-02-23)**: インベントリが満杯（36スロット全使用）の場合、`chest.withdraw()` がサイレントに失敗していた。`src/bot-manager/bot-storage.ts` に `usedSlots >= MAX_INVENTORY_SLOTS` チェックを追加し、満杯の場合は明確なエラーメッセージを返すよう修正。ボットがアイテムを先に捨てるべきと認識できるようになった。
 
