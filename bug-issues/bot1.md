@@ -6884,7 +6884,9 @@ Session 158初: ender_eye(2), ender_pearl(12), book(1), ... gold_ingot消失
    - 次回再現時に原因特定可能
 
 **Status**: 修正完了、次Sessionで動作確認予定
+- **修正済み (autofix-21, 2026-02-23)**: `src/bot-manager/bot-crafting.ts` の waitTime を `smeltCount * 10000` から `smeltCount * 10000 + 5000` に変更。furnace 起動遅延（~5秒）を考慮したバッファを追加し、最後のアイテムがまだ精錬中に `takeOutput()` が呼ばれる問題を修正。
 
+**修正済み**
 
 ---
 
