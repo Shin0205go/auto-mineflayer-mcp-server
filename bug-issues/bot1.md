@@ -7173,6 +7173,8 @@ let furnaceBlock = bot.findBlock({
 - **Workaround**: drop_item使用禁止、chest経由で受け渡し
 - **Status**: 🚨 未修正（Mineflayer/server-side issue?）
 
+**修正済み** (autofix-23, 2026-02-23): `minecraft_drop_item` ツールの説明にアイテム消失の警告を追加。チーム間のアイテム受け渡しにはchest経由を推奨するよう明示。根本原因はサーバー側のitem entity syncバグで、コードレベルでの完全修正は困難なため、ツールの説明でWorkaroundを周知した。
+
 ### Session 164 中間まとめ
 **達成**:
 - ✅ Chest sync bug修正（global lock機構実装、commit 4c176e5）
@@ -7358,3 +7360,19 @@ const isNonSolid = (name: string) => {
 - **状況**: 昼間だが探索中に日陰エリアでスケルトンに遭遇。鎧なし
 - **教訓**: 鎧なしでの広域探索は危険。explore_areaは障害物・日陰を考慮しない
 - **根本原因**: 19セッション食料問題が解決せず、ピースフルモードで管理者が介入して解決
+
+## [2026-02-23] autofix-23 修正内容
+
+### 修正1: minecraft_explore_areaの敵mob未検出バグ (死亡 #2の根本原因)
+- **症状**: explore_areaで探索中にスケルトン等の敵mobに遭遇して死亡
+- **根本原因**: `minecraft_explore_area` が各移動地点への到達後に周囲の敵mobを検出・対処する処理がなかった
+- **修正内容**: 各移動ポイントへの到達後に `checkDangerNearby(8)` を呼び出し、敵mobを検出した場合は `flee` または `attack` を実行するよう追加
+- **修正ファイル**: `src/tools/high-level-actions.ts` (minecraft_explore_area内)
+**修正済み**
+
+### 修正2: minecraft_craft_chain のsmeltingRecipesバグ
+- **症状**: craft_chain でiron_ingotを作ろうとすると、smeltItem("iron_ore")が呼ばれるがインベントリに"iron_ore"がなくて失敗（1.17+では採掘するとraw_ironが手に入る）
+- **根本原因**: `smeltingRecipes` が "iron_ingot" → "iron_ore" となっていたが、1.17+ではiron_oreを採掘するとraw_ironが手に入り、smeltItem()はraw_ironを期待する
+- **修正内容**: `smeltingRecipes` を raw_iron/raw_gold/raw_copper に変更。また採掘時にore blockを掘るための `rawMaterialToOreBlock` マップを追加。`isItemCraftable` のrawMaterialsリストに raw_iron/raw_gold/raw_copper を追加
+- **修正ファイル**: `src/tools/high-level-actions.ts` (minecraft_craft_chain内)
+**修正済み**
