@@ -16,6 +16,7 @@ import { storageTools, handleStorageTool } from "./tools/storage.js";
 import { combatTools, handleCombatTool } from "./tools/combat.js";
 import { highLevelActionTools, handleHighLevelActionTool } from "./tools/high-level-actions-mcp.js";
 import { debugCraftingTools, handleDebugCraftingTool } from "./tools/debug_crafting.js"; // Import new debug tool
+import { bootstrapTools, handleBootstrapTool } from "./tools/bootstrap.js";
 import { GAME_AGENT_TOOLS } from "./tool-filters.js";
 import { getAgentType } from "./agent-state.js";
 import { searchTools, TOOL_METADATA } from "./tool-metadata.js";
@@ -32,6 +33,7 @@ const allTools = {
   ...combatTools,
   ...highLevelActionTools,
   ...debugCraftingTools, // Add new debug tool
+  ...bootstrapTools, // Add bootstrap tools
   // Tool Search
   search_tools: {
     description: "Search for available tools by keyword or category. Use this to discover relevant tools without loading all tool definitions. Categories: connection, info, communication, actions, crafting",
@@ -114,6 +116,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       result = await handleHighLevelActionTool(name, toolArgs);
     } else if (name in debugCraftingTools) { // Route new debug tool
       result = await handleDebugCraftingTool(name, toolArgs);
+    } else if (name in bootstrapTools) {
+      result = await handleBootstrapTool(name, toolArgs);
     } else if (name === "search_tools") {
       const query = (toolArgs.query as string) || "";
       const detail = (toolArgs.detail as "brief" | "full") || "brief";
