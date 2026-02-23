@@ -408,6 +408,9 @@ Example (Option A):
 2. **URGENT: Survival Routine HP Pre-Check** (Code fix):
    - Do NOT attempt combat if HP < 5/20
    - Fallback to respawn or wait instead
+   - **修正済み (autofix-28, 2026-02-23)**: `src/tools/high-level-actions.ts` の `minecraft_survival_routine` に HP < 5 チェックを追加。危険なモブとの戦闘を強制 flee に変更し、食料動物狩りも HP < 5 時はスキップして respawn を促すメッセージを返すよう修正。食料動物狩りの flee threshold も 0 → 4 HP に変更。
+
+**修正済み**
 
 3. **HIGH: Pathfinder Emergency Chest Access** (Code fix):
    - Allow movement to nearest chest even at critical HP

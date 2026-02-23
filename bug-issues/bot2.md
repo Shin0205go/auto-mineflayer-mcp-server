@@ -963,3 +963,5 @@
 
 **修正済み (autofix-26, 2026-02-23)**: インベントリが満杯（36スロット全使用）の場合、`chest.withdraw()` がサイレントに失敗していた。`src/bot-manager/bot-storage.ts` に `usedSlots >= MAX_INVENTORY_SLOTS` チェックを追加し、満杯の場合は明確なエラーメッセージを返すよう修正。ボットがアイテムを先に捨てるべきと認識できるようになった。
 
+**修正済み (autofix-28, 2026-02-23)**: Session 85 で死亡原因となった「HP 1.5/20 でのサバイバル戦闘試行」バグを修正。`src/tools/high-level-actions.ts` の `minecraft_survival_routine` に HP < 5/20 チェックを追加。危険なモブへの戦闘を flee に強制変更、食料動物狩りも HP < 5 時はスキップして `minecraft_respawn` を使用するよう促す。
+
