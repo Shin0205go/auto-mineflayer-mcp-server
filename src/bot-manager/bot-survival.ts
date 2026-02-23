@@ -1055,27 +1055,50 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
   // Call bot.respawn() to click the "Respawn" button and actually respawn
   try {
     bot.respawn();
-  } catch (_) {
-    // ignore if already respawned
+    console.error(`[Respawn] Called bot.respawn()`);
+  } catch (err) {
+    console.error(`[Respawn] bot.respawn() threw error: ${err}`);
   }
 
   // Wait for spawn event (confirms respawn completed)
+  let spawnEventFired = false;
   await new Promise<void>((resolve) => {
-    const timeout = setTimeout(resolve, 5000);
-    bot.once("spawn", () => { clearTimeout(timeout); resolve(); });
+    const timeout = setTimeout(() => {
+      console.error(`[Respawn] Spawn event timeout after 5s`);
+      resolve();
+    }, 5000);
+    bot.once("spawn", () => {
+      spawnEventFired = true;
+      clearTimeout(timeout);
+      console.error(`[Respawn] Spawn event fired`);
+      resolve();
+    });
   });
 
-  // Brief wait for server to sync HP/Food after respawn
-  await delay(1000);
+  // Extended wait for server to sync HP/Food after respawn (up from 1s to 2s)
+  await delay(2000);
 
-  // Check new status
+  // Check new status and verify HP was actually restored
   const newPos = bot.entity.position;
-  const newHP = bot.health;
-  const newFood = bot.food;
+  let newHP = bot.health;
+  let newFood = bot.food;
 
-  console.error(`[Respawn] After: HP=${newHP}, Food=${newFood}, Pos=(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}, ${newPos.z.toFixed(1)})`);
+  console.error(`[Respawn] After: HP=${newHP}, Food=${newFood}, Pos=(${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}, ${newPos.z.toFixed(1)}), SpawnEventFired=${spawnEventFired}`);
 
-  return `Respawned! Old: (${oldPos.x.toFixed(0)}, ${oldPos.y.toFixed(0)}, ${oldPos.z.toFixed(0)}) HP:${oldHP?.toFixed(0)}/20 Food:${oldFood}/20 → New: (${newPos.x.toFixed(0)}, ${newPos.y.toFixed(0)}, ${newPos.z.toFixed(0)}) HP:${newHP?.toFixed(0)}/20 Food:${newFood}/20. Reason: ${reason || "strategic reset"}.`;
+  // VALIDATION: If HP is not restored (expected 20), this indicates a server-side issue
+  if (newHP < 18) {
+    console.error(`[Respawn] WARNING: HP not fully restored (${newHP} vs expected 20)! Server may not support respawn or keepInventory not working.`);
+  }
+  if (newFood < 18) {
+    console.error(`[Respawn] WARNING: Food not fully restored (${newFood} vs expected 20)! Attempting to eat.`);
+    try {
+      await eat(managed);
+    } catch (e) {
+      console.error(`[Respawn] Failed to eat after respawn: ${e}`);
+    }
+  }
+
+  return `Respawned! Old: (${oldPos.x.toFixed(0)}, ${oldPos.y.toFixed(0)}, ${oldPos.z.toFixed(0)}) HP:${oldHP?.toFixed(0)}/20 Food:${oldFood}/20 → New: (${newPos.x.toFixed(0)}, ${newPos.y.toFixed(0)}, ${newPos.z.toFixed(0)}) HP:${newHP?.toFixed(0)}/20 Food:${newFood}/20. SpawnEvent:${spawnEventFired}. Reason: ${reason || "strategic reset"}.`;
 }
 
 /**
