@@ -39,12 +39,24 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
       if (dist > searchRadius) return false; // Configurable range for item collection
 
       // Item detection - check multiple properties since items can have different names
-      // Items can be detected by: name="item", displayName="Item"/"Dropped Item", or type="object"
+      // Items can be detected by: name="item", displayName="Item"/"Dropped Item"
+      // NOTE: Do NOT use entity.type === "object" alone — it's too broad and matches
+      // boats, minecarts, armor stands, item frames, TNT, etc., causing false positives.
+      const NON_ITEM_OBJECTS = new Set([
+        "boat", "chest_boat", "oak_boat", "spruce_boat", "birch_boat", "jungle_boat",
+        "acacia_boat", "dark_oak_boat", "mangrove_boat", "bamboo_boat", "cherry_boat",
+        "minecart", "chest_minecart", "furnace_minecart", "tnt_minecart",
+        "hopper_minecart", "spawner_minecart", "command_block_minecart",
+        "tnt", "falling_block", "armor_stand", "item_frame", "glow_item_frame",
+        "painting", "end_crystal", "evoker_fangs", "fishing_bobber",
+        "firework_rocket", "eye_of_ender", "thrown_item",
+      ]);
       const isItem = entity.id !== bot.entity.id && (
         entity.name === "item" ||
         entity.displayName === "Item" ||
         entity.displayName === "Dropped Item" ||
-        entity.type === "object"
+        // Fallback for servers with non-standard entity data — but exclude known non-item objects
+        (entity.type === "object" && !NON_ITEM_OBJECTS.has(entity.name || ""))
       );
 
       if (isItem && dist < 5) {

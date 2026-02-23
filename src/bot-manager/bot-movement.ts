@@ -156,6 +156,9 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       // path_reset fires when pathfinder recalculates; with canDig=true this happens
       // frequently as the bot digs through obstacles. Only fail after many consecutive
       // resets without making any spatial progress toward the target.
+      // Reset notMovingCount: during recalculation isMoving() briefly returns false,
+      // which would incorrectly increment notMovingCount and cause premature failure.
+      notMovingCount = 0;
       const currentPos = bot.entity.position;
       const movedSinceLastReset = currentPos.distanceTo(lastPathResetPos);
       if (movedSinceLastReset > 0.3) {

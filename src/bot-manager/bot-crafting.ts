@@ -1805,8 +1805,9 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     await furnace.putInput(itemToSmelt.type, null, smeltCount);
 
     // Wait for smelting (roughly 10 seconds per item, with reasonable max)
-    // Minecraft takes 10s per item, so allow time for all items to finish
-    const waitTime = Math.min(smeltCount * 10000, 180000); // Cap at 3 minutes (18 items max)
+    // Minecraft takes 10s per item + ~5s startup delay for furnace to begin smelting
+    // Without the +5000ms buffer, the last item may still be smelting when takeOutput() is called
+    const waitTime = Math.min(smeltCount * 10000 + 5000, 180000); // Cap at 3 minutes, +5s startup buffer
     await new Promise(resolve => setTimeout(resolve, waitTime));
 
     // Track inventory count BEFORE taking output
