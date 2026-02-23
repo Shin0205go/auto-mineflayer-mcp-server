@@ -216,8 +216,9 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         }
       }
 
-      // Distance-based success check
-      if (currentDist < 3) {
+      // Distance-based success check (use strict range=2 matching GoalNear, not loose <3)
+      // Using <3 caused false success when bot starts within 3 blocks of target without moving
+      if (currentDist < 2) {
         finish({ success: true, message: `Reached destination (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)})` });
         return;
       }
