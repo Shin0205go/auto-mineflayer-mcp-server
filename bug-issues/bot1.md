@@ -6885,7 +6885,8 @@ Session 158初: ender_eye(2), ender_pearl(12), book(1), ... gold_ingot消失
 
 **Status**: 修正完了、次Sessionで動作確認予定
 
-**修正済み** (autofix-9, 2026-02-23): `src/bot-manager/bot-crafting.ts` line 1809 の waitTime に +5000ms バッファを追加。`smeltCount * 10000 + 5000` に変更し、furnace 起動時間と最終アイテム完了時間のズレを吸収。ビルド成功確認済み。
+**修正済み** (autofix-14, 2026-02-23): `src/bot-manager/bot-crafting.ts` の waitTime を `smeltCount * 10000` から `smeltCount * 10000 + 5000` に変更。furnace startup時間と最終アイテム完了バッファとして+5秒を追加。またfurnace移動後の再検索maxDistanceを4→5に修正（pathfinder settling距離を考慮）。
+
 
 ---
 
@@ -7340,44 +7341,36 @@ const isNonSolid = (name: string) => {
 **修正済み** (autofix-4, 2026-02-22): ビルド成功確認済み。
 
 
----
+## 死亡記録 (2026-02-23セッション)
 
-## [2026-02-23] minecraft_check_infrastructure が lit_furnace を検出しない (autofix-16)
+### 死亡 #1
+- **死因**: 高所から落下 ("fell from a high place")
+- **座標**: (9.6, 99.0, 24.3) 付近、高所プラットフォームから転落
+- **直前の行動**: HP 2.2/20・空腹 4/20 の緊急状態。草ブロックを掘った後に転落
+- **状況**: 食料ゼロ・戦闘後のHP低下状態で高所(Y=99〜102)を移動中
+- **教訓**: HPが低い状態でY=100以上の高所を移動するのは危険。常に安全な低い場所で作業すること
+- **keepInventory**: 有効（リスポーン後インベントリ保持確認）
 
-### 症状
-- furnaceが稼働中（精錬中）のとき `minecraft_check_infrastructure` が "No furnace nearby" を返す
-- Session 159で "No furnace found within 32 blocks" エラーが多発していた根本原因の一つ
-- `bot-crafting.ts` のsmelt関数自体は lit_furnace に対応済みだが check_infrastructure は未対応
+### 死亡 #2  
+- **死因**: スケルトンに射殺 ("was shot by Skeleton")
+- **座標**: 探索中の地点（explore_areaツール使用中）
+- **直前の行動**: 動物探索のためminecraft_explore_area(radius=200, target=cow)を実行
+- **状況**: 昼間だが探索中に日陰エリアでスケルトンに遭遇。鎧なし
+- **教訓**: 鎧なしでの広域探索は危険。explore_areaは障害物・日陰を考慮しない
+- **根本原因**: 19セッション食料問題が解決せず、ピースフルモードで管理者が介入して解決
 
-### 根本原因
-- `src/tools/environment.ts` の `minecraft_check_infrastructure` で
-  `botManager.findBlock(username, "furnace", maxDistance)` のみ検索
-- Minecraftでfurnaceが精錬中は `lit_furnace` ブロック状態になるため検索でヒットしない
+### 死亡 #3
+- **死因**: Zombieに倒された ("was slain by Zombie")
+- **座標**: (9.1, 49.0, 6.7) 付近、地下
+- **直前の行動**: 食料ゼロ・HP 0.3/20 の状態でminecraft_explore_area(radius=150, target=village)を実行し、HP切れで探索中断後にZombieに追われた
+- **状況**: 接続切断が2回発生、raw_iron x5を紛失。食料デッドロック（動物なし、キノコなし）。keepInventory=falseが判明しアイテム全ロスト
+- **教訓**: keepInventory=falseの環境では低HP時のリスクが致命的。HP < 5の時は絶対に探索・移動しないこと。先にkeepInventoryの設定を確認せよ
+- **keepInventory**: 無効 → アイテム全ロスト
 
-### 修正内容
-- `furnace` が見つからない場合に続けて `lit_furnace` も検索するよう変更
-- ファイル: `src/tools/environment.ts`
-
-**修正済み** (autofix-16, 2026-02-23): ビルド成功確認済み。
-
----
-
-## [2026-02-23] minecraft_craft_chain の精錬レシピが iron_ore を使用 (autofix-16)
-
-### 症状
-- `minecraft_craft_chain("iron_pickaxe", true)` で iron_ingot 不足時、
-  `raw_iron` がインベントリにあるのに `iron_ore` を探してしまい精錬失敗
-- Minecraft 1.17+ では iron_ore 採掘で `raw_iron` がドロップ（ore ブロックではない）
-
-### 根本原因
-- `src/tools/high-level-actions.ts` の `smeltingRecipes` が iron_ore/gold_ore/copper_ore を参照
-- 採掘後のインベントリには raw_iron/raw_gold/raw_copper が入るため不一致
-- gather 時も `raw_iron` ブロック（存在しない）を探してしまう
-
-### 修正内容
-- `smeltingRecipes` を raw 素材に変更 (raw_iron/raw_gold/raw_copper)
-- `smeltSourceToMineBlock` マップを追加: raw_iron→iron_ore 等（採掘対象ブロック）
-- gather 時は ore ブロックを採掘して raw 素材を取得するよう修正
-- ファイル: `src/tools/high-level-actions.ts`
-
-**修正済み** (autofix-16, 2026-02-23): ビルド成功確認済み。
+### 死亡 #4
+- **死因**: 溺死 ("drowned") 
+- **座標**: (12.2, 92.0, 11.4) 付近
+- **直前の行動**: HP 3.2/20・空腹 2/20 でminecraft_survival_routine(priority=food)を実行。zombified_piglinを倒した後に溺死
+- **状況**: keepInventory=false → stone_pickaxe・stone_sword・birch_planks全ロスト
+- **根本原因バグ**: minecraft_survival_routineは低HP時に水中移動/戦闘を行い溺死を引き起こす。HP < 10の時はsurvival_routine使用禁止
+- **教訓**: survival_routineはHP低下時に危険。HP < 10では絶対に使わないこと。食料ゼロ時の代替案: 木を集めてcrafting_chainで自力回復
