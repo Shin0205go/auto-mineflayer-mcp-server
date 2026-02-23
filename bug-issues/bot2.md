@@ -17,8 +17,10 @@
 - **例**: `move_to(-71, 89, -49)` → 実際はY=90に移動。`move_to(-69, 62, -52)` → 実際はY=63に移動し、その後同じコマンドで位置が変わらない
 - **原因**: `src/tools/movement.ts`の`minecraft_move_to`実装に問題がある可能性
 - **影響**: 正確な位置への移動が必要な作業（チェスト操作、ブロック設置等）で支障
-- **修正**: 未対応（要調査）
-- **ファイル**: `src/tools/movement.ts`
+- **修正**: ✅ **修正済み (autofix-4)**: `moveToBasic` の距離チェック(distance<2)で即座に成功判定していた早期リターン（line 94-99）を削除。GoalNear(range=2)がpathfinder側で距離チェックを行うよう変更。
+- **ファイル**: `src/bot-manager/bot-movement.ts`
+
+**修正済み**
 
 ### [2026-02-15] minecraft_open_chest / store_in_chest / list_chest がタイムアウト
 - **症状**: チェスト操作系のツールが全て「Event windowOpen did not fire within timeout of 20000ms」でエラー
@@ -457,7 +459,7 @@
 
 ---
 
-### [2026-02-21] Session 161 - Chest Sync Bug Reactivated (take_from_chest failure)
+### [2026-02-21] Session 161 - Chest Sync Bug Reactivated (take_from_chest failure) **修正済み**
 
 **🚨 CHEST SYNC BUG CONFIRMED AGAIN**
 - **Symptom**: `minecraft_take_from_chest(item_name="dirt", count=64)` → "Failed to withdraw any dirt from chest after 5s total wait. Requested 64 but got 0. ITEM MAY BE LOST IN VOID."
@@ -482,8 +484,28 @@
   - Reported to Claude1 ✅
   - Awaiting alternative strategy
   - Consider finding wood/planks for new chest creation
-- **Files**: Server-side chest sync issue, not fixable in `src/bot-manager/bot-blocks.ts`
-- **部分修正済み (autofix-25, 2026-02-23)**: `takeFromChest()` に inventory full 検出を追加。インベントリが満杯（36スロット全使用）の場合、`chest.withdraw()` がサイレント失敗して "ITEM MAY BE LOST IN VOID" と誤報するのを防止。代わりに明確なエラー "inventory is full" を返す。ファイル: `src/bot-manager/bot-storage.ts`
+- **Files**: `src/bot-manager/bot-storage.ts`
+- **修正 (autofix-18)**: `openContainer()` 後に500ms待機を追加し、`containerItems()` が空の場合は再度500ms待って再取得するようにした。チェストウィンドウのデータがサーバーから届く前に読み取ってしまう競合状態を修正。
+
+---
+
+### [2026-02-23] moveToBasic premature failure during path recalculation (notMovingCount bug)
+
+- **症状**: pathfinderがパスを再計算中（path_reset直後）に `isMoving()` が一瞬falseを返し、notMovingCount がインクリメントされて5秒後に移動失敗扱いになる
+- **影響**: 複雑な経路（障害物を掘る場合など）で移動が途中失敗する
+- **修正**: ✅ **修正済み (autofix-22)**: `onPathReset` ハンドラ内で `notMovingCount = 0` をリセットするよう修正。path_reset中はisMoving()がfalseになるのが正常動作のため、カウンターをリセットして誤検知を防ぐ。
+- **ファイル**: `src/bot-manager/bot-movement.ts` (onPathReset handler)
+
+**修正済み**
+
+---
+
+### [2026-02-23] collectNearbyItems entity.type==="object" false positives
+
+- **症状**: `entity.type === "object"` チェックがボート・トロッコ・鎧立て等の非アイテムエンティティも拾おうとしてしまい、アイテム収集が失敗・時間を無駄にする
+- **影響**: アイテム回収の精度低下、収集失敗の誤報告
+- **修正**: ✅ **修正済み (autofix-22)**: `entity.type === "object"` フォールバック条件に `!NON_ITEM_OBJECTS.has(entity.name)` チェックを追加。boat/minecart/tnt/armor_stand/item_frame等の既知の非アイテムエンティティを除外。
+- **ファイル**: `src/bot-manager/bot-items.ts` (collectNearbyItems関数)
 
 **修正済み**
 

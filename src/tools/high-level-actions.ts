@@ -381,10 +381,13 @@ export async function minecraft_craft_chain(
                 if (!sourceInInv || sourceInInv.count < neededCount) {
                   // Need to gather the source material first
                   const needToGather = neededCount - (sourceInInv?.count || 0);
-                  console.error(`[CraftChain] Need to gather ${needToGather}x ${sourceItem} first`);
+                  // For raw materials (raw_iron etc.), mine the corresponding ore block
+                  // because there are no "raw_iron" blocks in the world — only ore blocks that DROP raw_iron
+                  const oreBlock = rawMaterialToOreBlock[sourceItem] || sourceItem;
+                  console.error(`[CraftChain] Need to gather ${needToGather}x ${sourceItem} — mining ${oreBlock} first`);
                   const gatherResult = await minecraft_gather_resources(
                     username,
-                    [{ name: sourceItem, count: needToGather }],
+                    [{ name: oreBlock, count: needToGather }],
                     32
                   );
                   results.push(`Gathered for smelting: ${gatherResult}`);
@@ -425,13 +428,26 @@ export async function minecraft_craft_chain(
   };
 
   /**
-   * Smelting recipes: output -> input
+   * Map from raw smelting input to the ore block that must be mined to obtain it.
+   * Used when the bot needs to gather ore to produce a raw material for smelting.
+   */
+  const rawMaterialToOreBlock: Record<string, string> = {
+    "raw_iron": "iron_ore",
+    "raw_gold": "gold_ore",
+    "raw_copper": "copper_ore",
+  };
+
+  /**
+   * Smelting recipes: output -> smelt input
+   * In Minecraft 1.17+, ore blocks drop raw materials (raw_iron, raw_gold, raw_copper)
+   * which are then smelted into ingots. The smeltItem() function expects the raw material
+   * name (not the ore block name).
    */
   const smeltingRecipes: Record<string, string> = {
-    // Ores to ingots
-    "iron_ingot": "iron_ore",
-    "gold_ingot": "gold_ore",
-    "copper_ingot": "copper_ore",
+    // Raw materials to ingots (1.17+ ore drop system)
+    "iron_ingot": "raw_iron",
+    "gold_ingot": "raw_gold",
+    "copper_ingot": "raw_copper",
     // Other smelting
     "glass": "sand",
     "stone": "cobblestone",
@@ -463,9 +479,11 @@ export async function minecraft_craft_chain(
       "oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log",
       "mangrove_log", "cherry_log", "pale_oak_log",
       "cobblestone", "dirt", "sand", "gravel",
-      // Ores
+      // Ore blocks
       "coal_ore", "iron_ore", "gold_ore", "diamond_ore", "lapis_ore", "redstone_ore",
       "copper_ore", "emerald_ore",
+      // Raw materials from ore mining (1.17+ drop system: iron_ore → raw_iron, etc.)
+      "raw_iron", "raw_gold", "raw_copper",
       "coal", "diamond", "emerald",
       // Natural resources
       "wheat", "carrot", "potato", "beetroot",
@@ -855,6 +873,42 @@ export async function minecraft_explore_area(
 
       // Small delay to prevent overwhelming the connection
       await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Danger check: handle any hostile mobs encountered during exploration
+      // This prevents deaths from skeletons, zombies etc. when exploring for passive mobs
+      {
+        const dangerBot = botManager.getBot(username);
+        if (dangerBot) {
+          const danger = checkDangerNearby(dangerBot, 8);
+          if (danger.dangerous && danger.nearestHostile) {
+            console.error(`[ExploreArea] Danger at (${x}, ${z}): ${danger.hostileCount} hostile(s), nearest: ${danger.nearestHostile.name} at ${danger.nearestHostile.distance.toFixed(1)}m, action: ${danger.recommendation}`);
+            if (danger.recommendation === "flee") {
+              try {
+                await botManager.flee(username, 20);
+                findings.push(`Fled from ${danger.nearestHostile.name} at (${x}, ${z})`);
+              } catch (fleeErr) {
+                console.error(`[ExploreArea] Flee failed: ${fleeErr}`);
+              }
+            } else {
+              // Fight the hostile mob before continuing exploration
+              try {
+                const fightResult = await botManager.attack(username, danger.nearestHostile.name);
+                findings.push(`Cleared threat ${danger.nearestHostile.name}: ${fightResult}`);
+                await botManager.collectNearbyItems(username);
+                // Re-check HP after combat — abort if critically low
+                const postFightBot = botManager.getBot(username);
+                if (postFightBot && (postFightBot.health ?? 20) <= 8) {
+                  return `Exploration stopped after combat: HP critically low (${postFightBot.health}/20). Return to safety! Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
+                }
+              } catch (fightErr) {
+                console.error(`[ExploreArea] Fight failed: ${fightErr}`);
+                // Try to flee if fight fails
+                try { await botManager.flee(username, 20); } catch (_) {}
+              }
+            }
+          }
+        }
+      }
 
       // Abort enderman hunt if it becomes daytime or raining (endermen despawn in sunlight/rain)
       if (target?.toLowerCase() === "enderman") {
