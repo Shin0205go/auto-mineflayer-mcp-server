@@ -131,7 +131,24 @@ export async function minecraft_gather_resources(
         const moveResult = await botManager.moveTo(username, x, y, z);
         if (!moveResult.includes("Reached") && !moveResult.includes("Moved")) {
           console.error(`[GatherResources] Move failed: ${moveResult}`);
+          consecutiveFailures++;
           continue; // Try finding another block
+        }
+
+        // Verify bot actually reached the block (pathfinder may silently succeed
+        // without moving — e.g., when blocked by terrain or stuck position).
+        // Mining requires being within ~4.5 blocks; skip if still too far.
+        const posAfterMove = botManager.getPosition(username);
+        if (posAfterMove) {
+          const mdx = x - posAfterMove.x;
+          const mdy = y - posAfterMove.y;
+          const mdz = z - posAfterMove.z;
+          const distToBlock = Math.sqrt(mdx * mdx + mdy * mdy + mdz * mdz);
+          if (distToBlock > 5) {
+            console.error(`[GatherResources] Still ${distToBlock.toFixed(1)} blocks from ${item.name} at (${x},${y},${z}) after move. Pathfinder stuck — skipping.`);
+            consecutiveFailures++;
+            continue;
+          }
         }
 
         // Check inventory before mining
@@ -379,12 +396,15 @@ export async function minecraft_craft_chain(
                 const sourceInInv = inventory.find(i => i.name === sourceItem);
 
                 if (!sourceInInv || sourceInInv.count < neededCount) {
-                  // Need to gather the source material first
+                  // Need to gather the source material first.
+                  // raw_iron/raw_gold/raw_copper are item drops, not world blocks —
+                  // gather the corresponding ore block instead.
                   const needToGather = neededCount - (sourceInInv?.count || 0);
-                  console.error(`[CraftChain] Need to gather ${needToGather}x ${sourceItem} first`);
+                  const blockToMine = smeltSourceToMineBlock[sourceItem] || sourceItem;
+                  console.error(`[CraftChain] Need to gather ${needToGather}x ${sourceItem} (mine ${blockToMine})`);
                   const gatherResult = await minecraft_gather_resources(
                     username,
-                    [{ name: sourceItem, count: needToGather }],
+                    [{ name: blockToMine, count: needToGather }],
                     32
                   );
                   results.push(`Gathered for smelting: ${gatherResult}`);
@@ -425,13 +445,15 @@ export async function minecraft_craft_chain(
   };
 
   /**
-   * Smelting recipes: output -> input
+   * Smelting recipes: output -> input (the item to smelt)
+   * In Minecraft 1.17+, mining iron/gold/copper ore drops raw_* items (not ore blocks).
+   * So the smelt input must be raw_iron / raw_gold / raw_copper, not the ore block.
    */
   const smeltingRecipes: Record<string, string> = {
-    // Ores to ingots
-    "iron_ingot": "iron_ore",
-    "gold_ingot": "gold_ore",
-    "copper_ingot": "copper_ore",
+    // Raw ores to ingots (1.17+: mining gives raw_* drops, not ore blocks)
+    "iron_ingot": "raw_iron",
+    "gold_ingot": "raw_gold",
+    "copper_ingot": "raw_copper",
     // Other smelting
     "glass": "sand",
     "stone": "cobblestone",
@@ -444,6 +466,16 @@ export async function minecraft_craft_chain(
     "cooked_rabbit": "rabbit",
     "cooked_cod": "cod",
     "cooked_salmon": "salmon",
+  };
+
+  /**
+   * Map raw smelt inputs to the ORE BLOCK that must be mined to obtain them.
+   * raw_iron is not a world block — you mine iron_ore to get raw_iron as a drop.
+   */
+  const smeltSourceToMineBlock: Record<string, string> = {
+    "raw_iron": "iron_ore",
+    "raw_gold": "gold_ore",
+    "raw_copper": "copper_ore",
   };
 
   /**
