@@ -148,6 +148,18 @@ export async function handleMovementTool(
       }
 
       const result = await botManager.moveTo(username, x, y, z);
+      // Verify actual position after move — pathfinder sometimes returns "success"
+      // without the bot actually reaching the target (stuck on terrain, blocked path, etc.)
+      const finalPos = botManager.getPosition(username);
+      if (finalPos) {
+        const dx = x - finalPos.x;
+        const dy = y - finalPos.y;
+        const dz = z - finalPos.z;
+        const distToTarget = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (distToTarget > 3) {
+          return `${result} | WARNING: Bot did not reach target. Actual position: (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), still ${distToTarget.toFixed(1)} blocks from target. Pathfinder may be stuck — try a different coordinate or place blocks to create a path.`;
+        }
+      }
       return result;
     }
 

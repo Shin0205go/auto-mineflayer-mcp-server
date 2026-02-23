@@ -172,7 +172,15 @@ export async function openChest(
     }
   }
 
-  const items = chest.containerItems();
+  // Wait for chest window contents to be populated by server
+  await new Promise(resolve => setTimeout(resolve, 500));
+
+  // Retry containerItems() in case data hasn't arrived yet
+  let items = chest.containerItems();
+  if (items.length === 0) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    items = chest.containerItems();
+  }
 
   if (items.length === 0) {
     chest.close();
@@ -401,7 +409,15 @@ export async function takeFromChest(
     }
   }
 
-  const items = chest.containerItems();
+  // Wait for chest window contents to be populated by server (prevents chest sync bug)
+  await new Promise(resolve => setTimeout(resolve, 500));
+
+  // Retry containerItems() in case data hasn't arrived yet
+  let items = chest.containerItems();
+  if (items.length === 0) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    items = chest.containerItems();
+  }
 
   const item = items.find((i: any) => i.name === itemName);
   if (!item) {
