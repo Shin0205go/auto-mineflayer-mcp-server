@@ -5,6 +5,7 @@ import {
   minecraft_survival_routine,
   minecraft_explore_area,
   minecraft_validate_survival_environment,
+  minecraft_day1_boot_sequence,
 } from "./high-level-actions.js";
 
 export const highLevelActionTools = {
@@ -89,6 +90,16 @@ export const highLevelActionTools = {
       required: ["username"]
     }
   },
+  minecraft_day1_boot_sequence: {
+    description: "CRITICAL FIRST ACTION: Execute the deterministic Day 1 survival boot sequence. Runs in fixed order: env validation → gather wood → craft tools → hunt food → cook meat → mine stone → upgrade tools → build shelter. Call this ONCE at session start before any other actions. Eliminates trial-and-error startup.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        username: { type: "string", description: "Bot username" },
+      },
+      required: ["username"]
+    }
+  },
 };
 
 export async function handleHighLevelActionTool(name: string, args: Record<string, unknown>): Promise<string> {
@@ -127,6 +138,10 @@ export async function handleHighLevelActionTool(name: string, args: Record<strin
     case "minecraft_validate_survival_environment": {
       const searchRadius = args.searchRadius as number | undefined;
       return await minecraft_validate_survival_environment(username, searchRadius);
+    }
+
+    case "minecraft_day1_boot_sequence": {
+      return await minecraft_day1_boot_sequence(username);
     }
 
     default:

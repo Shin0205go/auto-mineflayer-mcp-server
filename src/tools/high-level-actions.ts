@@ -526,22 +526,29 @@ export async function minecraft_survival_routine(
     // Auto-detect priority based on current state
     // Parse JSON status: {"health":"X/20","hunger":"Y/20",...}
     let food = 20;
+    let hp = 20;
 
     try {
       const statusObj = JSON.parse(status);
       const hungerMatch = statusObj.hunger?.match(/([\d.]+)\//);
       if (hungerMatch) food = parseFloat(hungerMatch[1]);
+      const healthMatch = statusObj.health?.match(/([\d.]+)\//);
+      if (healthMatch) hp = parseFloat(healthMatch[1]);
     } catch (e) {
       // Fallback: try old text format
       const statusMatch = status.match(/Health: ([\d.]+)\/20, Food: ([\d.]+)\/20/);
       if (statusMatch) {
+        hp = parseFloat(statusMatch[1]);
         food = parseFloat(statusMatch[2]);
       }
     }
 
     const hasPickaxe = inventory.some(item => item.name.includes("pickaxe"));
 
-    if (food < 10) {
+    // Proactive thresholds: act BEFORE crisis hits
+    // food < 15 (was 10) — eat before starvation damage starts
+    // hp < 10 with low food — food is urgent regardless of hunger number
+    if (food < 15 || (hp < 10 && food < 18)) {
       selectedPriority = "food";
     } else if (!hasPickaxe) {
       selectedPriority = "tools";
@@ -549,7 +556,7 @@ export async function minecraft_survival_routine(
       selectedPriority = "shelter";
     }
 
-    console.error(`[SurvivalRoutine] Auto-selected priority: ${selectedPriority}`);
+    console.error(`[SurvivalRoutine] Auto-selected priority: ${selectedPriority} (HP: ${hp}/20, Food: ${food}/20)`);
   }
 
   const results: string[] = [];
@@ -1133,6 +1140,248 @@ export async function minecraft_brew_potion(
     const errMsg = err instanceof Error ? err.message : String(err);
     return `Failed to brew potion: ${errMsg}`;
   }
+}
+
+/**
+ * Day 1 Boot Sequence: Fixed deterministic startup protocol
+ * Executes the optimal first-day survival actions in order:
+ * 1. Environment validation
+ * 2. Gather 10 logs
+ * 3. Craft planks → crafting table → wooden tools (pickaxe, axe, sword)
+ * 4. Find and hunt first available food animal (accept raw meat)
+ * 5. Mine stone → upgrade to stone tools
+ * 6. Build small shelter before night
+ *
+ * This function is intentionally deterministic (no AI judgment) because
+ * the correct Minecraft Day 1 actions are well-known.
+ */
+export async function minecraft_day1_boot_sequence(
+  username: string
+): Promise<string> {
+  console.error(`[Day1Boot] Starting Day 1 Boot Sequence for ${username}`);
+  const steps: string[] = [];
+
+  // === STEP 0: Environment validation ===
+  console.error(`[Day1Boot] Step 0: Environment validation`);
+  try {
+    const envResult = await minecraft_validate_survival_environment(username, 50);
+    steps.push(`Env check: ${envResult.split("\n")[2] || "done"}`);
+    // If CRITICAL (no food sources), warn but continue — bot must still try
+    if (envResult.includes("CRITICAL") || envResult.includes("WARNING")) {
+      console.error(`[Day1Boot] WARNING: Limited food sources detected. Will hunt aggressively.`);
+      steps.push("WARNING: Limited food sources — hunting will be prioritized");
+    }
+  } catch (err) {
+    steps.push(`Env check skipped: ${err}`);
+  }
+
+  // === STEP 1: Gather 10 logs (try multiple wood types) ===
+  console.error(`[Day1Boot] Step 1: Gather wood`);
+  const woodTypes = ["oak_log", "spruce_log", "birch_log", "jungle_log", "acacia_log", "dark_oak_log", "mangrove_log"];
+  let woodGathered = false;
+  for (const woodType of woodTypes) {
+    try {
+      const woodResult = await minecraft_gather_resources(username, [{ name: woodType, count: 10 }], 32);
+      // Check if we actually got logs
+      const inv = botManager.getInventory(username);
+      const logsInInv = inv.filter(i => i.name.endsWith("_log")).reduce((sum, i) => sum + i.count, 0);
+      if (logsInInv >= 6) {
+        steps.push(`Wood gathered: ${logsInInv} logs (${woodType})`);
+        woodGathered = true;
+        break;
+      }
+    } catch (err) {
+      console.error(`[Day1Boot] Wood gather (${woodType}) failed: ${err}`);
+    }
+  }
+  if (!woodGathered) {
+    steps.push("WARNING: Could not gather enough wood. Continuing with what we have.");
+  }
+
+  // === STEP 2: Craft planks → crafting table → tools ===
+  console.error(`[Day1Boot] Step 2: Craft basic tools`);
+  try {
+    // Detect which wood type we have
+    const inv = botManager.getInventory(username);
+    const logItem = inv.find(i => i.name.endsWith("_log"));
+    const woodPrefix = logItem ? logItem.name.replace("_log", "") : "oak";
+
+    // Craft planks
+    await botManager.craftItem(username, `${woodPrefix}_planks`, 4);
+
+    // Craft crafting table
+    const tableResult = await botManager.craftItem(username, "crafting_table", 1);
+    steps.push(`Crafting table: ${tableResult.includes("Crafted") ? "OK" : tableResult}`);
+
+    // Place crafting table
+    const pos = botManager.getPosition(username);
+    if (pos) {
+      await botManager.placeBlock(username, "crafting_table", Math.floor(pos.x) + 1, Math.floor(pos.y), Math.floor(pos.z));
+    }
+
+    // Craft wooden tools (pickaxe first, then sword for hunting)
+    for (const tool of ["wooden_pickaxe", "wooden_sword", "wooden_axe"]) {
+      try {
+        const toolResult = await botManager.craftItem(username, tool, 1);
+        steps.push(`${tool}: ${toolResult.includes("Crafted") ? "OK" : toolResult}`);
+      } catch (err) {
+        console.error(`[Day1Boot] Failed to craft ${tool}: ${err}`);
+      }
+    }
+  } catch (err) {
+    steps.push(`Tool crafting failed: ${err}`);
+  }
+
+  // === STEP 3: Hunt first food animal (accept raw meat) ===
+  console.error(`[Day1Boot] Step 3: Hunt food`);
+  const foodAnimals = ["cow", "pig", "chicken", "sheep", "rabbit"];
+  let foodObtained = false;
+
+  // Check if we already have food
+  const invCheck = botManager.getInventory(username);
+  const hasFood = invCheck.some(i =>
+    ["bread", "cooked_beef", "beef", "porkchop", "cooked_porkchop",
+     "chicken", "cooked_chicken", "mutton", "cooked_mutton",
+     "rabbit", "cooked_rabbit", "rotten_flesh"].includes(i.name)
+  );
+
+  if (hasFood) {
+    steps.push("Food already in inventory, skipping hunt");
+    foodObtained = true;
+  } else {
+    // Equip sword for hunting
+    try {
+      await botManager.equipWeapon(username);
+    } catch (_) {}
+
+    for (const animal of foodAnimals) {
+      try {
+        const entities = botManager.findEntities(username, animal, 64);
+        if (!entities.includes(animal) || entities.startsWith("No")) continue;
+
+        const fightResult = await botManager.fight(username, animal, 0);
+        await botManager.collectNearbyItems(username);
+
+        const invAfter = botManager.getInventory(username);
+        const meatItems = invAfter.filter(i =>
+          ["beef", "porkchop", "chicken", "mutton", "rabbit"].includes(i.name)
+        );
+        if (meatItems.length > 0) {
+          steps.push(`Hunted ${animal}: got ${meatItems.map(i => `${i.name}x${i.count}`).join(", ")}`);
+          foodObtained = true;
+          break;
+        }
+      } catch (err) {
+        console.error(`[Day1Boot] Hunt ${animal} failed: ${err}`);
+      }
+    }
+
+    if (!foodObtained) {
+      steps.push("WARNING: No food animals found within 64 blocks. Will need to explore further.");
+    }
+  }
+
+  // === STEP 4: Cook meat if we have a furnace or can make one ===
+  console.error(`[Day1Boot] Step 4: Cook meat`);
+  try {
+    const invNow = botManager.getInventory(username);
+    const rawMeat = invNow.find(i => ["beef", "porkchop", "chicken", "mutton", "rabbit"].includes(i.name));
+    const hasFurnace = invNow.some(i => i.name === "furnace");
+    const hasCobblestone = invNow.some(i => i.name === "cobblestone" && i.count >= 8);
+
+    if (rawMeat && !hasFurnace && hasCobblestone) {
+      // Craft furnace
+      try {
+        await botManager.craftItem(username, "furnace", 1);
+        steps.push("Furnace crafted");
+      } catch (_) {}
+    }
+
+    if (rawMeat) {
+      try {
+        const smeltResult = await botManager.smeltItem(username, rawMeat.name, rawMeat.count);
+        steps.push(`Cooked ${rawMeat.name}: ${smeltResult.includes("Smelted") ? "OK" : smeltResult}`);
+      } catch (smeltErr) {
+        steps.push(`Cooking skipped (no furnace yet): ${smeltErr}`);
+      }
+    }
+  } catch (err) {
+    steps.push(`Cooking step failed: ${err}`);
+  }
+
+  // === STEP 5: Mine stone → upgrade to stone tools ===
+  console.error(`[Day1Boot] Step 5: Mine stone for tool upgrade`);
+  try {
+    const stoneResult = await minecraft_gather_resources(username, [{ name: "cobblestone", count: 16 }], 20);
+    const inv5 = botManager.getInventory(username);
+    const cobble = inv5.find(i => i.name === "cobblestone")?.count || 0;
+
+    if (cobble >= 11) {
+      // Upgrade key tools to stone
+      for (const tool of ["stone_pickaxe", "stone_sword"]) {
+        try {
+          const toolResult = await botManager.craftItem(username, tool, 1);
+          steps.push(`${tool}: ${toolResult.includes("Crafted") ? "OK" : toolResult}`);
+        } catch (err) {
+          console.error(`[Day1Boot] Failed to craft ${tool}: ${err}`);
+        }
+      }
+    } else {
+      steps.push(`Only ${cobble} cobblestone — skipping stone tool upgrade`);
+    }
+  } catch (err) {
+    steps.push(`Stone mining failed: ${err}`);
+  }
+
+  // === STEP 6: Eat before shelter if hungry ===
+  console.error(`[Day1Boot] Step 6: Eat if hungry`);
+  try {
+    const status6 = botManager.getStatus(username);
+    const statusObj6 = JSON.parse(status6);
+    const hungerMatch6 = statusObj6.hunger?.match(/([\d.]+)\//);
+    const hunger6 = hungerMatch6 ? parseFloat(hungerMatch6[1]) : 20;
+    if (hunger6 < 16) {
+      await botManager.eat(username);
+      steps.push(`Ate food (hunger was ${hunger6}/20)`);
+    }
+  } catch (_) {}
+
+  // === STEP 7: Build small shelter ===
+  console.error(`[Day1Boot] Step 7: Build shelter`);
+  try {
+    const bot7 = botManager.getBot(username);
+    const isNight = bot7 ? (bot7.time?.timeOfDay ?? 0) > 12541 : false;
+
+    if (isNight) {
+      steps.push("Night detected — building shelter immediately");
+    }
+
+    const shelterResult = await minecraft_build_structure(username, "shelter", "small");
+    steps.push(`Shelter: ${shelterResult.includes("Built") ? "OK" : shelterResult.substring(0, 60)}`);
+  } catch (err) {
+    steps.push(`Shelter failed: ${err}`);
+  }
+
+  // === Final report ===
+  const finalInv = botManager.getInventory(username);
+  const finalStatus = botManager.getStatus(username);
+  let finalHunger = "?";
+  let finalHp = "?";
+  try {
+    const statusObj = JSON.parse(finalStatus);
+    finalHunger = statusObj.hunger?.split("/")[0] || "?";
+    finalHp = statusObj.health?.split("/")[0] || "?";
+  } catch (_) {}
+
+  const invSummary = finalInv.map(i => `${i.name}(${i.count})`).join(", ");
+
+  return [
+    `=== Day 1 Boot Sequence Complete ===`,
+    `HP: ${finalHp}/20  Hunger: ${finalHunger}/20`,
+    `Steps:`,
+    ...steps.map(s => `  - ${s}`),
+    `Inventory: ${invSummary}`,
+  ].join("\n");
 }
 
 /**
