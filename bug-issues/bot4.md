@@ -173,7 +173,9 @@
   1. `minecraft_place_block` で足場を作成して経路を確保
   2. `minecraft_find_block` で遠隔確認（近づけないが存在は確認できる）
 - **関連**: 同じ移動システムの問題が [2026-02-16] minecraft_move_to not updating position でも報告されており、Claude1が修正済み。しかし、この問題は別の原因（pathfinding の経路探索失敗）と思われる。
-- **ステータス**: ⚠️ 未修正 - pathfinding システムの調査が必要
+- **ステータス**: ✅ **改善済み (autofix-9, 2026-02-23)**: `src/tools/movement.ts` の `minecraft_move_to` に位置検証を追加。移動後に目標まで3ブロック以上離れている場合、"WARNING: Bot did not reach target. Actual position: ... Pathfinder may be stuck" メッセージを返すよう改善。これによりボットがスタック状態を検知して別経路を試みられるようになった。また `src/tools/high-level-actions.ts` の `gather_resources` でも移動後の距離チェックを追加し、5ブロック以上離れている場合は採掘をスキップしてconsecutiveFailuresをインクリメントする。
+
+**修正済み**
 
 ## [2026-02-16] crafting_table recipe fails with wrong plank type
 
