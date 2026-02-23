@@ -6884,9 +6884,8 @@ Session 158初: ender_eye(2), ender_pearl(12), book(1), ... gold_ingot消失
    - 次回再現時に原因特定可能
 
 **Status**: 修正完了、次Sessionで動作確認予定
-- **修正済み (autofix-21, 2026-02-23)**: `src/bot-manager/bot-crafting.ts` の waitTime を `smeltCount * 10000` から `smeltCount * 10000 + 5000` に変更。furnace 起動遅延（~5秒）を考慮したバッファを追加し、最後のアイテムがまだ精錬中に `takeOutput()` が呼ばれる問題を修正。
 
-**修正済み**
+**修正済み** (autofix-9, 2026-02-23): `src/bot-manager/bot-crafting.ts` line 1809 の waitTime に +5000ms バッファを追加。`smeltCount * 10000 + 5000` に変更し、furnace 起動時間と最終アイテム完了時間のズレを吸収。ビルド成功確認済み。
 
 ---
 
@@ -7340,3 +7339,45 @@ const isNonSolid = (name: string) => {
 
 **修正済み** (autofix-4, 2026-02-22): ビルド成功確認済み。
 
+
+---
+
+## [2026-02-23] minecraft_check_infrastructure が lit_furnace を検出しない (autofix-16)
+
+### 症状
+- furnaceが稼働中（精錬中）のとき `minecraft_check_infrastructure` が "No furnace nearby" を返す
+- Session 159で "No furnace found within 32 blocks" エラーが多発していた根本原因の一つ
+- `bot-crafting.ts` のsmelt関数自体は lit_furnace に対応済みだが check_infrastructure は未対応
+
+### 根本原因
+- `src/tools/environment.ts` の `minecraft_check_infrastructure` で
+  `botManager.findBlock(username, "furnace", maxDistance)` のみ検索
+- Minecraftでfurnaceが精錬中は `lit_furnace` ブロック状態になるため検索でヒットしない
+
+### 修正内容
+- `furnace` が見つからない場合に続けて `lit_furnace` も検索するよう変更
+- ファイル: `src/tools/environment.ts`
+
+**修正済み** (autofix-16, 2026-02-23): ビルド成功確認済み。
+
+---
+
+## [2026-02-23] minecraft_craft_chain の精錬レシピが iron_ore を使用 (autofix-16)
+
+### 症状
+- `minecraft_craft_chain("iron_pickaxe", true)` で iron_ingot 不足時、
+  `raw_iron` がインベントリにあるのに `iron_ore` を探してしまい精錬失敗
+- Minecraft 1.17+ では iron_ore 採掘で `raw_iron` がドロップ（ore ブロックではない）
+
+### 根本原因
+- `src/tools/high-level-actions.ts` の `smeltingRecipes` が iron_ore/gold_ore/copper_ore を参照
+- 採掘後のインベントリには raw_iron/raw_gold/raw_copper が入るため不一致
+- gather 時も `raw_iron` ブロック（存在しない）を探してしまう
+
+### 修正内容
+- `smeltingRecipes` を raw 素材に変更 (raw_iron/raw_gold/raw_copper)
+- `smeltSourceToMineBlock` マップを追加: raw_iron→iron_ore 等（採掘対象ブロック）
+- gather 時は ore ブロックを採掘して raw 素材を取得するよう修正
+- ファイル: `src/tools/high-level-actions.ts`
+
+**修正済み** (autofix-16, 2026-02-23): ビルド成功確認済み。

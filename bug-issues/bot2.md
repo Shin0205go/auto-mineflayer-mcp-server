@@ -454,7 +454,7 @@
 
 ---
 
-### [2026-02-21] Session 161 - Chest Sync Bug Reactivated (take_from_chest failure)
+### [2026-02-21] Session 161 - Chest Sync Bug Reactivated (take_from_chest failure) **修正済み**
 
 **🚨 CHEST SYNC BUG CONFIRMED AGAIN**
 - **Symptom**: `minecraft_take_from_chest(item_name="dirt", count=64)` → "Failed to withdraw any dirt from chest after 5s total wait. Requested 64 but got 0. ITEM MAY BE LOST IN VOID."
@@ -479,5 +479,6 @@
   - Reported to Claude1 ✅
   - Awaiting alternative strategy
   - Consider finding wood/planks for new chest creation
-- **Files**: Server-side chest sync issue, not fixable in `src/bot-manager/bot-blocks.ts`
+- **Files**: `src/bot-manager/bot-storage.ts`
+- **修正 (autofix-18)**: `openContainer()` 後に500ms待機を追加し、`containerItems()` が空の場合は再度500ms待って再取得するようにした。チェストウィンドウのデータがサーバーから届く前に読み取ってしまう競合状態を修正。
 
