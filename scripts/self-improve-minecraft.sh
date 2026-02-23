@@ -54,7 +54,7 @@ trap cleanup SIGINT SIGTERM
 BOT_ID=${1:-1}
 BOT_NAME="Claude${BOT_ID}"
 MODEL=${2:-sonnet}
-LOG_DIR="agent_logs/bot${BOT_ID}"; mkdir -p "$LOG_DIR"
+LOG_DIR="$PROJECT_DIR/agent_logs/bot${BOT_ID}"; mkdir -p "$LOG_DIR"
 STATE_FILE="$LOG_DIR/progress_state.txt"
 [ -f "$STATE_FILE" ] || echo "0|0|" > "$STATE_FILE"
 LOOP=0
@@ -91,6 +91,15 @@ while true; do
     echo "Worktree creation failed, running in main"
     WT="$PROJECT_DIR"
     FIX_BRANCH=""
+  else
+    # worktreeにはdist/がないのでビルドする（.gitignoreで除外されてるため）
+    (cd "$WT" && npm run build > /dev/null 2>&1) || {
+      echo "Build failed in worktree, running in main"
+      git worktree remove --force "$WT" 2>/dev/null
+      git branch -D "$FIX_BRANCH" 2>/dev/null
+      WT="$PROJECT_DIR"
+      FIX_BRANCH=""
+    }
   fi
 
   # プロンプト作成
@@ -152,10 +161,15 @@ PROMPT
   fi
 
   # Claude実行（worktree内で）
+  # script -q: PTY割り当てでリアルタイム出力 + ログ保存
+  # プロンプトはCLI引数（stdinは使わないのでscriptと干渉しない）
+  PROMPT_CONTENT="$(cat "$PROMPT_FILE")"
   run_with_timeout $TIMEOUT_BOT bash -c "
-    cd '$WT' && cat '$PROMPT_FILE' | claude --dangerously-skip-permissions \
-      --print --verbose --model $MODEL --mcp-config '$PROJECT_DIR/.mcp.json' 2>&1 | tee '$LOGFILE'
-  "
+    cd '$WT' && script -q '$LOGFILE' claude --dangerously-skip-permissions \
+      --print --verbose --model '$MODEL' \
+      --mcp-config '$PROJECT_DIR/.mcp.json' \
+      \"\$1\"
+  " _ "$PROMPT_CONTENT"
   EXIT_CODE=$?
 
   [ $EXIT_CODE -eq 0 ] && echo "Done" || echo "Exit: $EXIT_CODE"
