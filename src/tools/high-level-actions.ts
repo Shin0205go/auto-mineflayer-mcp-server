@@ -131,7 +131,24 @@ export async function minecraft_gather_resources(
         const moveResult = await botManager.moveTo(username, x, y, z);
         if (!moveResult.includes("Reached") && !moveResult.includes("Moved")) {
           console.error(`[GatherResources] Move failed: ${moveResult}`);
+          consecutiveFailures++;
           continue; // Try finding another block
+        }
+
+        // Verify bot actually reached the block (pathfinder may silently succeed
+        // without moving — e.g., when blocked by terrain or stuck position).
+        // Mining requires being within ~4.5 blocks; skip if still too far.
+        const posAfterMove = botManager.getPosition(username);
+        if (posAfterMove) {
+          const mdx = x - posAfterMove.x;
+          const mdy = y - posAfterMove.y;
+          const mdz = z - posAfterMove.z;
+          const distToBlock = Math.sqrt(mdx * mdx + mdy * mdy + mdz * mdz);
+          if (distToBlock > 5) {
+            console.error(`[GatherResources] Still ${distToBlock.toFixed(1)} blocks from ${item.name} at (${x},${y},${z}) after move. Pathfinder stuck — skipping.`);
+            consecutiveFailures++;
+            continue;
+          }
         }
 
         // Check inventory before mining
