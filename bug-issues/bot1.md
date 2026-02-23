@@ -7374,3 +7374,35 @@ const isNonSolid = (name: string) => {
 - **状況**: keepInventory=false → stone_pickaxe・stone_sword・birch_planks全ロスト
 - **根本原因バグ**: minecraft_survival_routineは低HP時に水中移動/戦闘を行い溺死を引き起こす。HP < 10の時はsurvival_routine使用禁止
 - **教訓**: survival_routineはHP低下時に危険。HP < 10では絶対に使わないこと。食料ゼロ時の代替案: 木を集めてcrafting_chainで自力回復
+
+---
+
+## Session 111 (2026-02-23) - Bug #17: Zombie Kill at Low HP
+
+**死因**: Zombie に殺された
+**座標**: (-58, 97, -2)
+**HP時**: 5.2/20（最初に落下ダメージで5.2まで低下）
+**直前の行動**: 食料を探して移動中（spawn地点Y=96から落下ダメージを受けた後、動物を探して移動）
+
+**経緯**:
+1. 接続時HP 17.8/20 インベントリ空
+2. Y=96 spawn地点から移動 → 落下ダメージで HP 5.2/20 に
+3. Birch wood伐採 → 作業台クラフト → 石ピッケル・石剣クラフト成功
+4. 動物を探して移動中、夜間Zombie spawn → HP5.2で即死
+
+**根本原因**:
+- Spawn地点が高所（Y=96）で移動時に落下ダメージ
+- インベントリ空のため食料なく HP回復不可
+- 動物が32ブロック圏内に全く存在しない
+
+**対策**:
+- Bootstrap問題が根本。サーバーコンソールで /give が必要
+- Spawn後すぐに落下しないよう降下を慎重に行う
+
+## [autofix-27] 修正済み
+
+### 修正済み: survival_routine 低HP戦闘死亡
+- **Bug**: 死亡 #4, バグ #16等 - HP低下時に survival_routine が戦闘を試みて死亡
+- **Fix**: `src/tools/high-level-actions.ts` food section に HP pre-check 追加 + `src/bot-manager/bot-movement.ts` hunger deadlock 修正
+- **修正済み**: autofix-27
+

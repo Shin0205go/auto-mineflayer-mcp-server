@@ -57,13 +57,24 @@ export const GAME_AGENT_TOOLS = new Set([
   // Tool Search (1 tool)
   "search_tools",
 
-  // High-Level Actions (6 tools) - for skills
+  // High-Level Actions - for skills
   "minecraft_gather_resources",
   "minecraft_build_structure",
   "minecraft_craft_chain",
   "minecraft_survival_routine",
   "minecraft_explore_area",
   "minecraft_validate_survival_environment",
+  "minecraft_day1_boot_sequence",
+  "minecraft_establish_base",
+  "minecraft_upgrade_tools",
+  "minecraft_night_routine",
+  "minecraft_death_recovery",
+  "minecraft_food_emergency",
+
+  // Bootstrap tools
+  "minecraft_check_bootstrap",
+  "minecraft_generate_bootstrap_script",
+  "minecraft_list_bootstrap_needs",
 ]);
 
 export type AgentType = "game" | "dev";

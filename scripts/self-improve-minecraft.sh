@@ -1,18 +1,17 @@
 #!/bin/bash
 export PATH="$HOME/.nvm/versions/node/v20.19.0/bin:$HOME/.local/bin:$PATH"
 #
-# Minecraft 統合ランチャー
-#   bot モード: プレイ専用ループ
-#   dev モード: bug-issues/監視 → worktreeで自動修正 → mainにマージ
+# Minecraft 自律プレイ + コード自動改善ランチャー
+#   各ボットがworktreeでプレイしながらコードも修正する
 #
 # Usage:
 #   ./scripts/self-improve-minecraft.sh 1 sonnet
-#   ./scripts/self-improve-minecraft.sh dev [model]
+#   ./scripts/self-improve-minecraft.sh 2 haiku
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLAUDE_PID=""
 TIMEOUT_BOT=1800   # 30min
-TIMEOUT_DEV=900    # 15min
 
 kill_pid() {
   local pid=$1
@@ -24,9 +23,6 @@ kill_pid() {
   wait "$pid" 2>/dev/null
 }
 
-# タイムアウト付きでコマンドをバックグラウンド実行し、完了を待つ
-# Usage: run_with_timeout <timeout_sec> <command...>
-# 戻り値: 0=正常終了, 124=タイムアウト, その他=コマンドの終了コード
 run_with_timeout() {
   local timeout=$1; shift
   "$@" &
@@ -44,90 +40,16 @@ run_with_timeout() {
 cleanup() {
   echo ""; echo "Shutting down..."
   kill_pid "$CLAUDE_PID"
-  # dev worktree cleanup
-  git worktree list 2>/dev/null | grep 'autofix' | awk '{print $1}' | while read wt; do
-    git worktree remove --force "$wt" 2>/dev/null
+  # worktree cleanup for this bot
+  git -C "$PROJECT_DIR" worktree list 2>/dev/null | grep "bot${BOT_ID}-" | awk '{print $1}' | while read wt; do
+    git -C "$PROJECT_DIR" worktree remove --force "$wt" 2>/dev/null
   done
   exit 0
 }
 trap cleanup SIGINT SIGTERM
 
 # =============================================================================
-# dev モード
-# =============================================================================
-if [ "$1" = "dev" ]; then
-  MODEL=${2:-sonnet}
-  DEV_LOG_DIR="agent_logs/dev"; mkdir -p "$DEV_LOG_DIR"
-  SNAPSHOT_FILE="$DEV_LOG_DIR/bug_snapshot.md5"; touch "$SNAPSHOT_FILE"
-  DEV_LOOP=0
-
-  echo "Auto-fix dev loop | Model: $MODEL | Watching: bug-issues/"
-
-  while true; do
-    CURRENT_HASH=$(cat bug-issues/*.md 2>/dev/null | md5 2>/dev/null || md5sum 2>/dev/null | cut -d' ' -f1)
-    [ "$CURRENT_HASH" = "$(cat "$SNAPSHOT_FILE" 2>/dev/null)" ] && { sleep 30; continue; }
-
-    DEV_LOOP=$((DEV_LOOP + 1))
-    LOGFILE="$DEV_LOG_DIR/fix_${DEV_LOOP}_$(date +%Y%m%d_%H%M%S).log"
-    echo "━━━ [Dev] Fix #$DEV_LOOP ━━━"
-
-    # mainを最新に
-    git fetch origin main 2>/dev/null
-    git merge origin/main --no-edit 2>/dev/null || true
-
-    # worktreeで修正
-    FIX_BRANCH="autofix-${DEV_LOOP}"
-    WT=".claude/worktrees/$FIX_BRANCH"
-    git worktree add "$WT" -b "$FIX_BRANCH" HEAD 2>/dev/null
-
-    run_with_timeout $TIMEOUT_DEV bash -c "
-      cd '$WT' && unset CLAUDECODE
-      cat <<'PROMPT' | claude --dangerously-skip-permissions --print --verbose --model $MODEL 2>&1 | tee '$LOGFILE'
-# 自動バグ修正タスク
-bug-issues/ のバグを修正しろ。
-1. bug-issues/ を読み未修正バグを特定
-2. src/tools/ のコードを調査・修正
-3. npm run build で確認
-4. 修正済みバグに「**修正済み**」追記
-5. git add & git commit
-編集は src/tools/ と bug-issues/ のみ。
-PROMPT
-    "
-
-    # worktreeの変更をmainにマージ
-    if [ -d "$WT" ]; then
-      # 未コミット変更があればcommit
-      (cd "$WT" && git diff --quiet src/ bug-issues/ 2>/dev/null || {
-        git add src/tools/ bug-issues/ && git commit -m "[AutoFix] Fix #${DEV_LOOP}"
-      }) 2>/dev/null
-
-      AHEAD=$(cd "$WT" && git rev-list --count main.."$FIX_BRANCH" 2>/dev/null || echo 0)
-      if [ "$AHEAD" -gt 0 ]; then
-        if (cd "$WT" && npm run build --silent 2>/dev/null); then
-          if git merge "$FIX_BRANCH" --no-edit 2>/dev/null; then
-            npm run build --silent 2>/dev/null && git push origin main 2>/dev/null && echo "Pushed" || {
-              echo "Build/push failed after merge, reverting"
-              git reset --hard HEAD~1 2>/dev/null
-            }
-          else
-            echo "Merge conflict, aborting"
-            git merge --abort 2>/dev/null
-          fi
-        else
-          echo "Build failed in worktree, skipping"
-        fi
-      fi
-      git worktree remove --force "$WT" 2>/dev/null
-      git branch -D "$FIX_BRANCH" 2>/dev/null
-    fi
-
-    echo "$CURRENT_HASH" > "$SNAPSHOT_FILE"
-    echo "Next check in 60s..."; sleep 60
-  done
-fi
-
-# =============================================================================
-# bot モード
+# bot モード（プレイ + コード修正統合）
 # =============================================================================
 BOT_ID=${1:-1}
 BOT_NAME="Claude${BOT_ID}"
@@ -148,30 +70,67 @@ while true; do
   LOGFILE="$LOG_DIR/loop_${LOOP}_$(date +%Y%m%d_%H%M%S).log"
   echo "━━━ $BOT_NAME #$LOOP ━━━"
 
-  # 最新コード取り込み
+  # mainを最新に
+  cd "$PROJECT_DIR"
   git pull origin main --rebase 2>/dev/null || git pull origin main 2>/dev/null || true
   npm run build > /dev/null 2>&1 || true
+
+  # worktree作成（隔離ブランチで作業）
+  FIX_BRANCH="bot${BOT_ID}-loop${LOOP}"
+  WT="$PROJECT_DIR/.claude/worktrees/$FIX_BRANCH"
+
+  # 前回の残骸があれば掃除
+  if git worktree list 2>/dev/null | grep -q "$WT"; then
+    git worktree remove --force "$WT" 2>/dev/null
+  fi
+  git branch -D "$FIX_BRANCH" 2>/dev/null
+
+  git worktree add "$WT" -b "$FIX_BRANCH" HEAD 2>/dev/null
+
+  if [ ! -d "$WT" ]; then
+    echo "Worktree creation failed, running in main"
+    WT="$PROJECT_DIR"
+    FIX_BRANCH=""
+  fi
 
   # プロンプト作成
   PROMPT_FILE="/tmp/minecraft_prompt_bot${BOT_ID}.md"
   if [ "$BOT_ID" -eq 1 ]; then
     cat > "$PROMPT_FILE" << 'PROMPT'
-# Claude1 — リーダー（指示専任）
+# Claude1 — リーダー（指示専任 + コード改善）
 CLAUDE.mdに従え。
+
+## プレイ
 1. `minecraft_connect(username="Claude1")` で接続
 2. `minecraft_get_chat_messages()` でチャット確認
 3. `minecraft_get_surroundings()` と `minecraft_get_status()` で状況把握
 4. フェーズ判定→メンバーに指示
 5. 2アクションごとにチャット確認
+
+## コード改善
+プレイ中にツールのバグや改善点を発見したら：
+1. `bug-issues/bot1.md` に記録
+2. `src/tools/` や `src/bot-manager/` のコードを修正
+3. `npm run build` で確認
+4. git add & git commit（修正内容を明記）
 PROMPT
   else
     cat > "$PROMPT_FILE" << PROMPT
-# $BOT_NAME — フォロワー
+# $BOT_NAME — フォロワー + コード改善
 CLAUDE.mdに従え。
+
+## プレイ
 1. \`minecraft_connect(username="$BOT_NAME")\` で接続
 2. \`minecraft_get_chat_messages()\` でリーダーの指示確認
 3. 指示があれば実行。なければフェーズ目標に沿って自律行動
 4. 2アクションごとにチャット確認
+
+## コード改善
+プレイ中にツールのバグや改善点を発見したら：
+1. \`bug-issues/bot${BOT_ID}.md\` に記録
+2. \`src/tools/\` や \`src/bot-manager/\` のコードを修正
+3. \`npm run build\` で確認
+4. git add & git commit（修正内容を明記）
 PROMPT
   fi
 
@@ -192,15 +151,49 @@ PROMPT
     echo '```' >> "$PROMPT_FILE"
   fi
 
-  # Claude実行
+  # Claude実行（worktree内で）
   run_with_timeout $TIMEOUT_BOT bash -c "
-    cat '$PROMPT_FILE' | claude --dangerously-skip-permissions \
-      --print --verbose --model $MODEL --mcp-config .mcp.json 2>&1 | tee '$LOGFILE'
+    cd '$WT' && cat '$PROMPT_FILE' | claude --dangerously-skip-permissions \
+      --print --verbose --model $MODEL --mcp-config '$PROJECT_DIR/.mcp.json' 2>&1 | tee '$LOGFILE'
   "
   EXIT_CODE=$?
 
-  # 結果表示
   [ $EXIT_CODE -eq 0 ] && echo "Done" || echo "Exit: $EXIT_CODE"
+
+  # worktreeの変更をmainにマージ
+  if [ -n "$FIX_BRANCH" ] && [ -d "$WT" ]; then
+    cd "$WT"
+
+    # 未コミット変更があればcommit
+    git diff --quiet src/ bug-issues/ .claude/skills/ 2>/dev/null || {
+      git add src/tools/ src/bot-manager/ bug-issues/ .claude/skills/ 2>/dev/null
+      git commit -m "[${BOT_NAME}] Auto-commit on stop" 2>/dev/null
+    }
+
+    AHEAD=$(git rev-list --count main.."$FIX_BRANCH" 2>/dev/null || echo 0)
+    if [ "$AHEAD" -gt 0 ]; then
+      cd "$PROJECT_DIR"
+      # ビルド確認してからマージ
+      if (cd "$WT" && npm run build --silent 2>/dev/null); then
+        if git merge "$FIX_BRANCH" --no-edit 2>/dev/null; then
+          npm run build --silent 2>/dev/null && echo "Merged $FIX_BRANCH -> main" || {
+            echo "Build failed after merge, reverting"
+            git reset --hard HEAD~1 2>/dev/null
+          }
+        else
+          echo "Merge conflict, aborting"
+          git merge --abort 2>/dev/null
+        fi
+      else
+        echo "Build failed in worktree, skipping merge"
+      fi
+    fi
+
+    # worktree cleanup
+    cd "$PROJECT_DIR"
+    git worktree remove --force "$WT" 2>/dev/null
+    git branch -D "$FIX_BRANCH" 2>/dev/null
+  fi
 
   # 停滞検知
   CURRENT_PHASE=$(grep -oiE "phase.?[0-9]+" "$LOGFILE" 2>/dev/null | tail -1 | grep -oE "[0-9]+" || echo 0)

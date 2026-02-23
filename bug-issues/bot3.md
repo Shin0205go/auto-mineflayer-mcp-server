@@ -533,3 +533,20 @@ Session 89 Timeline:
 - **System Status**: 🔴 **CRITICAL - Death Loop Unbroken**
 - **Blocking Issue**: Admin must execute `/give` in SERVER CONSOLE (or code must implement inventory restoration on respawn)
 - **Next Session**: Will respawn again at HP 20/20, hunger 20/20, but inventory still empty → cycle repeats
+
+## [autofix-27] 修正済み
+
+### 修正済み: survival_routine HP pre-check
+- **Bug**: survival_routine が低HP時に戦闘を試みて死亡（HP 2.2/20でDrowned+Zombified Piglinと戦闘）
+- **Fix**: `src/tools/high-level-actions.ts` の food section 先頭にHP事前チェックを追加
+  - HP < 5 の場合: 即座にリターン（戦闘禁止）
+  - HP < 10 の場合: danger recommendation が "fight" でも強制的に flee
+  - 食料動物への flee threshold を 0 → `Math.min(6, currentHp - 1)` に変更
+- **修正済み**: autofix-27
+
+### 修正済み: movement safety hunger deadlock
+- **Bug**: hunger < 3 で 8ブロック以上の移動がブロックされ、チェストへのアクセス不可能
+- **Fix**: `src/bot-manager/bot-movement.ts` の安全チェックを修正
+  - `(hp < 5 || hunger < 3) && distance > 8` → `hp < 5 && distance > 8`
+  - hunger低下だけでは移動をブロックしない（HP危機時のみブロック）
+- **修正済み**: autofix-27

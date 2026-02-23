@@ -295,13 +295,14 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
 
   console.error(`[Move] From (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)}) to (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
 
-  // CRITICAL SAFETY CHECK: Prevent dangerous movement when HP/Hunger is critical
+  // CRITICAL SAFETY CHECK: Prevent dangerous movement when HP is critical
   // Session 73 bug: Claude2 tried to move with HP 3.6/20, pathfinder selected high-altitude
   // route that caused fall death. This check prevents that pattern.
+  // Note: hunger check removed — hunger alone doesn't create fall-death risk, and blocking
+  // movement when hungry caused a deadlock where bots couldn't reach chests to get food.
   const hp = bot.health ?? 20;
-  const hunger = bot.food ?? 20;
-  if ((hp < 5 || hunger < 3) && distance > 8) {
-    return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hp.toFixed(1)}/20) or Hunger(${hunger}/20). Risk of high-altitude route causing fall. Use pillar_up for gradual climb or restore HP/food first.`;
+  if (hp < 5 && distance > 8) {
+    return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hp.toFixed(1)}/20). Risk of high-altitude pathfinding causing fall death. Restore HP first (respawn or eat food), then retry movement.`;
   }
 
   // Check if target position is a portal block — delegate to enterPortal()
