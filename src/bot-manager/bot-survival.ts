@@ -459,10 +459,15 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         // Endermen teleport before dying — use wider search and longer wait
         const isEnderman = target.name === "enderman";
         await delay(isEnderman ? 1000 : 500);
+        let collectionResult = "Collection not attempted";
         try {
-          await collectNearbyItems(managed, isEnderman ? { searchRadius: 16, waitRetries: 12 } : undefined);
-        } catch (_) { /* ignore collection errors */ }
-        return `Killed ${target.name} after ${attacks} attacks`;
+          collectionResult = await collectNearbyItems(managed, isEnderman ? { searchRadius: 16, waitRetries: 12 } : undefined);
+          console.error(`[Attack] Item collection result: ${collectionResult}`);
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error(`[Attack] CRITICAL: Item collection failed after kill: ${errMsg}`);
+        }
+        return `Killed ${target.name} after ${attacks} attacks. Items: ${collectionResult}`;
       }
       // Track last known position (important for teleporting mobs like endermen)
       lastKnownTargetPos = currentTarget.position.clone();
@@ -693,10 +698,15 @@ export async function fight(
       // Endermen teleport before dying — use wider search and longer wait
       const isEnderman = targetName === "enderman";
       await delay(isEnderman ? 1000 : 500);
+      let collectionResult = "Collection not attempted";
       try {
-        await collectNearbyItems(managed, isEnderman ? { searchRadius: 16, waitRetries: 12 } : undefined);
-      } catch (_) { /* ignore collection errors */ }
-      return `${targetName} defeated! Attacked ${attackCount} times.` + getBriefStatus(bot);
+        collectionResult = await collectNearbyItems(managed, isEnderman ? { searchRadius: 16, waitRetries: 12 } : undefined);
+        console.error(`[Fight] Item collection result: ${collectionResult}`);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[Fight] CRITICAL: Item collection failed after kill: ${errMsg}`);
+      }
+      return `${targetName} defeated! Attacked ${attackCount} times. Items: ${collectionResult}` + getBriefStatus(bot);
     }
     // Track last known position (important for teleporting mobs like endermen)
     lastKnownFightPos = target.position.clone();

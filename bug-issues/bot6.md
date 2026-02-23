@@ -79,3 +79,9 @@
 ### 調査が必要なファイル
 - `src/tools/connection.ts` (次元間移動ロジック)
 - `src/bot-manager/index.ts` (ポータル検出ロジック)
+
+### 部分修正 (autofix-11, 2026-02-23)
+- `src/bot-manager/bot-movement.ts` の `enterPortal()` 関数で、5回のウォーク試行後に `bot.clearControlStates()` と `bot.pathfinder.setGoal(null)` を追加。ボットが動き続けてポータルブロックから出てしまう問題を軽減。ポータル内で静止することでテレポートが発動しやすくなる。
+- サーバー側でネザーが無効化（`allow-nether=false`）されている場合は引き続きタイムアウトする。
+
+**修正済み**

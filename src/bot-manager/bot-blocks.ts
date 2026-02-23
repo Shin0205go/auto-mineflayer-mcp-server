@@ -236,7 +236,7 @@ function getExpectedDrop(blockName: string): string | null {
     "large_fern": "wheat_seeds", // ~12.5% chance to drop seeds
 
     // Crop blocks - primary drops (mature crops drop both item + seeds)
-    "wheat": "wheat_seeds", // Always drops seeds; mature (age 7) also drops wheat item
+    "wheat": "wheat", // Mature wheat (age 7) primary drop is wheat (food item), seeds are secondary
     "beetroots": "beetroot",
     "carrots": "carrot",
     "potatoes": "potato",

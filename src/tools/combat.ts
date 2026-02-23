@@ -105,6 +105,12 @@ export const combatTools = {
           type: "string",
           description: "Reason for respawning (e.g., 'No food available, HP critical')",
         },
+        method: {
+          type: "string",
+          enum: ["auto", "fall", "drown", "lava"],
+          description: "Method to trigger respawn: 'auto' (default), 'fall' (jump from height), 'drown' (in water), 'lava' (in lava).",
+          default: "auto",
+        },
       },
       required: [],
     },
@@ -176,6 +182,7 @@ export async function handleCombatTool(
 
     case "minecraft_respawn": {
       const reason = args.reason as string | undefined;
+      // method arg is accepted by MCP schema but not yet implemented in respawn()
       return await botManager.respawn(username, reason);
     }
 

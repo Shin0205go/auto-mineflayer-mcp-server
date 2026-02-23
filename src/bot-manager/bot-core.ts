@@ -3,8 +3,6 @@ import { Vec3 } from "vec3";
 import { EventEmitter } from "events";
 import pkg from "mineflayer-pathfinder";
 const { pathfinder, Movements, goals } = pkg;
-import prismarineViewer from "prismarine-viewer";
-const { mineflayer: mineflayerViewer } = prismarineViewer;
 import type { BotConfig, ManagedBot, GameEvent } from "./types.js";
 import { isHostileMob, isPassiveMob } from "./minecraft-utils.js";
 import { equipArmor } from "./bot-items.js";
@@ -17,49 +15,11 @@ const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
  */
 export class BotCore extends EventEmitter {
   protected bots: Map<string, ManagedBot> = new Map();
-  private viewerPorts: Map<string, number> = new Map(); // username -> viewer port
-  private nextViewerPort = 3007;
   private connectionConfigs: Map<string, BotConfig> = new Map(); // Store connection params for auto-reconnect
   private connectingPromises: Map<string, Promise<string>> = new Map(); // Track ongoing connections
 
   constructor() {
     super();
-  }
-
-  /**
-   * Start prismarine-viewer for a bot
-   */
-  startViewer(username: string): number | null {
-    const managed = this.bots.get(username);
-    if (!managed) {
-      console.error(`[BotManager] Cannot start viewer: bot '${username}' not found`);
-      return null;
-    }
-
-    // Check if viewer already running for this bot
-    if (this.viewerPorts.has(username)) {
-      const port = this.viewerPorts.get(username)!;
-      console.error(`[BotManager] Viewer for ${username} already running on port ${port}`);
-      return port;
-    }
-
-    // Derive port from username (Claude1→3001, Claude2→3002, etc.)
-    const match = username.match(/(\d+)$/);
-    const viewerPort = match ? 3000 + parseInt(match[1]) : this.nextViewerPort++;
-    try {
-      console.error(`[BotManager] Starting viewer for ${username} on port ${viewerPort}...`);
-      mineflayerViewer(managed.bot, { port: viewerPort, firstPerson: true, viewDistance: 6 });
-      this.viewerPorts.set(username, viewerPort);
-      console.error(`[BotManager] Viewer started at http://localhost:${viewerPort}`);
-      return viewerPort;
-    } catch (err) {
-      console.error(`[BotManager] Failed to start viewer on port ${viewerPort}:`, err);
-      return null;
-    }
-  }
-
-  getViewerPort(username: string): number | null {
-    return this.viewerPorts.get(username) || null;
   }
 
   isConnected(username?: string): boolean {
@@ -767,22 +727,10 @@ export class BotCore extends EventEmitter {
         this.bots.set(config.username, managedBot);
         console.error(`[BotManager] ${config.username} connected`);
 
-        // Start prismarine-viewer for first-person view in browser (unless disabled)
-        let viewerPort: number | null = null;
-        if (!config.disableViewer) {
-          viewerPort = this.startViewer(config.username);
-          if (viewerPort) {
-            console.error(`[BotManager] Open http://localhost:${viewerPort} to see the first-person view`);
-          }
-        }
-
-        // Return connection info with game mode warning
-        let result = `Connected as ${config.username} (${gameMode} mode)`;
-        if (viewerPort) {
-          result += `. Viewer: http://localhost:${viewerPort}`;
-        }
+        // Return connection info
+        const result = `Connected as ${config.username} (${gameMode} mode)`;
         if (gameMode !== "survival") {
-          result += `. WARNING: Not in survival mode! Run /gamemode survival ${config.username} for items to drop.`;
+          return resolve(`${result}. WARNING: Not in survival mode! Run /gamemode survival ${config.username} for items to drop.`);
         }
         this.connectingPromises.delete(config.username);
         resolve(result);

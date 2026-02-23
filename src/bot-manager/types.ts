@@ -5,7 +5,6 @@ export interface BotConfig {
   port: number;
   username: string;
   version?: string;
-  disableViewer?: boolean;  // If true, don't start prismarine-viewer (for stdio MCP)
 }
 
 export interface BlockInfo {

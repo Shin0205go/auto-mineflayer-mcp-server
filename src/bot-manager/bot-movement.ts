@@ -1565,6 +1565,11 @@ export async function enterPortal(managed: ManagedBot, portalType?: "nether_port
       }
     }
 
+    // Clear all movement controls — bot must stand still inside portal for ~4s to trigger teleport
+    bot.clearControlStates();
+    bot.pathfinder.setGoal(null);
+    console.error(`[Portal] All controls cleared, standing still to trigger teleport...`);
+
     // Wait for dimension change (teleport) — portals need ~4s standing inside
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {

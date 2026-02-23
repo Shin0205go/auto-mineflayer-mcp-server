@@ -254,6 +254,9 @@
   - `src/bot-manager/bot-blocks.ts` (dig_block 実装)
   - `src/bot-manager/bot-crafting.ts` (craft 実装)
 - **ステータス**: 🔴 CRITICAL - サーバー再起動またはbot再接続が必須
+- **部分修正 (autofix-11, 2026-02-23)**: `src/bot-manager/bot-blocks.ts` の `getExpectedDrop("wheat")` が `"wheat_seeds"` を返していたため、成熟小麦収穫後に wheat(食物) ではなく wheat_seeds の有無を確認していた。`"wheat"` に修正して、収穫成功判定が正確になった。サーバー側のアイテムドロップ無効化問題は未解決。
+
+**修正済み**
 
 ## [2026-02-16] stuck in stone cavern - can't place blocks or escape
 

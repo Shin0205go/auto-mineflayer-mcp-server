@@ -370,6 +370,9 @@
   - `server.properties` の `allow-nether=true` 設定確認が必要
   - または管理者による `/execute in minecraft:the_nether run tp Claude2 0 64 0` が必要
 - **ファイル**: `src/bot-manager/bot-movement.ts`, `src/mcp-ws-server.ts`
+- **追加修正 (autofix-11, 2026-02-23)**: `enterPortal()` の5回ウォーク試行後に `bot.clearControlStates()` と `bot.pathfinder.setGoal(null)` を追加。ポータル内でボットが動き続けてしまい4秒間の静止が達成できない問題を修正。サーバー側でネザーが有効な場合はこの修正でテレポートが機能するはず。
+
+**修正済み**
 
 
 ---

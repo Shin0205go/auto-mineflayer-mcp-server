@@ -379,6 +379,8 @@ export function findBlock(bot: Bot, blockName: string, maxDistance: number = 10)
   const pos = bot.entity.position;
   const searchName = blockName.toLowerCase();
 
+  console.error(`[findBlock Debug] Searching for block: "${blockName}" (searchName: "${searchName}") within ${maxDistance} blocks`);
+
   // Use mineflayer's efficient bot.findBlocks API
   const mcData = (bot as any).registry;
 
@@ -386,6 +388,8 @@ export function findBlock(bot: Bot, blockName: string, maxDistance: number = 10)
   const matchingIds: number[] = [];
   const blocksByName = mcData.blocksByName;
   if (blocksByName) {
+    const blockDataForSearchName = blocksByName[searchName];
+
     for (const [name, blockData] of Object.entries(blocksByName)) {
       const lowerName = name.toLowerCase();
       if (lowerName === searchName ||
