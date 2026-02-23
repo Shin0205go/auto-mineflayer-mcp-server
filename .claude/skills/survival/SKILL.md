@@ -10,15 +10,22 @@ description: |
 
 生存に必要な基本行動を自動で実行する高レベルスキル。
 
-## 初日（Phase 0/1）は必ずこれを使え
+## 初日（Phase 0/1）プロトコル — この順番で1つずつ呼べ
 
-```
-minecraft_day1_boot_sequence { username: "BotName" }
-```
+MCPタイムアウト(60秒)のため、1ツール1ステップ。順番を守れ。
 
-**これ1つで全部やる：** 環境検証 → 木材10本 → 道具一式 → 狩猟 → 石採掘 → シェルター
+| ステップ | ツール | 目的 |
+|---------|--------|------|
+| 1 | `minecraft_validate_survival_environment` | 環境確認（食料源の有無） |
+| 2 | `minecraft_gather_resources` (oak_log x10) | 木材収集 |
+| 3 | `minecraft_craft_chain` (wooden_pickaxe) | 木ピッケル作成（作業台も自動） |
+| 4 | `minecraft_craft_chain` (wooden_sword) | 剣作成 |
+| 5 | `minecraft_survival_routine` (food) | 食料確保（狩猟） |
+| 6 | `minecraft_gather_resources` (cobblestone x32) | 石収集 |
+| 7 | `minecraft_upgrade_tools` (stone) | 石ツール一式 |
+| 8 | `minecraft_establish_base` | 作業台・かまど・チェスト・シェルター設置 |
 
-`survival_routine` を個別に何度も呼ぶな。まず `day1_boot_sequence` を使え。
+**各ステップは独立して完結する。失敗したら次に進め（完璧を求めるな）。**
 
 ---
 

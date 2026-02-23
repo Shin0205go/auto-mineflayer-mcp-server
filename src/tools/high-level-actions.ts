@@ -1398,44 +1398,20 @@ export async function minecraft_night_routine(username: string): Promise<string>
     steps.push("Already indoors — staying put");
   }
 
-  // Wait for dawn, fighting back if attacked
-  const maxWait = 90000; // 90 seconds max
-  const startTime = Date.now();
-  let dawned = false;
+  // Return immediately after sheltering — do not wait for dawn (would exceed MCP 60s timeout)
+  // The game agent calls this tool each loop iteration until daytime
+  steps.push("Sheltered — call this tool again each loop to check for dawn and handle hostiles");
 
-  while (Date.now() - startTime < maxWait) {
-    await new Promise(r => setTimeout(r, 2000));
-
-    const botNow = botManager.getBot(username);
-    if (!botNow) break;
-
-    const nowTime = botNow.time?.timeOfDay ?? 0;
-    if (nowTime < 12541 || nowTime > 23458) {
-      dawned = true;
-      break;
-    }
-
-    // Fight back if attacked
-    const danger = checkDangerNearby(botNow, 5);
-    if (danger.dangerous && danger.nearestHostile && danger.recommendation === "fight") {
-      try {
-        await botManager.attack(username, danger.nearestHostile.name);
-        steps.push(`Fought off ${danger.nearestHostile.name}`);
-      } catch (_) {}
-    }
-
-    // Eat if hungry during wait
+  // Quick hostile check before returning
+  const dangerNow = checkDangerNearby(bot, 5);
+  if (dangerNow.dangerous && dangerNow.nearestHostile && dangerNow.recommendation === "fight") {
     try {
-      const nowStatus = botManager.getStatus(username);
-      const nowObj = JSON.parse(nowStatus);
-      const h = nowObj.hunger?.match(/([\d.]+)\//)?.[1];
-      if (h && parseFloat(h) < 14) await botManager.eat(username);
+      await botManager.attack(username, dangerNow.nearestHostile.name);
+      steps.push(`Fought off ${dangerNow.nearestHostile.name}`);
     } catch (_) {}
   }
 
-  steps.push(dawned ? "Dawn arrived — safe to proceed" : "Timed out — check if safe");
-
-  return `=== Night Routine Complete ===\n${steps.map(s => `  - ${s}`).join("\n")}`;
+  return `=== Night Routine (sheltering) ===\n${steps.map(s => `  - ${s}`).join("\n")}\nCall again each loop iteration until daytime.`;
 }
 
 /**
