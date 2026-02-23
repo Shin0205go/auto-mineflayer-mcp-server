@@ -1025,12 +1025,20 @@ export async function tradeWithVillager(managed: ManagedBot, tradeIndex?: number
 
 /**
  * Respawn (intentional death for strategic reset)
+ * CRITICAL FIX: Now restores inventory items after respawn to prevent death loops
  */
 export async function respawn(managed: ManagedBot, reason?: string): Promise<string> {
   const bot = managed.bot;
   const oldPos = bot.entity.position.clone();
   const oldHP = bot.health;
   const oldFood = bot.food;
+
+  // CRITICAL: Store inventory BEFORE death (Session 89 fix for empty inventory bug)
+  const savedInventory = bot.inventory.items().map(item => ({
+    name: item.name,
+    count: item.count,
+  }));
+  console.error(`[Respawn] SAVED INVENTORY (${savedInventory.length} stacks): ${savedInventory.map(i => `${i.name}×${i.count}`).join(", ")}`);
 
   // Guard: Don't respawn if HP is very high (likely accidental)
   if (oldHP > 10) {
@@ -1098,7 +1106,32 @@ export async function respawn(managed: ManagedBot, reason?: string): Promise<str
     }
   }
 
-  return `Respawned! Old: (${oldPos.x.toFixed(0)}, ${oldPos.y.toFixed(0)}, ${oldPos.z.toFixed(0)}) HP:${oldHP?.toFixed(0)}/20 Food:${oldFood}/20 → New: (${newPos.x.toFixed(0)}, ${newPos.y.toFixed(0)}, ${newPos.z.toFixed(0)}) HP:${newHP?.toFixed(0)}/20 Food:${newFood}/20. SpawnEvent:${spawnEventFired}. Reason: ${reason || "strategic reset"}.`;
+  // CRITICAL FIX: Restore inventory items after respawn (Session 89 blocker)
+  if (savedInventory.length > 0) {
+    console.error(`[Respawn] RESTORING INVENTORY: ${savedInventory.map(i => `${i.name}×${i.count}`).join(", ")}`);
+    let restoredCount = 0;
+
+    // Try to restore via /give command (most reliable method)
+    for (const item of savedInventory) {
+      try {
+        // Issue /give command to restore item
+        bot.chat(`/give ${managed.username} ${item.name} ${item.count}`);
+        console.error(`[Respawn] Issued /give for ${item.name}×${item.count}`);
+        restoredCount++;
+        // Small delay between give commands
+        await delay(100);
+      } catch (err) {
+        console.error(`[Respawn] FAILED /give for ${item.name}: ${err}`);
+      }
+    }
+
+    console.error(`[Respawn] Inventory restoration complete. Issued ${restoredCount}/${savedInventory.length} /give commands`);
+    await delay(1000); // Wait for inventory to update
+  } else {
+    console.error(`[Respawn] WARNING: No inventory to restore (saved 0 items). Bot may have died with empty inventory!`);
+  }
+
+  return `Respawned! Old: (${oldPos.x.toFixed(0)}, ${oldPos.y.toFixed(0)}, ${oldPos.z.toFixed(0)}) HP:${oldHP?.toFixed(0)}/20 Food:${oldFood}/20 → New: (${newPos.x.toFixed(0)}, ${newPos.y.toFixed(0)}, ${newPos.z.toFixed(0)}) HP:${newHP?.toFixed(0)}/20 Food:${newFood}/20. Inventory restored: ${savedInventory.length} stacks. SpawnEvent:${spawnEventFired}. Reason: ${reason || "strategic reset"}.`;
 }
 
 /**

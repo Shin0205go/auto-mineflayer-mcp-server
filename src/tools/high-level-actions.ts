@@ -874,6 +874,42 @@ export async function minecraft_explore_area(
       // Small delay to prevent overwhelming the connection
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      // Danger check: handle any hostile mobs encountered during exploration
+      // This prevents deaths from skeletons, zombies etc. when exploring for passive mobs
+      {
+        const dangerBot = botManager.getBot(username);
+        if (dangerBot) {
+          const danger = checkDangerNearby(dangerBot, 8);
+          if (danger.dangerous && danger.nearestHostile) {
+            console.error(`[ExploreArea] Danger at (${x}, ${z}): ${danger.hostileCount} hostile(s), nearest: ${danger.nearestHostile.name} at ${danger.nearestHostile.distance.toFixed(1)}m, action: ${danger.recommendation}`);
+            if (danger.recommendation === "flee") {
+              try {
+                await botManager.flee(username, 20);
+                findings.push(`Fled from ${danger.nearestHostile.name} at (${x}, ${z})`);
+              } catch (fleeErr) {
+                console.error(`[ExploreArea] Flee failed: ${fleeErr}`);
+              }
+            } else {
+              // Fight the hostile mob before continuing exploration
+              try {
+                const fightResult = await botManager.attack(username, danger.nearestHostile.name);
+                findings.push(`Cleared threat ${danger.nearestHostile.name}: ${fightResult}`);
+                await botManager.collectNearbyItems(username);
+                // Re-check HP after combat — abort if critically low
+                const postFightBot = botManager.getBot(username);
+                if (postFightBot && (postFightBot.health ?? 20) <= 8) {
+                  return `Exploration stopped after combat: HP critically low (${postFightBot.health}/20). Return to safety! Findings: ${findings.length > 0 ? findings.join(", ") : "none"}`;
+                }
+              } catch (fightErr) {
+                console.error(`[ExploreArea] Fight failed: ${fightErr}`);
+                // Try to flee if fight fails
+                try { await botManager.flee(username, 20); } catch (_) {}
+              }
+            }
+          }
+        }
+      }
+
       // Abort enderman hunt if it becomes daytime or raining (endermen despawn in sunlight/rain)
       if (target?.toLowerCase() === "enderman") {
         const timeBot = botManager.getBot(username);

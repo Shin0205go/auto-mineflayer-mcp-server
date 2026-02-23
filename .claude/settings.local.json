@@ -121,7 +121,9 @@
       "Bash(brew list:*)",
       "Bash(brew uninstall:*)",
       "Bash(sudo rm:*)",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "Bash(git remote:*)",
+      "WebFetch(domain:ai.google.dev)"
     ]
   },
   "enableAllProjectMcpServers": true,
