@@ -7338,3 +7338,35 @@ const isNonSolid = (name: string) => {
 
 **修正済み** (autofix-4, 2026-02-22): ビルド成功確認済み。
 
+---
+
+## [2026-02-23] minecraft_craft_chain smelting recipes: iron_ore/gold_ore → raw_iron/raw_gold バグ
+
+### 症状
+- `minecraft_craft_chain("iron_pickaxe", autoGather=true)` が iron_ingot を自動精錬できない
+- craft_chain の smeltingRecipes が `"iron_ingot": "iron_ore"` と定義されていた
+- しかし Minecraft 1.17+ ではフォールバックなしで iron_ore を採掘すると raw_iron がドロップ（iron_ore ブロック自体はインベントリに入らない）
+- インベントリに raw_iron があるのに `smeltingRecipes["iron_ingot"] = "iron_ore"` でチェックするため「iron_ore がない」と誤判定
+- gather_resources も `iron_ore` でアイテムを探すが、raw_iron はブロック型でないため採掘前には見つからない
+
+### 根本原因
+- `src/tools/high-level-actions.ts` の `minecraft_craft_chain` 内の `smeltingRecipes`:
+  ```typescript
+  "iron_ingot": "iron_ore",   // ← 間違い (1.17+ では raw_iron)
+  "gold_ingot": "gold_ore",   // ← 間違い (1.17+ では raw_gold)
+  "copper_ingot": "copper_ore", // ← 間違い (1.17+ では raw_copper)
+  ```
+
+### 修正内容
+1. `smeltingRecipes` を 1.17+ のドロップ形式に修正:
+   - `"iron_ingot": "raw_iron"`
+   - `"gold_ingot": "raw_gold"`
+   - `"copper_ingot": "raw_copper"`
+2. `rawToOreBlock` マッピングを追加（raw_iron → iron_ore など）: gather ステップでは ore ブロックを採掘するため
+3. gather_resources 呼び出し時に `rawToOreBlock[sourceItem] || sourceItem` を使用
+
+### 修正ファイル
+- `src/tools/high-level-actions.ts` (minecraft_craft_chain 内 smeltingRecipes + gather ステップ)
+
+**修正済み** (autofix-19, 2026-02-23): ビルド成功確認済み。
+
