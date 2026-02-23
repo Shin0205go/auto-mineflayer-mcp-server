@@ -8,3 +8,4 @@ learning/
 agent_logs/
 .claude/worktrees/
 shared-board.txt
+.gemini/
