@@ -6,13 +6,43 @@ export PATH="$HOME/.nvm/versions/node/v20.19.0/bin:$HOME/.local/bin:$PATH"
 #   dev モード: bug-issues/監視 → worktreeで自動修正 → mainにマージ
 #
 # Usage:
-#   ./scripts/self-improve-minecraft.sh 1 sonnet
-#   ./scripts/self-improve-minecraft.sh dev [model]
+#   ./scripts/self-improve-minecraft.sh 1 claude [model]   # Claude (default model: sonnet)
+#   ./scripts/self-improve-minecraft.sh 1 gemini [model]   # Gemini (default model: gemini-2.5-flash)
+#   ./scripts/self-improve-minecraft.sh dev claude [model]
+#   ./scripts/self-improve-minecraft.sh dev gemini [model]
+#   ./scripts/self-improve-minecraft.sh 1 sonnet           # 後方互換 (claude + model)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CLAUDE_PID=""
+AGENT_PID=""
 TIMEOUT_BOT=1800   # 30min
 TIMEOUT_DEV=900    # 15min
+
+# =============================================================================
+# Agent判定: 第2引数が claude/gemini ならagent、それ以外は後方互換でclaude+model
+# =============================================================================
+if [ "$1" = "dev" ]; then
+  MODE="dev"
+  if [ "$2" = "claude" ] || [ "$2" = "gemini" ]; then
+    AGENT="$2"; MODEL="${3}"
+  else
+    AGENT="claude"; MODEL="${2}"
+  fi
+else
+  MODE="bot"
+  if [ "$2" = "claude" ] || [ "$2" = "gemini" ]; then
+    AGENT="$2"; MODEL="${3}"
+  else
+    AGENT="claude"; MODEL="${2}"
+  fi
+fi
+
+# デフォルトmodel
+if [ -z "$MODEL" ]; then
+  case "$AGENT" in
+    claude) MODEL="sonnet" ;;
+    gemini) MODEL="gemini-2.5-flash" ;;
+  esac
+fi
 
 kill_pid() {
   local pid=$1
@@ -30,20 +60,20 @@ kill_pid() {
 run_with_timeout() {
   local timeout=$1; shift
   "$@" &
-  CLAUDE_PID=$!
+  AGENT_PID=$!
   local waited=0
   while [ $waited -lt $timeout ]; do
-    kill -0 $CLAUDE_PID 2>/dev/null || { wait $CLAUDE_PID 2>/dev/null; CLAUDE_PID=""; return $?; }
+    kill -0 $AGENT_PID 2>/dev/null || { wait $AGENT_PID 2>/dev/null; AGENT_PID=""; return $?; }
     sleep 1; waited=$((waited + 1))
   done
   echo "Timeout (${timeout}s), stopping..."
-  kill_pid $CLAUDE_PID; CLAUDE_PID=""
+  kill_pid $AGENT_PID; AGENT_PID=""
   return 124
 }
 
 cleanup() {
   echo ""; echo "Shutting down..."
-  kill_pid "$CLAUDE_PID"
+  kill_pid "$AGENT_PID"
   # dev worktree cleanup
   git worktree list 2>/dev/null | grep 'autofix' | awk '{print $1}' | while read wt; do
     git worktree remove --force "$wt" 2>/dev/null
@@ -55,13 +85,12 @@ trap cleanup SIGINT SIGTERM
 # =============================================================================
 # dev モード
 # =============================================================================
-if [ "$1" = "dev" ]; then
-  MODEL=${2:-sonnet}
+if [ "$MODE" = "dev" ]; then
   DEV_LOG_DIR="agent_logs/dev"; mkdir -p "$DEV_LOG_DIR"
   SNAPSHOT_FILE="$DEV_LOG_DIR/bug_snapshot.md5"; touch "$SNAPSHOT_FILE"
   DEV_LOOP=0
 
-  echo "Auto-fix dev loop | Model: $MODEL | Watching: bug-issues/"
+  echo "Auto-fix dev loop | Agent: $AGENT | Model: $MODEL | Watching: bug-issues/"
 
   while true; do
     CURRENT_HASH=$(cat bug-issues/*.md 2>/dev/null | md5 2>/dev/null || md5sum 2>/dev/null | cut -d' ' -f1)
@@ -80,9 +109,8 @@ if [ "$1" = "dev" ]; then
     WT=".claude/worktrees/$FIX_BRANCH"
     git worktree add "$WT" -b "$FIX_BRANCH" HEAD 2>/dev/null
 
-    run_with_timeout $TIMEOUT_DEV bash -c "
-      cd '$WT' && unset CLAUDECODE
-      cat <<'PROMPT' | claude --dangerously-skip-permissions --print --verbose --model $MODEL 2>&1 | tee '$LOGFILE'
+    DEV_PROMPT_FILE="/tmp/dev_prompt_${DEV_LOOP}.md"
+    cat > "$DEV_PROMPT_FILE" << 'PROMPT'
 # 自動バグ修正タスク
 bug-issues/ のバグを修正しろ。
 1. bug-issues/ を読み未修正バグを特定
@@ -92,7 +120,12 @@ bug-issues/ のバグを修正しろ。
 5. git add & git commit
 編集は src/tools/ と bug-issues/ のみ。
 PROMPT
-    "
+
+    if [ "$AGENT" = "gemini" ]; then
+      run_with_timeout $TIMEOUT_DEV bash -c "cd '$WT' && unset CLAUDECODE && cat '$DEV_PROMPT_FILE' | gemini --yolo -p '' --model $MODEL -o text 2>&1 | tee '$LOGFILE'"
+    else
+      run_with_timeout $TIMEOUT_DEV bash -c "cd '$WT' && unset CLAUDECODE && cat '$DEV_PROMPT_FILE' | claude --dangerously-skip-permissions --print --verbose --model $MODEL 2>&1 | tee '$LOGFILE'"
+    fi
 
     # worktreeの変更をmainにマージ
     if [ -d "$WT" ]; then
@@ -130,8 +163,7 @@ fi
 # bot モード
 # =============================================================================
 BOT_ID=${1:-1}
-BOT_NAME="Claude${BOT_ID}"
-MODEL=${2:-sonnet}
+BOT_NAME="$(echo "$AGENT" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')${BOT_ID}"  # Claude1, Gemini1, etc.
 LOG_DIR="agent_logs/bot${BOT_ID}"; mkdir -p "$LOG_DIR"
 STATE_FILE="$LOG_DIR/progress_state.txt"
 [ -f "$STATE_FILE" ] || echo "0|0|" > "$STATE_FILE"
@@ -140,7 +172,15 @@ LOOP=0
 export BOT_USERNAME="$BOT_NAME"
 export ENABLE_VIEWER="${ENABLE_VIEWER:-false}"
 
-echo "$BOT_NAME | Model: $MODEL | Logs: $LOG_DIR"
+# Gemini: .gemini/settings.json のBOT_USERNAMEを動的に書き換え
+if [ "$AGENT" = "gemini" ]; then
+  GEMINI_SETTINGS=".gemini/settings.json"
+  if [ -f "$GEMINI_SETTINGS" ]; then
+    sed -i '' "s/\"BOT_USERNAME\": \".*\"/\"BOT_USERNAME\": \"$BOT_NAME\"/" "$GEMINI_SETTINGS"
+  fi
+fi
+
+echo "$BOT_NAME | Agent: $AGENT | Model: $MODEL | Logs: $LOG_DIR"
 sleep $((BOT_ID * 10))  # 起動ずらし
 
 while true; do
@@ -155,12 +195,12 @@ while true; do
   # プロンプト作成
   PROMPT_FILE="/tmp/minecraft_prompt_bot${BOT_ID}.md"
   if [ "$BOT_ID" -eq 1 ]; then
-    cat > "$PROMPT_FILE" << 'PROMPT'
-# Claude1 — リーダー（指示専任）
+    cat > "$PROMPT_FILE" << PROMPT
+# ${BOT_NAME} — リーダー（指示専任）
 CLAUDE.mdに従え。
-1. `minecraft_connect(username="Claude1")` で接続
-2. `minecraft_get_chat_messages()` でチャット確認
-3. `minecraft_get_surroundings()` と `minecraft_get_status()` で状況把握
+1. \`minecraft_connect(username="${BOT_NAME}")\` で接続
+2. \`minecraft_get_chat_messages()\` でチャット確認
+3. \`minecraft_get_surroundings()\` と \`minecraft_get_status()\` で状況把握
 4. フェーズ判定→メンバーに指示
 5. 2アクションごとにチャット確認
 PROMPT
@@ -184,19 +224,20 @@ PROMPT
     echo -e "\n## WARNING: ${STALE_COUNT}セッション停滞中\nアプローチを見直せ。" >> "$PROMPT_FILE"
   fi
 
-  # 前回ログ末尾を付与
+  # 前回ログ末尾を付与（ファイルパスっぽい行は除去 — Gemini CLIがファイル引数と誤認するため）
   PREV_LOG=$(ls -t $LOG_DIR/loop_*.log 2>/dev/null | head -1)
   if [ -f "$PREV_LOG" ] 2>/dev/null; then
     echo -e "\n## 前回ログ\n\`\`\`" >> "$PROMPT_FILE"
-    tail -80 "$PREV_LOG" >> "$PROMPT_FILE" 2>/dev/null
+    tail -80 "$PREV_LOG" 2>/dev/null | grep -v '^\s*at ' | grep -v 'node_modules/' | grep -v 'Git-ignored:' | grep -v 'Ignored [0-9]* files' >> "$PROMPT_FILE" 2>/dev/null
     echo '```' >> "$PROMPT_FILE"
   fi
 
-  # Claude実行
-  run_with_timeout $TIMEOUT_BOT bash -c "
-    cat '$PROMPT_FILE' | claude --dangerously-skip-permissions \
-      --print --verbose --model $MODEL --mcp-config .mcp.json 2>&1 | tee '$LOGFILE'
-  "
+  # Agent実行
+  if [ "$AGENT" = "gemini" ]; then
+    run_with_timeout $TIMEOUT_BOT bash -c "cat '$PROMPT_FILE' | gemini --yolo -p '' --model $MODEL -o text 2>&1 | tee '$LOGFILE'"
+  else
+    run_with_timeout $TIMEOUT_BOT bash -c "cat '$PROMPT_FILE' | claude --dangerously-skip-permissions --print --verbose --model $MODEL --mcp-config .mcp.json 2>&1 | tee '$LOGFILE'"
+  fi
   EXIT_CODE=$?
 
   # 結果表示
