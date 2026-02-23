@@ -483,4 +483,7 @@
   - Awaiting alternative strategy
   - Consider finding wood/planks for new chest creation
 - **Files**: Server-side chest sync issue, not fixable in `src/bot-manager/bot-blocks.ts`
+- **部分修正済み (autofix-25, 2026-02-23)**: `takeFromChest()` に inventory full 検出を追加。インベントリが満杯（36スロット全使用）の場合、`chest.withdraw()` がサイレント失敗して "ITEM MAY BE LOST IN VOID" と誤報するのを防止。代わりに明確なエラー "inventory is full" を返す。ファイル: `src/bot-manager/bot-storage.ts`
+
+**修正済み**
 

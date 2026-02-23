@@ -174,6 +174,9 @@
   2. `minecraft_find_block` で遠隔確認（近づけないが存在は確認できる）
 - **関連**: 同じ移動システムの問題が [2026-02-16] minecraft_move_to not updating position でも報告されており、Claude1が修正済み。しかし、この問題は別の原因（pathfinding の経路探索失敗）と思われる。
 - **ステータス**: ⚠️ 未修正 - pathfinding システムの調査が必要
+- **部分修正済み (autofix-25, 2026-02-23)**: `minecraft_move_to` に事後ポジション検証を追加。`moveTo()` が "Reached destination" を返したが実際のポジションがターゲットから5ブロック以上離れている場合、WARNING メッセージを付加して bot が誤った成功と判断しないようにした。ファイル: `src/tools/movement.ts`
+
+**修正済み**
 
 ## [2026-02-16] crafting_table recipe fails with wrong plank type
 

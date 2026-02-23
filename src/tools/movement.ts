@@ -148,6 +148,21 @@ export async function handleMovementTool(
       }
 
       const result = await botManager.moveTo(username, x, y, z);
+
+      // Verify bot actually reached near target to catch false-positive success reports.
+      // GoalNear uses range=2 but the periodic success check fires at distance<3,
+      // so a bot at 2.x blocks from target may report "Reached destination" without moving.
+      const finalPos = botManager.getPosition(username);
+      if (finalPos) {
+        const fdx = finalPos.x - x;
+        const fdy = finalPos.y - y;
+        const fdz = finalPos.z - z;
+        const finalDist = Math.sqrt(fdx * fdx + fdy * fdy + fdz * fdz);
+        if (finalDist > 5 && (result.includes("Reached destination") || result.includes("Moved near"))) {
+          return `${result} [WARNING: Position check shows bot is still ${finalDist.toFixed(1)} blocks from target. Actual position: (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}). Retry move_to or navigate manually.]`;
+        }
+      }
+
       return result;
     }
 
