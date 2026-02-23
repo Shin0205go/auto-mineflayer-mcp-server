@@ -91,6 +91,17 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
   const targetPos = new Vec3(x, y, z);
   const start = bot.entity.position;
   const distance = start.distanceTo(targetPos);
+  const yDelta = y - start.y;
+
+  // SAFETY CHECK: Warn if pathfinding will require dangerous height changes
+  // If target is only slightly lower but far horizontally, avoid going up too high
+  const horizontalDist = Math.sqrt((x - start.x) ** 2 + (z - start.z) ** 2);
+  if (horizontalDist > 5 && yDelta < 0) {
+    // Target is lower and far away - pathfinder might go UP first then drop, causing fall damage
+    // Safe rule: if target is N blocks away horizontally and M blocks lower,
+    // don't go more than 3 blocks UP (risky for falls)
+    console.error(`[MoveTo] Safety check: target (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)}) is ${horizontalDist.toFixed(1)} blocks away horizontally, ${Math.abs(yDelta).toFixed(1)} blocks lower. Pathfinder may try to go UP first (risky). Using ground-level pathfinding if possible.`);
+  }
 
   // GoalNear with range=2 already handles distance check - pathfinder will immediately
   // complete if within 2 blocks. No need for early return that skips actual movement.
@@ -99,6 +110,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
   return new Promise((resolve) => {
     let resolved = false;
     let noProgressCount = 0;
+    let maxHeightReached = start.y;
     // Declare checkInterval first to avoid TDZ issues when event handlers fire early
     let checkInterval: ReturnType<typeof setInterval> | null = null;
     let lastPos = start.clone();
@@ -191,6 +203,16 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       const currentPos = bot.entity.position;
       const currentDist = currentPos.distanceTo(targetPos);
 
+      // SAFETY: Track maximum height reached during pathfinding
+      // If bot goes much higher than start or target, pathfinder may be taking unsafe route
+      if (currentPos.y > maxHeightReached) {
+        maxHeightReached = currentPos.y;
+        const heightGain = currentPos.y - start.y;
+        if (heightGain > 8) {
+          console.error(`[MoveTo] WARNING: Bot climbing too high (${heightGain.toFixed(1)} blocks above start). May take dangerous falling route.`);
+        }
+      }
+
       // Distance-based success check
       if (currentDist < 3) {
         finish({ success: true, message: `Reached destination (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)})` });
@@ -268,6 +290,15 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   const distance = start.distanceTo(targetPos);
 
   console.error(`[Move] From (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)}) to (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
+
+  // CRITICAL SAFETY CHECK: Prevent dangerous movement when HP/Hunger is critical
+  // Session 73 bug: Claude2 tried to move with HP 3.6/20, pathfinder selected high-altitude
+  // route that caused fall death. This check prevents that pattern.
+  const hp = bot.health ?? 20;
+  const hunger = bot.food ?? 20;
+  if ((hp < 5 || hunger < 3) && distance > 8) {
+    return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hp.toFixed(1)}/20) or Hunger(${hunger}/20). Risk of high-altitude route causing fall. Use pillar_up for gradual climb or restore HP/food first.`;
+  }
 
   // Check if target position is a portal block — delegate to enterPortal()
   // Only if the portal would take us to a DIFFERENT dimension (avoid infinite loop in same dimension)

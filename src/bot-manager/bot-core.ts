@@ -242,12 +242,12 @@ export class BotCore extends EventEmitter {
           if (block) movements.scafoldingBlocks.push(block.id);
         }
 
-        // Movement options - NETHER SAFETY: disable risky movements in the_nether
+        // Movement options - SAFETY: disable risky movements to prevent fall damage
         const isNether = bot.game.dimension === "the_nether";
-        movements.allowFreeMotion = !isNether; // Nether: false (prevent lava jumps)
-        movements.allowParkour = !isNether; // Nether: false (prevent gap jumps over lava)
+        movements.allowFreeMotion = !isNether; // Disable in Nether (prevent lava jumps)
+        movements.allowParkour = false; // DISABLED in all dimensions (prevent gap jumps that can fail → fall damage)
         movements.allowSprinting = true;
-        movements.maxDropDown = isNether ? 1 : 4; // Nether: max 1 block drop to avoid cliffs
+        movements.maxDropDown = isNether ? 1 : 3; // Reduced from 4 to 3 in Overworld (safer fall limit)
 
         // Don't break blocks that would cause issues
         movements.dontMineUnderFallingBlock = true;
@@ -379,8 +379,8 @@ export class BotCore extends EventEmitter {
 
             // NETHER SAFETY: Restrict risky movements to prevent lava deaths and cliff falls
             movements.allowFreeMotion = !isNether;
-            movements.allowParkour = !isNether;
-            movements.maxDropDown = isNether ? 1 : 4;
+            movements.allowParkour = false; // DISABLED in all dimensions (prevents fall damage)
+            movements.maxDropDown = isNether ? 1 : 3; // Reduced to 3 (safer fall limit)
 
             bot.pathfinder.setMovements(movements);
             console.error(`[BotManager] Pathfinder updated for ${newDimension}: allowFreeMotion=${movements.allowFreeMotion}, allowParkour=${movements.allowParkour}, maxDropDown=${movements.maxDropDown}`);
