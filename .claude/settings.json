@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import sys,json,os; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); parts=p.replace(os.sep,'/').split('/'); ok=False; idx_src=-1;\\nfor i,d in enumerate(parts):\\n  if d=='src': idx_src=i\\nif idx_src>=0 and idx_src+1<len(parts) and parts[idx_src+1]=='tools': ok=True\\nif 'bug-issues' in parts: ok=True\\nexit(0 if ok else 2)\" || echo 'Only src/tools/, bug-issues/ editable'",
+            "command": "python3 -c \"import sys,json,os; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); parts=p.replace(os.sep,'/').split('/'); ok=False; idx_src=-1;\\nfor i,d in enumerate(parts):\\n  if d=='src': idx_src=i\\nif idx_src>=0 and idx_src+1<len(parts) and parts[idx_src+1] in ('tools','bot-manager'): ok=True\\nif 'bug-issues' in parts: ok=True\\nexit(0 if ok else 2)\" || echo 'Only src/tools/, src/bot-manager/, bug-issues/ editable'",
             "statusMessage": "Checking file permissions"
           }
         ]
