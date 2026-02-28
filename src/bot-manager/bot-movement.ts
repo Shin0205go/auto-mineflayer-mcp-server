@@ -206,6 +206,18 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       const currentPos = bot.entity.position;
       const currentDist = currentPos.distanceTo(targetPos);
 
+      // SAFETY: Detect falling — if Y dropped >3 blocks since last check, stop immediately
+      const yDrop = lastPos.y - currentPos.y;
+      if (yDrop > 3) {
+        console.error(`[MoveTo] FALL DETECTED: dropped ${yDrop.toFixed(1)} blocks (${lastPos.y.toFixed(1)} → ${currentPos.y.toFixed(1)}). Stopping pathfinder.`);
+        finish({
+          success: false,
+          message: `Navigation stopped: fell ${yDrop.toFixed(1)} blocks at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Unsafe terrain detected.`,
+          stuckReason: "fall_detected"
+        });
+        return;
+      }
+
       // SAFETY: Track maximum height reached during pathfinding
       // If bot goes much higher than start or target, pathfinder may be taking unsafe route
       if (currentPos.y > maxHeightReached) {
@@ -295,14 +307,16 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
 
   console.error(`[Move] From (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)}) to (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
 
-  // CRITICAL SAFETY CHECK: Prevent dangerous movement when HP is critical
-  // Session 73 bug: Claude2 tried to move with HP 3.6/20, pathfinder selected high-altitude
-  // route that caused fall death. This check prevents that pattern.
-  // Note: hunger check removed — hunger alone doesn't create fall-death risk, and blocking
-  // movement when hungry caused a deadlock where bots couldn't reach chests to get food.
+  // SAFETY CHECK: Prevent dangerous long-distance movement when HP is critically low
+  // Only block movement when HP is near-death AND distance is very far (high-altitude route risk).
+  // Short-distance moves (≤30 blocks) are always allowed so bot can reach food/chests.
+  // Previous threshold (hp<5 && dist>8) caused deadlocks where bots couldn't reach nearby food.
   const hp = bot.health ?? 20;
-  if (hp < 5 && distance > 8) {
-    return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hp.toFixed(1)}/20). Risk of high-altitude pathfinding causing fall death. Restore HP first (respawn or eat food), then retry movement.`;
+  if (hp < 3 && distance > 30) {
+    return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hp.toFixed(1)}/20). Risk of high-altitude pathfinding causing fall death. Eat food or heal first, then retry movement.`;
+  }
+  if (hp < 5 && distance > 30) {
+    console.error(`[Move] WARNING: Moving ${distance.toFixed(1)} blocks with low HP(${hp.toFixed(1)}/20). Proceeding with caution.`);
   }
 
   // Check if target position is a portal block — delegate to enterPortal()
