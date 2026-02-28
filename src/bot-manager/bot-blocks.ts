@@ -360,8 +360,8 @@ export async function digBlock(
 
       // Wait for horizontal movement
       const horizontalStart = Date.now();
-      while (Date.now() - horizontalStart < 10000) {
-        await delay(300);
+      while (Date.now() - horizontalStart < 6000) {
+        await delay(200);
         const horizontalDistance = Math.sqrt(
           Math.pow(bot.entity.position.x - x, 2) +
           Math.pow(bot.entity.position.z - z, 2)
@@ -380,10 +380,10 @@ export async function digBlock(
     const goal = new goals.GoalNear(Math.floor(x), Math.floor(y), Math.floor(z), targetRange);
     bot.pathfinder.setGoal(goal);
 
-    // Wait for movement (max 25 seconds for difficult vertical movements)
+    // Wait for movement (max 15 seconds for difficult vertical movements)
     const startTime = Date.now();
-    while (Date.now() - startTime < 25000) {
-      await delay(300);
+    while (Date.now() - startTime < 15000) {
+      await delay(200);
       distance = bot.entity.position.distanceTo(blockPos);
       if (distance <= REACH_DISTANCE) {
         moved = true;
@@ -792,8 +792,8 @@ export async function digBlock(
       return `Dig seemed to complete but block is still there (${blockAfter.name}). May be protected area.`;
     }
 
-    // Wait longer for item to spawn and stabilize (items can take up to 2000ms on some servers)
-    await delay(2000);
+    // Wait for item to spawn and stabilize (reduced from 2000ms - exponential backoff in collectNearbyItems handles late spawns)
+    await delay(800);
 
     // Check for nearby item entities on the ground
     // Also scan all entities to diagnose server configuration issues

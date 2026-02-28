@@ -448,17 +448,17 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
           const collectGoal = new goals.GoalNear(lastKnownTargetPos.x, lastKnownTargetPos.y, lastKnownTargetPos.z, 2);
           bot.pathfinder.setGoal(collectGoal);
           await new Promise<void>((resolve) => {
-            const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 5000);
+            const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 3000);
             const check = setInterval(() => {
               if (bot.entity.position.distanceTo(lastKnownTargetPos) < 3 || !bot.pathfinder.isMoving()) {
                 clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
               }
-            }, 200);
+            }, 150);
           });
         }
         // Endermen teleport before dying — use wider search and longer wait
         const isEnderman = target.name === "enderman";
-        await delay(isEnderman ? 1000 : 500);
+        await delay(isEnderman ? 700 : 300);
         let collectionResult = "Collection not attempted";
         try {
           collectionResult = await collectNearbyItems(managed, isEnderman ? { searchRadius: 16, waitRetries: 12 } : undefined);
@@ -467,7 +467,27 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[Attack] CRITICAL: Item collection failed after kill: ${errMsg}`);
         }
-        return `Killed ${target.name} after ${attacks} attacks. Items: ${collectionResult}`;
+
+        // Track consecutive kills without drops to detect doMobLoot=false
+        const noDrops = collectionResult.includes("No items") || collectionResult.includes("no items") || collectionResult.includes("none");
+        if (noDrops) {
+          managed.consecutiveKillsWithoutDrops = (managed.consecutiveKillsWithoutDrops ?? 0) + 1;
+          if (managed.consecutiveKillsWithoutDrops >= 3) {
+            console.error(`[Attack] ⚠️ ${managed.consecutiveKillsWithoutDrops} consecutive kills with no drops. Server may have doMobLoot=false`);
+            managed.serverHasItemPickupDisabled = true;
+            managed.serverHasItemPickupDisabledTimestamp = Date.now();
+          }
+        } else {
+          managed.consecutiveKillsWithoutDrops = 0;
+        }
+
+        let warning = "";
+        if (noDrops && managed.gamerulesFailed) {
+          warning = `\n⚠️ WARNING: Server gamerules may not be set correctly (doMobLoot may be false). Bot needs /op permission or admin must run: /gamerule doMobLoot true`;
+        } else if (managed.consecutiveKillsWithoutDrops && managed.consecutiveKillsWithoutDrops >= 3) {
+          warning = `\n⚠️ WARNING: ${managed.consecutiveKillsWithoutDrops} consecutive kills with no item drops. Check /gamerule doMobLoot`;
+        }
+        return `Killed ${target.name} after ${attacks} attacks. Items: ${collectionResult}${warning}`;
       }
       // Track last known position (important for teleporting mobs like endermen)
       lastKnownTargetPos = currentTarget.position.clone();
@@ -527,10 +547,15 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       bot.attack(currentTarget);
       attacks++;
 
-      // Wait for attack cooldown (Minecraft 1.9+ has attack cooldown)
-      // Diamond sword has ~0.6s cooldown, but 700ms was too slow allowing health regen
-      // Reduced to 650ms for faster kills
-      await delay(650);
+      // Wait for attack cooldown (Minecraft 1.9+ attack speed varies by weapon type)
+      const heldWeapon = bot.heldItem?.name || "";
+      const attackCooldown = heldWeapon.includes("sword") ? 625
+        : heldWeapon.includes("axe") ? 1000
+        : heldWeapon.includes("pickaxe") ? 830
+        : heldWeapon.includes("shovel") ? 1000
+        : heldWeapon.includes("trident") ? 1100
+        : 625;
+      await delay(attackCooldown);
     }
 
     return `Attacked ${target.name} ${attacks} times (may not be dead, stopped at safety limit)`;
@@ -687,17 +712,17 @@ export async function fight(
         const collectGoal = new goals.GoalNear(lastKnownFightPos.x, lastKnownFightPos.y, lastKnownFightPos.z, 2);
         bot.pathfinder.setGoal(collectGoal);
         await new Promise<void>((resolve) => {
-          const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 5000);
+          const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 3000);
           const check = setInterval(() => {
             if (bot.entity.position.distanceTo(lastKnownFightPos) < 3 || !bot.pathfinder.isMoving()) {
               clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
             }
-          }, 200);
+          }, 150);
         });
       }
       // Endermen teleport before dying — use wider search and longer wait
       const isEnderman = targetName === "enderman";
-      await delay(isEnderman ? 1000 : 500);
+      await delay(isEnderman ? 700 : 300);
       let collectionResult = "Collection not attempted";
       try {
         collectionResult = await collectNearbyItems(managed, isEnderman ? { searchRadius: 16, waitRetries: 12 } : undefined);
@@ -706,7 +731,27 @@ export async function fight(
         const errMsg = err instanceof Error ? err.message : String(err);
         console.error(`[Fight] CRITICAL: Item collection failed after kill: ${errMsg}`);
       }
-      return `${targetName} defeated! Attacked ${attackCount} times. Items: ${collectionResult}` + getBriefStatus(bot);
+
+      // Track consecutive kills without drops
+      const noDropsFight = collectionResult.includes("No items") || collectionResult.includes("no items") || collectionResult.includes("none");
+      if (noDropsFight) {
+        managed.consecutiveKillsWithoutDrops = (managed.consecutiveKillsWithoutDrops ?? 0) + 1;
+        if (managed.consecutiveKillsWithoutDrops >= 3) {
+          console.error(`[Fight] ⚠️ ${managed.consecutiveKillsWithoutDrops} consecutive kills with no drops`);
+          managed.serverHasItemPickupDisabled = true;
+          managed.serverHasItemPickupDisabledTimestamp = Date.now();
+        }
+      } else {
+        managed.consecutiveKillsWithoutDrops = 0;
+      }
+
+      let fightWarning = "";
+      if (noDropsFight && managed.gamerulesFailed) {
+        fightWarning = `\n⚠️ WARNING: Server gamerules may not be set correctly (doMobLoot may be false). Bot needs /op permission or admin must run: /gamerule doMobLoot true`;
+      } else if (managed.consecutiveKillsWithoutDrops && managed.consecutiveKillsWithoutDrops >= 3) {
+        fightWarning = `\n⚠️ WARNING: ${managed.consecutiveKillsWithoutDrops} consecutive kills with no item drops. Check /gamerule doMobLoot`;
+      }
+      return `${targetName} defeated! Attacked ${attackCount} times. Items: ${collectionResult}${fightWarning}` + getBriefStatus(bot);
     }
     // Track last known position (important for teleporting mobs like endermen)
     lastKnownFightPos = target.position.clone();
@@ -744,9 +789,15 @@ export async function fight(
       console.error(`[BotManager] Attack error: ${err}`);
     }
 
-    // Attack cooldown (Minecraft 1.9+ attack speed, ~0.6s for diamond sword)
-    // Reduced to 650ms to ensure faster kills before health regeneration
-    await delay(650);
+    // Attack cooldown varies by weapon type (Minecraft 1.9+)
+    const fightWeapon = bot.heldItem?.name || "";
+    const fightCooldown = fightWeapon.includes("sword") ? 625
+      : fightWeapon.includes("axe") ? 1000
+      : fightWeapon.includes("pickaxe") ? 830
+      : fightWeapon.includes("shovel") ? 1000
+      : fightWeapon.includes("trident") ? 1100
+      : 625;
+    await delay(fightCooldown);
   }
 
   return `Combat ended. Attacked ${attackCount} times. Target may still be alive.` + getBriefStatus(bot);
