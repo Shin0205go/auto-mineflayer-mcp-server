@@ -11,6 +11,22 @@ if [ -z "$BRANCH" ] || [ "$BRANCH" = "main" ]; then
   exit 0
 fi
 
+# --- claude/ ブランチはbot用mainマージフローをスキップ ---
+# claude/ ブランチは独自のリモートブランチにpushするだけ
+if echo "$BRANCH" | grep -q "^claude/"; then
+  git add -A 2>/dev/null
+  if ! git diff --cached --quiet 2>/dev/null; then
+    npm run build --silent 2>/dev/null
+    git commit -m "[Claude] Auto-commit on stop" 2>/dev/null
+    echo "✅ Committed on $BRANCH"
+  fi
+  AHEAD=$(git rev-list --count "origin/$BRANCH".."$BRANCH" 2>/dev/null || echo "0")
+  if [ "$AHEAD" -gt 0 ] 2>/dev/null; then
+    git push origin "$BRANCH" 2>/dev/null && echo "✅ Pushed $BRANCH" || echo "⚠️ Push failed for $BRANCH"
+  fi
+  exit 0
+fi
+
 # scripts/は常にmainの内容を維持（botの編集対象外）
 git checkout origin/main -- scripts/ 2>/dev/null
 
