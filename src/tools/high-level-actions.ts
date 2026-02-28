@@ -171,8 +171,8 @@ export async function minecraft_gather_resources(
           console.error(`[GatherResources] No items gained (failures: ${consecutiveFailures}), may need correct tool`);
         }
 
-        // Small delay between mining operations
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Small delay between mining operations (reduced from 500ms - collectNearbyItems has its own waits)
+        await new Promise(resolve => setTimeout(resolve, 200));
 
       } catch (err) {
         console.error(`[GatherResources] Error: ${err}`);

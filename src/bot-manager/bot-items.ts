@@ -75,8 +75,10 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
   let items = findItems();
 
   if (items.length === 0) {
-    for (let wait = 0; wait < waitRetries; wait++) {
-      await delay(500);
+    // Exponential backoff: fast initial checks, slower later (total ~3.1s vs 4s flat)
+    const backoffDelays = [100, 200, 400, 800, 1600];
+    for (let wait = 0; wait < backoffDelays.length; wait++) {
+      await delay(backoffDelays[wait]);
       items = findItems();
       if (items.length > 0) break;
     }
@@ -127,16 +129,16 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
 
         // DON'T back away if too close - instead move through it aggressively
         // First approach: Look at item and move forward while jumping (repeat multiple times)
-        for (let pass = 0; pass < 3; pass++) {
+        for (let pass = 0; pass < 2; pass++) {
           if (!bot.entities[item.id]) break; // Item collected
 
           await bot.lookAt(itemPos);
           bot.setControlState("forward", true);
           bot.setControlState("jump", true);
-          await delay(400);
+          await delay(250);
           bot.setControlState("forward", false);
           bot.setControlState("jump", false);
-          await delay(100);
+          await delay(50);
         }
 
         // Check if item still exists
@@ -196,13 +198,11 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
           } catch (_) { /* ignore pathfinder errors */ }
         }
 
-        // Third approach: If item still exists, try moving in a small circle around it
+        // Third approach: If item still exists, try moving in opposite directions through it
         if (bot.entities[item.id]) {
           const directions = [
             itemPos.offset(0.5, 0, 0),
             itemPos.offset(-0.5, 0, 0),
-            itemPos.offset(0, 0, 0.5),
-            itemPos.offset(0, 0, -0.5)
           ];
 
           for (const dir of directions) {
@@ -211,15 +211,15 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
             await bot.lookAt(dir);
             bot.setControlState("forward", true);
             bot.setControlState("jump", true);
-            await delay(300);
+            await delay(200);
             bot.setControlState("forward", false);
             bot.setControlState("jump", false);
-            await delay(100);
+            await delay(50);
           }
         }
 
         // Final wait for pickup to trigger
-        await delay(300);
+        await delay(150);
       } else {
         // Use pathfinder for longer distances
         const goal = new goals.GoalNear(

@@ -288,6 +288,16 @@ export class BotCore extends EventEmitter {
         // This is critical for resource gathering and survival to work properly
         // These reset on server restart, so we fix them every time a bot connects
         console.error(`[BotManager] Enabling item drops, pickup, and mob spawning via gamerules...`);
+
+        // Track gamerule command success by listening for server responses
+        let gameruleConfirmations = 0;
+        const gameruleListener = (message: string) => {
+          if (message.includes("Gamerule") && message.includes("set to")) {
+            gameruleConfirmations++;
+          }
+        };
+        bot.on("messagestr", gameruleListener);
+
         bot.chat("/gamerule doTileDrops true");
         bot.chat("/gamerule doMobLoot true");
         bot.chat("/gamerule doEntityDrops true");
@@ -306,7 +316,22 @@ export class BotCore extends EventEmitter {
           // Disconnecting and reconnecting clears server-side state
           serverHasItemPickupDisabled: false,
           serverHasItemPickupDisabledTimestamp: undefined,
+          gamerulesFailed: false,
+          consecutiveKillsWithoutDrops: 0,
         };
+
+        // Check gamerule command results after 3 seconds
+        setTimeout(() => {
+          bot.removeListener("messagestr", gameruleListener);
+          if (gameruleConfirmations === 0) {
+            console.error(`[BotManager] ⚠️ WARNING: No gamerule confirmations received. Bot may not have OP permissions. Item drops may not work!`);
+            console.error(`[BotManager] Admin should run: /op ${config.username} or manually set /gamerule doMobLoot true`);
+            managedBot.gamerulesFailed = true;
+          } else {
+            console.error(`[BotManager] ✅ Gamerule confirmations: ${gameruleConfirmations}/5`);
+            managedBot.gamerulesFailed = false;
+          }
+        }, 3000);
 
         // Helper to add event with max 50 events kept
         // Also emits 'gameEvent' for WebSocket push notifications
@@ -342,8 +367,7 @@ export class BotCore extends EventEmitter {
           // Chat event handles player messages like "<Player> message"
           if (messagePosition === "chat" && message.match(/^<\w+>/)) return;
 
-          // Skip noisy messages
-          if (message.includes("Gamerule") || message.includes("gamerule")) return;
+          // Skip noisy messages (gamerule filter removed - needed for permission detection)
           if (message.includes("Set the time to")) return;
           if (message.includes("joined the game")) return;
           if (message.includes("left the game")) return;

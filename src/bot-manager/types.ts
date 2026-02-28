@@ -42,4 +42,6 @@ export interface ManagedBot {
   particleInterval: NodeJS.Timeout | null;
   serverHasItemPickupDisabled?: boolean;  // Track if server blocks item pickup
   serverHasItemPickupDisabledTimestamp?: number;  // Timestamp when flag was set (ms since epoch)
+  gamerulesFailed?: boolean;  // True if gamerule commands failed (bot lacks OP)
+  consecutiveKillsWithoutDrops?: number;  // Track kills that produced no item drops
 }

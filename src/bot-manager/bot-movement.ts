@@ -130,7 +130,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
 
     const onGoalReached = async () => {
       // Wait for physics to settle - bot.entity.position may not be updated immediately when event fires
-      await delay(200);
+      await delay(100);
       const pos = bot.entity.position;
       // Verify we're actually within range before declaring success
       const actualDist = pos.distanceTo(targetPos);
@@ -142,7 +142,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
 
     const onGoalUpdated = async () => {
       // Goal was changed externally; treat as cancellation
-      await delay(200);  // Wait for physics to settle
+      await delay(100);  // Wait for physics to settle
       const pos = bot.entity.position;
       const dist = pos.distanceTo(targetPos);
       if (dist < 3) {
@@ -228,8 +228,8 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       const isDigging = (bot as any).targetDigBlock != null;
       if (moved < 0.1 && !isDigging) {
         noProgressCount++;
-        // Allow more time: 30 checks * 500ms = 15s without any movement or digging
-        if (noProgressCount >= 30) {
+        // 20 checks * 300ms = 6s without any movement or digging
+        if (noProgressCount >= 20) {
           const yDiff = y - currentPos.y;
           finish({
             success: false,
@@ -247,8 +247,8 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       // Only declare failure if pathfinder is not moving AND not digging AND we've waited enough
       if (!bot.pathfinder.isMoving() && !isDigging && currentDist > 3) {
         notMovingCount++;
-        // Wait for at least 10 consecutive checks (5s) before concluding
-        if (notMovingCount >= 10) {
+        // Wait for at least 7 consecutive checks (2.1s) before concluding
+        if (notMovingCount >= 7) {
           const yDiff = y - currentPos.y;
           finish({
             success: false,
@@ -259,13 +259,13 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       } else {
         notMovingCount = 0;
       }
-    }, 500);
+    }, 300);
 
     // Set the goal AFTER checkInterval is initialized (see comment above)
     bot.pathfinder.setGoal(goal);
 
-    // Increased timeout: min 30s + 1.5s per block + extra for complex paths
-    const timeout = Math.max(30000, distance * 1500);
+    // Timeout: min 20s + 0.8s per block (bot sprints ~5.6 blocks/sec)
+    const timeout = Math.max(20000, distance * 800);
     setTimeout(() => {
       if (!resolved) {
         const finalPos = bot.entity.position;

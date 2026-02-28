@@ -258,7 +258,7 @@ export async function storeInChest(
   console.error(`[Storage] Lock acquired for chest (${chestPos.x},${chestPos.y},${chestPos.z}) by ${bot.username}`);
 
   // Wait a moment if chest was recently used (prevent timing issues)
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise(resolve => setTimeout(resolve, 300));
 
   // Retry openContainer with timeout to handle multi-bot chest access
   let chest: any;
@@ -268,7 +268,7 @@ export async function storeInChest(
     try {
       chest = await Promise.race([
         bot.openContainer(chestBlock),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Chest open timeout")), 8000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Chest open timeout")), 4000))
       ]);
       break;
     } catch (err) {
@@ -297,7 +297,7 @@ export async function storeInChest(
   }
 
   // Wait for inventory sync
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  await new Promise(resolve => setTimeout(resolve, 500));
 
   // Verify items were actually removed from inventory (i.e., deposit succeeded)
   const invCountAfter = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
@@ -305,7 +305,7 @@ export async function storeInChest(
 
   if (storedCount === 0) {
     // Deposit may have failed silently - wait a bit more and check again
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 500));
     const invCountFinal = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
     const storedCountFinal = invCountBefore - invCountFinal;
     if (storedCountFinal === 0) {
@@ -385,7 +385,7 @@ export async function takeFromChest(
   console.error(`[Storage] Lock acquired for chest (${chestPos.x},${chestPos.y},${chestPos.z}) by ${bot.username}`);
 
   // Wait a moment if chest was recently used (prevent timing issues)
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise(resolve => setTimeout(resolve, 300));
 
   // Retry openContainer with timeout to handle multi-bot chest access
   let chest: any;
@@ -395,7 +395,7 @@ export async function takeFromChest(
     try {
       chest = await Promise.race([
         bot.openContainer(chestBlock),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Chest open timeout")), 8000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Chest open timeout")), 4000))
       ]);
       break;
     } catch (err) {
