@@ -247,7 +247,7 @@ export class BotCore extends EventEmitter {
         movements.allowFreeMotion = !isNether; // Disable in Nether (prevent lava jumps)
         movements.allowParkour = false; // DISABLED in all dimensions (prevent gap jumps that can fail → fall damage)
         movements.allowSprinting = true;
-        movements.maxDropDown = isNether ? 1 : 3; // Reduced from 4 to 3 in Overworld (safer fall limit)
+        movements.maxDropDown = isNether ? 1 : 2; // Reduced from 3 to 2 in Overworld (3-block drops cause fall damage in hilly terrain)
 
         // Don't break blocks that would cause issues
         movements.dontMineUnderFallingBlock = true;
