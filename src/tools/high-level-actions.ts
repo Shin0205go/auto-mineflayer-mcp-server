@@ -1,5 +1,6 @@
 import { botManager } from "../bot-manager/index.js";
-import { checkDangerNearby } from "../bot-manager/minecraft-utils.js";
+import { checkDangerNearby, canPickaxeHarvest, getRequiredPickaxeTier } from "../bot-manager/minecraft-utils.js";
+import { registry } from "../tool-handler-registry.js";
 
 /**
  * High-level, task-oriented Minecraft actions
@@ -132,6 +133,37 @@ export async function minecraft_gather_resources(
         if (!moveResult.includes("Reached") && !moveResult.includes("Moved")) {
           console.error(`[GatherResources] Move failed: ${moveResult}`);
           continue; // Try finding another block
+        }
+
+        // Check if bot has the right tool for this block (prevents infinite loop on no-drop mining)
+        // Check inventory (not just held item) and auto-equip best pickaxe if available
+        const gatherBot = botManager.getBot(username);
+        if (gatherBot) {
+          const blockData = gatherBot.registry.blocksByName[item.name];
+          if (blockData?.harvestTools) {
+            // Find best pickaxe in inventory
+            const pickaxeTiers = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe", "wooden_pickaxe"];
+            const inventory = gatherBot.inventory.items();
+            let bestPickaxe: string | null = null;
+            for (const tier of pickaxeTiers) {
+              const tool = inventory.find(i => i.name === tier);
+              if (tool) {
+                bestPickaxe = tier;
+                try {
+                  await gatherBot.equip(tool, "hand");
+                  console.error(`[GatherResources] Auto-equipped ${tier} for ${item.name}`);
+                } catch (e) {
+                  console.error(`[GatherResources] Failed to equip ${tier}: ${e}`);
+                }
+                break;
+              }
+            }
+            const toolToCheck = bestPickaxe || gatherBot.heldItem?.name || "";
+            if (!canPickaxeHarvest(gatherBot, item.name, toolToCheck)) {
+              const required = getRequiredPickaxeTier(gatherBot, item.name);
+              return `Gathering failed. ${item.name}: 0/${targetCount}. ${item.name} requires ${required || "better pickaxe"} for drops, have: ${toolToCheck || "empty hand"}. Craft the right tool first.`;
+            }
+          }
         }
 
         // Check inventory before mining
@@ -328,10 +360,39 @@ export async function minecraft_craft_chain(
   /**
    * Recursively craft an item and its dependencies
    */
+  // Items obtained by smelting, not crafting
+  const SMELT_MAP: Record<string, string> = {
+    iron_ingot: "raw_iron",
+    gold_ingot: "raw_gold",
+    copper_ingot: "raw_copper",
+    cooked_beef: "beef",
+    cooked_porkchop: "porkchop",
+    cooked_chicken: "chicken",
+  };
+
   const craftRecursive = async (itemName: string, count: number): Promise<void> => {
     if (craftedItems.has(itemName)) {
       console.error(`[CraftChain] Already crafted ${itemName}, skipping to prevent loop`);
       return;
+    }
+
+    // Smelting shortcut: if item is obtained by smelting, use furnace directly
+    if (SMELT_MAP[itemName]) {
+      const rawItem = SMELT_MAP[itemName];
+      const inv = botManager.getInventory(username);
+      const rawInInv = inv.find(i => i.name === rawItem);
+      if (rawInInv && rawInInv.count >= count) {
+        console.error(`[CraftChain] Smelting ${count}x ${rawItem} → ${itemName}`);
+        try {
+          const smeltResult = await botManager.smeltItem(username, rawItem, count);
+          results.push(smeltResult);
+          craftedItems.add(itemName);
+          return;
+        } catch (err) {
+          console.error(`[CraftChain] Smelt failed: ${err}`);
+          // Fall through to craft attempt
+        }
+      }
     }
 
     console.error(`[CraftChain] Attempting to craft ${itemName} x${count}`);
@@ -347,9 +408,144 @@ export async function minecraft_craft_chain(
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`[CraftChain] Direct craft failed: ${errMsg}`);
 
-      // If error is about crafting table placement, provide more helpful message
-      if (errMsg.includes("crafting_table") && errMsg.includes("Place one nearby")) {
-        throw new Error(`${itemName} requires a crafting_table. ${errMsg}`);
+      // Pattern: needs crafting_table — covers all variants:
+      //   "requires a crafting_table nearby. Place one first"
+      //   "Try placing a crafting_table nearby for advanced recipes"
+      //   "Also need crafting_table nearby"
+      if (errMsg.includes("crafting_table")) {
+        console.error(`[CraftChain] Need crafting_table — attempting to navigate, auto-craft, or place`);
+
+        // First try: find and navigate to existing crafting_table
+        try {
+          const findResult = botManager.findBlock(username, "crafting_table", 32);
+          const posMatch = findResult.match(/\((-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\)/);
+          if (posMatch) {
+            const tx = parseFloat(posMatch[1]);
+            const ty = parseFloat(posMatch[2]);
+            const tz = parseFloat(posMatch[3]);
+            const navResult = await botManager.moveTo(username, tx, ty, tz);
+            if (navResult.includes("Reached") || navResult.includes("Moved")) {
+              console.error(`[CraftChain] Moved to existing crafting_table, retrying craft`);
+              const retryResult = await botManager.craftItem(username, itemName, count);
+              results.push(retryResult);
+              craftedItems.add(itemName);
+              return;
+            }
+          }
+        } catch {
+          console.error(`[CraftChain] No existing crafting_table found nearby`);
+        }
+
+        // Second: craft and place one
+        const inv = botManager.getInventory(username);
+        const hasTable = inv.find(i => i.name === "crafting_table");
+        if (!hasTable) {
+          await craftRecursive("crafting_table", 1);
+        }
+        const pos = botManager.getPosition(username);
+        if (pos) {
+          await botManager.placeBlock(username, "crafting_table", pos.x + 1, pos.y, pos.z);
+        }
+        // Retry original craft
+        const retryResult = await botManager.craftItem(username, itemName, count);
+        results.push(retryResult);
+        craftedItems.add(itemName);
+        return;
+      }
+
+      // Pattern: "Cannot craft X: Need N sticks, have M" — auto-craft sticks from planks
+      const stickMatch = errMsg.match(/Need (\d+) sticks?, have (\d+)/);
+      if (stickMatch) {
+        const need = parseInt(stickMatch[1]) - parseInt(stickMatch[2]);
+        console.error(`[CraftChain] Need ${need} more sticks — crafting from planks`);
+        await craftRecursive("stick", Math.ceil(need / 4) * 4);
+        const retryResult = await botManager.craftItem(username, itemName, count);
+        results.push(retryResult);
+        craftedItems.add(itemName);
+        return;
+      }
+
+      // Pattern: "Cannot craft X: Need N planks, have M" — auto-craft planks from logs
+      const plankMatch = errMsg.match(/Need (\d+) planks?, have (\d+)/);
+      if (plankMatch) {
+        const need = parseInt(plankMatch[1]) - parseInt(plankMatch[2]);
+        console.error(`[CraftChain] Need ${need} more planks — crafting from logs`);
+        const inv = botManager.getInventory(username);
+        const log = inv.find(i => i.name.includes("_log"));
+        if (log) {
+          await craftRecursive(log.name.replace("_log", "_planks"), Math.ceil(need / 4) * 4);
+        } else if (autoGather) {
+          const gatherResult = await minecraft_gather_resources(username, [{ name: "oak_log", count: Math.ceil(need / 4) }], 32);
+          results.push(`Gathered: ${gatherResult}`);
+          await craftRecursive("oak_planks", Math.ceil(need / 4) * 4);
+        } else {
+          throw new Error(`Failed to craft ${itemName}: Need planks but no logs in inventory. ${errMsg}`);
+        }
+        const retryResult = await botManager.craftItem(username, itemName, count);
+        results.push(retryResult);
+        craftedItems.add(itemName);
+        return;
+      }
+
+      // Pattern: "Cannot craft X: Need N materialName, have M" — generic material shortage
+      const genericNeedMatch = errMsg.match(/Need (\d+) (\w+), have (\d+)/);
+      if (genericNeedMatch && !stickMatch && !plankMatch) {
+        const neededCount = parseInt(genericNeedMatch[1]) - parseInt(genericNeedMatch[3]);
+        const neededItem = genericNeedMatch[2];
+        console.error(`[CraftChain] Need ${neededCount} more ${neededItem} — attempting to resolve`);
+        if (await isItemCraftable(neededItem)) {
+          await craftRecursive(neededItem, neededCount);
+        } else if (autoGather) {
+          const gatherResult = await minecraft_gather_resources(username, [{ name: neededItem, count: neededCount }], 32);
+          results.push(`Gathered: ${gatherResult}`);
+        } else {
+          throw new Error(`Failed to craft ${itemName}: ${errMsg}`);
+        }
+        const retryResult = await botManager.craftItem(username, itemName, count);
+        results.push(retryResult);
+        craftedItems.add(itemName);
+        return;
+      }
+
+      // Pattern: "Missing: item_name (need N, have none/M, can also use: alt1, alt2)"
+      // This is the detailed error from bot-crafting.ts recipe analysis
+      const missingMatch = errMsg.match(/Missing:\s*(\w+)\s*\(need\s*(\d+)/);
+      if (missingMatch) {
+        const missingItem = missingMatch[1];
+        const missingCount = parseInt(missingMatch[2]);
+        console.error(`[CraftChain] Missing ${missingCount}x ${missingItem} — resolving dependency`);
+
+        // Check for planks variant — use logs we have
+        if (missingItem.includes("_planks") || missingItem === "planks") {
+          const inv = botManager.getInventory(username);
+          const log = inv.find(i => i.name.includes("_log"));
+          if (log) {
+            const planksName = log.name.replace("_log", "_planks");
+            console.error(`[CraftChain] Crafting ${planksName} from ${log.name}`);
+            await craftRecursive(planksName, Math.ceil(missingCount / 4) * 4);
+          } else if (autoGather) {
+            const gatherResult = await minecraft_gather_resources(username, [{ name: "oak_log", count: Math.ceil(missingCount / 4) }], 32);
+            results.push(`Gathered: ${gatherResult}`);
+            await craftRecursive("oak_planks", Math.ceil(missingCount / 4) * 4);
+          } else {
+            throw new Error(`Failed to craft ${itemName}: Need ${missingItem} but no logs available. ${errMsg}`);
+          }
+        } else if (missingItem === "stick" || missingItem === "sticks") {
+          await craftRecursive("stick", Math.ceil(missingCount / 4) * 4);
+        } else if (await isItemCraftable(missingItem)) {
+          await craftRecursive(missingItem, missingCount);
+        } else if (autoGather) {
+          const gatherResult = await minecraft_gather_resources(username, [{ name: missingItem, count: missingCount }], 32);
+          results.push(`Gathered: ${gatherResult}`);
+        } else {
+          throw new Error(`Failed to craft ${itemName}: Missing ${missingItem} and cannot resolve. ${errMsg}`);
+        }
+
+        // Retry original craft
+        const retryResult = await botManager.craftItem(username, itemName, count);
+        results.push(retryResult);
+        craftedItems.add(itemName);
+        return;
       }
 
       // If autoGather is enabled and error is about missing ingredients, try to gather/craft them
@@ -2053,3 +2249,13 @@ export async function minecraft_validate_survival_environment(
       `\nStatus: Good survival conditions detected.`;
   }
 }
+
+// ─── Registry registration (for hot-reload) ─────────────────────────────────
+
+registry.highLevel = {
+  minecraft_gather_resources, minecraft_build_structure, minecraft_craft_chain,
+  minecraft_survival_routine, minecraft_explore_area, minecraft_enchant_item,
+  minecraft_brew_potion, minecraft_establish_base, minecraft_upgrade_tools,
+  minecraft_night_routine, minecraft_death_recovery, minecraft_food_emergency,
+  minecraft_day1_boot_sequence, minecraft_validate_survival_environment,
+};
