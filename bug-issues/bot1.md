@@ -22,6 +22,16 @@
 
 ---
 
+## [2026-03-16] Bug: Creeper爆死 - 移動中Creeper接近回避失敗
+- **Cause**: HP 6.1 Hunger 0 の状態で拠点(9,96,4)へ移動中、AutoFleeが発動したが間に合わずCreeper爆発で死亡。AutoFlee発動ログ `[AutoFlee] HP=6.1, fleeing from creeper` 確認後すぐに死亡。低HP状態での長距離移動中にCreeperに追いつかれた。
+- **Location**: 座標 (9, 95-96, 3-4) 付近 拠点直前
+- **Coordinates**: (9, 96, 4) 付近
+- **Last Actions**: mc_navigate({ x:9, y:96, z:4 }) 実行中、midnight時間帯
+- **Fix Applied**: 根本的な問題は「HP/Hunger緊急時に長距離移動」。今後はHP<10かつHunger<4の状態では長距離移動を避け、近くで食料確保を優先する。また夜間長距離移動は避けること。
+- **Status**: Respawn後 HP 20/20 Hunger 19/20 で復活
+
+---
+
 ## [2026-03-15] Bug: HP 1/20 - Creeper攻撃 + 食料枯渇
 - **Cause**: 地下洞窟でCreeper x1攻撃を受けHPが20→1に低下。食料在庫ゼロで回復不可。
 - **Coordinates**: (57, 41, -7) 地下洞窟
@@ -7448,3 +7458,34 @@ const isNonSolid = (name: string) => {
 - **Last Actions**: `mc_craft("iron_ingot", 15)` 実行
 - **Fix Applied**: `mc_craft`にSMELT_RAWマップを追加。iron_ingot/gold_ingot/copper_ingotはcount > 1でも`smeltItem`を一括呼び出しするよう修正
 - **Status**: Fixed
+
+## [2026-03-15] Bug: Obsidian mining appears to hang (75s dig time)
+- **Cause**: prismarine-block calculates obsidian digTime as 75000ms with diamond pickaxe. Real Minecraft is ~9.4s. The dig WORKS but takes 75s. With no on-ground/in-water, times are 375s or 1875s.
+- **Location**: prismarine-block library (external), affects `digBlock` in src/bot-manager.ts:1090
+- **Coordinates**: (9, 110, 2) - portal frame obsidian
+- **Last Actions**: Trying to mine obsidian for enchanting table
+- **Fix Applied**: Obsidian CAN be mined with bot.dig() but requires 90+ second timeout. All previous 15-20s timeouts were too short. Must ensure bot is on solid ground (not in water, not floating) to avoid 5x penalties. Confirmed 75.5s successful mine at dry, on-ground location.
+- **Status**: Documented - no code fix needed, just use correct timeout (90s+)
+
+## [2026-03-15] Bug: Starvation - HP dropped to 7/20 underground
+- **Cause**: Bot spent extended time in underwater area (y=35-36 obsidian lava pool). No food in inventory, no animals nearby at surface.
+- **Coordinates**: Started underground at (-9, 36, 9) in water
+- **Last Actions**: Trying to mine obsidian underwater - all timeouts failed due to 375s+ dig time in water
+- **Fix Applied**: None yet - immediate danger managed by navigating to surface. HP stable at 7-8 due to Normal difficulty starvation floor. Need to find food urgently.
+- **Status**: Investigating - need to hunt animals
+
+## [2026-03-15] Bug: Death from fall - pathfinder led bot off cliff
+- **Cause**: Pathfinder navigated toward sheep at (-40, 114, -133). The path led the bot up onto a cliff and it fell. Starvation (HP=5, Hunger=0) made the bot vulnerable to fall damage.
+- **Location**: bot-movement.ts - pathfinder maxDropDown setting too high allowed dangerous falls
+- **Coordinates**: Fell from y=115 near (-17, 104, -91)
+- **Last Actions**: Trying to pathfind to sheep 128 blocks away while at HP=5
+- **Fix Applied**: None yet. Need to implement: (1) Don't navigate to animals >50 blocks away while HP<10, (2) maxDropDown should be 2 max for normal navigation
+- **Status**: Documented. Bot respawned at HP=20 Hunger=20. Items mostly preserved.
+
+## [2026-03-15] Bug: Death by drowning while digging up
+- **Cause**: Bot was at y=-32 underground, digging upward to surface. Hit water column while digging and drowned.
+- **Location**: Manual dig-up script, underwater cave
+- **Coordinates**: Drowned at approximately (2, -32, -3)
+- **Last Actions**: Digging upward block by block from y=-32
+- **Fix Applied**: None yet. Should check for water blocks above before digging and avoid digging into water. Or navigate OUT of cave first before digging up.
+- **Status**: Documented. Respawned at y=107, HP=20, diamonds preserved.

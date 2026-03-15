@@ -702,6 +702,39 @@ export class BotCore extends EventEmitter {
           }
         });
 
+        // Proactive Creeper flee: detect Creeper within 7 blocks and sprint away immediately
+        // This fires every physics tick (~50ms) to catch Creepers before they explode
+        let creeperFleeActive = false;
+        bot.on("physicsTick", () => {
+          if (creeperFleeActive) return; // Throttle: avoid re-triggering while already fleeing
+          const creeper = Object.values(bot.entities).find(
+            e => e !== bot.entity && e.name?.toLowerCase() === "creeper" &&
+            e.position.distanceTo(bot.entity.position) < 7
+          );
+          if (creeper) {
+            const dist = creeper.position.distanceTo(bot.entity.position);
+            const dir = bot.entity.position.minus(creeper.position).normalize();
+            const fleeTarget = bot.entity.position.plus(dir.scaled(12));
+            fleeTarget.y = bot.entity.position.y;
+            console.error(`[CreeperFlee] Creeper detected ${dist.toFixed(1)} blocks away! Fleeing preemptively.`);
+            creeperFleeActive = true;
+            // Sprint-flee immediately using control states (faster than pathfinder)
+            const lookAngle = Math.atan2(-dir.x, -dir.z); // Look AWAY from creeper
+            bot.look(lookAngle, 0, true);
+            bot.setControlState("sprint", true);
+            bot.setControlState("forward", true);
+            try {
+              bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
+            } catch (_) { /* ignore */ }
+            // Reset flee flag after 3 seconds
+            setTimeout(() => {
+              bot.setControlState("sprint", false);
+              bot.setControlState("forward", false);
+              creeperFleeActive = false;
+            }, 3000);
+          }
+        });
+
         // Heartbeat event (every 30 seconds for idle detection)
         let heartbeatCount = 0;
         const heartbeatInterval = setInterval(() => {
