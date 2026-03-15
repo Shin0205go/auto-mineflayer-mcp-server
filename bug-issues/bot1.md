@@ -2,6 +2,16 @@
 
 このファイルはBot1専用です。発見したバグやイシューをここに記録してください。
 
+## [2026-03-15] Bug: --mcp-config が prompt テキストを設定ファイルパスとして誤認識
+- **Cause**: `claude --mcp-config <path> "$1"` において `--mcp-config` が `<configs...>` で複数引数を受け付けるため、`"$1"`（プロンプト文字列）が設定ファイルパスとして誤解釈される。結果 `MCP config file not found: /path/# Claude1 ...` エラーが139セッション以上継続。
+- **Location**: `scripts/self-improve-minecraft.sh:168-172`
+- **Coordinates**: N/A (起動時エラー)
+- **Last Actions**: ランチャーがclaudeを起動しようとする際に毎回失敗
+- **Fix Applied**: `--mcp-config` と `"$1"` の間に `--` を挿入してオプション解析を終了させる
+- **Status**: Fixed
+
+---
+
 ## Session 169 (2026-02-28) - 落下死
 - **死因**: fell from a high place (77,92,-4付近、空腹0)
 - **対策**: 食料確保最優先

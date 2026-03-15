@@ -168,7 +168,7 @@ PROMPT
     cd '$WT' && script -q '$LOGFILE' claude --dangerously-skip-permissions \
       --print --verbose --model '$MODEL' \
       --mcp-config '$PROJECT_DIR/.mcp.json' \
-      \"\$1\"
+      -- \"\$1\"
   " _ "$PROMPT_CONTENT"
   EXIT_CODE=$?
 
