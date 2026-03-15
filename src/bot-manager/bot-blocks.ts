@@ -28,6 +28,13 @@ export async function placeBlock(
   _delay: (ms: number) => Promise<void>,
   _getBriefStatus: (username: string) => string
 ): Promise<{ success: boolean; message: string }> {
+  // Validate blockType early to avoid cryptic "Cannot read properties of undefined" errors
+  if (!blockType || typeof blockType !== 'string') {
+    return {
+      success: false,
+      message: `block_type is required and must be a string. Got: ${JSON.stringify(blockType)}. Example: mc_place_block({ block_type: "furnace", x: 10, y: 94, z: 9 })`
+    };
+  }
   const bot = managed.bot;
   const targetPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
   const botPos = bot.entity.position;

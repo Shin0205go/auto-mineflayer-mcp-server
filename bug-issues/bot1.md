@@ -12,6 +12,25 @@
 
 ---
 
+## [2026-03-15] Bug: mc_place_block に block_type=undefined を渡すと crash
+- **Cause**: `mc_place_block({ block: 'furnace' })` と呼んだ場合、MCP定義では `block_type` が正しいパラメータ名。`block_type=undefined` になり `item.name.replace("minecraft:", "")` で `Cannot read properties of undefined (reading 'replace')` エラー。
+- **Location**: `src/bot-manager/bot-blocks.ts:78`
+- **Coordinates**: (34, 43, -2) 地下
+- **Last Actions**: `mc_place_block({ block: 'furnace' })` 呼び出し
+- **Fix Applied**: `block_type` が undefined/null のとき早期エラーを返すバリデーション追加が必要
+- **Status**: Partial fix needed (caller側は修正済み)
+
+---
+
+## [2026-03-15] Bug: HP 1/20 - Creeper攻撃 + 食料枯渇
+- **Cause**: 地下洞窟でCreeper x1攻撃を受けHPが20→1に低下。食料在庫ゼロで回復不可。
+- **Coordinates**: (57, 41, -7) 地下洞窟
+- **Last Actions**: iron_ore採掘中にCreeper接近、mc_flee後もHP 1で食料なし
+- **Fix Applied**: 食料収集をPhase 4開始前に必須化すべき。地下探索前にfood x10確保ルールを追加。
+- **Status**: 生存状態継続中（HP 1/20、iron tools作成済み）
+
+---
+
 ## Session 169 (2026-02-28) - 落下死
 - **死因**: fell from a high place (77,92,-4付近、空腹0)
 - **対策**: 食料確保最優先
