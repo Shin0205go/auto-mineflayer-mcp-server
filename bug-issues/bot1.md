@@ -2,6 +2,10 @@
 
 このファイルはBot1専用です。発見したバグやイシューをここに記録してください。
 
+## Session 169 (2026-02-28) - 落下死
+- **死因**: fell from a high place (77,92,-4付近、空腹0)
+- **対策**: 食料確保最優先
+
 ---
 
 ## Session 168 (2026-02-21) - Phase 8 Step 3 進行中 + チーム連携課題
@@ -7406,3 +7410,12 @@ const isNonSolid = (name: string) => {
 - **Fix**: `src/tools/high-level-actions.ts` food section に HP pre-check 追加 + `src/bot-manager/bot-movement.ts` hunger deadlock 修正
 - **修正済み**: autofix-27
 
+
+## [2026-03-15] Bug: mc_craft count>1 で精錬アイテムがループ失敗
+
+- **Cause**: `mc_craft(iron_ingot, 15)` が `minecraft_craft_chain` を15回ループ呼び出し。1回目の精錬でraw_ironがfurnaceに投入されると、2回目以降はインベントリにraw_ironがなくなり精錬失敗→craftItemにフォールスルー→iron_block分解ルートを試みて無限ループエラー
+- **Location**: `src/tools/core-tools.ts` `mc_craft()` 関数
+- **Coordinates**: (-24, 90, 34)
+- **Last Actions**: `mc_craft("iron_ingot", 15)` 実行
+- **Fix Applied**: `mc_craft`にSMELT_RAWマップを追加。iron_ingot/gold_ingot/copper_ingotはcount > 1でも`smeltItem`を一括呼び出しするよう修正
+- **Status**: Fixed
