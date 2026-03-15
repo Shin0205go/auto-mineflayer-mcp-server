@@ -464,7 +464,9 @@ export class BotCore extends EventEmitter {
         let autoSwimActive = false;
         let autoSwimInterval: ReturnType<typeof setInterval> | null = null;
         bot.on("breath", () => {
-          const oxygen = bot.oxygenLevel ?? 20;
+          // Clamp oxygen to valid 0-20 range (server sometimes sends values > 300 after respawn)
+          const oxygenRaw = bot.oxygenLevel ?? 20;
+          const oxygen = Math.min(20, Math.max(0, oxygenRaw));
           // Only emit if oxygen is critically low AND decreasing (avoid false positives)
           if (oxygen < 5 && oxygen < lastOxygenLevel) {
             addEvent("drowning", `LOW OXYGEN: ${oxygen}/20! Swim up immediately!`, {
@@ -476,6 +478,7 @@ export class BotCore extends EventEmitter {
           if (oxygen < 18 && !autoSwimActive) {
             autoSwimActive = true;
             console.error(`[AutoSwim] Low oxygen (${oxygen}/20), swimming up!`);
+            lastOxygenLevel = oxygen;
             bot.pathfinder.setGoal(null); // Cancel current pathfinding
             // Look straight up so forward movement swims upward
             bot.look(bot.entity.yaw, -Math.PI / 2, true);
@@ -486,7 +489,8 @@ export class BotCore extends EventEmitter {
             let swimTicks = 0;
             autoSwimInterval = setInterval(() => {
               swimTicks++;
-              const currentOxygen = bot.oxygenLevel ?? 20;
+              // Clamp to valid range (server sometimes sends >300 after respawn)
+              const currentOxygen = Math.min(20, Math.max(0, bot.oxygenLevel ?? 20));
               // Stop if oxygen recovered OR max time reached (30s)
               // Removed stillInWater check to keep swimming until oxygen is restored
               if (currentOxygen > 19 || swimTicks >= 60) { // 60 * 500ms = 30s max
