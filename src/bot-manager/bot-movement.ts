@@ -390,9 +390,10 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     const isEndPortal = targetBlock.name === "end_portal";
     const isNetherPortal = targetBlock.name === "nether_portal";
     const alreadyInEnd = currentDim.includes("end");
-    const alreadyInNether = currentDim.includes("nether");
-    // Skip enterPortal() if already in the same dimension as the portal target
-    const shouldSkip = (isEndPortal && alreadyInEnd) || (isNetherPortal && alreadyInNether);
+    // nether_portal is bidirectional: OW->Nether and Nether->OW. Never skip.
+    // end_portal in End dimension: skip to avoid infinite loop (End exit portal handled separately).
+    // Only skip end_portal if already in End (avoid re-entering exit portal loop).
+    const shouldSkip = (isEndPortal && alreadyInEnd);
     if (!shouldSkip) {
       console.error(`[Move] Target is a ${targetBlock.name}, delegating to enterPortal()...`);
       try {
@@ -1593,7 +1594,7 @@ export async function enterPortal(managed: ManagedBot, portalType?: "nether_port
   const blockAtFeet = bot.blockAt(botBlockPos);
   const alreadyInPortal = blockAtFeet?.name === activePortalName;
   if (alreadyInPortal) {
-    console.error(`[Portal] Bot is already inside ${activePortalName} block, waiting for dimension change...`);
+    console.error(`[Portal] Bot is already inside ${activePortalName} block, will re-enter to reset portal timer...`);
   }
 
   // Temporarily allow stepping on portal blocks (normally avoided to prevent accidental teleport)
@@ -1604,7 +1605,9 @@ export async function enterPortal(managed: ManagedBot, portalType?: "nether_port
     if (netherPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.delete(netherPortalId);
     if (endPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.delete(endPortalId);
 
-    if (!alreadyInPortal) {
+    // Always do movement regardless of alreadyInPortal status
+    // Re-entering resets the 4-second portal timer and overrides any stale position state
+    {
       // Determine portal axis (nether_portal has state.axis = "x" or "z")
       // axis "x" = portal faces east/west, enter from north/south (Z direction)
       // axis "z" = portal faces north/south, enter from east/west (X direction)
