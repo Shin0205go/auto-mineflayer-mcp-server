@@ -460,6 +460,10 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   const groundCheck = checkGroundBelow(bot, x, y, z, 10);
   if (!groundCheck.safe && groundCheck.fallDistance >= 10) {
     console.error(`[Move] WARNING: No solid ground at destination (${x}, ${y}, ${z}), fall distance: ${groundCheck.fallDistance} blocks`);
+    // If HP is critically low, a 10+ block fall is lethal - block movement
+    if (hp < 10) {
+      return `⚠️ SAFETY: Destination (${x}, ${y}, ${z}) has no ground within ${groundCheck.fallDistance} blocks below. Fall would be lethal at HP=${hp.toFixed(1)}/20. Aborting movement.`;
+    }
   }
 
   // SAFETY CHECK: If target is significantly lower, prevent fall damage

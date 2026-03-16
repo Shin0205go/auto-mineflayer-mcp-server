@@ -7523,3 +7523,15 @@ const isNonSolid = (name: string) => {
 - **Last Actions**: Attempted to find sheep for food, blocked by safety check at every turn
 - **Fix Applied**: Added daytime + no-hostile-nearby check. During daytime with no hostile mobs within 20 blocks, only block movement when HP < 2 (truly near-death). At night or with hostiles nearby, keep strict HP < 3 threshold.
 - **Status**: Fixed
+
+## [2026-03-16] Bug: Death by fall during navigation to sheep - enderman AutoFlee
+
+- **Cause**: Navigation to (-39, 114, -133) went through high terrain (y=114+). While pathfinding, "No solid ground at destination, fall distance: 10 blocks" warning was logged but not blocked. Enderman appeared and AutoFlee triggered while at high altitude, causing fall death.
+- **Location**: `src/bot-manager/bot-movement.ts` - moveToBasic() fall detection, AutoFlee code
+- **Coordinates**: Fell from approximately (-17, 114, -91)
+- **Last Actions**: mc_navigate to (-39, 114, -133) for sheep, HP=2 daytime movement allowed by new fix
+- **Fix Required**: 
+  1. When "fall distance > 5 blocks" detected at destination, abort movement and try different route
+  2. AutoFlee should check terrain height before fleeing vertically upward
+  3. OR: revert daytime HP relaxation and find different food strategy
+- **Status**: Bot respawned. Investigating fixes.
