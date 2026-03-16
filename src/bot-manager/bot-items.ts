@@ -56,7 +56,9 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
         entity.displayName === "Item" ||
         entity.displayName === "Dropped Item" ||
         // Fallback for servers with non-standard entity data — but exclude known non-item objects
-        (entity.type === "object" && !NON_ITEM_OBJECTS.has(entity.name || ""))
+        (entity.type === "object" && !NON_ITEM_OBJECTS.has(entity.name || "")) ||
+        // In mineflayer 1.21.4+, dropped items have type="other" AND name="item"
+        (entity.type === "other" && entity.name === "item")
       );
 
       if (isItem && dist < 5) {
