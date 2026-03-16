@@ -202,3 +202,35 @@ The fight function matches entity displayName/name containing "pig" which matche
 In bot-survival.ts fight(), when searching by target name:
 - Should NOT match "zombified_piglin" when searching for "pig"
 - Need exact/suffix matching, not substring matching
+
+---
+
+## [2026-03-16] Bug: Death in Nether by lava during mc_navigate (Session 178)
+
+- **Cause**: mc_navigate to fortress (214,25,-134) used emergency dig-through after fall_detected.
+  The dig-through direction led into a lava pool. Bot fell 14.8 blocks at (153,33,-96).
+  AutoFlee triggered but HP drained HP=12.2→8.2→4.2→0.2 in lava.
+- **Location**: bot-movement.ts - `emergency dig-through` after fall_detected does NOT check for lava
+- **Coordinates**: Death at ~(153, 33, -96) in the_nether
+- **Last Actions**:
+  1. mc_navigate(x=214, y=25, z=-134) from Nether portal exit (-12, 110, 2)
+  2. Multiple fall_detected events as bot descended through Nether terrain
+  3. Emergency dig-through activated, dug soul_sand downward into lava
+  4. "Claude1 tried to swim in lava" - death
+- **Root Causes**:
+  1. Emergency dig-through doesn't check if destination block is lava/fire before digging
+  2. Nether navigation is inherently dangerous with uncontrolled descent
+  3. No lava detection in safety threshold during navigation
+- **Fix Applied**: None yet - need to add lava check before emergency dig and during pathfinding
+- **Status**: Investigating
+
+---
+
+## [2026-03-16] Bug: mc_combat object argument causes toLowerCase error (Session 178)
+
+- **Cause**: Script called mc_combat({target:'blaze', flee_at_hp:8, collect_items:true}).
+  mc_combat signature is mc_combat(target?: string, fleeAtHp?: number).
+  Object was passed as `target`, causing entityName.toLowerCase() crash in fight().
+- **Location**: src/tools/core-tools.ts mc_combat function
+- **Fix Applied**: Need to add object argument unpacking in mc_combat, or update signature
+- **Status**: Script fixed (calling with positional args now); core-tools should be hardened

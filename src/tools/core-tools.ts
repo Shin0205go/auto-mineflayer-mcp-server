@@ -367,10 +367,21 @@ export async function mc_navigate(
 // ─── mc_combat ───────────────────────────────────────────────────────────────
 
 export async function mc_combat(
-  target?: string,
-  fleeAtHp: number = 4
+  targetOrArgs?: string | { target?: string; flee_at_hp?: number; fleeAtHp?: number; collect_items?: boolean },
+  fleeAtHpArg: number = 4
 ): Promise<string> {
   const username = botManager.requireSingleBot();
+
+  // Support both positional and object argument styles
+  let target: string | undefined;
+  let fleeAtHp = fleeAtHpArg;
+
+  if (targetOrArgs && typeof targetOrArgs === "object") {
+    target = targetOrArgs.target;
+    fleeAtHp = targetOrArgs.flee_at_hp ?? targetOrArgs.fleeAtHp ?? fleeAtHpArg;
+  } else {
+    target = targetOrArgs as string | undefined;
+  }
 
   // Auto-equip best weapon
   try {
@@ -593,6 +604,22 @@ export async function mc_connect(
   setAgentType("game");
 
   await botManager.connect({ host, port, username, version });
+
+  // Start prismarine-viewer if VIEWER=1 env var is set
+  if (process.env.VIEWER === "1") {
+    const viewerPort = parseInt(process.env.VIEWER_PORT || "3007");
+    try {
+      const { default: prismarineViewer } = await import("prismarine-viewer");
+      const bot = botManager.getBot(username);
+      if (bot) {
+        prismarineViewer.mineflayer(bot, { port: viewerPort, firstPerson: false });
+        console.error(`[Viewer] Started at http://localhost:${viewerPort}`);
+      }
+    } catch (e) {
+      console.error(`[Viewer] Failed to start: ${e}`);
+    }
+  }
+
   return `Connected to ${host}:${port} as ${username}`;
 }
 

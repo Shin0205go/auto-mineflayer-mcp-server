@@ -218,6 +218,20 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         return;
       }
 
+      // SAFETY: Detect lava contact — stop immediately if in lava
+      const blockAtFeet = bot.blockAt(currentPos.floor());
+      const blockAtHead = bot.blockAt(currentPos.offset(0, 1, 0).floor());
+      if (blockAtFeet?.name === "lava" || blockAtHead?.name === "lava") {
+        bot.pathfinder.stop();
+        console.error(`[MoveTo] LAVA DETECTED at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Emergency stop!`);
+        finish({
+          success: false,
+          message: `Navigation stopped: lava detected at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Move away from lava immediately!`,
+          stuckReason: "lava_detected"
+        });
+        return;
+      }
+
       // SAFETY: Track maximum height reached during pathfinding
       // If bot goes much higher than start or target, pathfinder may be taking unsafe route
       if (currentPos.y > maxHeightReached) {
@@ -554,7 +568,9 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     const checkPos = finalPos.clone().add(direction.scaled(dist)).floor();
     const block = bot.blockAt(checkPos);
 
-    if (block && block.name !== "air" && block.name !== "cave_air" && block.name !== "water") {
+    // Skip non-solid/dangerous blocks: air, water, lava, fire, void
+    const dangerousBlocks = ["air", "cave_air", "water", "lava", "fire", "soul_fire", "void_air"];
+    if (block && !dangerousBlocks.includes(block.name)) {
       // Found solid block - try to dig it
       console.error(`[Move] Emergency dig: found ${block.name} at (${checkPos.x}, ${checkPos.y}, ${checkPos.z}), distance ${dist}`);
 
