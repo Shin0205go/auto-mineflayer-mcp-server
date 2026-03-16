@@ -1,3 +1,19 @@
+## [2026-03-17] Bug: Nether movement deadlock — isDaytime always false in Nether
+
+- **Cause**: `bot.time.timeOfDay` in Nether dimension is always 0, and since `isDaytime = timeOfDay < 12541` resolves to `true` (0 < 12541), BUT the dimension check is separate. After investigation: ネザーでは敵mob（wither_skeleton）が存在し`hasHostileNearby`がtrueになり、HP=2で距離>30の移動がブロックされた。
+- **Location**: `src/bot-manager/bot-movement.ts` line 331-337
+- **Coordinates**: Nether (20, 85, -22)
+- **Last Actions**:
+  1. Navigating from (-12,110,2) to (100,50,-70) in Nether
+  2. Skeleton encountered and attacked bot to HP=2
+  3. mc_navigate blocked due to HP<8 + hostile nearby (night check)
+  4. No food = cannot heal = permanent deadlock
+- **Fix Applied**: Added Nether/End dimension detection. In Nether/End, `isDaytime=true` always (no day/night cycle). Also: hasHostileNearby check did NOT include wither_skeleton/blaze/ghast for Nether mobs. Net effect: `isDaytime=true` in Nether unlocks the looser HP≥2 threshold.
+- **Fix Location**: `src/bot-manager/bot-movement.ts` — added `isNetherOrEnd` variable, set `isDaytime = isNetherOrEnd || timeOfDay < 12541`
+- **Status**: Fixed (commit pending)
+
+---
+
 ## [2026-03-16] Bug: Death by Zombie during dungeon navigation
 
 - **Cause**: Bot navigated underground (y=-7) toward dungeon surface (87,60,-62) and encountered a Zombie

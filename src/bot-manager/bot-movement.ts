@@ -327,9 +327,13 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   // Previous threshold (hp<5 && dist>8) caused deadlocks where bots couldn't reach nearby food.
   // Daytime check: if it's daytime (ticks < 12541) and no hostile threats, allow movement at HP≥2
   // to prevent starvation deadlock (HP=2, no food, can't move to find food).
+  // In Nether/End dimensions, timeOfDay is always 0 — treat as "safe" (no day/night cycle).
   const hp = bot.health ?? 20;
   const timeOfDay = (bot.time?.timeOfDay ?? 0) as number;
-  const isDaytime = timeOfDay < 12541;
+  const currentDimension = String(bot.game?.dimension ?? "overworld");
+  const isNetherOrEnd = currentDimension.includes("nether") || currentDimension.includes("end");
+  // In Nether/End: treat as daytime (no night cycle). In OW: check actual time.
+  const isDaytime = isNetherOrEnd || timeOfDay < 12541;
   const hasHostileNearby = Object.values(bot.entities).some((e: any) => {
     if (!e || !e.position) return false;
     const dist = e.position.distanceTo(bot.entity.position);
