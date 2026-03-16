@@ -85,12 +85,12 @@ export const coreTools = {
   },
 
   mc_combat: {
-    description: "Attack an entity, auto-equip best weapon, collect drops. Omit target for nearest hostile.",
+    description: "Attack an entity, auto-equip best weapon, collect drops. Omit target for nearest hostile. For dangerous mobs like blaze/ghast use flee_at_hp=10.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        target: { type: "string", description: "Entity name (e.g., 'zombie', 'cow')" },
-        flee_at_hp: { type: "number", default: 4 },
+        target: { type: "string", description: "Entity name (e.g., 'zombie', 'cow', 'blaze')" },
+        flee_at_hp: { type: "number", default: 4, description: "Flee when HP drops below this. Use 10 for blazes/ghasts." },
       },
       required: [],
     },
