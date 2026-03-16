@@ -60,6 +60,22 @@
 
 ---
 
+## [2026-03-16] Bug: Death from HP=2.17/Food=2 during navigation back to base
+
+- **Cause**: craft_book_final.mjs started with HP=2.17, Food=2 after cow hunt. `bot.consume()` timed out. Bot died during long-distance navigation from (-78,91,213) to base.
+- **Location**: tmp_scripts/craft_book_final.mjs - EPIPE error = bot death during nav
+- **Coordinates**: (~-78,91,213) → death somewhere between there and base
+- **Last Actions**:
+  1. hunt_animals.mjs found cow at (-94,97,181), killed it, got leather x1
+  2. craft_book_final.mjs started at HP=2.17, Food=2
+  3. `bot.consume()` timed out (food not consumed)
+  4. Bot navigated toward base with HP=2.17 and died
+- **Fix Applied**: survival_and_craft.mjs improved eat logic using activateItem() loop
+- **Note**: keepInventory=true confirmed - bot respawned with HP=20, Food=20, all items intact
+- **Status**: Recorded (keepInventory saved progress)
+
+---
+
 ## Previous sessions (Phase 5 - book hunt)
 - 5+ deaths trying to access dungeon at (87,35,-62)
 - doMobLoot disabled (gamerule shows true now but was disabled before)

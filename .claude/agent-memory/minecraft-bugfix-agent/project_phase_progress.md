@@ -1,70 +1,71 @@
 ---
-name: Phase Progress - 2026-03-16 Session 174
-description: Current gameplay phase progress and inventory state as of session 174
+name: Phase Progress - 2026-03-16 Session 175
+description: Current gameplay phase progress and inventory state as of session 175
 type: project
 ---
 
 ## Phase Progress
 
-Current Phase: Phase 5 (Diamond/Enchanting Table)
-Status: BLOCKED
+Current Phase: Phase 6 (Nether)
+Previous Phase: Phase 5 (Diamond/Enchanting Table) - COMPLETED
 
-## Critical State (Session 174)
-- HP: 4.5/20
-- Food: 0/20
-- Bot position: ~(-175, 75, 70) - far from base (~180 blocks away)
-- Admin intervention REQUIRED before next session
+## Phase 5 Completion (Session 175)
 
-## Inventory (Session 174)
-- diamond x3 (need 2 for enchanting table)
-- fishing_rod x1 (crafted from cobweb string this session!)
-- ender_pearl x12 (for Phase 7 - already have enough)
+### What was accomplished:
+1. doEntityDrops/doMobLoot fixed by admin (now both true)
+2. Killed cow at (-94,97,181) -> got leather x1
+3. Used sugar_cane x6 -> paper x2 (at crafting table (7,107,0))
+4. Crafted book x1 (3 paper + 1 leather)
+5. Found natural obsidian cluster at (-3 to -6, 102-106, z=27)
+6. Mined 4 obsidian with diamond_pickaxe (NOTE: dismantled Nether portal frame)
+7. Crafted enchanting_table
+8. Placed enchanting_table at (7,107,-1) at base
+9. Announced via chat: "[報告] Phase 5 完了条件達成！"
+
+## Current Inventory (after Phase 5)
+- enchanting_table: PLACED at (7,107,-1)
+- ender_pearl x12 (Phase 6 requirement MET)
+- diamond x1
+- obsidian x1 (extra)
 - iron_ingot x8, iron_sword x1, iron_pickaxe x1
 - diamond_pickaxe x1
-- stone_sword x1, stone_axe x1, stone_pickaxe x1
-- coal x39, cobblestone x34, gold_ingot x31
-- birch_log x8, birch_planks x12, birch_sapling x4
-- shears x1, furnace x1, bucket x1
+- beef x6 (raw), coal x39
+- birch_log x8, birch_planks x12
+- gold_ingot x31, bucket x1, paper x3
 
-## Inventory NOT PRESENT (lost or tossed)
-- obsidian x4 (was in inventory before, now 0; portal frame at (11,112,2))
-- diamond_sword x1 (also missing from last known state)
+## Phase 6 Requirements
+1. blaze_rod x7 (NEED: kill Blazes in Nether Fortress) ❌
+2. ender_pearl x12 (HAVE) ✅
 
-## Chest (9, 96, 4) Contents
-Nearly full of junk: cobblestone, soul_sand, soul_soil, clay, netherrack, etc.
-Useful: gold_ingot x31
+## Phase 6 Blockers
+- **Nether portal dismantled**: Mined the 4 portal frame blocks (11,112,2 etc.) for enchanting_table
+- Need to rebuild portal with 10 obsidian
+- Need flint_and_steel to light portal
+- Natural obsidian cluster: (-3 to -6, 102-106, z=27) has ~10+ blocks
 
-## Base Infrastructure
-- Crafting tables: (7,107,0), (11,94,8), (0,109,14)
-- Chest: (9, 96, 4) - nearly full
-- Nether portal frame blocks: (11,112,2), (11,113,2), (8,113,2), (11,114,2)
-- Natural lake: (-136, 51, 56) - for fishing
+## Infrastructure
+- Enchanting table: (7,107,-1)
+- Crafting tables: (7,107,0), (11,94,8), (0,109,14), multiple others
+- Natural obsidian cluster: (-4, 104, 27) area (~10 blocks)
+- More obsidian underground: (-4,37,14), (-5,37,15)
+- Lava: (-175,34,48) for making more obsidian if needed
+- Lake: (-136, 51, 56) for fishing
 
-## Phase 5 Requirements
-1. diamond x2 (HAVE x3) ✅
-2. obsidian x4 (MISSING - need to check portal area or mine new) ❌
-3. book x1 (BLOCKED by doEntityDrops=false) ❌
+## Deaths This Session (175)
+1. Bot died at (~-78,91,213) - HP=2.17 during navigation, EPIPE
+   - keepInventory=true: all items retained
+   - Respawned at base with HP=20, Food=20
 
-## Discoveries This Session
-- Cobweb mining with sword gives string (works!)
-- Natural lake at (-136, 51, 56) - can fish here
-- Village/bookshelf: not within 300 blocks in any direction
-- Fishing bobber correctly lands in water - but item entities don't spawn (blocked)
-- Sheep killed at (-197, 66, 87) - confirmed 0 drops
+## Key Fixes Applied This Session
+- doEntityDrops/doMobLoot: fixed by admin (no code fix needed)
+- collectNearbyItems: fixed in bot-items.ts for mineflayer 1.21.4 (prev session)
 
-## Admin Actions Required
-```
-/gamerule doEntityDrops true
-/gamerule doMobLoot true
-/give Claude1 bread 20
-/give Claude1 book 1  (or /give Claude1 obsidian 4)
-/tp Claude1 9 96 4    (return bot to base)
-```
-
-## What Happens After Admin Fix
-1. Eat food, restore HP to 20
-2. Navigate back to base at (9, 96, 4)
-3. Fish at lake (-136, 51, 56) for book
-4. Mine obsidian x4 if needed
-5. Craft enchanting_table
-6. Declare Phase 5 complete, begin Phase 6 (Nether)
+## Next Phase 6 Actions
+1. Cook beef in furnace at base
+2. Mine 9+ obsidian from cluster at (-4,104,27)
+3. Find gravel -> craft flint from it -> craft flint_and_steel (1 iron_ingot + 1 flint)
+4. Build Nether portal frame (10 blocks min, or 14 for standard 4-wide)
+5. Light portal with flint_and_steel
+6. Enter Nether, navigate to Nether Fortress
+7. Kill 7+ Blazes, collect 7 blaze_rods
+8. Return through portal
