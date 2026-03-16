@@ -723,10 +723,14 @@ export async function fight(
       continue;
     }
 
+    // Blaze special case - they hover in the air, attack range is up to 6 blocks
+    const isBlaze = targetName === "blaze";
+    const attackRange = isBlaze ? 5.5 : 3.5;
+
     // Move closer if needed
-    if (distance > 3.5) {
+    if (distance > attackRange) {
       bot.pathfinder.setGoal(new goals.GoalNear(
-        target.position.x, target.position.y, target.position.z, 2
+        target.position.x, target.position.y, target.position.z, isBlaze ? 4 : 2
       ));
       await delay(500);
       continue;
@@ -738,7 +742,7 @@ export async function fight(
       await bot.lookAt(target.position.offset(0, target.height * 0.8, 0));
       bot.attack(target);
       attackCount++;
-      console.error(`[BotManager] Hit ${targetName} (#${attackCount})`);
+      console.error(`[BotManager] Hit ${targetName} (#${attackCount}) at dist=${distance.toFixed(1)}`);
     } catch (err) {
       // Target might have died
       console.error(`[BotManager] Attack error: ${err}`);
