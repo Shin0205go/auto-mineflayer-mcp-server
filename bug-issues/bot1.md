@@ -293,4 +293,51 @@ Bot needs to explore further (200+ blocks) to find animals.
   OR restart bot at full HP with food available
 - **Next Session**: After admin gives food, navigate to portal at (-45,93,87), enter Nether,
   navigate to fortress at (214,25,-134), hunt blazes.
-- **Status**: BLOCKED - waiting for admin
+- **Status**: RESOLVED - bot was shot by skeleton and respawned with HP=20, Hunger=20
+
+---
+
+## [2026-03-17] Death: Shot by Skeleton (Session 179 report wait)
+
+- **Cause**: Bot was waiting for admin with HP=3, Hunger=0. AutoFlee triggered from skeleton
+  but HP=3 was too low to survive skeleton arrow. Bot died.
+- **Location**: Overworld near position (-24, 93, -5)
+- **Coordinates**: ~(-24, 93, -5) overworld
+- **Last Actions**:
+  1. Waiting for admin response loop (10s intervals)
+  2. AutoFlee triggered from skeleton
+  3. HP=3 not enough to survive arrow damage
+  4. "Claude1 was shot by Skeleton"
+- **Outcome**: Respawned with HP=20, Hunger=20 (keepInventory=true, all items intact)
+- **Root Cause**: AutoFlee with HP=3 cannot guarantee survival (skeleton damage > remaining HP)
+- **Fix Needed**: When HP <= 5, bot should hide indoors or dig into ground instead of fleeing
+- **Status**: Survived (keepInventory). Items intact including ender_pearl x12. Ready to continue.
+
+---
+
+## [2026-03-17] Critical: Nether Portal (Nether->OW) Not Working (Session 184)
+
+- **Cause**: Bot at (-12,110,2) in soul_sand_valley (Nether) cannot use nether_portal to return to OW.
+  Portal stands at (-12-13, 110-112, 2) with axis=x. Bot enters portal block, stands still for 30s,
+  but server never sends dimension change / spawn event.
+- **Location**: Nether portal at (-12,110,2) in the_nether
+- **Coordinates**: (-12, 110, 2) in the_nether
+- **Last Actions**:
+  1. Sessions 180-184: Bot repeatedly tried portal at (-12,110,2) - all timeout after 30s
+  2. Portal detection works (6 nether_portal blocks found at that location)
+  3. Bot enters portal, clears controls, waits - no teleport
+- **Code Bug Fixed**: bot-movement.ts shouldSkip logic was preventing enterPortal() when
+  bot was in Nether + targeting nether_portal (commit 6c2b56c). This is now fixed.
+- **Remaining Issue**: Even with code fixed, server not triggering portal teleport.
+  Possible server-side causes:
+  1. Portal cooldown (but bot has been in Nether for 10+ sessions - cooldown should be gone)
+  2. Server has disabled portal travel via spigot/paper config
+  3. OW side portal was broken/removed
+  4. `allowNether=false` in server.properties
+- **Admin Actions Required**:
+  1. Check: is the OW Nether portal at (-47 to -44, y=92-96, z=87) still active?
+  2. Check server.properties: `allow-nether=true`
+  3. Try: `/tp Claude1 -45 93 87` to force OW teleport
+  4. Or: `/give Claude1 cooked_beef 16` so bot can survive in Nether for blaze hunt
+- **Bot State**: HP=5, Hunger=4, Pos=(-12,110,2) in soul_sand_valley
+- **Status**: BLOCKED. Admin intervention required.
