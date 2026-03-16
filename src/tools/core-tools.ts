@@ -483,7 +483,21 @@ export async function mc_eat(food?: string): Promise<string> {
 // ─── mc_store ────────────────────────────────────────────────────────────────
 
 export async function mc_store(
-  action: "list" | "deposit" | "withdraw" | "deposit_all_except",
+  actionOrArgs:
+    | "list"
+    | "deposit"
+    | "withdraw"
+    | "deposit_all_except"
+    | {
+        action: "list" | "deposit" | "withdraw" | "deposit_all_except";
+        item?: string;
+        item_name?: string;
+        count?: number;
+        x?: number;
+        y?: number;
+        z?: number;
+        keep_items?: string[];
+      },
   itemName?: string,
   count?: number,
   chestX?: number,
@@ -491,6 +505,20 @@ export async function mc_store(
   chestZ?: number,
   keepItems?: string[]
 ): Promise<string> {
+  // Support object argument style (consistent with mc_navigate, mc_combat)
+  let action: "list" | "deposit" | "withdraw" | "deposit_all_except";
+  if (actionOrArgs && typeof actionOrArgs === "object") {
+    action = actionOrArgs.action;
+    itemName = actionOrArgs.item ?? actionOrArgs.item_name ?? itemName;
+    count = actionOrArgs.count ?? count;
+    chestX = actionOrArgs.x ?? chestX;
+    chestY = actionOrArgs.y ?? chestY;
+    chestZ = actionOrArgs.z ?? chestZ;
+    keepItems = actionOrArgs.keep_items ?? keepItems;
+  } else {
+    action = actionOrArgs;
+  }
+
   const username = botManager.requireSingleBot();
 
   switch (action) {

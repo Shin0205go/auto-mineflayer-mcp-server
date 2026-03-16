@@ -234,3 +234,63 @@ In bot-survival.ts fight(), when searching by target name:
 - **Location**: src/tools/core-tools.ts mc_combat function
 - **Fix Applied**: Need to add object argument unpacking in mc_combat, or update signature
 - **Status**: Script fixed (calling with positional args now); core-tools should be hardened
+
+---
+
+## [2026-03-17] Bug: mc_store object argument not supported (Session 179b)
+
+- **Cause**: Script called mc_store({ action: 'list', x: 9, y: 96, z: 4 }).
+  mc_store signature is mc_store(action, itemName?, count?, chestX?, chestY?, chestZ?).
+  Object arg was passed as `action`, causing `Unknown action: [object Object]`.
+- **Location**: src/tools/core-tools.ts mc_store function
+- **Coordinates**: (9, 96, 4) chest location
+- **Fix Applied**: Script fixed to use positional args: mc_store('list', undefined, undefined, 9, 96, 4)
+- **Status**: Script fixed; core-tools should add object argument support for consistency
+
+---
+
+## [2026-03-17] Critical: HP=3, Hunger=0, No food, Night (Session 179c)
+
+- **Cause**: Bot respawned after Nether lava death with HP=5. Then during navigation to chest,
+  pathfinder dug through cobbled_deepslate (draining further time/health), zombie/creeper
+  damaged bot at night, hunger drained to 0. HP dropped to 3.
+- **Location**: Overworld (7, 89, 9), birch_forest, midnight
+- **Last Actions**:
+  1. Connected with HP=5, Hunger=13
+  2. Tried to navigate to chest (9,96,4) - dug through cobbled_deepslate unnecessarily
+  3. Night time: zombie+creeper attacked (AutoFlee triggered but HP still dropped)
+  4. Hunger dropped to 0, HP now 3
+- **Chest Contents**: cobblestone, clay_ball, coal, netherrack, soul_sand, obsidian - NO FOOD
+- **Root Causes**:
+  1. doMobLoot disabled - cannot get food from animals
+  2. No food in chest
+  3. Night navigation with critical HP
+- **Admin Required**: /gamerule doMobLoot true + /give Claude1 cooked_beef 16
+- **Status**: Awaiting admin action. Bot alive at (7,88,9) HP=3.
+
+Additional finding: All passive mobs (cow/sheep/pig/chicken) "not found nearby" within 64 blocks
+of current position (-5, 95, 0). Area is depopulated. Even if doMobLoot was enabled, no mobs to hunt.
+Bot needs to explore further (200+ blocks) to find animals.
+
+---
+
+## [2026-03-17] Gameplay Blocker: HP=3, No Food, No Mobs (Session 179c-d)
+
+- **State**: HP=3, Hunger=0, Position (-5, 95, 0) overworld morning
+- **Phase**: 6 (Nether), need 7 blaze_rods, have 12 ender_pearls
+- **Blockers**:
+  1. No food in inventory
+  2. No food in chest (chest has only materials)
+  3. No passive mobs within 64 blocks of current position
+  4. doMobLoot status unknown (may or may not be disabled)
+  5. HP=3 makes exploration dangerous (hunger damage will kill)
+- **Admin Actions Required**:
+  ```
+  /gamerule doMobLoot true
+  /gamerule doEntityDrops true
+  /give Claude1 cooked_beef 16
+  ```
+  OR restart bot at full HP with food available
+- **Next Session**: After admin gives food, navigate to portal at (-45,93,87), enter Nether,
+  navigate to fortress at (214,25,-134), hunt blazes.
+- **Status**: BLOCKED - waiting for admin
