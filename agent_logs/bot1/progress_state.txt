@@ -1,7 +1,7 @@
-1→6|176|Phase6_Nether_fortress_search_resumed
+1→6|177|Phase6_Nether_blaze_hunt_blocked_by_food
 # Phase: 6 (Nether)
-# Session: 176 (2026-03-16)
-# Status: Phase 5 COMPLETE. Phase 6 in progress. Nether fortress NOT YET FOUND.
+# Session: 177 (2026-03-16)
+# Status: Phase 5 COMPLETE. Phase 6 BLOCKED by food shortage.
 #
 # Phase 5 COMPLETED:
 #   - enchanting_table placed at (7,107,-1)
@@ -9,56 +9,73 @@
 #
 # Phase 6 Status:
 #   - ender_pearl x12 ✅ (requirement met)
-#   - blaze_rod x7 ❌ (need to find Nether Fortress first)
+#   - blaze_rod x7 ❌ (BLOCKED: food shortage + doMobLoot disabled)
+#   - Nether fortress CONFIRMED at (214, 25, -134) in Nether coords
 #
-# Last Known Inventory (approximate from Session 175):
+# CRITICAL BLOCKING ISSUE:
+#   - NO food in inventory (0 food items)
+#   - doMobLoot likely disabled = no mob drops (beef, chicken, etc.)
+#   - Village/farmland: NOT found within 600 blocks
+#   - pale_oak_leaves: no apple drops (wrong tree type)
+#   - ADMIN ACTION REQUIRED:
+#     /gamerule doMobLoot true
+#     /gamerule doEntityDrops true
+#     /op Claude1
+#   OR provide food via: /give Claude1 bread 32
+#
+# Last Known Inventory (Session 177):
 #   ender_pearl x12
 #   iron_sword x1
-#   iron_ingot x7
+#   stone_pickaxe x1
+#   stone_axe x1
+#   iron_ingot x4
 #   diamond x1
 #   coal x41
 #   gold_ingot x31
-#   soul_sand x11, soul_soil x1
-#   netherrack x100+ (collected from Nether)
-#   cobblestone x100+
-#   birch_log x9, birch_planks x12
-#   beef x6 (raw) - COOK BEFORE NETHER
-#   diamond_pickaxe: UNCERTAIN (may have been lost)
-#   stone_pickaxe: UNCERTAIN
+#   soul_sand x24, soul_soil x9
+#   netherrack x100+
+#   cobblestone x38
+#   dirt x38
+#   birch_log x5, birch_planks x28
+#   stick x30
+#   pumpkin x1 (not food, can make jack_o_lantern)
+#   paper x3
+#   flint_and_steel x1, shears x1, bucket x1
+#   chest x2
 #
 # Infrastructure:
 #   - Enchanting table: (7,107,-1)
 #   - Nether portal: (-47 to -44, y=92-96, z=87) - BUILT AND ACTIVE
-#   - Natural obsidian cluster: (-4,104,27) - some may remain
+#   - Nether portal in Nether: (-12 to -13, y=110-112, z=0-2)
 #   - Crafting tables: (7,107,0), (11,94,8), etc.
-#   - Furnace: near base
+#   - Chest with resources: (9,96,4)
 #
-# Nether Search History:
-#   - Covered: x=[-300,300], z=[-300,300] → NO nether_bricks found
-#   - Nether spawn area: (-5,99,15) to (-12,110,2)
-#   - NEED to search: x=[300,800] range (chunk-by-chunk, 100 blocks at a time)
+# Current Position: (40, 109, 63) in overworld, birch_forest
 #
-# Code Fixes Applied This Session (2026-03-16):
-#   1. Fix: Blaze combat attack range extended to 5.5 blocks (hover issue)
-#   2. Perf: mc_navigate segment size 30→50 blocks
-#   3. Docs: mc_combat description updated for blaze guidance
-#   4. Docs: nether-fortress SKILL.md updated with exploration strategy
+# Code Fixes Applied (Session 177, 2026-03-16):
+#   1. Fix: bot-movement.ts night HP threshold 3→8 for navigation safety
+#   2. Fix: bot-movement.ts auto-eat before 30+ block moves when HP<14 and food available
+#   3. Commit: 7f41220
 #
 # Startup Checklist (NEXT SESSION):
+#   PREREQUISITE: Admin must run /gamerule doMobLoot true first!
 #   1. mc_connect()
-#   2. mc_chat(mode=get) - check messages
-#   3. mc_status() - check HP, food, position, inventory
-#   4. IF food < 10: cook beef at furnace, eat to full
-#   5. IF missing pickaxe: craft stone_pickaxe
-#   6. Navigate to portal: (-45,93,87)
-#   7. Enter Nether
-#   8. Move to x=300 in Nether, search nether_bricks
-#   9. If not found: x=400, x=500, ... (100 block steps)
-#   10. Kill 7 Blazes with flee_at_hp=10
-#   11. Return to overworld
+#   2. mc_chat(mode=get) - check messages (priority #1)
+#   3. mc_status() - HP, food, position, inventory
+#   4. IF doMobLoot now enabled:
+#      a. Hunt cow/chicken for food
+#      b. Eat to full
+#   5. IF still no food:
+#      a. Search wider range for village (try /locate village in console?)
+#      b. OR ask admin for /give Claude1 bread 32
+#   6. Navigate to portal: (-45,93,87) or (target_block: nether_portal)
+#   7. Enter Nether → go to (214, 25, -134)
+#   8. Kill 7 Blazes with mc_combat(target=blaze, flee_at_hp=8)
+#   9. Return to overworld with 7 blaze_rods
+#   10. [報告] Phase 6 完了条件達成
 #
-# Admin Required:
+# Admin Required (CRITICAL):
 #   /gamerule doMobLoot true
 #   /gamerule doEntityDrops true
 #   /op Claude1
-#   (Without these, blaze rods won't drop!)
+#   (Without these, blaze rods won't drop AND no food from animals!)
