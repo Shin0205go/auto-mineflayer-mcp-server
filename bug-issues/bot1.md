@@ -22,6 +22,31 @@
 
 ---
 
+## [2026-03-16] Critical: doMobLoot/doEntityDrops が無効 - 全mob loot取得不可
+- **Cause**: サーバー上でbotがOPではないため、接続時の `/gamerule doMobLoot true` コマンドが無効になっている。zombie/chicken等を倒してもアイテムドロップが0。
+- **Location**: `src/bot-manager/bot-core.ts:291-295` (接続時gamerule設定部分)
+- **Coordinates**: (28, 52, 48) zombie撃破時に確認
+- **Last Actions**: zombie討伐後 CollectItems: 0 items found
+- **Fix Required (Admin)**: サーバーコンソールで以下を実行:
+  ```
+  /gamerule doMobLoot true
+  /gamerule doEntityDrops true
+  /op Claude1
+  ```
+- **Impact**: Phase 2食料安定化不可（動物から食料取得不可）、Phase 6ブレイズロッド取得不可
+- **Status**: Admin対応待ち
+
+---
+
+## [2026-03-16] Bug: HP 1 落下死 - zombie逃走中落下
+- **Cause**: HP 1 状態で zombie から AutoFlee 発動、pathfinderが高い場所へ誘導したため落下死。
+- **Coordinates**: (22, 62, 56) 付近
+- **Last Actions**: mc_navigate({ x:26, y:111, z:60 }) 中に nav 失敗後、zombie AutoFlee発動→fall
+- **Fix Applied**: HP 1でのフライト検出改善は既に進行中。根本はdoMobLoot無効化。
+- **Status**: Respawn後 HP 17/20 Hunger 16/20
+
+---
+
 ## [2026-03-16] Bug: Creeper爆死 - 移動中Creeper接近回避失敗
 - **Cause**: HP 6.1 Hunger 0 の状態で拠点(9,96,4)へ移動中、AutoFleeが発動したが間に合わずCreeper爆発で死亡。AutoFlee発動ログ `[AutoFlee] HP=6.1, fleeing from creeper` 確認後すぐに死亡。低HP状態での長距離移動中にCreeperに追いつかれた。
 - **Location**: 座標 (9, 95-96, 3-4) 付近 拠点直前
