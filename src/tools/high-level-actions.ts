@@ -37,7 +37,24 @@ const BLOCK_DROP_MAP: Record<string, string[]> = {
   grass_block: ["dirt"],
   gravel: ["gravel", "flint"],
   clay: ["clay_ball"],
+  // Cobweb drops string when broken with sword/axe (not shears)
+  cobweb: ["string"],
 };
+
+/**
+ * Reverse map: given a desired drop item name, return the block(s) to mine.
+ * E.g. "string" → ["cobweb"], "raw_iron" → ["iron_ore", "deepslate_iron_ore"]
+ */
+const DROP_TO_BLOCK_MAP: Record<string, string[]> = (() => {
+  const map: Record<string, string[]> = {};
+  for (const [block, drops] of Object.entries(BLOCK_DROP_MAP)) {
+    for (const drop of drops) {
+      if (!map[drop]) map[drop] = [];
+      map[drop].push(block);
+    }
+  }
+  return map;
+})();
 
 /**
  * Get possible drop item names for a given block name.
@@ -98,11 +115,31 @@ export async function minecraft_gather_resources(
           }
         }
 
-        // Find the block
-        const findResult = botManager.findBlock(username, item.name, currentMaxDistance);
+        // Find the block — if item.name is a drop (not a block), look up source blocks
+        let blockNameToMine = item.name;
+        const sourceBlocks = DROP_TO_BLOCK_MAP[item.name];
+        if (sourceBlocks && sourceBlocks.length > 0) {
+          // Try each source block until one is found
+          let foundSourceBlock = false;
+          for (const srcBlock of sourceBlocks) {
+            const srcFindResult = botManager.findBlock(username, srcBlock, currentMaxDistance);
+            if (!srcFindResult.includes("No") && !srcFindResult.includes("not found")) {
+              blockNameToMine = srcBlock;
+              foundSourceBlock = true;
+              console.error(`[GatherResources] '${item.name}' is a drop — mining '${srcBlock}' instead`);
+              break;
+            }
+          }
+          if (!foundSourceBlock) {
+            console.error(`[GatherResources] No source blocks for '${item.name}' found within ${currentMaxDistance} blocks`);
+            break;
+          }
+        }
+
+        const findResult = botManager.findBlock(username, blockNameToMine, currentMaxDistance);
 
         if (findResult.includes("No") || findResult.includes("not found")) {
-          console.error(`[GatherResources] No more ${item.name} found within ${maxDistance} blocks`);
+          console.error(`[GatherResources] No more ${blockNameToMine} found within ${maxDistance} blocks`);
           break;
         }
 
@@ -117,7 +154,7 @@ export async function minecraft_gather_resources(
         const y = parseFloat(posMatch[2]);
         const z = parseFloat(posMatch[3]);
 
-        console.error(`[GatherResources] Found ${item.name} at (${x}, ${y}, ${z})`);
+        console.error(`[GatherResources] Found ${blockNameToMine} at (${x}, ${y}, ${z})`);
 
         // Safety check: Skip only if target is far above bot (floating island / sky structure)
         // Y=80 threshold was too low and broke surface gathering when base is at high altitude (e.g. Y=96+)
@@ -139,29 +176,45 @@ export async function minecraft_gather_resources(
         // Check inventory (not just held item) and auto-equip best pickaxe if available
         const gatherBot = botManager.getBot(username);
         if (gatherBot) {
-          const blockData = gatherBot.registry.blocksByName[item.name];
-          if (blockData?.harvestTools) {
-            // Find best pickaxe in inventory
-            const pickaxeTiers = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe", "wooden_pickaxe"];
-            const inventory = gatherBot.inventory.items();
-            let bestPickaxe: string | null = null;
-            for (const tier of pickaxeTiers) {
-              const tool = inventory.find(i => i.name === tier);
-              if (tool) {
-                bestPickaxe = tier;
+          // Special case: cobweb drops string when cut with sword/axe
+          if (blockNameToMine === "cobweb") {
+            const swordTiers = ["diamond_sword", "iron_sword", "stone_sword", "golden_sword", "wooden_sword"];
+            const inv = gatherBot.inventory.items();
+            for (const tier of swordTiers) {
+              const sword = inv.find(i => i.name === tier);
+              if (sword) {
                 try {
-                  await gatherBot.equip(tool, "hand");
-                  console.error(`[GatherResources] Auto-equipped ${tier} for ${item.name}`);
-                } catch (e) {
-                  console.error(`[GatherResources] Failed to equip ${tier}: ${e}`);
-                }
+                  await gatherBot.equip(sword, "hand");
+                  console.error(`[GatherResources] Equipped ${tier} to cut cobweb for string`);
+                } catch(e) {}
                 break;
               }
             }
-            const toolToCheck = bestPickaxe || gatherBot.heldItem?.name || "";
-            if (!canPickaxeHarvest(gatherBot, item.name, toolToCheck)) {
-              const required = getRequiredPickaxeTier(gatherBot, item.name);
-              return `Gathering failed. ${item.name}: 0/${targetCount}. ${item.name} requires ${required || "better pickaxe"} for drops, have: ${toolToCheck || "empty hand"}. Craft the right tool first.`;
+          } else {
+            const blockData = gatherBot.registry.blocksByName[blockNameToMine];
+            if (blockData?.harvestTools) {
+              // Find best pickaxe in inventory
+              const pickaxeTiers = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe", "wooden_pickaxe"];
+              const inventory = gatherBot.inventory.items();
+              let bestPickaxe: string | null = null;
+              for (const tier of pickaxeTiers) {
+                const tool = inventory.find(i => i.name === tier);
+                if (tool) {
+                  bestPickaxe = tier;
+                  try {
+                    await gatherBot.equip(tool, "hand");
+                    console.error(`[GatherResources] Auto-equipped ${tier} for ${blockNameToMine}`);
+                  } catch (e) {
+                    console.error(`[GatherResources] Failed to equip ${tier}: ${e}`);
+                  }
+                  break;
+                }
+              }
+              const toolToCheck = bestPickaxe || gatherBot.heldItem?.name || "";
+              if (!canPickaxeHarvest(gatherBot, blockNameToMine, toolToCheck)) {
+                const required = getRequiredPickaxeTier(gatherBot, blockNameToMine);
+                return `Gathering failed. ${item.name}: 0/${targetCount}. ${blockNameToMine} requires ${required || "better pickaxe"} for drops, have: ${toolToCheck || "empty hand"}. Craft the right tool first.`;
+              }
             }
           }
         }
@@ -169,7 +222,10 @@ export async function minecraft_gather_resources(
         // Check inventory before mining
         // Ores drop different items (iron_ore→raw_iron, coal_ore→coal, etc.)
         // so we track ALL possible drop names to correctly measure gain.
-        const dropNames = getDropNames(item.name);
+        // When mining a source block for a desired drop, track the drop name directly.
+        const dropNames = blockNameToMine !== item.name
+          ? [item.name, ...getDropNames(blockNameToMine)]
+          : getDropNames(item.name);
         const invBefore = botManager.getInventory(username);
         const countBefore = (name: string) => invBefore.find(i => i.name === name)?.count || 0;
         const beforeCount = dropNames.reduce((sum, n) => sum + countBefore(n), 0);
