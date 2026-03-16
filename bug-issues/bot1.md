@@ -166,3 +166,39 @@
 - 5+ deaths trying to access dungeon at (87,35,-62)
 - doMobLoot disabled (gamerule shows true now but was disabled before)
 - cobweb string collection broken
+
+## [2026-03-16] Bug: entity.mobType deprecated warning in fight()
+- **Cause**: bot-survival.ts uses `e.mobType?.toLowerCase()` which is deprecated in prismarine-entity
+- **Location**: `dist/bot-manager/bot-survival.js:584`
+- **Coordinates**: (40, 109, 63) birch_forest
+- **Last Actions**: `mc_combat('cow', 8)` - hunting for food
+- **Fix Applied**: None yet (warning only, not breaking)
+- **Status**: Low priority - need to change `e.mobType` to `e.displayName`
+
+## [2026-03-16] Observation: No animals found nearby for food
+- **Cause**: Area around (40, 109, 63) has no passive mobs (biome may be depopulated)
+- **Location**: birch_forest biome
+- **Coordinates**: (40, 109, 63)
+- **Last Actions**: mc_combat targeting cow/pig/sheep - all returned "No X found nearby"
+- **Fix Applied**: Need to explore wider area or use /locate village
+- **Status**: Gameplay issue, not code bug
+
+## [2026-03-16] Death: Killed by Zombified Piglin near Nether portal
+- **Cause**: mc_combat('pig', 6) found no pig but zombified_piglin nearby.
+  fight() targeted zombified_piglin instead of passive mob.
+  HP was already at 8.2 before fight started - too dangerous.
+- **Location**: `dist/bot-manager/bot-survival.js` fight() function
+- **Coordinates**: (-43.5, 92, 88.5) near Nether portal
+- **Last Actions**: mc_combat('pig', 6) → fight() matched zombified_piglin (not pig)
+- **Fix Applied**: flee_at_hp=6 was too low given HP=8.2 starting; need to check HP before combat
+- **Status**: Fixed by avoiding combat when HP < 10
+
+## Root Cause Analysis
+The bug: fight() with target="pig" found zombified_piglin nearby portal and attacked.
+When HP=8.2 and flee_at_hp=6, bot fought 3 zombified piglins and died at HP=3.2.
+The fight function matches entity displayName/name containing "pig" which matches "zombified_piglin".
+
+## Fix Needed
+In bot-survival.ts fight(), when searching by target name:
+- Should NOT match "zombified_piglin" when searching for "pig"
+- Need exact/suffix matching, not substring matching

@@ -231,6 +231,8 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
 
   if (entityName) {
     const targetLower = entityName.toLowerCase();
+    // Determine if the requested target is itself a hostile mob
+    const targetIsHostile = isHostileMob(bot, targetLower);
     target = entities.find(e => {
       if (!e || e === bot.entity) return false;
       const dist = e.position.distanceTo(bot.entity.position);
@@ -239,10 +241,15 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       const name = (e.name || "").toLowerCase();
       const displayName = ((e as any).displayName || "").toLowerCase();
 
-      return name === targetLower ||
-             name.includes(targetLower) ||
-             displayName === targetLower ||
-             displayName.includes(targetLower);
+      // Exact match always OK
+      if (name === targetLower || displayName === targetLower) return true;
+
+      // Substring match: exclude hostile mobs when targeting passive ones
+      const substringMatch = name.includes(targetLower) || displayName.includes(targetLower);
+      if (substringMatch && !targetIsHostile && isHostileMob(bot, name)) {
+        return false; // e.g. "pig" should not match "zombified_piglin"
+      }
+      return substringMatch;
     });
   } else {
     // Find nearest hostile (using dynamic registry check)
@@ -585,6 +592,9 @@ export async function fight(
     const entities = Object.values(bot.entities);
     if (entityName) {
       const targetLower = entityName.toLowerCase();
+      // Determine if the requested target is itself a hostile mob
+      const targetIsHostile = isHostileMob(bot, targetLower);
+
       const candidates = entities.filter(e => {
         if (!e || e === bot.entity) return false;
         const dist = e.position.distanceTo(bot.entity.position);
@@ -594,14 +604,24 @@ export async function fight(
         const eName = e.name?.toLowerCase() || "";
         const eDisplayName = (e as any).displayName?.toLowerCase() || "";
         const eUsername = (e as any).username?.toLowerCase() || "";
-        const eMobType = (e as any).mobType?.toLowerCase() || "";
 
-        return eName === targetLower ||
+        // Exact match is always OK
+        const exactMatch = eName === targetLower ||
                eDisplayName === targetLower ||
-               eUsername === targetLower ||
-               eMobType === targetLower ||
-               eName.includes(targetLower) ||
-               eDisplayName.includes(targetLower);
+               eUsername === targetLower;
+        if (exactMatch) return true;
+
+        // For substring matching: if target is a passive mob name, do NOT match
+        // hostile mobs that happen to contain the target string (e.g. "pig" in "zombified_piglin")
+        const substringMatch = eName.includes(targetLower) || eDisplayName.includes(targetLower);
+        if (substringMatch) {
+          if (!targetIsHostile && isHostileMob(bot, eName)) {
+            // Requested passive "pig" should not match hostile "zombified_piglin"
+            return false;
+          }
+          return true;
+        }
+        return false;
       });
       if (candidates.length === 0) return null;
       // Return closest match
