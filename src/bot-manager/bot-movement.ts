@@ -311,9 +311,28 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   // Only block movement when HP is near-death AND distance is very far (high-altitude route risk).
   // Short-distance moves (≤30 blocks) are always allowed so bot can reach food/chests.
   // Previous threshold (hp<5 && dist>8) caused deadlocks where bots couldn't reach nearby food.
+  // Daytime check: if it's daytime (ticks < 12541) and no hostile threats, allow movement at HP≥2
+  // to prevent starvation deadlock (HP=2, no food, can't move to find food).
   const hp = bot.health ?? 20;
-  if (hp < 3 && distance > 30) {
-    return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hp.toFixed(1)}/20). Risk of high-altitude pathfinding causing fall death. Eat food or heal first, then retry movement.`;
+  const timeOfDay = (bot.time?.timeOfDay ?? 0) as number;
+  const isDaytime = timeOfDay < 12541;
+  const hasHostileNearby = Object.values(bot.entities).some((e: any) => {
+    if (!e || !e.position) return false;
+    const dist = e.position.distanceTo(bot.entity.position);
+    return dist < 20 && e.type === "mob" && (e.name === "creeper" || e.name === "skeleton" || e.name === "zombie" || e.name === "spider" || e.name === "enderman" || e.name === "witch");
+  });
+  // During daytime with no hostile mobs nearby, allow movement at HP≥2 (starvation deadlock prevention)
+  // At night or with hostile mobs nearby, use strict HP check to prevent fall death
+  if (isDaytime && !hasHostileNearby) {
+    // Daytime safe: only block if truly near-death (hp < 2, i.e. 1 heart)
+    if (hp < 2 && distance > 30) {
+      return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hp.toFixed(1)}/20). Risk of high-altitude pathfinding causing fall death. Eat food or heal first, then retry movement.`;
+    }
+  } else {
+    // Nighttime or hostile nearby: strict check
+    if (hp < 3 && distance > 30) {
+      return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hp.toFixed(1)}/20). Risk of high-altitude pathfinding causing fall death. Eat food or heal first, then retry movement.`;
+    }
   }
   if (hp < 5 && distance > 30) {
     console.error(`[Move] WARNING: Moving ${distance.toFixed(1)} blocks with low HP(${hp.toFixed(1)}/20). Proceeding with caution.`);

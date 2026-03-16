@@ -7514,3 +7514,12 @@ const isNonSolid = (name: string) => {
 - **Last Actions**: Digging upward block by block from y=-32
 - **Fix Applied**: None yet. Should check for water blocks above before digging and avoid digging into water. Or navigate OUT of cave first before digging up.
 - **Status**: Documented. Respawned at y=107, HP=20, diamonds preserved.
+
+## [2026-03-16] Bug: HP safety check causes starvation deadlock
+
+- **Cause**: `moveTo()` blocked movement > 30 blocks when HP < 3. With HP=2, Hunger=0, and no food nearby, bot could not move to find animals → starvation deadlock. During daytime with no hostile mobs, the falling risk is actually minimal.
+- **Location**: `src/bot-manager/bot-movement.ts:315`
+- **Coordinates**: (9.5, 96, 3.5) - base area
+- **Last Actions**: Attempted to find sheep for food, blocked by safety check at every turn
+- **Fix Applied**: Added daytime + no-hostile-nearby check. During daytime with no hostile mobs within 20 blocks, only block movement when HP < 2 (truly near-death). At night or with hostiles nearby, keep strict HP < 3 threshold.
+- **Status**: Fixed
