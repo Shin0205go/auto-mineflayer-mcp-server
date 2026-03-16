@@ -1,63 +1,85 @@
 ---
-name: Phase Progress - 2026-03-16 Updated
-description: Current gameplay phase progress and inventory state as of 2026-03-16 latest session
+name: Phase Progress - 2026-03-16 Session 177
+description: Current gameplay phase progress and state as of Session 177 (latest)
 type: project
 ---
 
 ## Phase Progress
 
-Current Phase: Phase 5 (Diamond/Enchanting Table)
-Last confirmed completion: Phase 4 (iron gear) - all items gathered
+Current Phase: Phase 6 (Nether)
+Previous Phase: Phase 5 (Diamond/Enchanting Table) - COMPLETED
 
-## Inventory (as of 2026-03-16 latest session)
-- diamond x3
-- obsidian x4 (enough for enchanting table which needs 4)
-- diamond_pickaxe x1, diamond_sword x1
-- iron_pickaxe x1, iron_sword x1 (+ stone versions)
-- shears x1
-- coal x37
-- birch_log x8, birch_planks x12
-- cobblestone x64+
-- iron_ingot x8
-- torch x3
+## Phase 6 Requirements
+1. blaze_rod x7 (NEED: find Nether Fortress and kill Blazes) - NOT OBTAINED
+2. ender_pearl x12 (HAVE) - COMPLETE
 
-## Base Infrastructure
-- Crafting table: (11, 94, 8) [confirmed]
-- Furnace: (7, 100, -6)
-- Chest: (9, 96, 4) with ender_pearl x12, gold_ingot x31
-- Bot spawn point near (8.5, 113, -4.5) area (due to respawn)
+## Infrastructure
+- Overworld Nether portal: (-47 to -44, y=92-96, z=87) - BUILT AND ACTIVE
+- Enchanting table: (7,107,-1)
+- Crafting tables: (7,107,0), (11,94,8), (0,109,14), etc.
+- Furnace: near base at (7,107,0)
+- Chest with resources: (9,96,4)
 
-## To-Do for Phase 5
-1. Get 1 book (needs 3 paper + 1 leather OR find via dungeon/fishing)
-   - Sugar cane: NOT FOUND within ~200 block radius
-   - Leather: doMobLoot DISABLED → cannot get from kills
-   - Dungeon chest at (87, 35, -62): DISCOVERED but 5+ deaths attempting access
-   - Alternative: Make fishing rod (stick x3 + string x2), go fishing
-   - String source: cobweb at (68, -10, -39) mineshaft, but dangerous area
-2. Enchanting table = 4 obsidian (have) + 2 diamonds (have) + 1 book (MISSING)
-3. Place enchanting table
+## NETHER FORTRESS CONFIRMED (Session 177)
+- **Fortress location: Nether (214, 25, -134)** ← nether_bricks CONFIRMED
+- Portal entry spawns at: (-12, 110, 2) in Nether
+- Route: portal spawn (-12,110,2) → fortress (214,25,-134) = ~250 blocks +x, -z direction
+- Fortress is at y=25 (low elevation), portal spawn is y=110
+- Navigate through soul_sand_valley biome at y~70
 
-## Key Discoveries
-- Dungeon at (87, 35, -62): spawner at (86, 35, -64), 2 chests at (87,35,-62) and (88,35,-63)
-- Mineshaft at (68, -12, -44) with cobwebs at (68, -10, -39)
-- Sheep confirmed at (-39, 114, -133) - high cliff, hard to reach
-- No sugar cane within ~300 block radius
-- No village found yet
+## Current Bot State (after Session 177)
+- Position: (-3.5, 61.1, 13.9) in OVERWORLD
+- HP: 4.5/20 (CRITICAL - needs food immediately)
+- Hunger: 16/20 (but no food in inventory = cannot heal naturally)
+- Inventory: iron_pickaxe, iron_sword, stone_axe, shears, flint_and_steel
+  + ender_pearl x12, coal x41, gold_ingot x31
+  + birch_planks x28, stick x32, cobblestone x4+
+  + netherrack x100+, soul_sand x20, soul_soil x4
+  + bucket x1, diamond x1, iron_ingot x4
+  + **NO FOOD** ← CRITICAL
 
-## Blockers
-- doMobLoot disabled: cannot get leather/food from mob kills
-- No sugar cane found: cannot make paper
-- Dungeon is too dangerous (spawner + dark = constant mob spawns → bot deaths)
-- Phase 6 (Nether) ALSO blocked: blaze rods cannot be obtained with doMobLoot disabled
+## Admin Requirements (CRITICAL for Phase 6)
+Admin must run in Minecraft server console:
+```
+/gamerule doMobLoot true
+/gamerule doEntityDrops true
+/op Claude1
+/give Claude1 minecraft:cooked_beef 64
+```
+Without doMobLoot=true, Blaze rods will NOT drop from Blazes.
 
-## Bug Fixes This Session
-1. HP safety deadlock: allow daytime movement at HP>=2 when no hostiles nearby
-2. Lethal fall detection: block movement when destination has 10+ block fall with HP<10
-3. Documented 5+ deaths in dungeon/mineshaft area
+## Session 177 Events
+1. Connected as Claude1 - found bot underground at y=79 (from prev session failure)
+2. Used pathfinder GoalBlock to escape underground → base at y=105 ✓
+3. Crafted iron_pickaxe (3 iron_ingot + 2 stick) ✓
+4. Entered Nether via portal at (-45,93,87) → spawned at (-12,110,2) ✓
+5. Explored Nether, found nether_bricks at (214,25,-134) ✓
+6. Died in lava at ~(130,26,-42) - HP=4 from hunger → immediate lava death
+7. Respawned overworld, keepInventory confirmed (all items intact)
 
-## Deaths This Session
-1. Fall from height (y=114) during sheep navigation - enderman AutoFlee caused fall
-2. Night mob death during dungeon approach
-3. Night mob death during dungeon approach (second attempt)
-4. Night mob death during dungeon approach (third attempt)
-5. Night mob death during mineshaft (y=-10) exploration
+## Code Fixes Applied Session 176/177 (cumulative)
+1. Fix: Blaze combat attack range extended to 5.5 blocks - bae9f56
+2. Perf: mc_navigate segment size 30→50 blocks - 53d3ea3
+3. Docs: mc_combat description updated - 51e7544
+4. Docs: nether-fortress SKILL.md updated - 0eec2fe
+
+## Next Session Startup Checklist
+1. Admin: Run gamerule commands + give cooked_beef x64
+2. mc_connect() as Claude1
+3. mc_chat(mode=get)
+4. mc_status() → check HP, food, position, inventory
+5. mc_eat() until HP/Hunger full (need Hunger >= 18 for natural HP regen)
+6. Navigate to portal (-45, 93, 87) in overworld
+7. Enter Nether → spawn at (-12, 110, 2)
+8. Navigate to (214, 25, -134) - nether_bricks confirmed there
+9. Search area for Blaze spawners (spawner block)
+10. Kill 7 Blazes with mc_combat(target="blaze", flee_at_hp=10)
+11. Return via portal at (-12, 110, 2)
+
+## CRITICAL LESSONS LEARNED (Session 177)
+- **NEVER enter Nether without 32+ food items in inventory**
+- **flee_at_hp=10 (not 8) for Nether** - lava everywhere, need safety margin
+- **Check HP every 30s in Nether** - no food = can't regen
+- `mc_store action: 'take'` is WRONG → use `action: 'withdraw'`
+- Fortress detection: use `!result.startsWith('No ')` not `!includes('not found')`
+- Nether navigation is slow (lava obstacles, complex terrain)

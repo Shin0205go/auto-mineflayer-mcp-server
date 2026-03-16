@@ -1,60 +1,64 @@
-1→6|175|Phase6_Nether_blaze_rods_needed
+1→6|176|Phase6_Nether_fortress_search_resumed
 # Phase: 6 (Nether)
-# Session: 175 (2026-03-16)
-# Status: Phase 5 COMPLETE - enchanting_table placed. Phase 6 in progress.
+# Session: 176 (2026-03-16)
+# Status: Phase 5 COMPLETE. Phase 6 in progress. Nether fortress NOT YET FOUND.
 #
 # Phase 5 COMPLETED:
-#   - book x1 crafted (sugar_cane -> paper + leather from cow)
-#   - obsidian x4 mined from portal frame + natural cluster
-#   - enchanting_table crafted and placed at (7,107,-1)
+#   - enchanting_table placed at (7,107,-1)
 #   - [報告] Phase 5 完了条件達成 sent via chat
 #
-# Current Inventory:
-#   ender_pearl x12 ✅ (Phase 6 requirement met)
-#   diamond x1, obsidian x1
-#   iron_ingot x8, iron_sword x1, iron_pickaxe x1
-#   diamond_pickaxe x1
-#   beef x6 (raw), coal x39
-#   birch_log x8, birch_planks x12
-#   gold_ingot x31, bucket x1
-#   paper x3, shears x1, stick x2
-#   enchanting_table: PLACED at (7,107,-1)
+# Phase 6 Status:
+#   - ender_pearl x12 ✅ (requirement met)
+#   - blaze_rod x7 ❌ (need to find Nether Fortress first)
 #
-# Phase 6 Requirements:
-#   - blaze_rod x7 (need: kill Blazes in Nether Fortress) ❌
-#   - ender_pearl x12 ✅ (already have)
+# Last Known Inventory (approximate from Session 175):
+#   ender_pearl x12
+#   iron_sword x1
+#   iron_ingot x7
+#   diamond x1
+#   coal x41
+#   gold_ingot x31
+#   soul_sand x11, soul_soil x1
+#   netherrack x100+ (collected from Nether)
+#   cobblestone x100+
+#   birch_log x9, birch_planks x12
+#   beef x6 (raw) - COOK BEFORE NETHER
+#   diamond_pickaxe: UNCERTAIN (may have been lost)
+#   stone_pickaxe: UNCERTAIN
 #
 # Infrastructure:
 #   - Enchanting table: (7,107,-1)
-#   - Nether portal: DISMANTLED (mined 4 frame blocks for enchanting_table)
-#   - Natural obsidian cluster: (-3 to -6, 102-106, z=27) - ~10+ blocks
-#   - More obsidian at (-4,37,14) and (-5,37,15) underground
-#   - Lava at (-175,34,48) for making more obsidian
-#   - Crafting tables: (7,107,0), (11,94,8), (0,109,14), etc.
+#   - Nether portal: (-47 to -44, y=92-96, z=87) - BUILT AND ACTIVE
+#   - Natural obsidian cluster: (-4,104,27) - some may remain
+#   - Crafting tables: (7,107,0), (11,94,8), etc.
+#   - Furnace: near base
 #
-# Phase 6 Plan:
-#   1. Build Nether portal (need 10 obsidian minimum for 4-block wide portal)
-#      OR use existing obsidian at (-3 to -6, z=27) cluster
-#      Min obsidian needed: 10 blocks for standard portal frame
-#      Currently have 1 in inventory + ~10 at (-3-6, z=27) + underground
-#   2. Craft flint_and_steel to light portal
-#      Need: 1 iron_ingot + 1 flint (from gravel)
-#   3. Enter Nether, find Nether Fortress
-#   4. Kill Blazes x7 (get blaze_rod x7)
-#   5. Return through portal
+# Nether Search History:
+#   - Covered: x=[-300,300], z=[-300,300] → NO nether_bricks found
+#   - Nether spawn area: (-5,99,15) to (-12,110,2)
+#   - NEED to search: x=[300,800] range (chunk-by-chunk, 100 blocks at a time)
 #
-# Key coordinates:
-#   Base: (7,107,0)
-#   Enchanting table: (7,107,-1)
-#   Natural obsidian cluster: (-4, 104, 27) approx
-#   Lake: (-136, 51, 56)
-#   Lava: (-175, 34, 48)
+# Code Fixes Applied This Session (2026-03-16):
+#   1. Fix: Blaze combat attack range extended to 5.5 blocks (hover issue)
+#   2. Perf: mc_navigate segment size 30→50 blocks
+#   3. Docs: mc_combat description updated for blaze guidance
+#   4. Docs: nether-fortress SKILL.md updated with exploration strategy
 #
-# Next steps:
-#   1. Cook beef (furnace at base)
-#   2. Mine 9 more obsidian from natural cluster at (-4, 104, 27)
-#      (need 10 total for portal, have 1 in inv + 1 mined = 2 spare from portal)
-#   3. Gather flint from gravel
-#   4. Craft flint_and_steel
-#   5. Place portal frame
-#   6. Light portal and enter Nether
+# Startup Checklist (NEXT SESSION):
+#   1. mc_connect()
+#   2. mc_chat(mode=get) - check messages
+#   3. mc_status() - check HP, food, position, inventory
+#   4. IF food < 10: cook beef at furnace, eat to full
+#   5. IF missing pickaxe: craft stone_pickaxe
+#   6. Navigate to portal: (-45,93,87)
+#   7. Enter Nether
+#   8. Move to x=300 in Nether, search nether_bricks
+#   9. If not found: x=400, x=500, ... (100 block steps)
+#   10. Kill 7 Blazes with flee_at_hp=10
+#   11. Return to overworld
+#
+# Admin Required:
+#   /gamerule doMobLoot true
+#   /gamerule doEntityDrops true
+#   /op Claude1
+#   (Without these, blaze rods won't drop!)
