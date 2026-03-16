@@ -1717,21 +1717,58 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
         }, 300);
       });
 
-      // Re-check nearby
+      // Re-check nearby — use wider radius since pathfinder may not get exactly within 4 blocks
       furnaceBlock = bot.findBlock({
         matching: (block) => furnaceIds.includes(block.type),
-        maxDistance: 4,
+        maxDistance: 8,
       });
     }
   }
 
   if (!furnaceBlock) {
-    // Check if player has a furnace in inventory
+    // Auto-place furnace from inventory if available
     const furnaceInInventory = bot.inventory.items().find(i => i.name === "furnace");
     if (furnaceInInventory) {
-      throw new Error("No furnace found within 32 blocks, but you have one in inventory. Place it first using minecraft_place_block, then try smelting again.");
+      console.error("[Smelt] No furnace in range — auto-placing furnace from inventory...");
+      // Find a solid block to place the furnace on (1 block below current position)
+      const pos = bot.entity.position.floored();
+      let placed = false;
+      // Try placing on the block directly below or adjacent
+      const offsets = [
+        { x: 0, y: -1, z: 0 }, // below bot
+        { x: 1, y: 0, z: 0 },
+        { x: -1, y: 0, z: 0 },
+        { x: 0, y: 0, z: 1 },
+        { x: 0, y: 0, z: -1 },
+      ];
+      for (const off of offsets) {
+        const refPos = { x: pos.x + off.x, y: pos.y + off.y, z: pos.z + off.z };
+        const refBlock = bot.blockAt(new (bot.entity.position.constructor as any)(refPos.x, refPos.y, refPos.z));
+        if (refBlock && refBlock.boundingBox === "block") {
+          // Place furnace on top of this block
+          try {
+            await bot.equip(furnaceInInventory, "hand");
+            await bot.placeBlock(refBlock, new (bot.entity.position.constructor as any)(0, 1, 0));
+            placed = true;
+            console.error(`[Smelt] Placed furnace at (${refPos.x}, ${refPos.y + 1}, ${refPos.z})`);
+            break;
+          } catch (_) { continue; }
+        }
+      }
+      if (!placed) {
+        throw new Error("No furnace found within 32 blocks, but you have one in inventory. Place it first using mc_place_block, then try smelting again.");
+      }
+      // Re-search for the placed furnace
+      furnaceBlock = bot.findBlock({
+        matching: (block) => furnaceIds.includes(block.type),
+        maxDistance: 4,
+      });
+      if (!furnaceBlock) {
+        throw new Error("Placed furnace but still cannot find it within 4 blocks. Try mc_smelt again.");
+      }
+    } else {
+      throw new Error("No furnace found within 32 blocks. Craft one with 8 cobblestone.");
     }
-    throw new Error("No furnace found within 32 blocks. Craft one with 8 cobblestone.");
   }
 
   // Find the item to smelt in inventory
