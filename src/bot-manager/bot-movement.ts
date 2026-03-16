@@ -308,7 +308,7 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   console.error(`[Move] From (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)}) to (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
 
   // SAFETY CHECK: Prevent dangerous long-distance movement when HP is critically low
-  // Only block movement when HP is near-death AND distance is very far (high-altitude route risk).
+  // Only block movement when HP is dangerously low AND distance is far (high-altitude route risk).
   // Short-distance moves (≤30 blocks) are always allowed so bot can reach food/chests.
   // Previous threshold (hp<5 && dist>8) caused deadlocks where bots couldn't reach nearby food.
   // Daytime check: if it's daytime (ticks < 12541) and no hostile threats, allow movement at HP≥2
@@ -321,21 +321,51 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     const dist = e.position.distanceTo(bot.entity.position);
     return dist < 20 && e.type === "mob" && (e.name === "creeper" || e.name === "skeleton" || e.name === "zombie" || e.name === "spider" || e.name === "enderman" || e.name === "witch");
   });
+
+  // Auto-eat if food available and HP is low — prevents navigating into death
+  // Bug fix (bot1.md 2026-03-16): Bot had HP=4.5, food=16 but skipped eating because hunger check passed.
+  // Now: if HP < 14 AND food items in inventory, eat before moving long distances.
+  if (hp < 14 && distance > 30) {
+    const foodItems = bot.inventory.items().filter((item: any) => {
+      const n = item.name;
+      return n === "bread" || n === "cooked_beef" || n === "cooked_porkchop" || n === "cooked_chicken" ||
+             n === "cooked_mutton" || n === "apple" || n === "golden_apple" || n === "carrot" ||
+             n === "baked_potato" || n === "melon_slice" || n === "cooked_rabbit" || n === "cooked_salmon" ||
+             n === "cooked_cod" || n === "mushroom_stew" || n === "rabbit_stew" || n === "beef" ||
+             n === "porkchop" || n === "chicken" || n === "mutton" || n === "potato" || n === "beetroot";
+    });
+    if (foodItems.length > 0) {
+      console.error(`[Move] HP=${hp.toFixed(1)}, eating ${foodItems[0].name} before ${distance.toFixed(1)}-block move...`);
+      try {
+        await bot.equip(foodItems[0], "hand");
+        await bot.consume();
+        console.error(`[Move] Ate ${foodItems[0].name}, HP now: ${bot.health?.toFixed(1)}`);
+      } catch (_) {
+        // continue even if eat fails
+      }
+    }
+  }
+
+  // Re-read HP after eating
+  const hpNow = bot.health ?? 20;
+
   // During daytime with no hostile mobs nearby, allow movement at HP≥2 (starvation deadlock prevention)
   // At night or with hostile mobs nearby, use strict HP check to prevent fall death
   if (isDaytime && !hasHostileNearby) {
     // Daytime safe: only block if truly near-death (hp < 2, i.e. 1 heart)
-    if (hp < 2 && distance > 30) {
-      return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hp.toFixed(1)}/20). Risk of high-altitude pathfinding causing fall death. Eat food or heal first, then retry movement.`;
+    if (hpNow < 2 && distance > 30) {
+      return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20). Risk of high-altitude pathfinding causing fall death. Eat food or heal first, then retry movement.`;
     }
   } else {
-    // Nighttime or hostile nearby: strict check
-    if (hp < 3 && distance > 30) {
-      return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hp.toFixed(1)}/20). Risk of high-altitude pathfinding causing fall death. Eat food or heal first, then retry movement.`;
+    // Nighttime or hostile nearby: block movement when HP is dangerously low
+    // Bug fix (bot1.md 2026-03-16): Raised threshold from 3 to 8 — skeleton + enderman combo at night
+    // with HP=4.5 caused death. 4 hearts (hp=8) provides survivability for 1-2 hits.
+    if (hpNow < 8 && distance > 30) {
+      return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20) at night/hostile nearby. Risk of fall death under mob pressure. Eat food or heal first, then retry movement.`;
     }
   }
-  if (hp < 5 && distance > 30) {
-    console.error(`[Move] WARNING: Moving ${distance.toFixed(1)} blocks with low HP(${hp.toFixed(1)}/20). Proceeding with caution.`);
+  if (hpNow < 10 && distance > 30) {
+    console.error(`[Move] WARNING: Moving ${distance.toFixed(1)} blocks with low HP(${hpNow.toFixed(1)}/20). Proceeding with caution.`);
   }
 
   // Check if target position is a portal block — delegate to enterPortal()

@@ -140,6 +140,28 @@
 
 ---
 
+## [2026-03-16] Bug: Death from Skeleton+Enderman at night with HP=4.5 (Session 177)
+
+- **Cause**: Script started with HP=4.5, food(hunger)=16. Script checked `bot.food < 10` which was FALSE (16 >= 10), so skipped `mc_eat`. Then immediately tried to navigate 49.5 blocks at night. Skeleton+Enderman attacked bot, HP dropped to 2.5. Then `mc_navigate` blocked with SAFETY (HP=2.5 < 3), but bot continued due to respawn in wrong place.
+- **Location**: Near (-3.5, 61, 13.9) in overworld, nighttime
+- **Coordinates**: Death near (-3.5, 61, 13.9) overworld
+- **Last Actions**:
+  1. Connected with HP=4.5, food=16
+  2. Script skipped `mc_eat` because hunger=16 (condition was food < 10)
+  3. Navigated 49.5 blocks at night — Skeleton attacked immediately
+  4. AutoFlee triggered but HP kept dropping
+  5. Fell from height, died from fall damage
+- **Root Causes**:
+  1. Script bug: should check HP < 12, not just food < 10 — hungry meter ok but HP was critical
+  2. Code bug: `bot-movement.ts` only blocked at HP < 3 at night — should block at HP < 8
+- **Fix Applied**:
+  1. `bot-movement.ts`: Raised night-hostile threshold from HP < 3 to HP < 8 for movement blocks
+  2. `bot-movement.ts`: Added auto-eat logic before 30+ block moves when HP < 14 and food available
+  3. Committed with `npm run build`
+- **Status**: Fixed
+
+---
+
 ## Previous sessions (Phase 5 - book hunt)
 - 5+ deaths trying to access dungeon at (87,35,-62)
 - doMobLoot disabled (gamerule shows true now but was disabled before)
