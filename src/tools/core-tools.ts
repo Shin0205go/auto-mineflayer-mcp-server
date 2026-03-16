@@ -338,7 +338,7 @@ export async function mc_navigate(
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
       if (dist > 50) {
-        const segmentSize = 30;
+        const segmentSize = 50;
         const steps = Math.ceil(dist / segmentSize);
         let lastResult = "";
         for (let i = 1; i <= steps; i++) {
