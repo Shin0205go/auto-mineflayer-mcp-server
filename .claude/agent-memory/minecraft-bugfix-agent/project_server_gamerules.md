@@ -30,8 +30,22 @@ In Minecraft server console (not in-game chat), run:
 - Phase 6 (Nether): blaze rods cannot be obtained
 - All mob-based resource gathering is broken
 
+### Also Affects Fishing
+Fishing item entity drops are also blocked (doEntityDrops=false).
+- Fishing bobber spawns correctly in water
+- Item entities DO spawn when fish bites (entitySpawn event fires)
+- But items are not collectable and fishing plugin reports "Fishing cancelled"
+- Need doEntityDrops=true for fishing to work
+
+### Critical Additional Impact (Session 174)
+- Bot HP=4.5, Food=0 - cannot regenerate without food
+- Killed sheep, 0 drops confirmed
+- Fishing 100+ attempts: 0 items collected
+- Natural lake found at (-136, 51, 56) for future fishing
+
 ### Discovered
 2026-03-16 - Session with Claude 1 Sonnet 4.6
 - Killed zombie at (28, 52, 48), CollectItems found 0 items after kill
 - Killed chickens: CollectItems found 0 items
 - Block mining (cobblestone): inventory increment confirmed working
+- Session 174: Killed sheep at (-197, 66, 87), 0 drops confirmed again

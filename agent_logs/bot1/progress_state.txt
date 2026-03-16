@@ -1,39 +1,60 @@
-5|173|Phase5_book_needed_dungeon_found
+1→5|174|Phase5_CRITICAL_no_food_server_drops_disabled
 # Phase: 5 (Diamond/Enchanting Table)
-# Session: 173 (2026-03-16)
-# Status: BLOCKED by doMobLoot disabled AND dungeon access dangerous
+# Session: 174 (2026-03-16)
+# Status: BLOCKED by doEntityDrops/doMobLoot=false AND critical HP
 #
-# Inventory:
-#   diamond x3, obsidian x4
-#   iron_ingot x8, shears x1
-#   diamond_pickaxe x1, diamond_sword x1
-#   iron_pickaxe x1, iron_sword x1, stone versions
-#   coal x37, birch_log x8
-#   torch x3
+# Inventory (last checked):
+#   diamond x3, fishing_rod x1, shears x1
+#   iron_ingot x8, iron_sword x1, iron_pickaxe x1
+#   diamond_pickaxe x1, stone_sword x1, stone_axe x1, stone_pickaxe x1
+#   coal x39, cobblestone x34, gold_ingot x31
+#   ender_pearl x12, sticks x2
+#   birch_log x8, birch_planks x12, birch_sapling x4
+#   furnace x1, bucket x1, andesite x1
+#   granite x7, diorite x8, cobbled_deepslate x3
 #
-# Chest (9,96,4):
-#   ender_pearl x12, gold_ingot x31
+# Chest (9,96,4) contents:
+#   cobblestone x93, clay_ball x128, coal x23, netherrack x76
+#   birch_sapling x16, gravel x44, raw_copper x67, soul_sand x258
+#   soul_soil x189, gold_ingot x31 (NOTE: chest nearly full of junk)
 #
-# Progress toward enchanting table:
+# CRITICAL STATE:
+#   HP = 4.5/20, Food = 0/20
+#   Bot position: ~(-175, 75, 70) - far from base
+#   doEntityDrops/doMobLoot = DISABLED (confirmed: sheep killed, 0 drops)
+#
+# Phase 5 Requirements:
 #   - diamond x3 (need 2) ✅
-#   - obsidian x4 (need 4) ✅
-#   - book x0 (need 1) ❌ BLOCKED
+#   - obsidian x4 (need 4) ❌ (0 in inv, portal frame blocks at (11,112,2))
+#   - book x1 (need 1) ❌ BLOCKED - fishing not working (item entities blocked)
 #
-# Key Discovery:
-#   Dungeon chest found at (87, 35, -62) and (88, 35, -63)!
-#   Spawner at (86, 35, -64)
-#   Mineshaft cobweb at (68, -10, -39)
-#   5+ deaths trying to access dungeon
+# Admin Action REQUIRED:
+#   /gamerule doEntityDrops true
+#   /gamerule doMobLoot true
+#   /give Claude1 bread 20  (or /food Claude1 20)
+#   /give Claude1 book 1    (to unblock Phase 5 completely)
+#
+# What was tried this session:
+#   - Dungeon chest at (87,35,-62): no book
+#   - Cobweb mining: got string x2 (working!)
+#   - Crafted fishing_rod x1 (working!)
+#   - Natural lake found at (-136,51,56)
+#   - Fishing 100+ attempts: item entities not being collected (entity drops blocked)
+#   - Animal kills (sheep): 0 drops (doMobLoot disabled)
+#   - Wide area search 300 blocks: no village/bookshelf
+#   - Sugar cane: not found within 200 blocks
 #
 # Bugs fixed this session:
-#   - HP safety deadlock: allow daytime movement at HP>=2 when no hostiles
-#   - Lethal fall detection: block movement when dest has 10+ block fall at HP<10
+#   - mc_gather string: added DROP_TO_BLOCK_MAP for cobweb→string
+#   - inventory toss: freed 17 slots from 320+ cobblestone
 #
-# Required admin action:
-#   /gamerule doMobLoot true
-#   OR
-#   Torches approach to clear dungeon spawner safely
+# Navigation log:
+#   Natural lake: (-136, 51, 56) - confirmed natural water
+#   Sheep location: (-197, 66, 87)
 #
-# Next attempt strategy:
-#   Place torches around dungeon spawner BEFORE entering
-#   OR find string from cobweb in mineshaft with better protection
+# Next steps (after admin fix):
+#   1. After /give bread: eat food, restore HP
+#   2. After doEntityDrops=true: fish at (-136,51,56) for book
+#   OR admin /give Claude1 book 1 to directly unblock
+#   3. Craft enchanting_table
+#   4. Mine obsidian x4 (portal frame at y=112 or mine new from lava+water)
