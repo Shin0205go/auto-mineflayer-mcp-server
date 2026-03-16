@@ -28,15 +28,14 @@ description: |
 
 1. **溶岩溜まりを見つける**
    ```
-   minecraft_find_block { block_name: "lava", max_distance: 64 }
+   mc_navigate(target_block="lava", max_distance=64)
    ```
 
 2. **水バケツを用意**
    ```
-   minecraft_craft { item_name: "bucket" }  # 鉄インゴット3個
-   # 水源で水を汲む
-   minecraft_use_item {}  # バケツを持って水に向かって使用
+   mc_craft(item="bucket")  # 鉄インゴット3個
    ```
+   水源で水を汲む: `search_tools(query="use_item")` → `minecraft_use_item_on_block`
 
 3. **ポータル枠を作る**
    - 溶岩源に水を流す → 黒曜石に変化
@@ -54,15 +53,11 @@ description: |
 ## 方法2: 黒曜石を採掘（ダイヤピッケル必要）
 
 1. **溶岩を黒曜石にする**
-   ```
-   # 溶岩源に水を流す
-   minecraft_place_block { block_type: "water_bucket", ... }
-   ```
+   水バケツで溶岩源に水を流す
 
 2. **ダイヤピッケルで採掘**
    ```
-   minecraft_equip_item { item_name: "diamond_pickaxe" }
-   minecraft_dig_block { x, y, z }  # 黒曜石1個につき約10秒
+   mc_gather(block="obsidian", count=10)
    ```
 
 3. **10個集めてポータル設置**
@@ -71,13 +66,11 @@ description: |
 
 1. **火打石と打ち金を作成**
    ```
-   minecraft_craft { item_name: "flint_and_steel" }
+   mc_craft(item="flint_and_steel")
    ```
 
 2. **ポータル内部で使用**
-   ```
-   minecraft_use_item {}  # ポータル枠の内側で
-   ```
+   低レベルツール: `search_tools(query="use_item")` → `minecraft_use_item_on_block`
 
 3. **紫のポータルが出現したら成功**
 
@@ -114,7 +107,7 @@ description: |
 ## ブレイズロッド収集
 
 ```
-minecraft_fight { entity_name: "blaze" }
+mc_combat(target="blaze")
 ```
 
 - ネザー要塞のブレイズスポナー付近

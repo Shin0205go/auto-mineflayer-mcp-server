@@ -19,7 +19,7 @@ description: |
 
 ### 1. X軸方向に移動
 ```
-minecraft_move_to { x: current_x + 100, y: 60, z: current_z }
+mc_navigate(x=current_x + 100, y=60, z=current_z)
 ```
 - 要塞は**X軸方向に並ぶ傾向**
 - Z軸よりX軸方向の探索が効率的
@@ -62,9 +62,8 @@ minecraft_move_to { x: current_x + 100, y: 60, z: current_z }
 ```
 1. 盾で火の玉を防ぐ
 2. 攻撃の合間に近づく
-3. 剣で攻撃
-4. 後退して盾構え
-5. 繰り返し
+3. mc_combat(target="blaze") で攻撃
+4. HP低下時は mc_eat() で回復
 ```
 
 ### 必要数
@@ -73,7 +72,7 @@ minecraft_move_to { x: current_x + 100, y: 60, z: current_z }
 
 ### ブレイズパウダー
 ```
-minecraft_craft { item_name: "blaze_powder" }
+mc_craft(item="blaze_powder")
 # ブレイズロッド1本 → ブレイズパウダー2個
 ```
 
@@ -144,9 +143,7 @@ minecraft_craft { item_name: "blaze_powder" }
 ## 帰還方法
 
 1. **ポータルの座標を記録**
-   ```
-   remember_location { name: "nether_portal", ... }
-   ```
+   `mc_chat(message="[拠点] ネザーポータル: x=..., y=..., z=...")`
 
 2. **迷ったら**
    - 丸石で道を作りながら戻る

@@ -30,14 +30,22 @@ description: |
 Y = -59（深層岩層）
 ```
 
-## 採掘方法
+## 採掘手順（mc_*ツール使用）
 
-### 1. ブランチマイニング（最効率）
+### 基本手順
+```
+1. mc_status() — 現在位置・道具を確認
+2. mc_navigate(x=current_x, y=-59, z=current_z) — Y=-59まで移動
+3. mc_gather(block="diamond_ore", count=5) — ダイヤ鉱石を自動採掘
+4. mc_status() — 収集結果確認
+```
+
+### ブランチマイニング（最効率・手動）
+
+低レベルツールが必要: `search_tools(query="dig")` → `minecraft_dig_block`
 
 ```
-# メイン通路を掘る
-minecraft_dig_block { x, y: -59, z }  # 直進
-
+# メイン通路を掘る（Y=-59）
 # 3ブロック間隔で枝を伸ばす
 #
 # メイン通路
@@ -50,73 +58,27 @@ minecraft_dig_block { x, y: -59, z }  # 直進
 - ダイヤ鉱脈は最大8ブロック
 - 3間隔で見落としなし
 
-### 2. 実際の手順
-
-```
-# 1. Y=-59まで階段で降りる
-minecraft_dig_block { ..., y: current_y - 1 }  # 繰り返し
-
-# 2. メイン通路を作成（高さ2）
-minecraft_dig_block { x, y: -59, z }
-minecraft_dig_block { x, y: -58, z }
-
-# 3. 松明を設置（8ブロックごと）
-minecraft_place_block { block_type: "torch", ... }
-
-# 4. 枝を掘る
-# 左右に交互に、3ブロック間隔で
-```
-
-### 3. 採掘パターン図
-
-```
-上から見た図（Y=-59）:
-
-     北
-     ↑
-T----+----+----+----T  メイン通路（T=松明）
-|    |    |    |    |
-|    |    |    |    |  枝（各20-30ブロック）
-|    |    |    |    |
-```
-
 ## 危険対策
 
 ### 溶岩
-```
-# 水バケツを常に持つ
-minecraft_equip_item { item_name: "water_bucket" }
-
-# 溶岩を見つけたら水で固める
-minecraft_use_item {}
-```
-
-**重要**: Y=-54以下は溶岩湖に注意
+- 水バケツを常に持つ
+- 溶岩を見つけたら水で固める
+- **重要**: Y=-54以下は溶岩湖に注意
 
 ### 落下
-```
-# 真下を掘らない
-# 足元を確認しながら進む
-```
+- 真下を掘らない
+- 足元を確認しながら進む
 
 ### モブ
-```
-# 松明を頻繁に設置
-# 暗いところはスポーン可能
-minecraft_place_block { block_type: "torch", ... }
-```
+- 松明を頻繁に設置（低レベル: `search_tools(query="place")` → `minecraft_place_block`）
+- 敵に遭遇したら `mc_combat()` で排除
 
 ## ダイヤ発見時
 
 ```
-# 1. 周囲を全部掘る（最大8ブロック繋がってる可能性）
-minecraft_dig_block { ... }  # 周囲8方向 + 上下
-
-# 2. 回収
-minecraft_collect_items {}
-
-# 3. 場所を記録（また近くにあるかも）
-remember_location { name: "diamond_vein_1", ... }
+1. mc_gather(block="diamond_ore", count=8) — 周囲のダイヤも全て採掘
+2. mc_status() — インベントリ確認
+3. mc_chat(message="[資源] ダイヤ発見: x=..., z=..., Y=-59") — チームに共有
 ```
 
 ## 効率化テクニック
@@ -162,5 +124,5 @@ remember_location { name: "diamond_vein_1", ... }
 
 ダイヤ発見時:
 - [ ] 周囲を全て掘る
-- [ ] 座標を記録
+- [ ] 座標を記録・チームに共有
 - [ ] インベントリに空きを確認

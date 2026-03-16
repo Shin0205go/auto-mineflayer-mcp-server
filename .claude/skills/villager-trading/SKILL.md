@@ -96,7 +96,7 @@ description: |
 ```
 1. ベッドを多めに設置
 2. 村人にパンを投げる（最低6個）
-   minecraft_drop_item { item_name: "bread", count: 6 }
+   → search_tools(query="drop") → minecraft_drop_item(item_name="bread", count=6)
 3. 自動で繁殖開始（ハートが出る）
 4. 子供村人が生まれる
 5. 成長まで20分

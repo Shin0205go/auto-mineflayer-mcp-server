@@ -1,81 +1,77 @@
 ---
 name: crafting-chain
 description: |
-  minecraft_craft_chainツールで素材収集→中間素材→最終製品まで自動クラフト。autoGather=trueで不足素材も自動収集。
+  mc_craftツールで素材収集→中間素材→最終製品まで自動クラフト。autoGather=trueで不足素材も自動収集。
   ALWAYS use when: ピッケルを作りたい、斧が必要、かまどを作る、松明が欲しい、道具をクラフトしたい時。
-  minecraft_craftを何度も呼ぶ代わりに、このスキルでwooden_pickaxe/stone_pickaxe/iron_pickaxe/furnace/torch等を一発作成。
 ---
 
 # クラフトチェーンスキル
 
-複雑なレシピを自動で実行する高レベルスキル。
-
-## 使用方法
+## 基本使用法
 
 ```
-minecraft_craft_chain {
-  username: "BotName",
-  target: "wooden_pickaxe",
-  autoGather: true  // 不足素材を自動収集
-}
+mc_craft(item="wooden_pickaxe", autoGather=true)
 ```
 
-## 対応レシピ
+## よく使うレシピ
 
-### 基本ツール
-- `wooden_pickaxe`: oak_log → oak_planks → stick → 木のピッケル
-- `stone_pickaxe`: stick + cobblestone → 石のピッケル
-- `iron_pickaxe`: stick + iron_ore → iron_ingot → 鉄のピッケル
-
-### インフラ
-- `crafting_table`: oak_log → oak_planks → クラフト台
-- `furnace`: cobblestone × 8 → かまど
-- `torch`: coal + stick → 松明 × 4
-
-## 自動実行される処理
-
-1. **レシピ解析** - ターゲットに必要な全ステップを計算
-2. **材料確認** - インベントリの現在の所持数をチェック
-3. **不足分収集** - autoGather=trueなら自動で素材採集
-4. **順次クラフト** - 依存関係に従って順番にクラフト
-5. **精錬処理** - 必要なら自動でかまどを使用
+| アイテム | コマンド |
+|---------|---------|
+| 作業台 | `mc_craft(item="crafting_table")` |
+| 木ピッケル | `mc_craft(item="wooden_pickaxe")` |
+| 石ピッケル | `mc_craft(item="stone_pickaxe")` |
+| 鉄ピッケル | `mc_craft(item="iron_pickaxe", autoGather=true)` |
+| かまど | `mc_craft(item="furnace")` |
+| 松明 | `mc_craft(item="torch")` |
+| チェスト | `mc_craft(item="chest")` |
 
 ## autoGather パラメータ
 
-- `true`: 不足素材を自動で収集（推奨）
-- `false`: 手持ちの素材のみでクラフト
+- `true`: 不足素材を自動で収集・精錬して完成
+- `false`(デフォルト): 手持ちの素材のみ。不足分はエラーメッセージで通知
 
-## クラフトチェーン例
+## Tool Upgrade Protocol（ツールアップグレード手順）
 
-### wooden_pickaxe (autoGather=true)
+旧`minecraft_upgrade_tools`の代替。
+
+### Stone Upgrade (Phase 3)
 ```
-1. oak_log が 1個必要 → 自動で木を伐採
-2. oak_planks をクラフト (oak_log × 1 → oak_planks × 4)
-3. stick をクラフト (oak_planks × 1 → stick × 4)
-4. wooden_pickaxe をクラフト (oak_planks × 3 + stick × 2)
+1. mc_status() — 現在の道具を確認
+2. mc_gather(block="cobblestone", count=20) — 石材確保
+3. mc_craft(item="stone_pickaxe") — 石ピッケル
+4. mc_craft(item="stone_axe") — 石斧
+5. mc_craft(item="stone_sword") — 石の剣
 ```
 
-### iron_pickaxe (autoGather=true)
+### Iron Upgrade (Phase 4)
 ```
-1. iron_ore が 3個必要 → 自動で鉱石採掘
-2. かまどで精錬 (iron_ore × 3 → iron_ingot × 3)
-3. stick が 2個必要 → 木材からクラフト
-4. iron_pickaxe をクラフト
+1. mc_status() — 鉄鉱石の位置を確認
+2. mc_gather(block="iron_ore", count=12) — 鉄鉱石採掘
+3. mc_craft(item="furnace") — かまどがなければ作成
+4. mc_craft(item="iron_pickaxe", autoGather=true) — 鉄ピッケル
+5. mc_craft(item="iron_sword", autoGather=true) — 鉄の剣
+6. mc_craft(item="iron_helmet", autoGather=true) — 防具も可能なら
 ```
+
+### Diamond Upgrade (Phase 5)
+```
+1. diamond-mining SKILLを参照（Y=-59でブランチマイニング）
+2. mc_gather(block="diamond_ore", count=5) — ダイヤ採掘
+3. mc_craft(item="diamond_pickaxe") — ダイヤピッケル
+4. mc_craft(item="diamond_sword") — ダイヤ剣
+```
+
+## 失敗時の対応
+
+`mc_craft`は失敗時に不足アイテムを返す：
+```json
+{ "success": false, "item": "iron_pickaxe", "missing": ["iron_ingot x1"] }
+```
+
+→ `mc_gather(block="iron_ore", count=1)` で不足分を収集して再実行
 
 ## Tips
 
 - **autoGather推奨**: 素材不足を気にせず実行可能
-- **事前確認**: インベントリに素材があれば即座にクラフト
-- **チェーン中断**: 素材が見つからない場合は中断して報告
-- **進捗確認**: 各ステップの成否を返り値で確認可能
-
-## 対応予定の追加レシピ
-
-独自のクラフトチェーンを定義したい場合は、`src/tools/high-level-actions.ts` の `craftingChains` オブジェクトに追加可能。
-
-## エラー対応
-
-- `No crafting chain defined`: 未対応レシピ → 低レベルツールで手動クラフト
-- `Failed to gather XXX`: 素材が見つからない → 範囲拡大または手動収集
-- `Crafting chain aborted`: 途中で失敗 → 進捗を確認して残りを手動実行
+- **事前確認**: `mc_status()`でインベントリを確認してから実行
+- **精錬自動化**: iron_ingotが必要な場合、raw_iron→精錬を自動処理

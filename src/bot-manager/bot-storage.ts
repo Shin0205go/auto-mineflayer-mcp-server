@@ -297,7 +297,9 @@ export async function storeInChest(
   }
 
   // Wait for inventory sync
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  // Extended from 1.5s to 3s to ensure server-side chest window updates propagate
+  // and multi-bot access doesn't cause silent failures
+  await new Promise(resolve => setTimeout(resolve, 3000));
 
   // Verify items were actually removed from inventory (i.e., deposit succeeded)
   const invCountAfter = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
@@ -455,34 +457,74 @@ export async function takeFromChest(
   }
 
   // Wait for inventory to sync (multi-bot chest access needs more time)
-  // Extended from 1.5s to 3s to prevent item void bug
-  await new Promise(resolve => setTimeout(resolve, 3000));
+  // Extended to 5s to prevent item void bug
+  await new Promise(resolve => setTimeout(resolve, 5000));
 
   // Verify items were actually withdrawn
   const inventoryAfter = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
   const withdrawnCount = inventoryAfter - inventoryBefore;
   console.error(`[Storage] After withdrawal: ${itemName} count in inventory = ${inventoryAfter}, withdrawn = ${withdrawnCount}`);
 
-  // Only throw if zero items were withdrawn (partial success is acceptable due to sync delays)
+  // Also check if chest lost the items (inventory sync may lag but chest reflects truth)
+  const chestItemsAfterWithdraw = chest.containerItems();
+  const chestCountAfter = chestItemsAfterWithdraw.filter((i: any) => i.name === itemName).reduce((sum: number, i: any) => sum + i.count, 0);
+  const chestCountBefore = item.count;
+  const chestReduced = chestCountBefore - chestCountAfter;
+  console.error(`[Storage] Chest ${itemName}: before=${chestCountBefore}, after=${chestCountAfter}, reduced=${chestReduced}`);
+
+  // Only throw if zero items were withdrawn AND chest didn't lose items
   if (withdrawnCount === 0) {
-    // DO NOT close chest before retry — keep it open to prevent server rollback
-    console.error(`[Storage] CRITICAL: Zero items withdrawn after 3s wait. Waiting additional 2s before giving up...`);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Final verification
-    const inventoryFinal = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
-    const finalWithdrawn = inventoryFinal - inventoryBefore;
-
-    if (finalWithdrawn === 0) {
-      chest.close();
-      releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
-      throw new Error(`Failed to withdraw any ${itemName} from chest after 5s total wait. Requested ${actualCount} but got 0. ITEM MAY BE LOST IN VOID.`);
+    // If chest lost items, they're in transit — wait more
+    if (chestReduced > 0) {
+      console.error(`[Storage] Chest lost ${chestReduced} items but inventory hasn't updated yet. Waiting 3s more...`);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const inventoryRecovery = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
+      const recoveredCount = inventoryRecovery - inventoryBefore;
+      if (recoveredCount > 0) {
+        console.error(`[Storage] Recovery: ${recoveredCount}x ${itemName} appeared after extended wait.`);
+        chest.close();
+        releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
+        return `Took ${recoveredCount}x ${itemName} from chest (requested ${actualCount}, delayed sync). Inventory: ${bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ")}`;
+      }
     }
 
-    console.error(`[Storage] Recovery: ${finalWithdrawn}x ${itemName} appeared after extended wait.`);
+    // Retry: close chest and re-open for a fresh withdraw attempt
+    console.error(`[Storage] CRITICAL: Zero items withdrawn. Retrying with chest close/reopen...`);
     chest.close();
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    try {
+      const chest2 = await Promise.race([
+        bot.openContainer(chestBlock),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Chest reopen timeout")), 8000))
+      ]) as any;
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const items2 = chest2.containerItems();
+      const retryItem = items2.find((i: any) => i.name === itemName);
+      if (retryItem) {
+        const retryCount = Math.min(actualCount, retryItem.count);
+        await chest2.withdraw(retryItem.type, null, retryCount);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        const inventoryRetry = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
+        const retryWithdrawn = inventoryRetry - inventoryBefore;
+        chest2.close();
+
+        if (retryWithdrawn > 0) {
+          console.error(`[Storage] Retry succeeded: ${retryWithdrawn}x ${itemName} withdrawn.`);
+          releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
+          return `Took ${retryWithdrawn}x ${itemName} from chest (retry succeeded). Inventory: ${bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ")}`;
+        }
+      } else {
+        chest2.close();
+      }
+    } catch (retryErr) {
+      console.error(`[Storage] Retry failed: ${retryErr}`);
+    }
+
     releaseChestLock(chestPos.x, chestPos.y, chestPos.z);
-    return `Took ${finalWithdrawn}x ${itemName} from chest (requested ${actualCount}, delayed sync). Inventory: ${bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ")}`;
+    throw new Error(`Failed to withdraw any ${itemName} from chest after retry. Requested ${actualCount} but got 0.`);
   }
 
   chest.close();

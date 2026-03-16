@@ -21,23 +21,17 @@ description: |
 ### 1. 羊を探す
 
 ```
-minecraft_find_entities { entity_type: "sheep" }
+mc_navigate(target_entity="sheep", max_distance=64)
 ```
 
 **羊がいない場合:**
-```
-minecraft_explore_for_biome { target_biome: "plains", max_distance: 200 }
-```
-
-羊が多いバイオーム:
-- plains, sunflower_plains, meadow
-- forest, birch_forest
-- snowy_plains
+- plainsバイオームへ移動して探す
+- 羊が多いバイオーム: plains, sunflower_plains, meadow, forest
 
 ### 2. 羊を狩る
 
 ```
-minecraft_fight { entity_name: "sheep" }
+mc_combat(target="sheep")
 ```
 
 - 羊1匹 = 羊毛1個 + 羊肉1個
@@ -46,8 +40,7 @@ minecraft_fight { entity_name: "sheep" }
 ### 3. 木を集める
 
 ```
-minecraft_find_block { block_name: "oak_log" }
-minecraft_dig_block { x, y, z }
+mc_gather(block="oak_log", count=1)
 ```
 
 原木1個 → 板材4個なので、原木1個でOK
@@ -56,18 +49,19 @@ minecraft_dig_block { x, y, z }
 
 ```
 # 板材を作る（作業台不要）
-minecraft_craft { item_name: "oak_planks", count: 1 }
+mc_craft(item="oak_planks", count=1)
 
 # ベッドを作る（作業台必要）
-minecraft_craft { item_name: "bed", count: 1 }
+mc_craft(item="white_bed", count=1)
 ```
 
 **注意**: ベッドのクラフトには作業台が必要
 
 ### 5. ベッドを設置
 
+低レベルツール使用: `search_tools(query="place")` → `minecraft_place_block`
 ```
-minecraft_place_block { block_type: "bed", x, y, z }
+minecraft_place_block(block_type="white_bed", x=..., y=..., z=...)
 ```
 
 - 平らな場所に2ブロック分のスペースが必要
@@ -76,10 +70,10 @@ minecraft_place_block { block_type: "bed", x, y, z }
 ### 6. 寝る
 
 ```
-minecraft_sleep {}
+mc_sleep()
 ```
 
-- 夜（13000-23000 tick）のみ可能
+- 夜（13000-23000 tick）のみ可能（Tier2ツール、夜のみ表示）
 - 近くにモンスターがいると寝れない
 
 ## トラブルシューティング
@@ -88,7 +82,7 @@ minecraft_sleep {}
 |------|--------|
 | 羊が見つからない | plainsバイオームへ移動 |
 | 羊毛の色が違う | 混色でもベッドは作れる |
-| 作業台がない | 板材4個でcraft |
+| 作業台がない | `mc_craft(item="crafting_table")` |
 | 寝れない | モンスターを倒すか離れる |
 | 設置できない | 2ブロックの平らな場所を確保 |
 

@@ -276,7 +276,11 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
       }
 
       // Wait for auto-pickup and check if item was collected
-      await delay(500); // Increased from 300
+      // Extended from 500ms to 1200ms to handle:
+      // 1. Server-side item entity spawn delay (especially after mob loot)
+      // 2. Multi-bot chest access race conditions
+      // 3. Auto-pickup trigger propagation
+      await delay(1200);
 
       if (!bot.entities[item.id]) {
         collectedCount++;

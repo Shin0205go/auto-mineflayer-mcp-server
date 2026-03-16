@@ -15,32 +15,38 @@ description: |
 
 **接続したら最初に必ずこの順番で実行せよ：**
 
-1. `minecraft_get_chat_messages()` でチャット確認
-2. **`minecraft_validate_survival_environment`** で生存可能性チェック
-   - CRITICAL判定 → 即座に `[SOS] 環境CRITICAL: 食料源なし。管理者介入要。` をチャット
-   - WARNING判定 → `[報告] 食料源が限定的。狩猟優先で行動する。` をチャット
+1. `mc_chat()` でチャット確認（未読メッセージを取得）
+2. `mc_status()` で状況把握（HP/位置/インベントリ/脅威を一括確認）
 3. リーダー（Claude1）の `[指示]` があれば従う
-4. 指示がなければ → **`minecraft_day1_boot_sequence`** を実行（Phase 0/1 の場合）
+4. 指示がなければ → **survival SKILL.md の Day 1 Protocol** を実行（Phase 0/1 の場合）
 5. Phase 2以降は現在フェーズの目標に向けて自律行動
 
 ---
 
-## Day 1 Boot Sequence（Phase 0/1 必須）
+## Day 1 Protocol（Phase 0/1 必須）
 
-**セッション開始時（フェーズ0/1）は `minecraft_day1_boot_sequence` を必ず呼ぶ。**
-低レベルツールを個別に呼んで試行錯誤するな。このツール1つで以下を全部やる：
+**セッション開始時（フェーズ0/1）は survival SKILL.md の Day 1 Protocol に従う。**
+mc_*コアツールを1ステップずつ実行し、各結果を見て判断せよ。
 
-1. 環境検証 → 木材10本収集 → 作業台 + 木のツール一式
-2. 近くの動物を狩猟（生肉でも可、調理前提にするな）
-3. 石を採掘 → 石ピッケル + 石の剣にアップグレード
-4. 夜前にシェルター建築
+1. `mc_status()` → 状況把握
+2. `mc_gather(block="oak_log", count=10)` → 木材収集
+3. `mc_craft(item="crafting_table")` → 作業台
+4. `mc_craft(item="wooden_pickaxe")` → ツルハシ
+5. `mc_craft(item="wooden_sword")` → 剣
+6. `mc_combat(target="cow")` → 食料狩り（cow→pig→chicken→sheep→zombie）
+7. `mc_eat()` → 食事
+8. `mc_gather(block="cobblestone", count=20)` → 石収集
+9. `mc_craft(item="stone_pickaxe")` → 石ツルハシ
+10. `mc_build(preset="shelter", size="small")` → シェルター
+
+**各ステップは独立して完結。失敗したら次に進め。**
 
 ---
 
 ## 基本原則
 
 1. **チームで動く** — 個人プレイ禁止。全ての行動はチームのフェーズ目標に沿って行う
-2. **チャットが生命線** — **毎アクション** `minecraft_get_chat_messages()` を確認
+2. **チャットが生命線** — **毎アクション** `mc_chat()` を確認
 3. **リーダーの指示が最優先** — Claude1の `[指示]` は他の全てに優先する
 4. **報告義務** — タスク完了、資源発見、危険はすべてチャットで報告
 
@@ -50,15 +56,15 @@ description: |
 
 **接続直後にやること（サバイバルより先）：**
 
-1. `minecraft_get_chat_messages()` でチャット確認
-2. `minecraft_validate_survival_environment` で世界の食料源チェック
-   - CRITICAL → 全ボットに生存不可を警告し管理者に報告スクリプト生成
+1. `mc_chat()` でチャット確認
+2. `mc_status()` で世界の状況把握
+   - 脅威だらけ+食料なし → 全ボットに生存不可を警告
    - OK → 次フェーズへ
 3. **技術的チェック（重要）：**
    - Claude2に gamerule 確認を指示:
      `[指示] @Claude2 gamerule確認: /gamerule doMobLoot, /gamerule doTileDrops, /gamerule doEntityDrops を実行して報告せよ`
    - falseの場合は同じメンバーに修正指示
-4. `minecraft_chat("[フェーズ] Phase N 開始。目標: ...")` でフェーズ宣言
+4. `mc_chat(message="[フェーズ] Phase N 開始。目標: ...")` でフェーズ宣言
 5. 全メンバー（Claude2〜7）に `[指示] @Claude番号 具体的タスク` を送信
 6. **全員に指示を出し終えてから自分の作業を開始**
 
@@ -86,9 +92,9 @@ description: |
 5. survivalスキル等の個人行動
 
 **接続直後：**
-1. `minecraft_get_chat_messages()` でリーダーの指示を確認
-2. 指示があれば `minecraft_chat("[了解] @Claude1 ...")` で応答して実行
-3. 指示がなければ `minecraft_day1_boot_sequence` を実行（Phase 0/1 時）
+1. `mc_chat()` でリーダーの指示を確認
+2. 指示があれば `mc_chat(message="[了解] @Claude1 ...")` で応答して実行
+3. 指示がなければ Day 1 Protocol を実行（Phase 0/1 時）
 
 ---
 
@@ -99,8 +105,8 @@ description: |
 | 状態 | しきい値 | 行動 |
 |------|---------|------|
 | 食料備蓄 | チェスト内 < 20個 | 次の空きアクションで食料確保 |
-| 腹具合 | < 15/20 | 即座に `minecraft_eat` |
-| HP | < 10/20 | 戦闘中断、`minecraft_survival_routine {priority: "food"}` |
+| 腹具合 | < 15/20 | 即座に `mc_eat()` |
+| HP | < 10/20 | 戦闘中断、survival SKILL.md Food Emergency Protocol |
 | HP | < 4/20 | 即時逃走 + 食べる + シェルターへ |
 
 **HPが低い時はリスポーンするな。食料を食べてHP回復が最優先。**
@@ -142,8 +148,8 @@ description: |
 
 ## アンチパターン（やってはいけないこと）
 
-- 接続後すぐにget_inventory/get_statusして食料パニックに入る（まずチャット確認）
-- `minecraft_day1_boot_sequence` を呼ばずに低レベルツールで個別に試行錯誤する
+- 接続後すぐにmc_statusして食料パニックに入る（まずチャット確認）
+- Day 1 Protocolに従わず低レベルツールで個別に試行錯誤する
 - 指示を出さずに黙々と1人で作業する（リーダー）
 - リーダーの指示を無視して自分の判断で動く（フォロワー）
 - チャットを3アクション以上確認しない

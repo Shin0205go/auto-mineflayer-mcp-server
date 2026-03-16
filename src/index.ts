@@ -7,6 +7,13 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
+// Tier 1: Core tools
+import { coreTools, handleCoreTool } from "./tools/core-tools-mcp.js";
+
+// Tier 2: Situational tools
+import { tier2ToolDefs, handleTier2Tool, getActiveTier2Tools, getVisibleGameTools, TIER1_CORE_TOOLS, ALL_TOOL_NAMES_FOR_SEARCH } from "./tool-filters.js";
+
+// Tier 3: Legacy low-level tools (hidden from tools/list, accessible via search_tools and CallTool)
 import { connectionTools, handleConnectionTool } from "./tools/connection.js";
 import { movementTools, handleMovementTool } from "./tools/movement.js";
 import { environmentTools, handleEnvironmentTool } from "./tools/environment.js";
@@ -15,15 +22,21 @@ import { craftingTools, handleCraftingTool } from "./tools/crafting.js";
 import { storageTools, handleStorageTool } from "./tools/storage.js";
 import { combatTools, handleCombatTool } from "./tools/combat.js";
 import { highLevelActionTools, handleHighLevelActionTool } from "./tools/high-level-actions-mcp.js";
-import { debugCraftingTools, handleDebugCraftingTool } from "./tools/debug_crafting.js"; // Import new debug tool
+import { debugCraftingTools, handleDebugCraftingTool } from "./tools/debug_crafting.js";
 import { bootstrapTools, handleBootstrapTool } from "./tools/bootstrap.js";
-import { GAME_AGENT_TOOLS } from "./tool-filters.js";
+
 import { getAgentType } from "./agent-state.js";
 import { searchTools, TOOL_METADATA } from "./tool-metadata.js";
 import { botManager } from "./bot-manager/index.js";
+import { registry } from "./tool-handler-registry.js";
 
-// Combine all tools
-const allTools = {
+// All tool definitions (Tier 1 + Tier 2 + Tier 3) for CallTool routing
+const allToolDefs = {
+  // Tier 1
+  ...coreTools,
+  // Tier 2
+  ...tier2ToolDefs,
+  // Tier 3 (legacy)
   ...connectionTools,
   ...movementTools,
   ...environmentTools,
@@ -32,17 +45,26 @@ const allTools = {
   ...storageTools,
   ...combatTools,
   ...highLevelActionTools,
-  ...debugCraftingTools, // Add new debug tool
-  ...bootstrapTools, // Add bootstrap tools
-  // Tool Search
+  ...debugCraftingTools,
+  ...bootstrapTools,
+  // Hot-reload tool
+  mc_reload: {
+    description: "Hot-reload tool implementations after code changes. Re-imports core-tools and high-level-actions modules without restarting the MCP server process. Call after `npm run build` to reflect code changes. Stdio connection is preserved.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  // Tool Search (always visible)
   search_tools: {
-    description: "Search for available tools by keyword or category. Use this to discover relevant tools without loading all tool definitions. Categories: connection, info, communication, actions, crafting",
+    description: "Search for available tools by keyword or category. Use this to discover low-level tools not shown in the main list. Categories: connection, info, communication, actions, crafting, mining, building, storage, combat, survival",
     inputSchema: {
       type: "object" as const,
       properties: {
         query: {
           type: "string",
-          description: "Search query (keyword, category, or tag). Examples: 'crafting', 'survival', 'mining', 'info'. Leave empty to get top priority tools.",
+          description: "Search query (keyword, category, or tag). Examples: 'crafting', 'survival', 'mining', 'dig', 'portal'. Leave empty to get top priority tools.",
         },
         detail: {
           type: "string",
@@ -59,29 +81,35 @@ const allTools = {
 const server = new Server(
   {
     name: "mineflayer-mcp-server",
-    version: "1.0.0",
+    version: "2.0.0",
   },
   {
     capabilities: {
-      tools: {},
+      tools: { listChanged: true },
     },
   }
 );
 
-// Handle tool listing
+// Handle tool listing — 3-tier filtering
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  // Get current agent type
   const agentType = getAgentType();
 
-  // Filter tools based on agent type
-  const filteredTools = agentType === "dev"
-    ? Object.entries(allTools)  // Dev mode: all tools
-    : Object.entries(allTools).filter(([name]) => GAME_AGENT_TOOLS.has(name));  // Game mode: basic tools only
+  let visibleTools: [string, { description: string; inputSchema: object }][];
 
-  console.error(`[MCP-Stdio] tools/list for agentType=${agentType}: ${filteredTools.length} tools`);
+  if (agentType === "dev") {
+    // Dev mode: show ALL tools
+    visibleTools = Object.entries(allToolDefs);
+  } else {
+    // Game mode: Tier 1 (always) + active Tier 2 (conditional)
+    const visibleNames = getVisibleGameTools();
+    visibleTools = Object.entries(allToolDefs)
+      .filter(([name]) => visibleNames.has(name));
+  }
+
+  console.error(`[MCP-Stdio] tools/list for agentType=${agentType}: ${visibleTools.length} tools`);
 
   return {
-    tools: filteredTools.map(([name, tool]) => ({
+    tools: visibleTools.map(([name, tool]) => ({
       name,
       description: (tool as { description: string }).description,
       inputSchema: (tool as { inputSchema: object }).inputSchema,
@@ -89,7 +117,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
-// Handle tool execution
+// Handle tool execution — routes to appropriate handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   const toolArgs = (args || {}) as Record<string, unknown>;
@@ -97,8 +125,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     let result: string;
 
-    // Route to appropriate handler
-    if (name in connectionTools) {
+    // Route: Tier 1 core tools (mc_*)
+    if (name in coreTools) {
+      result = await handleCoreTool(name, toolArgs);
+    }
+    // Route: Tier 2 situational tools
+    else if (name in tier2ToolDefs) {
+      result = await handleTier2Tool(name, toolArgs);
+    }
+    // Route: Tier 3 legacy tools (minecraft_*)
+    else if (name in connectionTools) {
       result = await handleConnectionTool(name, toolArgs);
     } else if (name in movementTools) {
       result = await handleMovementTool(name, toolArgs);
@@ -114,23 +150,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       result = await handleCombatTool(name, toolArgs);
     } else if (name in highLevelActionTools) {
       result = await handleHighLevelActionTool(name, toolArgs);
-    } else if (name in debugCraftingTools) { // Route new debug tool
+    } else if (name in debugCraftingTools) {
       result = await handleDebugCraftingTool(name, toolArgs);
     } else if (name in bootstrapTools) {
       result = await handleBootstrapTool(name, toolArgs);
+    } else if (name === "mc_reload") {
+      result = await reloadModules();
     } else if (name === "search_tools") {
       const query = (toolArgs.query as string) || "";
       const detail = (toolArgs.detail as "brief" | "full") || "brief";
 
-      // IMPORTANT: search_tools always searches ALL tools (Progressive Disclosure)
-      // Only tools/list is filtered by agent type
-      const availableTools = new Set(Object.keys(allTools));
-
-      // Search for matching tools
+      // search_tools always searches ALL tools (Progressive Disclosure)
+      const availableTools = ALL_TOOL_NAMES_FOR_SEARCH;
       const matchedTools = searchTools(query, availableTools);
 
       if (detail === "brief") {
-        // Return brief info: name and category only
         const results = matchedTools.map(toolName => {
           const metadata = TOOL_METADATA[toolName];
           return {
@@ -141,10 +175,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         result = JSON.stringify({ query, count: results.length, tools: results }, null, 2);
       } else {
-        // Return full info: name, category, description, and input schema
         const results = matchedTools.map(toolName => {
           const metadata = TOOL_METADATA[toolName];
-          const toolDef = allTools[toolName as keyof typeof allTools];
+          const toolDef = allToolDefs[toolName as keyof typeof allToolDefs];
           return {
             name: toolName,
             category: metadata?.category || "unknown",
@@ -160,9 +193,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     // Auto-inject unread chat messages into every tool result
-    // so bots don't need to poll minecraft_get_chat_messages separately
+    // so bots don't need to poll separately
     let chatSuffix = "";
-    if (name !== "minecraft_get_chat_messages" && name !== "minecraft_connect" && name !== "search_tools") {
+    if (name !== "mc_chat" && name !== "minecraft_get_chat_messages" && name !== "mc_connect" && name !== "minecraft_connect" && name !== "search_tools") {
       try {
         const username = botManager.requireSingleBot();
         const messages = botManager.getChatMessages(username, true);
@@ -199,11 +232,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
+// Hot-reload: re-import modules with cache busting
+async function reloadModules(): Promise<string> {
+  const v = Date.now();
+  const base = new URL('./', import.meta.url).href;
+  const reloaded: string[] = [];
+  const errors: string[] = [];
+
+  // Reload order matters: leaf dependencies first
+  const modules = [
+    { name: 'high-level-actions', path: 'tools/high-level-actions.js' },
+    { name: 'core-tools', path: 'tools/core-tools.js' },
+  ];
+
+  for (const mod of modules) {
+    try {
+      await import(base + mod.path + '?v=' + v);
+      reloaded.push(mod.name);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`${mod.name}: ${msg}`);
+      console.error(`[mc_reload] Failed to reload ${mod.name}:`, err);
+    }
+  }
+
+  // Notify client to refresh tool list
+  try {
+    await server.sendToolListChanged();
+  } catch (err) {
+    console.error('[mc_reload] Failed to send list_changed:', err);
+  }
+
+  const status = [
+    `Reloaded: ${reloaded.join(', ') || 'none'}`,
+    `Registry keys: ${Object.keys(registry).join(', ')}`,
+  ];
+  if (errors.length > 0) {
+    status.push(`Errors: ${errors.join('; ')}`);
+  }
+  status.push('tools/list_changed notification sent.');
+  console.error(`[mc_reload] ${status.join(' | ')}`);
+  return status.join('\n');
+}
+
 // Start the server
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Mineflayer MCP Server running on stdio");
+  console.error("Mineflayer MCP Server v2.0 running on stdio");
 }
 
 // Cleanup: disconnect all bots when process exits
@@ -217,6 +293,16 @@ function cleanup() {
   }
 }
 
+// SIGUSR1: Hot-reload modules + send tools/list_changed (triggered by npm run dev)
+process.on('SIGUSR1', () => {
+  console.error('[MCP-Stdio] SIGUSR1 received - hot-reloading modules');
+  reloadModules().then((result) => {
+    console.error('[MCP-Stdio] Reload result:', result);
+  }).catch((err) => {
+    console.error('[MCP-Stdio] Reload failed:', err);
+  });
+});
+
 process.on('SIGTERM', () => {
   cleanup();
   process.exit(0);
@@ -227,19 +313,13 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// Note: Don't cleanup on 'exit' - the MCP stdio process may be restarted
-// between tool calls, and we want to keep bot connections alive.
-// Only cleanup on explicit signals (SIGTERM, SIGINT).
-
 // Add global error handlers to prevent crashes
 process.on('uncaughtException', (error) => {
   console.error('[MCP-Stdio] Uncaught exception:', error);
-  // Don't exit - try to continue running
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[MCP-Stdio] Unhandled rejection at:', promise, 'reason:', reason);
-  // Don't exit - try to continue running
 });
 
 main().catch((error) => {

@@ -1,3 +1,17 @@
+/**
+ * High-Level Action Tools — Tier 3 (discoverable via search_tools only)
+ *
+ * God functions removed:
+ * - minecraft_day1_boot_sequence → survival SKILL.md "Day 1 Protocol"
+ * - minecraft_establish_base → building SKILL.md "Base Protocol"
+ * - minecraft_upgrade_tools → crafting-chain SKILL.md "Tool Upgrade Protocol"
+ * - minecraft_night_routine → survival SKILL.md "Night Protocol"
+ * - minecraft_food_emergency → survival SKILL.md "Food Emergency Protocol"
+ *
+ * Remaining tools are useful as Tier 3 low-level alternatives.
+ * minecraft_death_recovery → moved to Tier 2 (conditional on respawn state).
+ */
+
 import {
   minecraft_gather_resources,
   minecraft_build_structure,
@@ -5,12 +19,7 @@ import {
   minecraft_survival_routine,
   minecraft_explore_area,
   minecraft_validate_survival_environment,
-  minecraft_day1_boot_sequence,
-  minecraft_establish_base,
-  minecraft_upgrade_tools,
-  minecraft_night_routine,
   minecraft_death_recovery,
-  minecraft_food_emergency,
 } from "./high-level-actions.js";
 
 export const highLevelActionTools = {
@@ -85,7 +94,7 @@ export const highLevelActionTools = {
     }
   },
   minecraft_validate_survival_environment: {
-    description: "Validate if environment has sufficient food sources for survival - checks for passive mobs, edible plants, and fishing viability. Run this at session start to detect unplayable environments.",
+    description: "Validate if environment has sufficient food sources for survival - checks for passive mobs, edible plants, and fishing viability.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -95,49 +104,8 @@ export const highLevelActionTools = {
       required: ["username"]
     }
   },
-  minecraft_day1_boot_sequence: {
-    description: "CRITICAL FIRST ACTION: Execute the deterministic Day 1 survival boot sequence. Runs in fixed order: env validation → gather wood → craft tools → hunt food → cook meat → mine stone → upgrade tools → build shelter. Call this ONCE at session start before any other actions. Eliminates trial-and-error startup.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        username: { type: "string", description: "Bot username" },
-      },
-      required: ["username"]
-    }
-  },
-  minecraft_establish_base: {
-    description: "Phase 1 completion: place crafting table + furnace + 3 chests + build small shelter. Call after day1_boot_sequence to complete Phase 1. Deterministic — no guesswork.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        username: { type: "string", description: "Bot username" },
-      },
-      required: ["username"]
-    }
-  },
-  minecraft_upgrade_tools: {
-    description: "Upgrade all tools to target material tier (stone/iron/diamond). Handles gathering, smelting, crafting, and equipping automatically. Use for Phase 3 (stone), Phase 4 (iron), Phase 5 (diamond).",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        username: { type: "string", description: "Bot username" },
-        material: { type: "string", enum: ["stone", "iron", "diamond"], description: "Target tool tier" },
-      },
-      required: ["username", "material"]
-    }
-  },
-  minecraft_night_routine: {
-    description: "Handle nighttime safely. Sleeps in bed if available, otherwise builds shelter and waits for dawn while defending against hostiles. Call when night falls.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        username: { type: "string", description: "Bot username" },
-      },
-      required: ["username"]
-    }
-  },
   minecraft_death_recovery: {
-    description: "Post-respawn recovery protocol. Navigate to base, get food/tools from shared chest, eat, equip armor. Call IMMEDIATELY after respawn instead of resuming solo activities.",
+    description: "Post-respawn recovery protocol. Navigate to base, get food/tools from shared chest, eat, equip armor.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -145,16 +113,6 @@ export const highLevelActionTools = {
         baseX: { type: "number", description: "Base X coordinate (optional)" },
         baseY: { type: "number", description: "Base Y coordinate (optional)" },
         baseZ: { type: "number", description: "Base Z coordinate (optional)" },
-      },
-      required: ["username"]
-    }
-  },
-  minecraft_food_emergency: {
-    description: "Aggressive food acquisition through all available sources in order: inventory → chest → hunt animals (expanding radius) → zombie rotten_flesh → fishing. Use when survival_routine food mode fails.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        username: { type: "string", description: "Bot username" },
       },
       required: ["username"]
     }
@@ -199,32 +157,11 @@ export async function handleHighLevelActionTool(name: string, args: Record<strin
       return await minecraft_validate_survival_environment(username, searchRadius);
     }
 
-    case "minecraft_day1_boot_sequence": {
-      return await minecraft_day1_boot_sequence(username);
-    }
-
-    case "minecraft_establish_base": {
-      return await minecraft_establish_base(username);
-    }
-
-    case "minecraft_upgrade_tools": {
-      const material = args.material as "stone" | "iron" | "diamond";
-      return await minecraft_upgrade_tools(username, material);
-    }
-
-    case "minecraft_night_routine": {
-      return await minecraft_night_routine(username);
-    }
-
     case "minecraft_death_recovery": {
       const baseX = args.baseX as number | undefined;
       const baseY = args.baseY as number | undefined;
       const baseZ = args.baseZ as number | undefined;
       return await minecraft_death_recovery(username, baseX, baseY, baseZ);
-    }
-
-    case "minecraft_food_emergency": {
-      return await minecraft_food_emergency(username);
     }
 
     default:

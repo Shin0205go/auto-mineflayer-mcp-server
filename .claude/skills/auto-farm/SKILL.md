@@ -22,26 +22,24 @@ description: |
 ### 手順
 
 1. **水源を設置**
-   ```
-   minecraft_place_block { block_type: "water_bucket", ... }
-   ```
+   低レベルツール使用: `search_tools(query="use_item")` → `minecraft_use_item_on_block`
    - 水源から4ブロック以内が耕作可能
 
 2. **土を耕す**
+   低レベルツール使用: `search_tools(query="use_item")` → `minecraft_use_item_on_block`
    ```
-   minecraft_equip_item { item_name: "wooden_hoe" }
-   minecraft_use_item {}  # 土ブロックに向けて
+   minecraft_use_item_on_block(item_name="wooden_hoe", x=..., y=..., z=...)
    ```
 
 3. **種を植える**
+   低レベルツール使用: `search_tools(query="place")` → `minecraft_place_block`
    ```
-   minecraft_place_block { block_type: "wheat_seeds", ... }
+   minecraft_place_block(block_type="wheat_seeds", x=..., y=..., z=...)
    ```
 
 4. **収穫**（成長後）
    ```
-   minecraft_dig_block { ... }  # 小麦を壊す
-   minecraft_collect_items {}
+   mc_gather(block="wheat", count=20)
    ```
 
 ### 効率的なレイアウト
@@ -73,37 +71,11 @@ D D D D  ← 砂/土
 W W W W  ← 水
 ```
 
-1. **オブザーバー**で成長検知
-2. **ピストン**で2段目以上を押し出す
-3. **ホッパー付きトロッコ**で回収
-
-### 必要素材
-| アイテム | 数量 |
-|---------|------|
-| サトウキビ | 初期分 |
-| 砂または土 | 農場サイズ分 |
-| 水バケツ | 列数分 |
-| ピストン | 列数分 |
-| オブザーバー | 列数分 |
-| レッドストーン | 配線分 |
-
 ## カボチャ・スイカ農場
 
 ### 特徴
 - 茎から実が隣接ブロックに生成
 - 茎は残る（再収穫可能）
-
-### 自動化
-```
-# 上から見た図
-T O T O T  (T=茎, O=オブザーバー監視位置)
-P - P - P  (P=ピストン, -=実が生成される場所)
-H H H H H  (H=ホッパー付きトロッコのレール)
-```
-
-1. **オブザーバー**で実の生成を検知
-2. **ピストン**で実を押し出す
-3. **ホッパー**で回収
 
 ## 村人式全自動農場
 
@@ -120,12 +92,6 @@ H H H H H  (H=ホッパー付きトロッコのレール)
 | ホッパー | 農場下全面 |
 | ガラス | 囲い用 |
 | 松明 | 照明用 |
-
-### 手順
-1. 農場を作成（9x9推奨）
-2. 農民村人を中に入れる
-3. 下にホッパー設置
-4. ガラスで囲う（逃げ防止）
 
 ## 成長速度
 

@@ -1,14 +1,15 @@
-5|172|Phase5_enchanting_table_in_progress
+5|173|Phase5_book_needed_dungeon_found
 # Phase: 5 (Diamond/Enchanting Table)
-# Session: 172 (2026-03-16)
-# Status: BLOCKED by doMobLoot disabled
+# Session: 173 (2026-03-16)
+# Status: BLOCKED by doMobLoot disabled AND dungeon access dangerous
 #
 # Inventory:
 #   diamond x3, obsidian x4
 #   iron_ingot x8, shears x1
 #   diamond_pickaxe x1, diamond_sword x1
-#   iron_pickaxe x1, iron_sword x1
+#   iron_pickaxe x1, iron_sword x1, stone versions
 #   coal x37, birch_log x8
+#   torch x3
 #
 # Chest (9,96,4):
 #   ender_pearl x12, gold_ingot x31
@@ -16,13 +17,23 @@
 # Progress toward enchanting table:
 #   - diamond x3 (need 2) ✅
 #   - obsidian x4 (need 4) ✅
-#   - book x0 (need 1) ❌ BLOCKED: no leather (doMobLoot disabled)
+#   - book x0 (need 1) ❌ BLOCKED
 #
-# Required admin action:
-#   /op Claude1  OR  /gamerule doMobLoot true  in server console
+# Key Discovery:
+#   Dungeon chest found at (87, 35, -62) and (88, 35, -63)!
+#   Spawner at (86, 35, -64)
+#   Mineshaft cobweb at (68, -10, -39)
+#   5+ deaths trying to access dungeon
 #
 # Bugs fixed this session:
-#   - Proactive Creeper detection on physicsTick (prevents explosion deaths)
-#   - AutoSwim oxygen clamp to 0-20 range (fixes 399/400 display)
-#   - smeltItem auto-places furnace from inventory
-#   - smeltItem widens furnace re-check radius to 8 blocks
+#   - HP safety deadlock: allow daytime movement at HP>=2 when no hostiles
+#   - Lethal fall detection: block movement when dest has 10+ block fall at HP<10
+#
+# Required admin action:
+#   /gamerule doMobLoot true
+#   OR
+#   Torches approach to clear dungeon spawner safely
+#
+# Next attempt strategy:
+#   Place torches around dungeon spawner BEFORE entering
+#   OR find string from cobweb in mineshaft with better protection

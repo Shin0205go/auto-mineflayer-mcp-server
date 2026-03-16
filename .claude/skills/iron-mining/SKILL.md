@@ -23,39 +23,30 @@ description: |
 | Y=0〜64 | 多い | 洞窟でよく見つかる |
 | Y=-64〜0 | 少ない | 深層岩エリア |
 
-## 採掘方法
+## 採掘手順（mc_*ツール使用）
 
-### ブランチマイニング
+### 基本手順
+```
+1. mc_status() — 現在の道具・周囲の鉄鉱石を確認
+2. mc_gather(block="iron_ore", count=12) — 鉄鉱石を自動採掘
+3. mc_craft(item="furnace") — かまどがなければ作成
+4. mc_craft(item="iron_pickaxe", autoGather=true) — 鉄ピッケル（精錬含む自動解決）
+```
+
+### ブランチマイニング（大量採掘）
 ```
 1. Y=16まで掘り下げる
 2. 横方向に2ブロック間隔でトンネルを掘る
 3. 鉄鉱石（茶色の斑点）を見つけたら採掘
 ```
 
-### 洞窟探索
-```
-1. 洞窟を見つける
-2. 松明を設置しながら探索
-3. 壁の鉄鉱石を採掘
-```
-
-## 鉄鉱石の採掘
-
-```
-minecraft_find_block { block_name: "iron_ore" }
-# または deepslate_iron_ore（深層）
-
-minecraft_dig_block { x, y, z }
-→ raw_iron（鉄の原石）がドロップ
-```
+低レベルの掘削が必要な場合: `search_tools(query="dig")` → `minecraft_dig_block`
 
 ## 精錬
 
-```
-# かまどの近く（4ブロック以内）で
-minecraft_smelt { item_name: "raw_iron", count: 1 }
-→ iron_ingot（鉄インゴット）
-```
+`mc_craft(item="iron_pickaxe", autoGather=true)` を使えば精錬も自動処理される。
+
+手動で精錬する場合: `search_tools(query="smelt")` → `minecraft_smelt`
 
 **燃料**: 石炭1個で8個精錬可能
 

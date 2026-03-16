@@ -19,7 +19,7 @@ description: |
 | 本 | 1冊 | 革1+紙3 |
 
 ```
-minecraft_craft { item_name: "enchanting_table" }
+mc_craft(item="enchanting_table")
 ```
 
 ## 本棚の設置（最重要）
@@ -46,19 +46,19 @@ B . . . B  ← 2段目の本棚
 
 ### 本棚の作成
 ```
-minecraft_craft { item_name: "bookshelf" }
+mc_craft(item="bookshelf")
 # 本3冊 + 板材6個
 ```
 
 **本の作成**:
 ```
-minecraft_craft { item_name: "book" }
+mc_craft(item="book")
 # 革1 + 紙3
 ```
 
 **紙の作成**:
 ```
-minecraft_craft { item_name: "paper" }
+mc_craft(item="paper")
 # サトウキビ3
 ```
 
@@ -118,22 +118,15 @@ minecraft_craft { item_name: "paper" }
 - 取引（村人）
 
 ### 中盤以降
-- **モブトラップ**（別スキル参照）
+- **モブトラップ**（mob-farm SKILL参照）
 - **エンダーマントラップ**
 - **ブレイズトラップ**
-
-### 経験値効率
-| 方法 | XP/時間 |
-|------|--------|
-| 通常狩り | 100-200 |
-| モブトラップ | 500-1000 |
-| エンダーマントラップ | 2000+ |
 
 ## 金床（修理・合成）
 
 ### 作成
 ```
-minecraft_craft { item_name: "anvil" }
+mc_craft(item="anvil")
 # 鉄ブロック3 + 鉄インゴット4
 ```
 
@@ -141,23 +134,6 @@ minecraft_craft { item_name: "anvil" }
 1. **修理**: 同じアイテム2個を合成
 2. **エンチャント本適用**: 本のエンチャントを付与
 3. **名前変更**: アイテムに名前をつける
-
-### コスト
-- 合成コストは累積（何度も修理すると高くなる）
-- **40レベル超え**は金床で操作不可
-
-## エンチャント本
-
-### 入手方法
-- 村人取引（司書）
-- ダンジョンチェスト
-- 釣り
-
-### 司書ガチャ
-1. 司書の村人を用意
-2. 職業ブロック（書見台）を壊す
-3. 置き直す
-4. 欲しいエンチャントが出るまで繰り返し
 
 ## Tips
 

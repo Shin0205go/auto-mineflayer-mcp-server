@@ -1,52 +1,46 @@
 ---
 name: exploration
 description: |
-  minecraft_explore_areaツールでスパイラルパターンの広範囲探索を自動実行。バイオーム・村・構造物・資源を発見。
+  mc_navigateとmc_statusで広範囲探索を実行。バイオーム・村・構造物・資源を発見。
   ALWAYS use when: 新しい場所を探索したい、村を見つけたい、特定のバイオームを探している、周辺の地形を把握したい時。
   move_toを何度も呼んで手動探索する代わりに、このスキルで効率的に広範囲を探索。
 ---
 
 # エリア探索スキル
 
-スパイラルパターンで効率的に探索する高レベルスキル。
+mc_*コアツールで効率的にエリアを探索する。
 
-## 使用方法
+## 基本的な探索手順
 
 ```
-minecraft_explore_area {
-  username: "BotName",
-  radius: 100,
-  target: "village"  // 省略時は全般的な探索
-}
+1. mc_status() — 現在位置・周囲の資源・脅威を確認
+2. mc_navigate(target_block="diamond_ore", max_distance=64) — 特定ブロックへ移動
+3. mc_status() — 移動先の状況確認
 ```
-
-## パラメータ
-
-- `radius`: 探索半径（ブロック単位）
-- `target`: 探索対象（省略可能）
-  - バイオーム名: "desert", "forest", "plains"
-  - ブロック名: "diamond_ore", "village"
-  - エンティティ名: "villager", "horse"
 
 ## 探索パターン
 
+### 特定ブロックを探す
 ```
-スパイラル探索（5ブロック間隔）:
-    ↑
-  ← ● →
-    ↓
-
-開始地点から螺旋状に外側へ展開
+mc_navigate(target_block="iron_ore", max_distance=64)
 ```
 
-## 自動実行される処理
+### 特定エンティティを探す
+```
+mc_navigate(target_entity="villager", max_distance=64)
+```
 
-1. **開始座標記録** - 探索開始位置を保存
-2. **スパイラル移動** - 5ブロック間隔で螺旋状に移動
-3. **バイオーム確認** - 各地点でバイオームをチェック
-4. **ターゲット検索** - 指定されたブロック/エンティティを探索
-5. **発見記録** - 見つかったものを座標付きで記録
-6. **範囲制限** - 指定半径を超えたら探索終了
+### 座標指定で移動
+```
+mc_navigate(x=250, y=64, z=-200)
+```
+
+### スパイラル探索（広範囲）
+
+Tier3ツールの`minecraft_explore_area`で自動スパイラル探索も可能:
+```
+search_tools(query="explore") → minecraft_explore_area を発見
+```
 
 ## 探索対象例
 
@@ -75,32 +69,16 @@ minecraft_explore_area {
 | 200 | 15分 | 村・構造物探索 |
 | 500 | 1時間 | 長距離探検 |
 
-## 発見データの形式
-
-```
-Exploration complete. Visited 80 points.
-Findings:
-- village biome at (250, 320)
-- diamond_ore block at current location
-- villager entity at current location
-```
-
 ## Tips
 
 - **事前準備**: 食料、武器、松明を持参
-- **座標記録**: save_memoryで発見した重要な場所を記録
+- **座標記録**: 発見した重要な場所はチャットで共有
 - **夜間注意**: 夜間探索は危険、明るい時間に実行推奨
-- **ターゲット指定**: 目的がある場合はtargetを指定して効率化
 - **中断可能**: 途中で危険を感じたら中断してOK
-
-## 探索後のアクション
-
-発見した重要な場所はメモリに保存することを推奨：
-- save_memory で座標を記録
-- 後で recall_memory で参照可能
+- **mc_statusを活用**: 移動先でmc_statusを呼ぶとnearby_resourcesで周囲資源が見える
 
 ## エラー対応
 
 - `Move failed`: 障害物や地形が複雑 → 別ルートを試す
-- `No notable findings`: 半径を広げて再探索
+- `No notable findings`: 範囲を広げて再探索
 - `Target not found`: ターゲットがこの範囲にない → さらに遠くを探索

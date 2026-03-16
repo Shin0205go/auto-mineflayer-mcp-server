@@ -22,8 +22,7 @@ import { botManager } from "../bot-manager/index.js";
 
 export const coreTools = {
   mc_status: {
-    description:
-      "Get comprehensive bot status: HP, hunger, position, time, inventory summary, nearby threats, resources, and infrastructure. Call this first to understand the situation. Replaces get_status + get_position + get_inventory + get_surroundings + get_nearby_entities + check_infrastructure.",
+    description: "Get bot status: HP, hunger, position, inventory, nearby threats and resources.",
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -32,261 +31,157 @@ export const coreTools = {
   },
 
   mc_gather: {
-    description:
-      "Gather a specific block/resource. Automatically finds, moves to, mines, and collects. Use for wood, stone, ore, etc. Single item type per call.",
+    description: "Find, move to, mine, and collect a block type (wood/stone/ore). Single type per call.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        block: {
-          type: "string",
-          description:
-            "Block to gather (e.g., 'oak_log', 'cobblestone', 'iron_ore', 'sand')",
-        },
-        count: {
-          type: "number",
-          description: "Number to collect (default: 1)",
-          default: 1,
-        },
-        max_distance: {
-          type: "number",
-          description: "Search radius in blocks (default: 32)",
-          default: 32,
-        },
+        block: { type: "string", description: "Block name (e.g., 'oak_log', 'iron_ore')" },
+        count: { type: "number", default: 1 },
+        max_distance: { type: "number", default: 32 },
       },
       required: ["block"],
     },
   },
 
   mc_craft: {
-    description:
-      "Craft an item with automatic dependency resolution. Resolves recipe chains (e.g., wooden_pickaxe crafts planks→sticks→pickaxe). Returns missing items on failure. Set autoGather=true to auto-collect missing materials.",
+    description: "Craft an item with auto dependency resolution. Set autoGather=true to collect missing materials.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        item: {
-          type: "string",
-          description:
-            "Item to craft (e.g., 'crafting_table', 'wooden_pickaxe', 'furnace', 'iron_pickaxe')",
-        },
-        count: {
-          type: "number",
-          description: "Number to craft (default: 1)",
-          default: 1,
-        },
-        autoGather: {
-          type: "boolean",
-          description:
-            "Automatically gather missing materials (default: false)",
-          default: false,
-        },
+        item: { type: "string", description: "Item name (e.g., 'wooden_pickaxe', 'furnace')" },
+        count: { type: "number", default: 1 },
+        autoGather: { type: "boolean", default: false },
       },
       required: ["item"],
     },
   },
 
   mc_build: {
-    description:
-      "Build a predefined structure at current position. Auto-levels ground and selects materials from inventory. Need 50+ blocks for small, 150+ for medium.",
+    description: "Build a structure at current position. Need 50+ blocks for small, 150+ for medium.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        preset: {
-          type: "string",
-          enum: ["shelter", "wall", "platform", "tower"],
-          description: "Structure type",
-        },
-        size: {
-          type: "string",
-          enum: ["small", "medium", "large"],
-          description: "Structure size (default: small)",
-          default: "small",
-        },
+        preset: { type: "string", enum: ["shelter", "wall", "platform", "tower"] },
+        size: { type: "string", enum: ["small", "medium", "large"], default: "small" },
       },
       required: ["preset"],
     },
   },
 
   mc_navigate: {
-    description:
-      "Move to coordinates, a block type, or an entity. Handles pathfinding, long-distance segment navigation, and chunk loading automatically.",
+    description: "Move to coordinates, a block type, or an entity. Provide x/y/z OR target_block OR target_entity.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        x: { type: "number", description: "X coordinate" },
-        y: { type: "number", description: "Y coordinate" },
-        z: { type: "number", description: "Z coordinate" },
-        target_block: {
-          type: "string",
-          description:
-            "Block type to navigate to (e.g., 'crafting_table', 'iron_ore'). Finds nearest.",
-        },
-        target_entity: {
-          type: "string",
-          description:
-            "Entity to navigate to (e.g., 'cow', 'villager', player name)",
-        },
-        max_distance: {
-          type: "number",
-          description: "Search radius for block/entity targets (default: 32)",
-          default: 32,
-        },
+        x: { type: "number" },
+        y: { type: "number" },
+        z: { type: "number" },
+        target_block: { type: "string", description: "Block to navigate to (e.g., 'crafting_table')" },
+        target_entity: { type: "string", description: "Entity to navigate to (e.g., 'cow', 'villager')" },
+        max_distance: { type: "number", default: 32 },
       },
       required: [],
     },
   },
 
   mc_combat: {
-    description:
-      "Fight a target entity. Auto-equips best weapon, attacks until dead or HP drops to flee threshold, then collects drops. Use for hunting animals or fighting mobs.",
+    description: "Attack an entity, auto-equip best weapon, collect drops. Omit target for nearest hostile.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        target: {
-          type: "string",
-          description:
-            "Entity to attack (e.g., 'zombie', 'cow', 'skeleton'). If omitted, attacks nearest hostile.",
-        },
-        flee_at_hp: {
-          type: "number",
-          description: "HP threshold to flee (default: 4)",
-          default: 4,
-        },
+        target: { type: "string", description: "Entity name (e.g., 'zombie', 'cow')" },
+        flee_at_hp: { type: "number", default: 4 },
       },
       required: [],
     },
   },
 
   mc_eat: {
-    description:
-      "Eat food to restore hunger. Auto-selects best food from inventory. If raw meat and furnace nearby, cooks first then eats. Returns error if no food available.",
+    description: "Eat food to restore hunger. Cooks raw meat if furnace nearby.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        food: {
-          type: "string",
-          description:
-            "Specific food to eat (optional). If omitted, eats best available.",
-        },
+        food: { type: "string", description: "Food name (optional, auto-selects best)" },
       },
       required: [],
     },
   },
 
   mc_store: {
-    description:
-      'Unified chest operations. Actions: "list" shows contents, "deposit" stores items, "withdraw" takes items, "deposit_all_except" bulk-stores keeping tools/armor.',
+    description: 'Chest operations: "list" contents, "deposit" items, "withdraw" items, "deposit_all_except" bulk-store.',
     inputSchema: {
       type: "object" as const,
       properties: {
-        action: {
-          type: "string",
-          enum: ["list", "deposit", "withdraw", "deposit_all_except"],
-          description: "Operation type",
-        },
-        item_name: {
-          type: "string",
-          description: "Item for deposit/withdraw (not needed for list)",
-        },
-        count: {
-          type: "number",
-          description: "Item count (default: all)",
-        },
-        chest_x: { type: "number", description: "Chest X (optional, uses nearest)" },
-        chest_y: { type: "number", description: "Chest Y (optional)" },
-        chest_z: { type: "number", description: "Chest Z (optional)" },
-        keep_items: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "Items to keep when using deposit_all_except (tools/armor always kept)",
-        },
+        action: { type: "string", enum: ["list", "deposit", "withdraw", "deposit_all_except"] },
+        item_name: { type: "string" },
+        count: { type: "number" },
+        chest_x: { type: "number" },
+        chest_y: { type: "number" },
+        chest_z: { type: "number" },
+        keep_items: { type: "array", items: { type: "string" }, description: "Items to keep with deposit_all_except" },
       },
       required: ["action"],
     },
   },
 
   mc_chat: {
-    description:
-      "Send and/or read chat messages in one call. Always reads unread messages. Use for team coordination and responding to player commands.",
+    description: "Read unread chat messages (and optionally send one). Call before every action for team coordination.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        message: {
-          type: "string",
-          description: "Message to send (optional). Omit to just read.",
-        },
+        message: { type: "string", description: "Message to send (omit to read only)" },
       },
       required: [],
     },
   },
 
   mc_smelt: {
-    description: "Smelt items in a furnace. Requires a furnace nearby and fuel (coal/wood). Use for raw_iron, raw_gold, raw_copper, etc.",
+    description: "Smelt items in nearby furnace (requires fuel). Use for raw_iron, raw_gold, etc.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        item_name: { type: "string", description: "Item to smelt (e.g., 'raw_iron', 'raw_gold', 'sand')" },
-        count: { type: "number", description: "Number to smelt (default: 1)", default: 1 },
+        item_name: { type: "string", description: "Item to smelt (e.g., 'raw_iron')" },
+        count: { type: "number", default: 1 },
       },
       required: ["item_name"],
     },
   },
 
   mc_flee: {
-    description: "Run away from nearest hostile mob. Use when in danger.",
+    description: "Run away from nearest hostile mob.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        distance: { type: "number", description: "Distance to flee in blocks (default: 20)", default: 20 },
+        distance: { type: "number", default: 20 },
       },
       required: [],
     },
   },
 
   mc_place_block: {
-    description: "Place a block from inventory at specific coordinates. Use for furnace, crafting_table, chest, torch, etc.",
+    description: "Place a block at coordinates (furnace, crafting_table, chest, torch, etc.).",
     inputSchema: {
       type: "object" as const,
       properties: {
-        block_type: { type: "string", description: "Block to place (e.g., 'furnace', 'crafting_table', 'chest', 'torch')" },
-        x: { type: "number", description: "X coordinate" },
-        y: { type: "number", description: "Y coordinate" },
-        z: { type: "number", description: "Z coordinate" },
+        block_type: { type: "string", description: "Block to place (e.g., 'furnace', 'chest')" },
+        x: { type: "number" },
+        y: { type: "number" },
+        z: { type: "number" },
       },
       required: ["block_type", "x", "y", "z"],
     },
   },
 
   mc_connect: {
-    description:
-      "Connect to or disconnect from a Minecraft server.",
+    description: "Connect to or disconnect from a Minecraft server.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        action: {
-          type: "string",
-          enum: ["connect", "disconnect"],
-          description: "Connect or disconnect",
-          default: "connect",
-        },
-        username: {
-          type: "string",
-          description: "Bot username (required for connect)",
-        },
-        host: {
-          type: "string",
-          description: "Server host (default: localhost)",
-          default: "localhost",
-        },
-        port: {
-          type: "number",
-          description: "Server port (default: 25565)",
-          default: 25565,
-        },
-        version: {
-          type: "string",
-          description: "Minecraft version (optional, auto-detect)",
-        },
+        action: { type: "string", enum: ["connect", "disconnect"], default: "connect" },
+        username: { type: "string", description: "Bot username (required for connect)" },
+        host: { type: "string", default: "localhost" },
+        port: { type: "number", default: 25565 },
+        version: { type: "string" },
       },
       required: ["action"],
     },

@@ -7535,3 +7535,17 @@ const isNonSolid = (name: string) => {
   2. AutoFlee should check terrain height before fleeing vertically upward
   3. OR: revert daytime HP relaxation and find different food strategy
 - **Status**: Bot respawned. Investigating fixes.
+
+## [2026-03-16] Bug: Multiple deaths during dungeon/mineshaft exploration
+
+- **Cause**: Multiple deaths (5+) while attempting to access dungeon at (87, 35, -62) and mineshaft at (68, -10, -39). Pathfinder led bot through areas with mob spawners (dungeon spawner at 86, 35, -64) and deep underground areas with no light, causing repeated mob deaths.
+- **Location**: Dungeon spawner at (86, 35, -64), Mineshaft at (68, -10, -39)
+- **Pattern**: Bot navigates underground, encounters spawner mobs (zombie/skeleton) in dark areas, dies
+- **Root Cause**: doMobLoot disabled means no food available → bot enters combat with near-zero food. Also, dark underground areas spawn mobs constantly near spawner.
+- **Deaths This Session**: 5+ (exploring dungeon/mineshaft area)
+- **Impact**: Cannot access dungeon chests for book. Cannot progress Phase 5.
+- **Fix Required**: 
+  1. Admin: /gamerule doMobLoot true
+  2. Code: When navigating underground, avoid areas with spawners in 10-block radius
+  3. Code: navigation should place torches automatically to prevent spawns
+- **Status**: Admin intervention required. Documenting and pausing dungeon exploration.

@@ -1,115 +1,92 @@
 ---
 name: survival
 description: |
-  サバイバル行動を自動実行。minecraft_survival_routineツールで食料確保・シェルター建築・ツール作成を一括処理。
-  ALWAYS use when: お腹が空いた、HPが低い、食料がない、ピッケルがない、シェルターがない、夜になった、生存の基本行動が必要な時。
-  低レベルツール(move_to, dig_block等)を個別に呼ぶ前に、まずこのスキルを使うこと。
+  サバイバル行動の手順書。mc_*コアツールで食料確保・HP回復・夜間処理・緊急対応を実行。
+  ALWAYS use when: お腹が空いた、HPが低い、食料がない、夜になった、リスポーン直後、生存の基本行動が必要な時。
 ---
 
-# サバイバルルーチンスキル
+# サバイバルスキル
 
-生存に必要な基本行動を自動で実行する高レベルスキル。
+mc_*コアツールを使ったサバイバル手順書。各ステップの結果を見て次の判断をせよ。
 
-## 初日（Phase 0/1）プロトコル — この順番で1つずつ呼べ
+## Day 1 Protocol（初日プロトコル）
 
-MCPタイムアウト(60秒)のため、1ツール1ステップ。順番を守れ。
+新規セッション開始時、この順番で1ステップずつ実行せよ。
 
-| ステップ | ツール | 目的 |
-|---------|--------|------|
-| 1 | `minecraft_validate_survival_environment` | 環境確認（食料源の有無） |
-| 2 | `minecraft_gather_resources` (oak_log x10) | 木材収集 |
-| 3 | `minecraft_craft_chain` (wooden_pickaxe) | 木ピッケル作成（作業台も自動） |
-| 4 | `minecraft_craft_chain` (wooden_sword) | 剣作成 |
-| 5 | `minecraft_survival_routine` (food) | 食料確保（狩猟） |
-| 6 | `minecraft_gather_resources` (cobblestone x32) | 石収集 |
-| 7 | `minecraft_upgrade_tools` (stone) | 石ツール一式 |
-| 8 | `minecraft_establish_base` | 作業台・かまど・チェスト・シェルター設置 |
+| # | ツール | 目的 | 失敗時の代替 |
+|---|--------|------|-------------|
+| 1 | `mc_status()` | 状況把握（HP/位置/バイオーム/インベントリ） | — |
+| 2 | `mc_gather(block="oak_log", count=10)` | 木材収集 | birch_log, spruce_logを試す |
+| 3 | `mc_craft(item="crafting_table")` | 作業台 | — |
+| 4 | `mc_craft(item="wooden_pickaxe")` | ツルハシ | — |
+| 5 | `mc_craft(item="wooden_sword")` | 剣 | — |
+| 6 | `mc_combat(target="cow")` | 食料狩り | pig→chicken→sheep→zombie(rotten_flesh) |
+| 7 | `mc_eat()` | 食事 | — |
+| 8 | `mc_gather(block="cobblestone", count=20)` | 石収集 | — |
+| 9 | `mc_craft(item="stone_pickaxe")` | 石ツルハシ | — |
+| 10 | `mc_craft(item="stone_sword")` | 石の剣 | — |
+| 11 | `mc_build(preset="shelter", size="small")` | シェルター | 壁を建てるだけでも可 |
 
-**各ステップは独立して完結する。失敗したら次に進め（完璧を求めるな）。**
-
----
-
-## 通常のサバイバルルーチン
-
-```
-minecraft_survival_routine {
-  username: "BotName",
-  priority: "auto"  // or "food", "shelter", "tools"
-}
-```
-
-### autoモードのしきい値（プロアクティブ）
-
-| 条件 | 選択される優先度 |
-|------|----------------|
-| 腹具合 < **15**/20 | food（危機になる前に動く） |
-| HP < 10 AND 腹具合 < 18 | food（HP低い時は食料最優先） |
-| ピッケルなし | tools |
-| その他 | shelter |
-
-**food < 10 まで待つな。15 を切ったら即食料確保。**
+**各ステップは独立して完結。失敗したら次に進め（完璧を求めるな）。**
 
 ---
 
-## 優先度モード
+## Night Protocol（夜間プロトコル）
 
-### food（食料確保）
-1. インベントリに食料があれば即食べる
-2. **チェストから食料を取得**（優先）
-   - `minecraft_list_chest` で最寄りのチェスト内容を確認
-   - 食料アイテムがあれば `minecraft_take_from_chest` で取得
-3. チェストに食料がない場合のみ、近くの動物を探索（牛、豚、鶏、羊）
-4. 動物を狩猟（生肉でも食べる — 腐った肉も飢餓よりマシ）
-5. かまどがあれば肉を調理
+`mc_status()`でtime.phase="night"/"midnight"の時：
 
-### shelter（シェルター建築）
-1. ベッドの有無を確認
-2. ベッドがなければ材料収集（羊毛 + 板材）
-3. 小型シェルターを自動建築
-
-### tools（ツール作成）
-1. ピッケルがなければクラフト
-2. 斧がなければクラフト
-3. シャベルがなければクラフト
+1. `mc_status()` — 脅威を確認
+2. ベッドがインベントリにあれば → `mc_sleep()` (Tier2ツール、夜のみ表示)
+3. ベッドがなければ：
+   - シェルター内にいるか確認
+   - シェルターがなければ `mc_build(preset="shelter", size="small")`
+   - 敵が近ければ `mc_combat()` で排除
+4. 夜明けまで `mc_status()` で状況監視
 
 ---
 
-## HP/食料しきい値の行動ガイド
+## Food Emergency Protocol（食料緊急プロトコル）
 
-| HP | 腹具合 | すべきこと |
-|----|--------|-----------|
-| 20 | < 15 | `survival_routine {priority: "food"}` |
-| < 10 | 任意 | 即 `minecraft_eat` → フリーズしたら `survival_routine {priority: "food"}` |
-| < 4 | 任意 | 即 `minecraft_flee` → 食べる → シェルターへ |
+食料が尽きた時の優先順位：
+
+1. `mc_status()` — インベントリ内の食料確認
+2. `mc_eat()` — 何か食べられるものがあれば即食べる
+3. `mc_store(action="list")` — チェストに食料があるか確認
+4. チェストに食料あれば → `mc_store(action="withdraw", item_name="bread")`
+5. チェストにもなければ → 狩猟:
+   - `mc_combat(target="cow")` → cow>pig>chicken>sheep
+   - `mc_eat()` — 生肉でも食べる
+6. 動物もいなければ → ゾンビ狩り:
+   - `mc_combat(target="zombie")` → rotten_fleshを得る
+   - `mc_eat(food="rotten_flesh")` — 飢餓死よりマシ
+7. 最終手段 → 釣り (search_toolsで"fish"を検索)
 
 **HPが低くてもリスポーンするな。食料で回復せよ。**
 
 ---
 
-## 食料の選好順（調理前提にするな）
+## HP/食料の行動ガイド
+
+| HP | 腹具合 | すべきこと |
+|----|--------|-----------|
+| 20 | < 15 | `mc_eat()` → 食料なければFood Emergency Protocol |
+| < 10 | 任意 | 即 `mc_eat()` → 食料なければ上記プロトコル |
+| < 5 | 任意 | `mc_flee()` (Tier2) → 安全な場所で `mc_eat()` |
+| < 4 | 脅威あり | 絶対に戦闘するな。`mc_flee()` 最優先 |
+
+---
+
+## 食料の選好順
 
 1. 調理済み肉（cooked_beef等）← 最高効率
-2. 生肉（beef, porkchop, chicken等）← 十分に有効
-3. パン・農作物 ← あれば使う
+2. パン・農作物 ← あれば使う
+3. 生肉（beef, porkchop等）← 十分に有効
 4. 腐った肉（rotten_flesh）← 飢餓死よりマシ。緊急時OK
-5. 釣り（fishing_rod必要）← 代替手段
 
 ---
 
 ## エラー対応
 
-- `No food sources found`: まずチェストを確認（`minecraft_list_chest`）。なければ64ブロック以内の動物を探す。それも無ければ釣りか腐った肉。
-- `No suitable building materials`: resource-gatheringで木材や石を収集
-- `Crafting failed`: 素材不足 → 収集してから再実行
-
----
-
-## サーバー制限への対応
-
-- **動物がスポーンしない**: チェストから食料を取得するのが唯一の方法
-- **アイテムドロップ無効**: ブロックを壊しても何も落ちない場合、チェストの既存アイテムのみ使用可能
-
-このような環境では、**チェストアクセスツール**が生存の鍵となります：
-1. `minecraft_list_chest` - 最寄りチェストの内容確認
-2. `minecraft_take_from_chest` - 食料・道具の取得
-3. `minecraft_store_in_chest` - 不要品の保管
+- `No food in inventory`: Food Emergency Protocol実行
+- 動物がいない: チェスト確認 → ゾンビ狩り → 釣り
+- サーバーに動物がスポーンしない: チェストのみが食料源
