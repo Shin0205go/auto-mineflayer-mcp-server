@@ -1,3 +1,19 @@
+## [2026-03-17] Bug: Death by Pillager in OW (AutoFlee insufficient vs ranged mob)
+
+- **Cause**: Bot navigating near a Pillager Outpost at HP~8 in OW at night. AutoFlee triggered but pillager's ranged arrows continued hitting bot while fleeing. HP went 8→5→2→0.
+- **Location**: `src/bot-manager/bot-survival.ts` — AutoFlee logic (flee toward safe direction doesn't clear pillager shots)
+- **Coordinates**: OW approximately (-33, 71, 55) near a Pillager Outpost
+- **Last Actions**:
+  1. Navigating toward portal at (-46, 93, 87) in OW
+  2. Path went through forested area near pillager outpost
+  3. AutoFlee triggered but ranged mob kept shooting
+  4. Death: "Claude1 was shot by Pillager"
+- **Fix Applied**: None yet. AutoFlee doesn't help vs ranged mobs at distance
+- **Workaround**: After respawn, admin (shng25) had already given HP=20, bot re-entered Nether successfully
+- **Status**: Recorded. AutoFlee needs to prioritize cover vs ranged mobs.
+
+---
+
 ## [2026-03-17] Bug: Death by fall in Nether (HP=1 with pathfinder going up)
 
 - **Cause**: Bot at HP=1 attempted movement. Pathfinder chose route going UP to Y=116 (soul_sand_valley ceiling area) then fell 24+ blocks. At HP=1 any fall is lethal.

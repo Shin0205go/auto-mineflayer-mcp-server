@@ -367,23 +367,33 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   // Re-read HP after eating
   const hpNow = bot.health ?? 20;
 
-  // During daytime with no hostile mobs nearby, allow movement at HP≥2 (starvation deadlock prevention)
-  // At night or with hostile mobs nearby, use strict HP check to prevent fall death
-  if (isDaytime && !hasHostileNearby) {
-    // Daytime safe: only block if truly near-death (hp < 2, i.e. 1 heart)
-    if (hpNow < 2 && distance > 30) {
-      return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20). Risk of high-altitude pathfinding causing fall death. Eat food or heal first, then retry movement.`;
+  // PRE-CHECK: If target block is a portal, skip HP/distance safety checks.
+  // Portal navigation teleports the bot — no fall risk. Blocking portal entry at low HP
+  // causes permanent deadlock (can't heal without food, can't get food without entering Nether).
+  const targetBlockPreCheck = bot.blockAt(targetPos);
+  const isTargetPortal = targetBlockPreCheck &&
+    (targetBlockPreCheck.name === "nether_portal" || targetBlockPreCheck.name === "end_portal");
+  if (!isTargetPortal) {
+    // During daytime with no hostile mobs nearby, allow movement at HP≥2 (starvation deadlock prevention)
+    // At night or with hostile mobs nearby, use strict HP check to prevent fall death
+    if (isDaytime && !hasHostileNearby) {
+      // Daytime safe: only block if truly near-death (hp < 2, i.e. 1 heart)
+      if (hpNow < 2 && distance > 30) {
+        return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20). Risk of high-altitude pathfinding causing fall death. Eat food or heal first, then retry movement.`;
+      }
+    } else {
+      // Nighttime or hostile nearby: block movement when HP is dangerously low
+      // Bug fix (bot1.md 2026-03-16): Raised threshold from 3 to 8 — skeleton + enderman combo at night
+      // with HP=4.5 caused death. 4 hearts (hp=8) provides survivability for 1-2 hits.
+      if (hpNow < 8 && distance > 30) {
+        return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20) at night/hostile nearby. Risk of fall death under mob pressure. Eat food or heal first, then retry movement.`;
+      }
+    }
+    if (hpNow < 10 && distance > 30) {
+      console.error(`[Move] WARNING: Moving ${distance.toFixed(1)} blocks with low HP(${hpNow.toFixed(1)}/20). Proceeding with caution.`);
     }
   } else {
-    // Nighttime or hostile nearby: block movement when HP is dangerously low
-    // Bug fix (bot1.md 2026-03-16): Raised threshold from 3 to 8 — skeleton + enderman combo at night
-    // with HP=4.5 caused death. 4 hearts (hp=8) provides survivability for 1-2 hits.
-    if (hpNow < 8 && distance > 30) {
-      return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20) at night/hostile nearby. Risk of fall death under mob pressure. Eat food or heal first, then retry movement.`;
-    }
-  }
-  if (hpNow < 10 && distance > 30) {
-    console.error(`[Move] WARNING: Moving ${distance.toFixed(1)} blocks with low HP(${hpNow.toFixed(1)}/20). Proceeding with caution.`);
+    console.error(`[Move] Target is a portal block — bypassing HP/distance safety checks for portal entry.`);
   }
 
   // Check if target position is a portal block — delegate to enterPortal()
