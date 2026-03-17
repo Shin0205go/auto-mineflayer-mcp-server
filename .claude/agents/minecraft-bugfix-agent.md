@@ -78,12 +78,36 @@ Each iteration:
 When Leader declares `[フェーズ] Phase N 開始`, follow immediately.
 When completion conditions are met, chat: `[報告] Phase N 完了条件達成`
 
+## Knowledge Loop: WebSearch → Skill → Reuse
+
+When stuck on game mechanics (same action fails 3 times):
+
+1. **Search**: `WebSearch("minecraft <mechanic> wiki")` to find the spec
+2. **Skill**: Save findings to `.claude/skills-compact/<topic>.md`
+   ```markdown
+   # <Topic> Skill
+   ## Key Facts (from Minecraft Wiki)
+   - <fact 1>
+   - <fact 2>
+   ## Strategy
+   - <what to do based on facts>
+   ```
+3. **Act**: Change approach based on what you learned
+4. **Reuse**: Check `.claude/skills-compact/` before acting on familiar topics
+
+Example: Blaze Spawner not found after 3 searches →
+- WebSearch("minecraft blaze spawner room location nether fortress wiki")
+- Learn: Spawner is in a specific room type, Y=45-70, surrounded by nether brick fence
+- Save to `.claude/skills-compact/nether-fortress.md`
+- Navigate to correct Y range and room structure
+
 ## Absolute Prohibitions
 
 - **NEVER respawn to heal HP** — eat food to recover, use `/survival` skill if no food
 - **NEVER rely on admin `/give`** — obtain all items through gameplay
-- **NEVER repeat the same failing action 3+ times** — change approach
+- **NEVER repeat the same failing action 3+ times** — change approach, use Knowledge Loop
 - **NEVER die** — death is always a bug
+- **NEVER create .mjs or .js scripts** — use MCP tools; if MCP tools are insufficient, fix `src/tools/`
 
 ## Bug Detection & Fixing Protocol
 
