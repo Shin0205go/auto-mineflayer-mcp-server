@@ -1,3 +1,19 @@
+## [2026-03-17] Bug: AutoFlee fires when approaching portal (within 3 blocks, HP<=10)
+
+- **Cause**: AutoFlee triggered at HP=7.8 when bot was 2-3 blocks from portal entry point. The portal block suppression only checked if bot was INSIDE portal, but flee was redirecting the pathfinder goal before bot stepped in.
+- **Location**: `src/bot-manager/bot-core.ts` — AutoFlee and CreeperFlee handlers
+- **Coordinates**: OW ~(-43, 92, 88) near portal at (-46, 93, 87)
+- **Last Actions**:
+  1. Bot reached destination (-43.7, 92, 88.3) — portal was in reach
+  2. Skeleton spawned nearby, HP dropped to 7.8
+  3. AutoFlee fired, overriding the portal-entry pathfinder goal
+  4. Bot fled away from portal to (-50, 91, 85)
+- **Fix Applied**: Extended portal suppression to also check within 3 blocks of portal. If any nether_portal/end_portal within 3 blocks XZ and 2 blocks Y, suppress flee.
+- **Fix Location**: `src/bot-manager/bot-core.ts` — AutoFlee and CreeperFlee handlers (commit 71e475a)
+- **Status**: Fixed
+
+---
+
 ## [2026-03-17] Bug: Death by Pillager in OW (AutoFlee insufficient vs ranged mob)
 
 - **Cause**: Bot navigating near a Pillager Outpost at HP~8 in OW at night. AutoFlee triggered but pillager's ranged arrows continued hitting bot while fleeing. HP went 8→5→2→0.
@@ -389,3 +405,36 @@ Bot needs to explore further (200+ blocks) to find animals.
   4. Or: `/give Claude1 cooked_beef 16` so bot can survive in Nether for blaze hunt
 - **Bot State**: HP=5, Hunger=4, Pos=(-12,110,2) in soul_sand_valley
 - **Status**: BLOCKED. Admin intervention required.
+
+---
+
+## [2026-03-17] Bug: Death by Skeleton in Nether near portal spawn (HP=1, no food)
+
+- **Cause**: Bot entered Nether at HP=1 Hunger=0 (no food due to doMobLoot disabled). Skeleton spawned near portal spawn at (-12, 110, 3). AutoFlee triggered but HP was already critical. "Claude1 went up in flames" = fire damage (may have been knocked into lava/fire).
+- **Location**: `src/bot-manager/bot-core.ts` — AutoFlee during portal entry suppressed, but death still occurred from skeleton AFTER portal entry
+- **Coordinates**: Nether ~(-12, 110, 3) (portal spawn area)
+- **Last Actions**:
+  1. Entered Nether via portal at (-46, 93, 87) OW
+  2. Respawned in Nether at (-12, 110, 3) with HP=1
+  3. Skeleton hit, HP→0, "went up in flames"
+- **Fix Applied**: Session 186 - AutoFlee suppressed during portal entry (bot-core.ts commit 6379575). But survival after portal entry at HP=1 remains issue.
+- **Root Cause**: No food available (doMobLoot disabled), starvation reduces HP to 1 before portal entry, making bot trivially killable.
+- **Status**: Need admin food before Nether entry at low HP.
+
+---
+
+## [2026-03-17] Bug: Death by lava in Nether navigation (pathfinder routes over lava lakes)
+
+- **Cause**: `checkGroundBelow()` treated lava blocks as solid ground, allowing sub-step navigation to waypoints above lava lakes. Pathfinder would route bot over lava lake edge and bot would fall into lava.
+- **Location**: `src/bot-manager/minecraft-utils.ts:checkGroundBelow()` and `src/bot-manager/bot-movement.ts`
+- **Coordinates**: Nether ~(70, 72, -49) — fell into lava lake between T1 and T2
+- **Last Actions**:
+  1. Navigating from T1 (24, 87, -19) toward T2 (131, 47, -90) 
+  2. Sub-step waypoint at ~(68, 78, -46) was over a lava lake
+  3. FALL DETECTED stopped pathfinder but bot had already started falling
+  4. "Claude1 tried to swim in lava"
+- **Fix Applied**: 
+  1. `checkGroundBelow()` returns `hasLavaBelow=true` when lava found below destination
+  2. `moveTo()` aborts immediately when `hasLavaBelow=true` with descriptive error
+  3. Commit: 1816582
+- **Status**: Fixed. Navigation will now abort instead of routing over lava lakes.
