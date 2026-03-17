@@ -12,6 +12,16 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/shingo/Develop/auto-mineflayer-mcp-server/.claude/hooks/validate-agent-bash.sh",
+            "statusMessage": "Checking Bash permissions"
+          }
+        ]
+      },
+      {
         "matcher": "mcp__mineflayer__minecraft_chat",
         "hooks": [
           {
