@@ -1,3 +1,19 @@
+## [2026-03-17] Bug: Death by fall in Nether (HP=1 with pathfinder going up)
+
+- **Cause**: Bot at HP=1 attempted movement. Pathfinder chose route going UP to Y=116 (soul_sand_valley ceiling area) then fell 24+ blocks. At HP=1 any fall is lethal.
+- **Location**: `src/bot-manager/bot-movement.ts` — MoveTo FALL DETECTED logic
+- **Coordinates**: Nether ~(16, 88, -24) → died at ~(20, 116, -23) → fall to (20, 92, -23)
+- **Last Actions**:
+  1. HP=1 from skeleton attack in previous session
+  2. Attempted `mc_navigate` to (38, 88, -35) to approach fortress
+  3. Pathfinder took bot UP to Y=116 (ceiling), then bot fell
+  4. System: "Claude1 fell from a high place"
+- **Fix Applied**: The Nether deadlock fix (isDaytime=true in Nether) was applied but not sufficient to prevent this death. Root cause: pathfinder chose upward route at HP=1. The FALL DETECTED at 24 blocks was correct but too late.
+- **Positive outcome**: Bot respawned in OW at (156,41,-104) with HP=13.3 and most items retained
+- **Status**: Recorded. Need food before returning to Nether.
+
+---
+
 ## [2026-03-17] Bug: Nether movement deadlock — isDaytime always false in Nether
 
 - **Cause**: `bot.time.timeOfDay` in Nether dimension is always 0, and since `isDaytime = timeOfDay < 12541` resolves to `true` (0 < 12541), BUT the dimension check is separate. After investigation: ネザーでは敵mob（wither_skeleton）が存在し`hasHostileNearby`がtrueになり、HP=2で距離>30の移動がブロックされた。
