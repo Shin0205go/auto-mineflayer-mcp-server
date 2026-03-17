@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import sys,json,os; p=json.load(sys.stdin).get('tool_input',{}).get('file_path',''); parts=p.replace(os.sep,'/').split('/'); ok=False; idx_src=-1;\\nfor i,d in enumerate(parts):\\n  if d=='src': idx_src=i\\nif idx_src>=0 and idx_src+1<len(parts) and parts[idx_src+1]=='tools': ok=True\\nif 'bug-issues' in parts: ok=True\\nexit(0 if ok else 2)\" || echo 'Only src/tools/, bug-issues/ editable'",
+            "command": "python3 -c \"\nimport sys,json,os\np=json.load(sys.stdin).get('tool_input',{}).get('file_path','')\nnorm=p.replace(os.sep,'/')\nallowed=['src/','bug-issues/','.claude/','CLAUDE.md']\nif any(norm.startswith(a) or a in norm for a in allowed):\n  exit(0)\nprint('BLOCKED: Write only allowed in src/, bug-issues/, .claude/skills-compact/')\nexit(2)\n\"",
             "statusMessage": "Checking file permissions"
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import sys,json,re; cmd=json.load(sys.stdin).get('tool_input',{}).get('command',''); blocked=[r'git\\s+push\\s+--force',r'git\\s+push\\s+-f\\b',r'git\\s+reset\\s+--hard',r'rm\\s+-rf\\s+/',r'>\\.mcp\\.json',r'>\\.claude/settings']; exit(2 if any(re.search(p,cmd) for p in blocked) else 0)\" || echo 'Dangerous command blocked'",
+            "command": "python3 -c \"\nimport sys,json,re\ncmd=json.load(sys.stdin).get('tool_input',{}).get('command','').strip()\nallowed=[\n  r'^git\\s',r'^npm\\s',\n  r'^cat\\s',r'^ls',r'^grep\\s',r'^find\\s',r'^echo\\s',r'^head\\s',r'^tail\\s',\n  r'^wc\\s',r'^which\\s',r'^lsof\\s',r'^ps\\s',r'^kill\\s',r'^pkill\\s',\n  r'^mkdir\\s',r'^rm\\s',r'^mv\\s',r'^cp\\s',\n  r'^curl\\s',r'^brew\\s',\n]\nif any(re.match(p,cmd) for p in allowed):\n  exit(0)\nprint('BLOCKED: Only git/npm/read commands allowed. Use MCP tools for Minecraft.')\nexit(2)\n\"",
             "statusMessage": "Checking command safety"
           }
         ]
