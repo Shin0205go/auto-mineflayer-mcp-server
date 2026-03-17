@@ -519,9 +519,12 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   const groundCheck = checkGroundBelow(bot, x, y, z, 10);
   if (!groundCheck.safe && groundCheck.fallDistance >= 10) {
     console.error(`[Move] WARNING: No solid ground at destination (${x}, ${y}, ${z}), fall distance: ${groundCheck.fallDistance} blocks`);
-    // If HP is critically low, a 10+ block fall is lethal - block movement
-    if (hp < 10) {
-      return `⚠️ SAFETY: Destination (${x}, ${y}, ${z}) has no ground within ${groundCheck.fallDistance} blocks below. Fall would be lethal at HP=${hp.toFixed(1)}/20. Aborting movement.`;
+    // Only block if HP is truly critical (< 3) AND fall would be lethal.
+    // Previously blocked at hp < 10, but this prevented pathfinder from routing around the gap,
+    // causing permanent deadlock in Nether navigation (bot stuck at portal spawn unable to move).
+    // Bug fix: pathfinder can navigate around 10-block falls; only block when survival is impossible.
+    if (hpNow < 3) {
+      return `⚠️ SAFETY: Destination (${x}, ${y}, ${z}) has no ground within ${groundCheck.fallDistance} blocks below. Fall would be lethal at HP=${hpNow.toFixed(1)}/20. Aborting movement.`;
     }
   }
 
