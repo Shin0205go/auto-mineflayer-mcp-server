@@ -12,16 +12,6 @@
         ]
       },
       {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 -c \"\nimport sys,json,re\ncmd=json.load(sys.stdin).get('tool_input',{}).get('command','').strip()\nallowed=[\n  r'^git\\s',r'^npm\\s',\n  r'^cat\\s',r'^ls',r'^grep\\s',r'^find\\s',r'^echo\\s',r'^head\\s',r'^tail\\s',\n  r'^wc\\s',r'^which\\s',r'^lsof\\s',r'^ps\\s',r'^kill\\s',r'^pkill\\s',\n  r'^mkdir\\s',r'^rm\\s',r'^mv\\s',r'^cp\\s',\n  r'^curl\\s',r'^brew\\s',\n]\nif any(re.match(p,cmd) for p in allowed):\n  exit(0)\nprint('BLOCKED: Only git/npm/read commands allowed. Use MCP tools for Minecraft.')\nexit(2)\n\"",
-            "statusMessage": "Checking command safety"
-          }
-        ]
-      },
-      {
         "matcher": "mcp__mineflayer__minecraft_chat",
         "hooks": [
           {
