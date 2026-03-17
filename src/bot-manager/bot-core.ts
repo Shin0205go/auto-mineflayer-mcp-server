@@ -726,6 +726,17 @@ export class BotCore extends EventEmitter {
             e.position.distanceTo(bot.entity.position) < 7
           );
           if (creeper) {
+            // Bug fix (Session 186): Do NOT flee when inside a portal block.
+            // CreeperFlee during portal entry overrides the portal goal via pathfinder.setGoal()
+            // and causes portal teleport to fail (GoalChanged exception).
+            const creeperFleeBlockFeet = bot.blockAt(bot.entity.position.floored());
+            const creeperFleeBlockHead = bot.blockAt(bot.entity.position.floored().offset(0, 1, 0));
+            const creeperFleeInPortal = (creeperFleeBlockFeet?.name === "nether_portal" || creeperFleeBlockFeet?.name === "end_portal" ||
+                                         creeperFleeBlockHead?.name === "nether_portal" || creeperFleeBlockHead?.name === "end_portal");
+            if (creeperFleeInPortal) {
+              console.error(`[CreeperFlee] Suppressed: bot is inside portal block, standing still for teleportation.`);
+              return;
+            }
             const dist = creeper.position.distanceTo(bot.entity.position);
             const dir = bot.entity.position.minus(creeper.position).normalize();
             const fleeTarget = bot.entity.position.plus(dir.scaled(12));
