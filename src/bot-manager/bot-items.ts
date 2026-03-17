@@ -511,9 +511,11 @@ export async function dropItem(bot: Bot, itemName: string, count?: number): Prom
 export async function equipArmor(bot: Bot): Promise<string> {
   // In Nether, prioritize gold armor to prevent Piglin aggression
   const isNether = bot.game.dimension === "the_nether";
+  // Note: Minecraft item names use "golden_" prefix for gold armor (e.g. "golden_helmet"),
+  // not "gold_". The armorPriority list uses the actual item name prefix.
   const armorPriority = isNether
-    ? ["gold", "netherite", "diamond", "iron", "chainmail", "leather"]
-    : ["netherite", "diamond", "iron", "chainmail", "gold", "leather"];
+    ? ["golden", "netherite", "diamond", "iron", "chainmail", "leather"]
+    : ["netherite", "diamond", "iron", "chainmail", "golden", "leather"];
   const armorSlots = {
     helmet: "head",
     chestplate: "torso",
