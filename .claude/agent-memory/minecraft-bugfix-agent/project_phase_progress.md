@@ -1,6 +1,6 @@
 ---
-name: Phase Progress - 2026-03-17 Sessions 180-184
-description: Current gameplay phase progress and state as of Session 184
+name: Phase Progress - 2026-03-17 Sessions 180-186
+description: Current gameplay phase progress and state as of Session 186
 type: project
 ---
 
@@ -8,85 +8,84 @@ type: project
 
 Current Phase: Phase 6 (Nether)
 Previous Phase: Phase 5 (Diamond/Enchanting Table) - COMPLETED
-Session: 184 (2026-03-17)
+Session: 186 (2026-03-17)
 
 ## Phase 6 Requirements
 1. blaze_rod x7 - NOT OBTAINED (BLOCKED)
 2. ender_pearl x12 - COMPLETE
 
+## Current State (Session 186)
+- Bot in OW at (24, 86, -19), HP=16.3, Hunger=15
+- OW Portal at (-45, 93, 87) - WORKING (confirmed portal entry works)
+- Nether portal exit: (-12, 110, 3) soul_sand_valley biome - DANGEROUS
+
+## KEY DISCOVERY Session 186
+- Portal entry is NOW RELIABLE with flee-suppression fixes
+- The bot can enter Nether portal successfully when HP > 5 (tested multiple times)
+- Confirmed bot reaches Nether at (-12, 110, 3)
+
 ## CRITICAL BLOCKERS
 
-### Blocker 1: Nether Portal (Nether->OW) Not Working
-- Bot is at (-12,110,2) in soul_sand_valley (Nether)
-- Nether portal at (-12,110,2) exists but will NOT teleport bot back to OW
-- Tried 10+ times across sessions 180-184, always 30s timeout
-- Code bug FIXED (shouldSkip logic in bot-movement.ts, commit 6c2b56c)
-- Server-side issue: may have disabled portal travel
-- Admin must check: `allow-nether=true` in server.properties
-- Admin must check: OW portal at (-47 to -44, y=92-96, z=87) still active?
+### Blocker 1: No Food - Can't survive in Nether
+- Bot enters Nether at HP=6-15, gets attacked by skeletons/endermen at portal spawn
+- Without food, HP can't regenerate
+- doMobLoot likely still disabled on server
+- Bot keeps dying in Nether within seconds of entering
 
-### Blocker 2: No Food (HP=5, Hunger=4)
-- Bot has NO food items in inventory
-- HP=5 - too low to safely explore Nether
-- doMobLoot status: believed disabled (blaze kills yield 0 rods in previous sessions)
-- No passive mobs found in OW area (depopulated)
+### Blocker 2: No Armor
+- Bot has: iron_sword x1 (newly crafted), iron_ingot x2
+- No helmet, no chestplate, no leggings, no boots
+- Each skeleton/zombie hit takes 3-4 HP with no armor
+- 2-3 hits = death
 
-### Admin Actions Required (CRITICAL)
-```
-Option A: /tp Claude1 -45 93 87  (teleport to OW portal)
-Option B: /give Claude1 cooked_beef 16  (give food while in Nether)
-Option C: /gamerule doMobLoot true  (enable mob drops for blaze rods)
-Option D: Check server.properties allow-nether=true
-```
+### Admin Actions Required
+1. `/give Claude1 cooked_beef 16` - food for HP regen
+2. `/give Claude1 iron_chestplate 1` OR `/give Claude1 iron_helmet 1` - armor
+3. OR `/tp Claude1 -12 110 3` then `/tp Claude1 214 25 -134` (skip dangerous path)
 
-## Nether Fortress CONFIRMED
-- Location: (214, 25, -134) in Nether coords
-- nether_bricks found at (168,11,-133) suggests low Y level
-- Blaze Spawner likely at Y=11-25 range
-- Distance from Nether portal exit: ~233 blocks
+## Nether Navigation Progress
+- T1=(24,87,-19) - reachable from portal spawn
+- T2=(131,47,-90) - reachable from T1 (but dangerous fall terrain)
+- T3=(175,33,-118) - BLOCKED by lava lake (fix applied: checkGroundBelow detects lava)
+- Fortress=(214,25,-134) - confirmed location, nether_bricks found at (168,11,-133)
+
+### High-Y Route (avoids lava at T3)
+New waypoints to avoid lava lake:
+- T2a=(90,65,-60), T2b=(130,65,-80) - higher Y avoids lava
+- T3a=(165,55,-110) - still might have lava
+- T3b=(190,40,-120), then (214,25,-134)
+
+## Code Fixes Applied Session 186
+1. AutoFlee suppressed when INSIDE portal (commit 6379575)
+2. CreeperFlee suppressed when INSIDE portal (commit 1e2bdc7)
+3. checkGroundBelow returns hasLavaBelow=true for lava (commit 1816582)
+4. moveTo aborts when lava below destination (part of #3)
+5. AutoFlee/CreeperFlee suppressed when within 6 blocks of portal (commit 8d9c14d)
+6. Standable candidate loop stops on fall_detected (commit e5c2aa1)
 
 ## Infrastructure
-- Overworld Nether portal: (-47 to -44, y=92-96, z=87) - BUILT BUT OW->NETHER ONLY
-- Nether portal exit (Nether side): (-12, 110, 2)
-- Enchanting table: (7,107,-1)
-- Chest at: (9,96,4) - contains no food
-- Current position: (-12, 110, 2) in soul_sand_valley (Nether)
+- Overworld Nether portal: (-45, 93, 87) - WORKING
+- Nether portal exit: (-12, 110, 3)
+- Enchanting table: (7, 107, -1)
+- Current OW position: (24, 86, -19)
+- Crafting table at: (-3, 104, 20)
 
-## Current Inventory (Session 184)
+## Current Inventory (Session 186)
 - ender_pearl x12
-- iron_sword x1, stone_pickaxe x1, stone_axe x1
-- iron_ingot x4, diamond x1
+- iron_sword x1, stone_pickaxe x1 (presumed - had before)
+- iron_ingot x2, diamond x1
 - coal x41, gold_ingot x31
-- soul_sand x48, soul_soil x27, netherrack x64*6, quartz x4
-- cobblestone x63, dirt x36+64+64+64, sand x1
-- birch_log x5, birch_planks x28, stick x30, birch_leaves x9, birch_sapling x4
-- paper x3, pumpkin x1, dark_oak_sapling x1, dark_oak_leaves x2
-- flint_and_steel x1, bucket x1, chest x2, furnace x1, flint x1
-- slots_used: 36/36 (FULL)
+- cobblestone ~158, dirt ~346, sand x3, gravel x7
+- soul_sand x66, soul_soil x13
+- birch_log x12, birch_planks x25, stick x29
+- flint_and_steel x1, bucket x1, chest x2, furnace x1
 - NO food
 
-## Code Fixes Applied Sessions 180-184
-1. Fix: bot-movement.ts nether_portal shouldSkip bug (commit 6c2b56c)
-   - From Nether, enterPortal() was being skipped for nether_portal targets
-   - Fixed to only skip end_portal when already in End dimension
-2. Fix: bot-movement.ts alreadyInPortal always re-enters to reset 4s timer
-
-## Next Session Strategy
-If admin runs `/tp Claude1 -45 93 87`:
-1. Eat any food admin gives
-2. Hunt animals for food (if doMobLoot enabled)
-3. Navigate to portal at (-45,93,87)
-4. Enter Nether
-5. Navigate to fortress (214,25,-134) - 233 blocks
-6. Hunt blazes at Y=11-25 range
-
-If admin runs `/give Claude1 cooked_beef 16`:
-1. Eat to Hunger>=18
-2. Navigate to fortress (214,25,-134) via stages
-3. Hunt blazes - retreat if Hunger < 6
-
-## Inventory Full Problem
-slots_used=36/36 - FULL inventory
-Need to drop netherrack stacks to make room
-Drop: netherrack (have 6 stacks = 6 slots), soul_sand, soul_soil
-Keep: ender_pearl, iron_sword, iron_ingot, diamond, flint_and_steel, tools
+## Next Steps
+1. Wait for admin food/armor
+2. With HP=20+food: Enter portal at (-45, 93, 87)
+3. Navigate Nether with high-Y route to avoid lava
+4. Find blaze spawner at fortress (214,25,-134)
+5. Kill 7 blazes for 7 blaze_rod
+6. Combine with ender_pearl x12 → 12 eyes of ender
+7. Report Phase 6 complete
