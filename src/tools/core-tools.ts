@@ -383,11 +383,16 @@ export async function mc_combat(
     target = targetOrArgs as string | undefined;
   }
 
-  // Auto-equip best weapon
+  // Auto-equip best weapon and armor
   try {
     await botManager.equipWeapon(username);
   } catch {
     // Continue without weapon
+  }
+  try {
+    await botManager.equipArmor(username);
+  } catch {
+    // Continue without armor
   }
 
   // Attack target
