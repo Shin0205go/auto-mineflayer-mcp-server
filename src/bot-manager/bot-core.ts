@@ -548,8 +548,24 @@ export class BotCore extends EventEmitter {
               const botBlockHead = bot.blockAt(bot.entity.position.floored().offset(0, 1, 0));
               const isInPortal = (botBlockFeet?.name === "nether_portal" || botBlockFeet?.name === "end_portal" ||
                                   botBlockHead?.name === "nether_portal" || botBlockHead?.name === "end_portal");
-              if (isInPortal) {
-                console.error(`[AutoFlee] Suppressed: bot is inside portal block, standing still for teleportation.`);
+              // Bug fix (Session 186b): Also suppress flee when a portal is within 3 blocks.
+              // The bot may be approaching the portal and AutoFlee fires just before entry.
+              let isNearPortal = false;
+              if (!isInPortal) {
+                const botPos = bot.entity.position;
+                for (let dx = -3; dx <= 3 && !isNearPortal; dx++) {
+                  for (let dy = -2; dy <= 2 && !isNearPortal; dy++) {
+                    for (let dz = -3; dz <= 3 && !isNearPortal; dz++) {
+                      const nearBlock = bot.blockAt(botPos.floored().offset(dx, dy, dz));
+                      if (nearBlock?.name === "nether_portal" || nearBlock?.name === "end_portal") {
+                        isNearPortal = true;
+                      }
+                    }
+                  }
+                }
+              }
+              if (isInPortal || isNearPortal) {
+                console.error(`[AutoFlee] Suppressed: bot is ${isInPortal ? "inside" : "near"} portal block, standing still for teleportation.`);
               } else {
               const nearestHostile = Object.values(bot.entities)
                 .filter(e => e !== bot.entity && e.name && isHostileMob(bot, e.name.toLowerCase()))
@@ -733,8 +749,23 @@ export class BotCore extends EventEmitter {
             const creeperFleeBlockHead = bot.blockAt(bot.entity.position.floored().offset(0, 1, 0));
             const creeperFleeInPortal = (creeperFleeBlockFeet?.name === "nether_portal" || creeperFleeBlockFeet?.name === "end_portal" ||
                                          creeperFleeBlockHead?.name === "nether_portal" || creeperFleeBlockHead?.name === "end_portal");
-            if (creeperFleeInPortal) {
-              console.error(`[CreeperFlee] Suppressed: bot is inside portal block, standing still for teleportation.`);
+            // Bug fix (Session 186b): Also suppress when portal is nearby (within 3 blocks)
+            let creeperFleeNearPortal = false;
+            if (!creeperFleeInPortal) {
+              const cfPos = bot.entity.position;
+              for (let dx = -3; dx <= 3 && !creeperFleeNearPortal; dx++) {
+                for (let dy = -2; dy <= 2 && !creeperFleeNearPortal; dy++) {
+                  for (let dz = -3; dz <= 3 && !creeperFleeNearPortal; dz++) {
+                    const nb = bot.blockAt(cfPos.floored().offset(dx, dy, dz));
+                    if (nb?.name === "nether_portal" || nb?.name === "end_portal") {
+                      creeperFleeNearPortal = true;
+                    }
+                  }
+                }
+              }
+            }
+            if (creeperFleeInPortal || creeperFleeNearPortal) {
+              console.error(`[CreeperFlee] Suppressed: bot is ${creeperFleeInPortal ? "inside" : "near"} portal block, standing still for teleportation.`);
               return;
             }
             const dist = creeper.position.distanceTo(bot.entity.position);
