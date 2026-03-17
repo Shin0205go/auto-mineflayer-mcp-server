@@ -508,6 +508,13 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
         const suffix = isOre ? ` (near ${targetBlock.name} - use minecraft_dig_block to mine it)` : "";
         return `Moved near ${targetBlock.name} at (${candidate.pos.x.toFixed(1)}, ${candidate.pos.y.toFixed(1)}, ${candidate.pos.z.toFixed(1)})${suffix}` + getBriefStatus(managed);
       }
+      // Bug fix (Session 186): If a standable candidate attempt caused a fall,
+      // do NOT try more candidates - the bot's position has changed due to falling
+      // and further candidate attempts will cause compounding fall damage.
+      if (result.stuckReason === "fall_detected" || result.stuckReason === "lava_detected") {
+        console.error(`[Move] Stopping candidate search: ${result.stuckReason} during standable position attempt.`);
+        break;
+      }
     }
 
     // No standable candidate found or all failed - fall through to pathfinder
