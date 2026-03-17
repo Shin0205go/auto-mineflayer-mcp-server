@@ -548,14 +548,15 @@ export class BotCore extends EventEmitter {
               const botBlockHead = bot.blockAt(bot.entity.position.floored().offset(0, 1, 0));
               const isInPortal = (botBlockFeet?.name === "nether_portal" || botBlockFeet?.name === "end_portal" ||
                                   botBlockHead?.name === "nether_portal" || botBlockHead?.name === "end_portal");
-              // Bug fix (Session 186b): Also suppress flee when a portal is within 3 blocks.
+              // Bug fix (Session 186b): Also suppress flee when a portal is within 6 blocks.
               // The bot may be approaching the portal and AutoFlee fires just before entry.
+              // Using 6 blocks to catch GoalBlock navigation to portal (bot may be 4-5 blocks away).
               let isNearPortal = false;
               if (!isInPortal) {
                 const botPos = bot.entity.position;
-                for (let dx = -3; dx <= 3 && !isNearPortal; dx++) {
-                  for (let dy = -2; dy <= 2 && !isNearPortal; dy++) {
-                    for (let dz = -3; dz <= 3 && !isNearPortal; dz++) {
+                for (let dx = -6; dx <= 6 && !isNearPortal; dx++) {
+                  for (let dy = -3; dy <= 3 && !isNearPortal; dy++) {
+                    for (let dz = -6; dz <= 6 && !isNearPortal; dz++) {
                       const nearBlock = bot.blockAt(botPos.floored().offset(dx, dy, dz));
                       if (nearBlock?.name === "nether_portal" || nearBlock?.name === "end_portal") {
                         isNearPortal = true;
@@ -749,13 +750,13 @@ export class BotCore extends EventEmitter {
             const creeperFleeBlockHead = bot.blockAt(bot.entity.position.floored().offset(0, 1, 0));
             const creeperFleeInPortal = (creeperFleeBlockFeet?.name === "nether_portal" || creeperFleeBlockFeet?.name === "end_portal" ||
                                          creeperFleeBlockHead?.name === "nether_portal" || creeperFleeBlockHead?.name === "end_portal");
-            // Bug fix (Session 186b): Also suppress when portal is nearby (within 3 blocks)
+            // Bug fix (Session 186b): Also suppress when portal is nearby (within 6 blocks)
             let creeperFleeNearPortal = false;
             if (!creeperFleeInPortal) {
               const cfPos = bot.entity.position;
-              for (let dx = -3; dx <= 3 && !creeperFleeNearPortal; dx++) {
-                for (let dy = -2; dy <= 2 && !creeperFleeNearPortal; dy++) {
-                  for (let dz = -3; dz <= 3 && !creeperFleeNearPortal; dz++) {
+              for (let dx = -6; dx <= 6 && !creeperFleeNearPortal; dx++) {
+                for (let dy = -3; dy <= 3 && !creeperFleeNearPortal; dy++) {
+                  for (let dz = -6; dz <= 6 && !creeperFleeNearPortal; dz++) {
                     const nb = bot.blockAt(cfPos.floored().offset(dx, dy, dz));
                     if (nb?.name === "nether_portal" || nb?.name === "end_portal") {
                       creeperFleeNearPortal = true;
