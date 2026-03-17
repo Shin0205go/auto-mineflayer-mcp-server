@@ -168,10 +168,16 @@ export function checkDangerNearby(bot: Bot, dangerRadius: number = 8): {
 export function checkGroundBelow(bot: Bot, x: number, y: number, z: number, maxFallCheck: number = 4): {
   safe: boolean;
   fallDistance: number;
+  hasLavaBelow?: boolean;
 } {
   for (let dy = 1; dy <= maxFallCheck; dy++) {
     const block = bot.blockAt(new Vec3(Math.floor(x), Math.floor(y) - dy, Math.floor(z)));
     if (block && block.name !== "air" && block.name !== "cave_air" && block.name !== "void_air") {
+      // Bug fix (Session 186): lava is NOT safe ground — falling into lava is lethal.
+      // Treat lava as lethal and return unsafe with lava flag.
+      if (block.name === "lava") {
+        return { safe: false, fallDistance: dy, hasLavaBelow: true };
+      }
       // Fall distance of 3 or less = no damage
       return { safe: dy <= 3, fallDistance: dy - 1 };
     }

@@ -517,14 +517,22 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
 
   // SAFETY CHECK: Verify ground exists at destination
   const groundCheck = checkGroundBelow(bot, x, y, z, 10);
-  if (!groundCheck.safe && groundCheck.fallDistance >= 10) {
-    console.error(`[Move] WARNING: No solid ground at destination (${x}, ${y}, ${z}), fall distance: ${groundCheck.fallDistance} blocks`);
-    // Only block if HP is truly critical (< 3) AND fall would be lethal.
-    // Previously blocked at hp < 10, but this prevented pathfinder from routing around the gap,
-    // causing permanent deadlock in Nether navigation (bot stuck at portal spawn unable to move).
-    // Bug fix: pathfinder can navigate around 10-block falls; only block when survival is impossible.
-    if (hpNow < 3) {
-      return `⚠️ SAFETY: Destination (${x}, ${y}, ${z}) has no ground within ${groundCheck.fallDistance} blocks below. Fall would be lethal at HP=${hpNow.toFixed(1)}/20. Aborting movement.`;
+  if (!groundCheck.safe) {
+    if (groundCheck.hasLavaBelow) {
+      // Bug fix (Session 186): lava below destination is ALWAYS lethal — abort regardless of HP.
+      // The pathfinder routes over lava lakes in the Nether, causing direct lava deaths even at HP=20.
+      console.error(`[Move] BLOCKED: Destination (${x}, ${y}, ${z}) has lava ${groundCheck.fallDistance} blocks below. Aborting to prevent lava death.`);
+      return `⚠️ SAFETY: Destination (${x}, ${y}, ${z}) has lava ${groundCheck.fallDistance} blocks below. Route over lava lake is lethal. Choose a different waypoint.`;
+    }
+    if (groundCheck.fallDistance >= 10) {
+      console.error(`[Move] WARNING: No solid ground at destination (${x}, ${y}, ${z}), fall distance: ${groundCheck.fallDistance} blocks`);
+      // Only block if HP is truly critical (< 3) AND fall would be lethal.
+      // Previously blocked at hp < 10, but this prevented pathfinder from routing around the gap,
+      // causing permanent deadlock in Nether navigation (bot stuck at portal spawn unable to move).
+      // Bug fix: pathfinder can navigate around 10-block falls; only block when survival is impossible.
+      if (hpNow < 3) {
+        return `⚠️ SAFETY: Destination (${x}, ${y}, ${z}) has no ground within ${groundCheck.fallDistance} blocks below. Fall would be lethal at HP=${hpNow.toFixed(1)}/20. Aborting movement.`;
+      }
     }
   }
 
