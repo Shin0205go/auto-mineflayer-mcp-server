@@ -542,6 +542,15 @@ export class BotCore extends EventEmitter {
             }
             // Auto-flee when HP drops to 10 or below after taking damage
             else if (bot.health <= 10) {
+              // Bug fix (Session 186): Do NOT flee when inside a portal block.
+              // AutoFlee during portal entry overrides the portal goal and breaks teleportation.
+              const botBlockFeet = bot.blockAt(bot.entity.position.floored());
+              const botBlockHead = bot.blockAt(bot.entity.position.floored().offset(0, 1, 0));
+              const isInPortal = (botBlockFeet?.name === "nether_portal" || botBlockFeet?.name === "end_portal" ||
+                                  botBlockHead?.name === "nether_portal" || botBlockHead?.name === "end_portal");
+              if (isInPortal) {
+                console.error(`[AutoFlee] Suppressed: bot is inside portal block, standing still for teleportation.`);
+              } else {
               const nearestHostile = Object.values(bot.entities)
                 .filter(e => e !== bot.entity && e.name && isHostileMob(bot, e.name.toLowerCase()))
                 .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position))[0];
@@ -562,6 +571,7 @@ export class BotCore extends EventEmitter {
                   bot.equip(food, "hand").then(() => bot.consume()).catch(() => {});
                 }
               }
+              } // end else (!isInPortal)
             }
           } else if (entity.position.distanceTo(bot.entity.position) < 10) {
             addEvent("entity_hurt", `${entity.name || "Entity"} took damage nearby`, {
