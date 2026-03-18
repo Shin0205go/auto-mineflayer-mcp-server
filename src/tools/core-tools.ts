@@ -250,6 +250,149 @@ export async function mc_craft(
   return `Crafted ${item} x${count}. ${results.join("; ")}. Inventory: ${invStr}`;
 }
 
+// ─── mc_farm ─────────────────────────────────────────────────────────────────
+//
+// Full farming sequence: till dirt → place crafting_table → plant seeds →
+// apply bone_meal → harvest wheat → craft bread → eat.
+// Requires: stone_hoe + wheat_seeds in inventory. Dirt is always available.
+// Optional: bone_meal for instant growth.
+
+export async function mc_farm(): Promise<string> {
+  const username = botManager.requireSingleBot();
+  const bot = botManager.getBot(username);
+  if (!bot) throw new Error("Not connected");
+
+  const logs: string[] = [];
+
+  // Check for required items
+  const inv = botManager.getInventory(username);
+  const hasHoe = inv.some(i => i.name.includes("_hoe"));
+  const seeds = inv.find(i => i.name.includes("_seeds"));
+  const boneMeal = inv.find(i => i.name === "bone_meal");
+  const hasCraftingTable = inv.some(i => i.name === "crafting_table");
+
+  if (!hasHoe) {
+    return "mc_farm: No hoe in inventory. Craft a stone_hoe first (2 cobblestone + 2 sticks).";
+  }
+  if (!seeds) {
+    return "mc_farm: No seeds in inventory. Find wheat_seeds by breaking tall grass.";
+  }
+
+  const pos = bot.entity.position;
+  const bx = Math.floor(pos.x);
+  const by = Math.floor(pos.y);
+  const bz = Math.floor(pos.z);
+
+  // Step 1: Place crafting_table if not nearby
+  let craftingTablePlaced = false;
+  const nearbyTable = bot.findBlock({
+    matching: (b: any) => b.name === "crafting_table",
+    maxDistance: 8,
+  });
+  if (!nearbyTable && hasCraftingTable) {
+    try {
+      const placeResult = await botManager.placeBlock(username, "crafting_table", bx + 1, by, bz);
+      logs.push(`Placed crafting_table: ${placeResult.message}`);
+      craftingTablePlaced = true;
+    } catch (e) {
+      logs.push(`Could not place crafting_table: ${e}`);
+    }
+  } else if (nearbyTable) {
+    logs.push("Crafting table already nearby.");
+  }
+
+  // Step 2: Till 4 dirt blocks in a row starting at bx+2
+  const farmCoords: Array<{ x: number; y: number; z: number }> = [];
+  const seedCount = Math.min(seeds.count, 4);
+  for (let i = 0; i < seedCount; i++) {
+    farmCoords.push({ x: bx + 2 + i, y: by, z: bz });
+  }
+
+  for (const fc of farmCoords) {
+    try {
+      const tillResult = await botManager.tillSoil(username, fc.x, fc.y, fc.z);
+      logs.push(`Till (${fc.x},${fc.y},${fc.z}): ${tillResult}`);
+    } catch (e) {
+      logs.push(`Till failed at (${fc.x},${fc.y},${fc.z}): ${e}`);
+    }
+  }
+
+  // Step 3: Plant seeds on farmland
+  for (const fc of farmCoords) {
+    try {
+      const plantResult = await botManager.useItemOnBlock(username, seeds.name, fc.x, fc.y, fc.z);
+      logs.push(`Plant ${seeds.name} at (${fc.x},${fc.y},${fc.z}): ${plantResult}`);
+    } catch (e) {
+      logs.push(`Plant failed at (${fc.x},${fc.y},${fc.z}): ${e}`);
+    }
+  }
+
+  // Step 4: Apply bone_meal for instant growth
+  if (boneMeal && boneMeal.count > 0) {
+    for (const fc of farmCoords) {
+      const wheatBlock = bot.blockAt(
+        bot.entity.position.offset(fc.x - bx, 1, fc.z - bz)
+      );
+      // Apply bone_meal up to 8 times per crop to guarantee max growth
+      for (let attempt = 0; attempt < 8; attempt++) {
+        try {
+          const boneResult = await botManager.useItemOnBlock(username, "bone_meal", fc.x, fc.y + 1, fc.z);
+          logs.push(`Bone_meal at (${fc.x},${fc.y + 1},${fc.z}): ${boneResult}`);
+          // Check if fully grown (age=7)
+          const crop = bot.blockAt(new (bot.entity.position.constructor as any)(fc.x + 0.5, fc.y + 1, fc.z + 0.5));
+          if (crop && crop.getProperties && (crop.getProperties() as any).age === 7) break;
+        } catch (e) {
+          logs.push(`Bone_meal failed: ${e}`);
+          break;
+        }
+      }
+    }
+  } else {
+    logs.push("No bone_meal — crops will grow naturally (takes several minutes).");
+  }
+
+  // Step 5: Harvest wheat
+  let wheatGathered = false;
+  try {
+    const harvestResult = await getHighLevel().minecraft_gather_resources(username, [{ name: "wheat", count: seedCount }], 8);
+    logs.push(`Harvest: ${harvestResult}`);
+    wheatGathered = true;
+  } catch (e) {
+    logs.push(`Harvest failed: ${e}`);
+  }
+
+  // Step 6: Craft bread (3 wheat = 1 bread)
+  const invAfter = botManager.getInventory(username);
+  const wheatInInv = invAfter.find(i => i.name === "wheat");
+  if (wheatInInv && wheatInInv.count >= 3) {
+    const breadCount = Math.floor(wheatInInv.count / 3);
+    try {
+      const craftResult = await getHighLevel().minecraft_craft_chain(username, "bread", false);
+      logs.push(`Craft bread: ${craftResult}`);
+    } catch (e) {
+      logs.push(`Craft bread failed: ${e}`);
+    }
+  } else if (wheatGathered) {
+    logs.push(`Not enough wheat for bread (need 3, have ${wheatInInv?.count ?? 0}).`);
+  }
+
+  // Step 7: Eat any food
+  try {
+    const eatResult = await botManager.eat(username);
+    logs.push(`Eat: ${eatResult}`);
+  } catch (e) {
+    logs.push(`Eat failed: ${e}`);
+  }
+
+  const finalInv = botManager.getInventory(username);
+  const finalBot = botManager.getBot(username);
+  return [
+    `mc_farm complete. HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}`,
+    ...logs,
+    `Inventory: ${finalInv.map(i => `${i.name}(${i.count})`).join(", ")}`,
+  ].join("\n");
+}
+
 // ─── mc_build ────────────────────────────────────────────────────────────────
 
 export async function mc_build(
@@ -398,17 +541,31 @@ export async function mc_combat(
   // Attack target
   if (target) {
     const result = await botManager.fight(username, target, fleeAtHp);
-    // Wait briefly for drops to spawn, then collect
-    await new Promise(r => setTimeout(r, 500));
+    // Wait for drops to spawn (server needs time to create item entities)
+    await new Promise(r => setTimeout(r, 1500));
     const collected = await botManager.collectNearbyItems(username);
     return collected ? `${result}\nCollected: ${collected}` : result;
   }
 
   // Attack nearest hostile
   const result = await botManager.attack(username);
-  await new Promise(r => setTimeout(r, 500));
+  await new Promise(r => setTimeout(r, 1500));
   const collected = await botManager.collectNearbyItems(username);
   return collected ? `${result}\nCollected: ${collected}` : result;
+}
+
+// ─── mc_drop ─────────────────────────────────────────────────────────────────
+
+export async function mc_drop(
+  item_name: string,
+  count?: number
+): Promise<string> {
+  const username = botManager.requireSingleBot();
+  const bot = botManager.getBot(username);
+  if (!bot) throw new Error("Bot not connected");
+
+  const { dropItem } = await import("../bot-manager/bot-items.js");
+  return await dropItem(bot, item_name, count);
 }
 
 // ─── mc_eat ──────────────────────────────────────────────────────────────────

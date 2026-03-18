@@ -9,9 +9,11 @@ import {
   mc_status,
   mc_gather,
   mc_craft,
+  mc_farm,
   mc_build,
   mc_navigate,
   mc_combat,
+  mc_drop,
   mc_eat,
   mc_store,
   mc_chat,
@@ -96,6 +98,18 @@ export const coreTools = {
     },
   },
 
+  mc_drop: {
+    description: "Drop/discard items from inventory to free space. Essential before gathering when inventory is full.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        item_name: { type: "string", description: "Item to drop (e.g., 'dirt', 'cobblestone')" },
+        count: { type: "number", description: "Number to drop (omit to drop all)" },
+      },
+      required: ["item_name"],
+    },
+  },
+
   mc_eat: {
     description: "Eat food to restore hunger. Cooks raw meat if furnace nearby.",
     inputSchema: {
@@ -172,6 +186,15 @@ export const coreTools = {
     },
   },
 
+  mc_farm: {
+    description: "Full farming sequence: till dirt → plant wheat_seeds → apply bone_meal → harvest wheat → craft bread → eat. Requires stone_hoe + wheat_seeds in inventory. Use when you need food and have seeds.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+
   mc_connect: {
     description: "Connect to or disconnect from a Minecraft server.",
     inputSchema: {
@@ -208,6 +231,8 @@ export async function handleCoreTool(
         return await fn(args.block, (args.count as number) || 1, (args.max_distance as number) || 32);
       case "mc_craft":
         return await fn(args.item, (args.count as number) || 1, (args.autoGather as boolean) || false);
+      case "mc_farm":
+        return await fn();
       case "mc_build":
         return await fn(args.preset, (args.size as string) || "small");
       case "mc_navigate":
@@ -218,6 +243,8 @@ export async function handleCoreTool(
         });
       case "mc_combat":
         return await fn(args.target, (args.flee_at_hp as number) || 4);
+      case "mc_drop":
+        return await fn(args.item_name, args.count);
       case "mc_eat":
         return await fn(args.food);
       case "mc_store":
@@ -232,8 +259,10 @@ export async function handleCoreTool(
     }
   }
 
-  // New Tier1 tools (not in registry, use botManager directly)
+  // New Tier1 tools (not in registry, call imported functions directly)
   switch (name) {
+    case "mc_farm":
+      return await mc_farm();
     case "mc_smelt": {
       const username = botManager.requireSingleBot();
       return await botManager.smeltItem(username, args.item_name as string, (args.count as number) || 1);
@@ -274,6 +303,7 @@ export async function handleCoreTool(
       const result = await botManager.placeBlock(username, args.block_type as string, args.x as number, args.y as number, args.z as number);
       return result.message;
     }
+    case "mc_drop": return await mc_drop(args.item_name as string, args.count as number | undefined);
     default: throw new Error(`Unknown core tool: ${name}`);
   }
 }

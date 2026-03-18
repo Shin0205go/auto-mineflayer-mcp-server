@@ -32,6 +32,8 @@ export const TIER1_CORE_TOOLS = new Set([
   "mc_place_block",
   "minecraft_till_soil",
   "minecraft_use_item_on_block",
+  // Farming (till + plant + bone_meal + harvest + craft bread)
+  "mc_farm",
   // Hot-reload after code changes
   "mc_reload",
   // Tool search is always visible for Tier 3 discovery
@@ -450,7 +452,7 @@ export function getVisibleGameTools(): Set<string> {
  * Tier 3 tools are the old minecraft_* tools, discoverable via search but not in tools/list
  */
 export const ALL_TOOL_NAMES_FOR_SEARCH = new Set([
-  // Tier 1
+  // Tier 1 (includes mc_farm, mc_place_block, minecraft_till_soil, minecraft_use_item_on_block)
   ...TIER1_CORE_TOOLS,
   // Tier 2 (all, regardless of condition)
   ...TIER2_TOOLS.map(t => t.name),
