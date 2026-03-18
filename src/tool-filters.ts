@@ -23,6 +23,7 @@ export const TIER1_CORE_TOOLS = new Set([
   "mc_build",
   "mc_navigate",
   "mc_combat",
+  "mc_drop",
   "mc_eat",
   "mc_store",
   "mc_chat",
@@ -160,6 +161,39 @@ export const TIER2_TOOLS: Tier2Tool[] = [
     },
   },
   {
+    name: "minecraft_till_soil",
+    condition: (username: string) => {
+      try {
+        const inventory = botManager.getInventory(username);
+        // Show when bot has a hoe (for farming)
+        return inventory.some(item =>
+          item.name.includes("_hoe")
+        );
+      } catch {
+        return false;
+      }
+    },
+  },
+  {
+    name: "minecraft_use_item_on_block",
+    condition: (username: string) => {
+      try {
+        const inventory = botManager.getInventory(username);
+        // Show when bot has seeds, bone_meal, bucket, or flint_and_steel
+        return inventory.some(item =>
+          item.name.includes("_seeds") ||
+          item.name === "bone_meal" ||
+          item.name === "bucket" ||
+          item.name === "water_bucket" ||
+          item.name === "lava_bucket" ||
+          item.name === "flint_and_steel"
+        );
+      } catch {
+        return false;
+      }
+    },
+  },
+  {
     name: "mc_enter_portal",
     condition: (username: string) => {
       try {
@@ -251,6 +285,34 @@ export const tier2ToolDefs: Record<string, { description: string; inputSchema: o
       required: ["block_type", "x", "y", "z"],
     },
   },
+  minecraft_till_soil: {
+    description: "Till dirt or grass to create farmland for planting crops. Requires a hoe in inventory. Appears when you have a hoe.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        x: { type: "number", description: "X coordinate of block to till" },
+        y: { type: "number", description: "Y coordinate of block to till" },
+        z: { type: "number", description: "Z coordinate of block to till" },
+      },
+      required: ["x", "y", "z"],
+    },
+  },
+  minecraft_use_item_on_block: {
+    description: "Use a held item on a block. Use cases: bone_meal on crops to grow instantly, water_bucket to place water, flint_and_steel to ignite, seeds on farmland to plant. Appears when you have seeds, bone_meal, bucket, or flint_and_steel.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        item_name: {
+          type: "string",
+          description: "Item to use (e.g., 'bone_meal', 'wheat_seeds', 'water_bucket', 'flint_and_steel')",
+        },
+        x: { type: "number", description: "X coordinate of target block" },
+        y: { type: "number", description: "Y coordinate of target block" },
+        z: { type: "number", description: "Z coordinate of target block" },
+      },
+      required: ["item_name", "x", "y", "z"],
+    },
+  },
   mc_equip: {
     description: "Equip an item to the correct slot (auto-detects hand/armor slot). Appears when you have unequipped armor or weapons. Use 'none' to unequip.",
     inputSchema: {
@@ -330,6 +392,14 @@ export async function handleTier2Tool(
     }
     case "mc_enter_portal": {
       return await botManager.enterPortal(username);
+    }
+    case "minecraft_till_soil": {
+      const { handleBuildingTool } = await import("./tools/building.js");
+      return await handleBuildingTool("minecraft_till_soil", args);
+    }
+    case "minecraft_use_item_on_block": {
+      const { handleBuildingTool } = await import("./tools/building.js");
+      return await handleBuildingTool("minecraft_use_item_on_block", args);
     }
     default:
       throw new Error(`Unknown Tier 2 tool: ${name}`);
