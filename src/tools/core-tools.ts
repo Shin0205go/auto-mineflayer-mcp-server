@@ -738,7 +738,34 @@ export async function mc_drop(
   if (!bot) throw new Error("Bot not connected");
 
   const { dropItem } = await import("../bot-manager/bot-items.js");
-  return await dropItem(bot, item_name, count);
+  const result = await dropItem(bot, item_name, count);
+
+  // Move 4 blocks away after dropping to prevent immediate re-pickup
+  // Dropped items have a 2-block pickup radius; moving 4 blocks clears it
+  try {
+    const pos = bot.entity.position;
+    const { pathfinder, goals: { GoalNear } } = await import("mineflayer-pathfinder");
+    const targets = [
+      { x: pos.x + 4, y: pos.y, z: pos.z },
+      { x: pos.x - 4, y: pos.y, z: pos.z },
+      { x: pos.x, y: pos.y, z: pos.z + 4 },
+      { x: pos.x, y: pos.y, z: pos.z - 4 },
+    ];
+    // Try each direction until one succeeds
+    for (const t of targets) {
+      try {
+        await bot.pathfinder.goto(new GoalNear(t.x, t.y, t.z, 1));
+        break;
+      } catch {
+        // Try next direction
+      }
+    }
+  } catch {
+    // Move away failed — not critical, just log
+    console.error("[Drop] Could not move away after drop (pathfinder unavailable)");
+  }
+
+  return result;
 }
 
 // ─── mc_eat ──────────────────────────────────────────────────────────────────

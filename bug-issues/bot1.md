@@ -472,6 +472,75 @@ Bot needs to explore further (200+ blocks) to find animals.
 
 ---
 
+## [2026-03-18] Death: Slain by Zombie at night with HP=5, Hunger=0 (Session current)
+
+- **Cause**: HP=5 from starvation, hunger=0, no food. Night time. Bot wandered to find animals, zombie spawned and killed bot.
+- **Location**: OW (~151, 63, 4) old_growth_birch_forest
+- **Coordinates**: ~(151, 63, 4)
+- **Last Actions**:
+  1. HP=5 from starvation (hunger=0 stops damage at 0.5 hearts on Normal)
+  2. Searched cow/sheep/pig/chicken/rabbit all "not found" within 512 blocks
+  3. Tried mc_combat(zombie) to get rotten flesh — zombie defeated but no drops (doEntityDrops disabled)
+  4. Night fell, zombie spawned and killed bot
+- **Outcome**: Respawned HP=19, Hunger=20 (keepInventory=true). All items intact.
+- **Root Cause**: doEntityDrops disabled — zombie dropped nothing. No passive mobs in area to hunt.
+- **Status**: Survived (keepInventory). Continuing.
+
+---
+
+## [2026-03-18] Death: Slain by Zombie during cave navigation (HP=5, hunger=0)
+
+- **Cause**: mc_navigate to chest at (276,54,36) routed through cave system. HP=5, hunger=0, midnight. Zombie in cave killed bot. Chat showed "Claude1 was slain by Zombie".
+- **Location**: OW cave ~(98, 61, 14) — pathfinder entered cave from surface
+- **Coordinates**: ~(98, 61, 14)
+- **Last Actions**:
+  1. HP=5, hunger=0, no food, no animals within 200 blocks
+  2. Tried to navigate to surface chest at (276,54,36) to find food
+  3. Pathfinder routed through cave/underground at night
+  4. Zombie in cave killed bot at HP=5
+- **Root Cause**: mc_navigate with HP=5 at midnight routed underground where hostile mobs spawn
+- **Fix Needed**: mc_navigate should avoid underground routing when HP < 8 at night
+- **Status**: Survived (keepInventory). Respawned.
+
+---
+
+## [2026-03-18] Death: Lava during navigation at night (HP=4, hunger=0, safety guard stale)
+
+- **Cause**: Safety guard in bot-movement.ts read stale HP=4 (from previous body), blocked mc_navigate. Meanwhile bot actually died again from lava (likely pathfinder still running from previous mc_navigate call). Chat: "Claude1 tried to swim in lava".
+- **Coordinates**: ~(95, 61, 13) → fell into lava somewhere underground
+- **Last Actions**:
+  1. mc_status showed HP=12, hunger=13
+  2. mc_navigate to (276,54,36) — safety guard blocked with "HP=4.0 at night"
+  3. Bot apparently still moving from a prior navigate call, hit lava
+  4. Respawned at (-8.5, 111, 2.7) — base area with HP=20, Hunger=20
+- **Root Cause**: Safety guard reading stale HP from bot object during async operation
+- **Status**: Survived (keepInventory). Now at base with full HP/hunger.
+
+---
+
+## [2026-03-18] Death: Slain by Zombie while dropping inventory junk (HP=20 → 0)
+
+- **Cause**: Bot was standing still at (10, 92, 9) dropping/picking up items in a loop. A zombie killed the bot. No armor equipped. Bot was distracted by inventory management loop.
+- **Coordinates**: ~(10, 92, 9) overworld, daytime
+- **Last Actions**:
+  1. Attempting to drop junk (dirt x370, diorite, andesite, etc.) via mc_drop
+  2. Bot standing still re-picking up dropped items (vanilla item pickup)
+  3. Tried deposit_all_except to chest at (9,96,4) — GoalChanged errors (chest unreachable, 4 blocks up)
+  4. Placed new chest at (12,92,6) — chest open timeout errors
+  5. "Claude1 was slain by Zombie"
+- **Root Cause 1**: mc_drop drops items at bot feet → bot immediately re-picks up (vanilla behavior). Need to move away before re-picking or use different disposal strategy.
+- **Root Cause 2**: Chest at (9,96,4) is 4 blocks above current position — pathfinder can't reach it.
+- **Root Cause 3**: Freshly placed chest at (12,92,6) caused "Chest open timeout" — possible server sync issue with newly placed chests.
+- **Root Cause 4**: No armor equipped during this entire session — zombie killed bot in 1-2 hits.
+- **Outcome**: Respawned with keepInventory=true. All items intact.
+- **Fix Needed**:
+  1. After respawn, immediately equip armor before any inventory management
+  2. Use mc_craft bread immediately (have 4 wheat) then eat before doing anything else
+  3. For junk disposal: navigate to main chest properly or drop and sprint away immediately
+- **Status**: Recorded. Continuing.
+
+---
+
 ## [2026-03-18] Critical: HP=5, Hunger=0, No Food — Phase 6 Blocked (Session current)
 
 - **Cause**: doMobLoot still disabled on server. No food obtainable from any mob kills.
