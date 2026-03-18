@@ -198,6 +198,24 @@ export async function mc_gather(
   maxDistance: number = 32
 ): Promise<string> {
   const username = botManager.requireSingleBot();
+
+  // Special case: gathering wheat when none nearby — auto-farm if bot has seeds + hoe
+  if (block === "wheat") {
+    const inv = botManager.getInventory(username);
+    const seeds = inv.find(i => i.name.includes("_seeds"));
+    const hasHoe = inv.some(i => i.name.includes("_hoe"));
+    // Check if there's actual wheat to gather first
+    const bot = botManager.getBot(username);
+    const existingWheat = bot?.findBlock({
+      matching: (b: any) => b.name === "wheat",
+      maxDistance: maxDistance,
+    });
+    if (!existingWheat && seeds && hasHoe) {
+      // No wheat nearby — auto-farm using mc_farm sequence
+      return await mc_farm();
+    }
+  }
+
   return await getHighLevel().minecraft_gather_resources(username, [{ name: block, count }], maxDistance);
 }
 
@@ -284,7 +302,6 @@ export async function mc_farm(): Promise<string> {
   const bz = Math.floor(pos.z);
 
   // Step 1: Place crafting_table if not nearby
-  let craftingTablePlaced = false;
   const nearbyTable = bot.findBlock({
     matching: (b: any) => b.name === "crafting_table",
     maxDistance: 8,
@@ -293,7 +310,6 @@ export async function mc_farm(): Promise<string> {
     try {
       const placeResult = await botManager.placeBlock(username, "crafting_table", bx + 1, by, bz);
       logs.push(`Placed crafting_table: ${placeResult.message}`);
-      craftingTablePlaced = true;
     } catch (e) {
       logs.push(`Could not place crafting_table: ${e}`);
     }
@@ -301,48 +317,113 @@ export async function mc_farm(): Promise<string> {
     logs.push("Crafting table already nearby.");
   }
 
-  // Step 2: Till 4 dirt blocks in a row starting at bx+2
+  // Step 2: Find actual dirt/grass blocks to till near the bot
+  // Scan in a 5-block radius at ground level for tillable blocks
+  const TILLABLE = new Set(["dirt", "grass_block", "coarse_dirt", "rooted_dirt", "farmland"]);
   const farmCoords: Array<{ x: number; y: number; z: number }> = [];
   const seedCount = Math.min(seeds.count, 4);
-  for (let i = 0; i < seedCount; i++) {
-    farmCoords.push({ x: bx + 2 + i, y: by, z: bz });
+
+  // Search a 7x7 area around the bot for dirt blocks on the surface
+  outer:
+  for (let dx = -3; dx <= 3 && farmCoords.length < seedCount; dx++) {
+    for (let dz = -3; dz <= 3 && farmCoords.length < seedCount; dz++) {
+      const cx = bx + dx;
+      const cz = bz + dz;
+      // Scan Y from bot level down 5 to find ground
+      for (let dy = 0; dy >= -5; dy--) {
+        const cy = by + dy;
+        const groundBlock = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy, cz));
+        const aboveBlock = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy + 1, cz));
+        const above2Block = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy + 2, cz));
+        if (
+          groundBlock && TILLABLE.has(groundBlock.name) &&
+          aboveBlock && aboveBlock.name === "air" &&
+          above2Block && above2Block.name === "air"
+        ) {
+          farmCoords.push({ x: cx, y: cy, z: cz });
+          break;
+        }
+        // Stop scanning down if we hit a solid non-tillable block
+        if (groundBlock && groundBlock.name !== "air" && !TILLABLE.has(groundBlock.name)) break;
+      }
+    }
   }
 
+  if (farmCoords.length === 0) {
+    // Fallback: place dirt blocks from inventory and till them
+    logs.push("No natural dirt found nearby — placing dirt blocks from inventory.");
+    for (let i = 0; i < seedCount; i++) {
+      const cx = bx + i;
+      const cy = by - 1;
+      const cz = bz + 1;
+      try {
+        const placeResult = await botManager.placeBlock(username, "dirt", cx, cy, cz);
+        logs.push(`Placed dirt at (${cx},${cy},${cz}): ${placeResult.message}`);
+        farmCoords.push({ x: cx, y: cy, z: cz });
+      } catch (e) {
+        logs.push(`Place dirt failed: ${e}`);
+      }
+    }
+  }
+
+  logs.push(`Farm locations: ${farmCoords.map(c => `(${c.x},${c.y},${c.z})`).join(", ")}`);
+
+  // Step 3: Till then immediately plant each block (till+plant per block, with wait)
+  const plantedCoords: Array<{ x: number; y: number; z: number }> = [];
   for (const fc of farmCoords) {
+    // Till the block
     try {
       const tillResult = await botManager.tillSoil(username, fc.x, fc.y, fc.z);
       logs.push(`Till (${fc.x},${fc.y},${fc.z}): ${tillResult}`);
     } catch (e) {
       logs.push(`Till failed at (${fc.x},${fc.y},${fc.z}): ${e}`);
+      continue;
     }
-  }
+    // Wait 2 ticks for server to update block state to farmland
+    await new Promise(r => setTimeout(r, 100));
 
-  // Step 3: Plant seeds on farmland
-  for (const fc of farmCoords) {
+    // Verify block is now farmland
+    const blockAfterTill = bot.blockAt(new (bot.entity.position.constructor as any)(fc.x, fc.y, fc.z));
+    if (blockAfterTill && blockAfterTill.name !== "farmland") {
+      logs.push(`Warn: block at (${fc.x},${fc.y},${fc.z}) is "${blockAfterTill.name}" after till (expected farmland) — attempting plant anyway`);
+    }
+
+    // Plant seeds ON TOP of farmland (same x,y,z — seeds go on top face)
     try {
       const plantResult = await botManager.useItemOnBlock(username, seeds.name, fc.x, fc.y, fc.z);
       logs.push(`Plant ${seeds.name} at (${fc.x},${fc.y},${fc.z}): ${plantResult}`);
+      // Wait a tick for seed to register
+      await new Promise(r => setTimeout(r, 100));
+      // Check if crop appeared above farmland
+      const cropBlock = bot.blockAt(new (bot.entity.position.constructor as any)(fc.x, fc.y + 1, fc.z));
+      if (cropBlock && cropBlock.name === "wheat") {
+        logs.push(`Crop confirmed at (${fc.x},${fc.y + 1},${fc.z})`);
+        plantedCoords.push(fc);
+      } else {
+        logs.push(`Crop not visible at (${fc.x},${fc.y + 1},${fc.z}) — got "${cropBlock?.name ?? 'null'}"`);
+        plantedCoords.push(fc); // Try bone-mealing anyway
+      }
     } catch (e) {
       logs.push(`Plant failed at (${fc.x},${fc.y},${fc.z}): ${e}`);
     }
   }
 
-  // Step 4: Apply bone_meal for instant growth
-  if (boneMeal && boneMeal.count > 0) {
-    for (const fc of farmCoords) {
-      const wheatBlock = bot.blockAt(
-        bot.entity.position.offset(fc.x - bx, 1, fc.z - bz)
-      );
-      // Apply bone_meal up to 8 times per crop to guarantee max growth
+  // Step 4: Apply bone_meal for instant growth (up to 8x per crop)
+  const boneMealInv = botManager.getInventory(username).find(i => i.name === "bone_meal");
+  if (boneMealInv && boneMealInv.count > 0) {
+    for (const fc of plantedCoords) {
       for (let attempt = 0; attempt < 8; attempt++) {
         try {
+          // Bone meal targets the crop block at fc.y+1
           const boneResult = await botManager.useItemOnBlock(username, "bone_meal", fc.x, fc.y + 1, fc.z);
           logs.push(`Bone_meal at (${fc.x},${fc.y + 1},${fc.z}): ${boneResult}`);
-          // Check if fully grown (age=7)
-          const crop = bot.blockAt(new (bot.entity.position.constructor as any)(fc.x + 0.5, fc.y + 1, fc.z + 0.5));
-          if (crop && crop.getProperties && (crop.getProperties() as any).age === 7) break;
+          await new Promise(r => setTimeout(r, 100));
+          const crop = bot.blockAt(new (bot.entity.position.constructor as any)(fc.x, fc.y + 1, fc.z));
+          if (crop && (crop as any).metadata === 7) break; // age=7 = fully grown
+          const props = crop && (crop as any).getProperties ? (crop as any).getProperties() : null;
+          if (props && props.age === 7) break;
         } catch (e) {
-          logs.push(`Bone_meal failed: ${e}`);
+          logs.push(`Bone_meal failed at (${fc.x},${fc.y + 1},${fc.z}): ${e}`);
           break;
         }
       }
