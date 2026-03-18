@@ -82,6 +82,11 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
     category: "survival",
     priority: 9,
   },
+  mc_drop: {
+    tags: ["drop", "discard", "throw", "toss", "inventory", "free", "space", "clean"],
+    category: "storage",
+    priority: 7,
+  },
   mc_smelt: {
     tags: ["smelting", "furnace", "ore", "cook", "raw_iron", "raw_gold", "ingot"],
     category: "crafting",
@@ -190,20 +195,26 @@ export function searchTools(query: string, availableTools: Set<string>): string[
       .slice(0, 15);
   }
 
+  // Split multi-word queries — each word must match at least one field (AND logic)
+  const words = lowerQuery.split(/\s+/).filter(w => w.length > 0);
+
+  /**
+   * Returns true if a single word matches the tool's name, category, or any tag.
+   */
+  function wordMatches(word: string, name: string, metadata: ToolMetadata): boolean {
+    if (name.includes(word)) return true;
+    if (metadata.category.includes(word)) return true;
+    return metadata.tags.some(tag => tag.includes(word));
+  }
+
   // Search by tags, category, and tool name
   const results = Array.from(availableTools)
     .filter(name => {
       const metadata = TOOL_METADATA[name];
       if (!metadata) return false;
 
-      // Check tool name
-      if (name.includes(lowerQuery)) return true;
-
-      // Check category
-      if (metadata.category.includes(lowerQuery)) return true;
-
-      // Check tags
-      return metadata.tags.some(tag => tag.includes(lowerQuery));
+      // All words must match (AND logic across words, OR logic within fields)
+      return words.every(word => wordMatches(word, name, metadata));
     })
     .sort((a, b) => {
       const priorityA = TOOL_METADATA[a]?.priority || 0;
@@ -213,11 +224,12 @@ export function searchTools(query: string, availableTools: Set<string>): string[
         return priorityB - priorityA;
       }
 
-      // Exact match in category or name gets priority
+      // Exact match in category or name gets priority (use first word for boost)
+      const firstWord = words[0] || lowerQuery;
       const metaA = TOOL_METADATA[a];
       const metaB = TOOL_METADATA[b];
-      const exactA = (metaA.category === lowerQuery || a.includes(lowerQuery)) ? 1 : 0;
-      const exactB = (metaB.category === lowerQuery || b.includes(lowerQuery)) ? 1 : 0;
+      const exactA = (metaA.category === firstWord || a.includes(firstWord)) ? 1 : 0;
+      const exactB = (metaB.category === firstWord || b.includes(firstWord)) ? 1 : 0;
 
       return exactB - exactA;
     });
