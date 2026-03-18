@@ -374,12 +374,33 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   const isTargetPortal = targetBlockPreCheck &&
     (targetBlockPreCheck.name === "nether_portal" || targetBlockPreCheck.name === "end_portal");
   if (!isTargetPortal) {
+    // Starvation deadlock exception (bot1.md 2026-03-18):
+    // If hunger=0 AND no food in inventory AND no hostile mobs nearby, allow movement at HP≥2.
+    // Rationale: staying put guarantees death (starvation + no recovery); moving to find food is the only path.
+    const hungerLevel = (bot as any).food ?? 20;
+    const hasFoodInInventory = bot.inventory.items().some((item: any) => {
+      const n = item.name;
+      return n === "bread" || n === "cooked_beef" || n === "cooked_porkchop" || n === "cooked_chicken" ||
+             n === "cooked_mutton" || n === "apple" || n === "golden_apple" || n === "carrot" ||
+             n === "baked_potato" || n === "melon_slice" || n === "cooked_rabbit" || n === "cooked_salmon" ||
+             n === "cooked_cod" || n === "mushroom_stew" || n === "rabbit_stew" || n === "beef" ||
+             n === "porkchop" || n === "chicken" || n === "mutton" || n === "potato" || n === "beetroot";
+    });
+    const isStarvationDeadlock = hungerLevel === 0 && !hasFoodInInventory && !hasHostileNearby;
+
     // During daytime with no hostile mobs nearby, allow movement at HP≥2 (starvation deadlock prevention)
     // At night or with hostile mobs nearby, use strict HP check to prevent fall death
     if (isDaytime && !hasHostileNearby) {
       // Daytime safe: only block if truly near-death (hp < 2, i.e. 1 heart)
       if (hpNow < 2 && distance > 30) {
         return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20). Risk of high-altitude pathfinding causing fall death. Eat food or heal first, then retry movement.`;
+      }
+    } else if (isStarvationDeadlock) {
+      // Starvation deadlock: hunger=0, no food, no hostiles. Allow movement at HP≥2.
+      // Moving to find food is the only survival option.
+      console.error(`[Move] Starvation deadlock detected (hunger=0, no food, no hostiles). Allowing movement at HP=${hpNow.toFixed(1)}.`);
+      if (hpNow < 2 && distance > 30) {
+        return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20). HP too low even for starvation escape. Use /give or seek shelter.`;
       }
     } else {
       // Nighttime or hostile nearby: block movement when HP is dangerously low

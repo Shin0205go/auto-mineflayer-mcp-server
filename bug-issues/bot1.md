@@ -46,6 +46,20 @@
 
 ---
 
+## [2026-03-18] Bug: Starvation deadlock — HP<8 + hunger=0 + no food blocks all movement at night
+
+- **Cause**: At sunset (timeOfDay crossed 12541), `isDaytime` became false. Combined with HP=5 and `hpNow < 8` threshold, movement was blocked. But hunger=0 and no food in inventory means no way to recover HP. Staying in place is also fatal (slower starvation). Result: permanent deadlock.
+- **Location**: `src/bot-manager/bot-movement.ts` lines 384-390
+- **Coordinates**: OW (168, 59, -7) — forest, no animals within 128 blocks
+- **Last Actions**:
+  1. Area hunted out, hunger=0, HP=5
+  2. Actions 1-7: navigate checks, all entity searches returned empty
+  3. Action 8: navigate to (200,64,200) blocked by safety guard (tick had crossed 12541)
+- **Fix Applied**: Added starvation-deadlock exception: when hunger=0 AND no food in inventory AND no hostile mobs nearby, movement is allowed at HP≥2 even at night. Rationale: staying put guarantees death; moving to find food is the only survival path.
+- **Status**: Fixed
+
+---
+
 ## [2026-03-17] Bug: Nether movement deadlock — isDaytime always false in Nether
 
 - **Cause**: `bot.time.timeOfDay` in Nether dimension is always 0, and since `isDaytime = timeOfDay < 12541` resolves to `true` (0 < 12541), BUT the dimension check is separate. After investigation: ネザーでは敵mob（wither_skeleton）が存在し`hasHostileNearby`がtrueになり、HP=2で距離>30の移動がブロックされた。
@@ -423,6 +437,23 @@ Bot needs to explore further (200+ blocks) to find animals.
 
 ---
 
+## [2026-03-17] Bug: Death from fall damage at 0.5 HP while navigating to portal (Session current)
+
+- **Cause**: Hunger depleted to 0 during navigation from (32,95,-73) to portal (-45,93,87). HP drained to 0.5 from starvation. mc_navigate to portal caused fall damage ("hit the ground too hard") which killed bot at 0.5 HP.
+- **Location**: OW navigation path near portal coordinates (-45, 93, 87)
+- **Coordinates**: Death near (-43.5, 92.0, 88.5)
+- **Last Actions**:
+  1. Started Phase 6 at (32,95,-73) with HP=20, hunger=20
+  2. Crafted and equipped full gold armor
+  3. Hunger dropped to 0, HP to 0.5 during travel (no food in inventory)
+  4. mc_navigate to portal caused "Claude1 hit the ground too hard" - death
+- **Root Cause**: No food in inventory. Area is depopulated of passive mobs (over-hunted in previous sessions). Bot traveled ~100 blocks with hunger=0 → HP drained to 0.5 → any fall fatal.
+- **Outcome**: Respawned HP=20, Hunger=20, armor retained (keepInventory=true)
+- **Fix Needed**: mc_navigate should abort/warn when HP < 5 or hunger = 0 before long distances
+- **Status**: Recorded. Continuing Phase 6 with full HP after respawn.
+
+---
+
 ## [2026-03-17] Bug: Death by lava in Nether navigation (pathfinder routes over lava lakes)
 
 - **Cause**: `checkGroundBelow()` treated lava blocks as solid ground, allowing sub-step navigation to waypoints above lava lakes. Pathfinder would route bot over lava lake edge and bot would fall into lava.
@@ -438,3 +469,32 @@ Bot needs to explore further (200+ blocks) to find animals.
   2. `moveTo()` aborts immediately when `hasLavaBelow=true` with descriptive error
   3. Commit: 1816582
 - **Status**: Fixed. Navigation will now abort instead of routing over lava lakes.
+
+---
+
+## [2026-03-18] Critical: HP=5, Hunger=0, No Food — Phase 6 Blocked (Session current)
+
+- **Cause**: doMobLoot still disabled on server. No food obtainable from any mob kills.
+  Starvation reduced HP to 5 (stable — Normal difficulty stops at 0.5 hearts).
+- **Location**: OW (152, 60, -22) near base crafting_table (153, 60, -21)
+- **Coordinates**: (152, 60, -22)
+- **Last Actions**:
+  1. Connected with HP=20, Hunger=11, gold full armor, ender_pearl x12
+  2. Searched for animals: cow/sheep/pig/chicken/rabbit all "not found" within 256 blocks
+  3. Killed 2 salmon — 0 food drops (doEntityDrops still disabled)
+  4. Killed 1 drowned — 0 drops
+  5. Fell underground (y=29) during navigation, climbed back to surface y=60
+  6. HP drained to 5 from starvation during underground navigation
+- **Blockers**:
+  1. doMobLoot disabled → no mob loot of any kind (food, blaze rods)
+  2. No passive mobs within 256 blocks (area depopulated)
+  3. No plant-based food (no sweet_berry_bush, mushrooms within 128 blocks)
+  4. Phase 6 blaze_rod farming impossible without doMobLoot
+- **Admin Actions Required**:
+  ```
+  /gamerule doMobLoot true
+  /gamerule doEntityDrops true
+  /give Claude1 cooked_beef 16
+  ```
+- **Bot State**: HP=5, Hunger=0, Position=(152, 60, -22), gold armor + iron_sword + ender_pearl x12
+- **Status**: BLOCKED. Awaiting admin action.
