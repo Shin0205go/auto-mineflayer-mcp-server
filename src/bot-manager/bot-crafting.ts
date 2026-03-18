@@ -1860,17 +1860,27 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
     const countBefore = inventoryBefore?.count || 0;
 
     // Take output and track count
-    const output = furnace.outputItem();
+    // Retry takeOutput up to 3 times if output appears
     let newOutputCount = 0;
-    if (output) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const output = furnace.outputItem();
+      if (!output) break;
       newOutputCount = output.count;
       await furnace.takeOutput();
+      // Wait for items to transfer to inventory BEFORE closing the window
+      // Closing immediately after takeOutput() can cause items to be lost
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Check if output slot is now empty (successful transfer)
+      const afterOutput = furnace.outputItem();
+      if (!afterOutput) break;
+      // Still has items - wait and retry
+      console.error(`[Smelt] Output slot still has items after attempt ${attempt + 1}, retrying...`);
     }
 
     furnace.close();
 
-    // Small delay to ensure items are transferred to inventory
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Additional delay after close to ensure server-side inventory sync
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Track inventory count AFTER taking output
     const inventoryAfter = bot.inventory.items().find(i => i.name === expectedOutputName);
