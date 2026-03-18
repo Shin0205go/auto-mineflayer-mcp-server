@@ -368,6 +368,55 @@ export async function mc_farm(): Promise<string> {
 
   logs.push(`Farm locations: ${farmCoords.map(c => `(${c.x},${c.y},${c.z})`).join(", ")}`);
 
+  // Step 2b: Check for water within 4 blocks of farm area — farmland needs water to stay moist
+  // If no water nearby, navigate to find water and re-scan for farmCoords near it
+  {
+    const waterBlock = bot.findBlock({
+      matching: (b: any) => b.name === "water",
+      maxDistance: 10,
+    });
+    if (!waterBlock) {
+      logs.push("No water within 10 blocks — farmland may dry out. Searching for water source...");
+      const farWater = bot.findBlock({
+        matching: (b: any) => b.name === "water",
+        maxDistance: 64,
+      });
+      if (farWater) {
+        logs.push(`Found water at (${farWater.position.x}, ${farWater.position.y}, ${farWater.position.z}), moving close...`);
+        try {
+          await botManager.moveTo(username, farWater.position.x, farWater.position.y, farWater.position.z);
+          // Re-scan for tillable blocks near water
+          const newPos = bot.entity.position;
+          const nbx = Math.floor(newPos.x), nby = Math.floor(newPos.y), nbz = Math.floor(newPos.z);
+          farmCoords.length = 0;
+          for (let dx2 = -3; dx2 <= 3 && farmCoords.length < seedCount; dx2++) {
+            for (let dz2 = -3; dz2 <= 3 && farmCoords.length < seedCount; dz2++) {
+              const cx = nbx + dx2, cz = nbz + dz2;
+              for (let dy2 = 0; dy2 >= -5; dy2--) {
+                const cy = nby + dy2;
+                const gb = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy, cz));
+                const ab = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy + 1, cz));
+                const a2b = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy + 2, cz));
+                if (gb && TILLABLE.has(gb.name) && ab?.name === "air" && a2b?.name === "air") {
+                  farmCoords.push({ x: cx, y: cy, z: cz });
+                  break;
+                }
+                if (gb && gb.name !== "air" && !TILLABLE.has(gb.name)) break;
+              }
+            }
+          }
+          logs.push(`Near-water farm locations found: ${farmCoords.length}`);
+        } catch (e) {
+          logs.push(`Failed to move to water: ${e}`);
+        }
+      } else {
+        logs.push("No water found within 64 blocks — farmland will be dry (crops may not grow).");
+      }
+    } else {
+      logs.push(`Water source nearby at (${waterBlock.position.x}, ${waterBlock.position.y}, ${waterBlock.position.z}) — farmland will stay moist.`);
+    }
+  }
+
   // Step 3: Till then immediately plant each block (till+plant per block, with wait)
   const plantedCoords: Array<{ x: number; y: number; z: number }> = [];
   for (const fc of farmCoords) {
@@ -379,8 +428,22 @@ export async function mc_farm(): Promise<string> {
       logs.push(`Till failed at (${fc.x},${fc.y},${fc.z}): ${e}`);
       continue;
     }
-    // Wait 3 ticks for server to update block state to farmland
-    await new Promise(r => setTimeout(r, 150));
+    // Poll for farmland state — up to 1 second (server may take several ticks)
+    {
+      const { Vec3: Vec3Cls } = await import("vec3");
+      let farmlandConfirmed = false;
+      for (let poll = 0; poll < 10; poll++) {
+        await new Promise(r => setTimeout(r, 150));
+        const b = bot.blockAt(new Vec3Cls(fc.x, fc.y, fc.z));
+        if (b && b.name === "farmland") { farmlandConfirmed = true; break; }
+      }
+      logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): ${farmlandConfirmed ? "farmland confirmed" : "still not farmland, proceeding anyway"}`);
+    }
+
+    // Navigate close to the block before planting (must be within reach)
+    try {
+      await botManager.moveTo(username, fc.x, fc.y + 1, fc.z);
+    } catch (_) {}
 
     // Plant seeds ON TOP of farmland (same x,y,z — seeds go on top face)
     try {
@@ -405,17 +468,22 @@ export async function mc_farm(): Promise<string> {
   // Step 4: Apply bone_meal for instant growth (up to 8x per crop)
   const boneMealInv = botManager.getInventory(username).find(i => i.name === "bone_meal");
   if (boneMealInv && boneMealInv.count > 0) {
+    const { Vec3: Vec3Cls } = await import("vec3");
     for (const fc of plantedCoords) {
       for (let attempt = 0; attempt < 8; attempt++) {
         try {
-          // Bone meal targets the crop block at fc.y+1
-          const boneResult = await botManager.useItemOnBlock(username, "bone_meal", fc.x, fc.y + 1, fc.z);
-          logs.push(`Bone_meal at (${fc.x},${fc.y + 1},${fc.z}): ${boneResult}`);
-          await new Promise(r => setTimeout(r, 100));
-          const crop = bot.blockAt(new (bot.entity.position.constructor as any)(fc.x, fc.y + 1, fc.z));
-          if (crop && (crop as any).metadata === 7) break; // age=7 = fully grown
-          const props = crop && (crop as any).getProperties ? (crop as any).getProperties() : null;
-          if (props && props.age === 7) break;
+          // Check whether crop exists at fc.y+1 or fc.y
+          const cropAbove = bot.blockAt(new Vec3Cls(fc.x, fc.y + 1, fc.z));
+          const targetY = (cropAbove && cropAbove.name === "wheat") ? fc.y + 1 : fc.y;
+          const boneResult = await botManager.useItemOnBlock(username, "bone_meal", fc.x, targetY, fc.z);
+          logs.push(`Bone_meal at (${fc.x},${targetY},${fc.z}): ${boneResult}`);
+          await new Promise(r => setTimeout(r, 200));
+          const crop = bot.blockAt(new Vec3Cls(fc.x, fc.y + 1, fc.z));
+          if (crop && crop.name === "wheat") {
+            const props = crop && (crop as any).getProperties ? (crop as any).getProperties() : null;
+            const age = props?.age ?? (crop as any).metadata;
+            if (age >= 7) break; // fully grown
+          }
         } catch (e) {
           logs.push(`Bone_meal failed at (${fc.x},${fc.y + 1},${fc.z}): ${e}`);
           break;
