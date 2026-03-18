@@ -426,14 +426,44 @@ export async function mc_farm(): Promise<string> {
     logs.push("No bone_meal — crops will grow naturally (takes several minutes).");
   }
 
-  // Step 5: Harvest wheat
+  // Step 5: Harvest wheat — wait for growth then dig each crop directly
   let wheatGathered = false;
-  try {
-    const harvestResult = await getHighLevel().minecraft_gather_resources(username, [{ name: "wheat", count: seedCount }], 8);
-    logs.push(`Harvest: ${harvestResult}`);
-    wheatGathered = true;
-  } catch (e) {
-    logs.push(`Harvest failed: ${e}`);
+  // Wait up to 10s for natural growth if no bone_meal (tick-based growth)
+  // With bone_meal we already applied it; crops at Y+1 should be wheat now
+  await new Promise(r => setTimeout(r, 500));
+
+  for (const fc of plantedCoords) {
+    const cropY = fc.y + 1;
+    try {
+      // Move close to the crop
+      await botManager.moveTo(username, fc.x, cropY, fc.z);
+      // Check what block is actually there
+      const freshBot = botManager.getBot(username);
+      const { Vec3: Vec3Cls } = await import("vec3");
+      const cropPos = new Vec3Cls(fc.x, cropY, fc.z);
+      const cropBlock = freshBot?.blockAt(cropPos);
+      logs.push(`Harvest check (${fc.x},${cropY},${fc.z}): block="${cropBlock?.name ?? 'null'}"`);
+      if (cropBlock && cropBlock.name === "wheat") {
+        await freshBot!.dig(cropBlock);
+        await new Promise(r => setTimeout(r, 300));
+        await botManager.collectNearbyItems(username);
+        logs.push(`Harvested wheat at (${fc.x},${cropY},${fc.z})`);
+        wheatGathered = true;
+      }
+    } catch (e) {
+      logs.push(`Harvest at (${fc.x},${cropY},${fc.z}) failed: ${e}`);
+    }
+  }
+
+  // Also try gather_resources as fallback for any wheat within 16 blocks
+  if (!wheatGathered) {
+    try {
+      const harvestResult = await getHighLevel().minecraft_gather_resources(username, [{ name: "wheat", count: seedCount }], 16);
+      logs.push(`Harvest fallback: ${harvestResult}`);
+      wheatGathered = harvestResult.includes("wheat:") && !harvestResult.includes("wheat: 0/");
+    } catch (e) {
+      logs.push(`Harvest fallback failed: ${e}`);
+    }
   }
 
   // Step 6: Craft bread (3 wheat = 1 bread)
