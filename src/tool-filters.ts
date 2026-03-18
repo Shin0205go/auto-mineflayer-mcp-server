@@ -28,6 +28,10 @@ export const TIER1_CORE_TOOLS = new Set([
   "mc_store",
   "mc_chat",
   "mc_connect",
+  // Block placement and item-on-block interaction (always needed)
+  "mc_place_block",
+  "minecraft_till_soil",
+  "minecraft_use_item_on_block",
   // Hot-reload after code changes
   "mc_reload",
   // Tool search is always visible for Tier 3 discovery
