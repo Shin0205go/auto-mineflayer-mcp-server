@@ -679,8 +679,11 @@ export async function digBlock(
       if (currentDistance > REACH_DISTANCE) {
         reasons.push(`too far (${currentDistance.toFixed(1)} blocks, max: ${REACH_DISTANCE})`);
       }
+      // Non-solid blocks (short_grass, tall_grass, leaves, etc.) have no collision shape
+      // but CAN be dug/broken. Don't reject them - let bot.dig() handle it.
       if (block.shapes && block.shapes.length === 0) {
-        reasons.push(`block has no collision shape`);
+        // Not a reason to reject - these are breakable decorative/plant blocks
+        console.error(`[Dig] ${blockName} has no collision shape (non-solid), will attempt dig anyway`);
       }
 
       // Check tool requirements dynamically using registry
@@ -1767,6 +1770,36 @@ export async function useItemOnBlock(
         } else {
           console.error(`[PORTAL DEBUG] Found ${nearbyObsidian.length} obsidian blocks nearby (need ≥10 for portal frame).`);
         }
+      }
+    } else if (itemName.includes("_seeds") || itemName === "wheat_seeds" || itemName === "carrot" || itemName === "potato" || itemName === "beetroot_seeds" || itemName === "melon_seeds" || itemName === "pumpkin_seeds") {
+      // Seed planting: use bot.placeBlock on the farmland/dirt block with UP face
+      // This sends the correct block_place packet for planting crops
+      try {
+        await bot.placeBlock(block, new Vec3(0, 1, 0)); // click TOP face of farmland
+      } catch (e) {
+        // placeBlock may throw if block is not placeable, try activateBlock as fallback
+        console.error(`[useItemOnBlock] placeBlock for seeds failed: ${e}, trying activateBlock`);
+        await bot.activateBlock(block);
+      }
+    } else if (itemName.includes("_hoe") || itemName === "hoe") {
+      // Hoe tilling: send block_place packet with the hoe on the TOP face of dirt/grass
+      // bot.activateBlock works but let's also try block_place directly for reliability
+      try {
+        (bot as any)._client.write('block_place', {
+          hand: 0,
+          location: { x: pos.x, y: pos.y, z: pos.z },
+          direction: 1, // top face
+          cursorX: 0.5,
+          cursorY: 1.0,
+          cursorZ: 0.5,
+          insideBlock: false,
+          sequence: 0,
+          worldBorderHit: false,
+        });
+        await new Promise(resolve => setTimeout(resolve, 200));
+      } catch (e) {
+        console.error(`[useItemOnBlock] block_place for hoe failed: ${e}, trying activateBlock`);
+        await bot.activateBlock(block);
       }
     } else {
       // For other items, use activateBlock

@@ -379,14 +379,8 @@ export async function mc_farm(): Promise<string> {
       logs.push(`Till failed at (${fc.x},${fc.y},${fc.z}): ${e}`);
       continue;
     }
-    // Wait 2 ticks for server to update block state to farmland
-    await new Promise(r => setTimeout(r, 100));
-
-    // Verify block is now farmland
-    const blockAfterTill = bot.blockAt(new (bot.entity.position.constructor as any)(fc.x, fc.y, fc.z));
-    if (blockAfterTill && blockAfterTill.name !== "farmland") {
-      logs.push(`Warn: block at (${fc.x},${fc.y},${fc.z}) is "${blockAfterTill.name}" after till (expected farmland) — attempting plant anyway`);
-    }
+    // Wait 3 ticks for server to update block state to farmland
+    await new Promise(r => setTimeout(r, 150));
 
     // Plant seeds ON TOP of farmland (same x,y,z — seeds go on top face)
     try {
