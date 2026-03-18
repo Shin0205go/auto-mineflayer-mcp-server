@@ -541,6 +541,21 @@ Bot needs to explore further (200+ blocks) to find animals.
 
 ---
 
+## [2026-03-18] Bug: mc_drop items re-collected by subsequent collectNearbyItems calls
+
+- **Cause**: `mc_drop` moves bot only 4 blocks away after dropping. But `collectNearbyItems` has a default `searchRadius=10`. Any subsequent `mc_gather`, `mc_combat`, or `mc_craft` call that runs `collectNearbyItems` will re-pick up the dropped items.
+- **Location**: `src/tools/core-tools.ts` lines 743-766 (mc_drop move-away logic)
+- **Coordinates**: ~(3, 44, 3) — dirt was dropped, bot moved 4 blocks, then gather/gather re-picked all dirt
+- **Last Actions**:
+  1. mc_drop(dirt) — dropped 308x dirt, moved 4 blocks away
+  2. mc_drop(diorite) — dropped 23x diorite; but next status showed dirt back in inventory
+  3. mc_gather(iron_ore) — navigated back near drop area, collectNearbyItems re-collected dirt
+- **Root Cause**: 4 block move-away < 10 block collectNearbyItems search radius
+- **Fix Applied**: Increased move-away distance from 4 to 15 blocks in mc_drop (beyond 10-block collection radius). Also added a 1.5s wait after move to ensure item entities settle before returning.
+- **Status**: Fixed
+
+---
+
 ## [2026-03-18] Critical: HP=5, Hunger=0, No Food — Phase 6 Blocked (Session current)
 
 - **Cause**: doMobLoot still disabled on server. No food obtainable from any mob kills.

@@ -740,26 +740,28 @@ export async function mc_drop(
   const { dropItem } = await import("../bot-manager/bot-items.js");
   const result = await dropItem(bot, item_name, count);
 
-  // Move 4 blocks away after dropping to prevent immediate re-pickup
-  // Dropped items have a 2-block pickup radius; moving 4 blocks clears it
+  // Move 15 blocks away after dropping to prevent re-pickup by collectNearbyItems
+  // collectNearbyItems has a default 10-block search radius; 15 blocks clears it safely
   try {
     const pos = bot.entity.position;
     const { pathfinder, goals: { GoalNear } } = await import("mineflayer-pathfinder");
     const targets = [
-      { x: pos.x + 4, y: pos.y, z: pos.z },
-      { x: pos.x - 4, y: pos.y, z: pos.z },
-      { x: pos.x, y: pos.y, z: pos.z + 4 },
-      { x: pos.x, y: pos.y, z: pos.z - 4 },
+      { x: pos.x + 15, y: pos.y, z: pos.z },
+      { x: pos.x - 15, y: pos.y, z: pos.z },
+      { x: pos.x, y: pos.y, z: pos.z + 15 },
+      { x: pos.x, y: pos.y, z: pos.z - 15 },
     ];
     // Try each direction until one succeeds
     for (const t of targets) {
       try {
-        await bot.pathfinder.goto(new GoalNear(t.x, t.y, t.z, 1));
+        await bot.pathfinder.goto(new GoalNear(t.x, t.y, t.z, 2));
         break;
       } catch {
         // Try next direction
       }
     }
+    // Brief wait to let item entities settle and drift beyond collection zone
+    await new Promise(r => setTimeout(r, 1500));
   } catch {
     // Move away failed — not critical, just log
     console.error("[Drop] Could not move away after drop (pathfinder unavailable)");
