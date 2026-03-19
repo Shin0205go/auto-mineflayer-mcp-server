@@ -18,6 +18,8 @@ import {
   mc_store,
   mc_chat,
   mc_connect,
+  mc_flee,
+  minecraft_pillar_up,
 } from "./core-tools.js";
 import { registry } from "../tool-handler-registry.js";
 import { botManager } from "../bot-manager/index.js";
@@ -195,6 +197,17 @@ export const coreTools = {
     },
   },
 
+  minecraft_pillar_up: {
+    description: "Build a pillar upward by jump-placing blocks (cobblestone/dirt). Use to climb out of caves or reach higher locations. Max 15 blocks per call.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        height: { type: "number", description: "Number of blocks to pillar up (default: 1, max: 15)" },
+      },
+      required: [],
+    },
+  },
+
   mc_connect: {
     description: "Connect to or disconnect from a Minecraft server.",
     inputSchema: {
@@ -256,25 +269,10 @@ export async function handleCoreTool(
           action: (args.action as string) || "connect",
           username: args.username, host: args.host, port: args.port, version: args.version,
         });
-    }
-  }
-
-  // New Tier1 tools (not in registry, call imported functions directly)
-  switch (name) {
-    case "mc_farm":
-      return await mc_farm();
-    case "mc_smelt": {
-      const username = botManager.requireSingleBot();
-      return await botManager.smeltItem(username, args.item_name as string, (args.count as number) || 1);
-    }
-    case "mc_flee": {
-      const username = botManager.requireSingleBot();
-      return await botManager.flee(username, (args.distance as number) || 20);
-    }
-    case "mc_place_block": {
-      const username = botManager.requireSingleBot();
-      const result = await botManager.placeBlock(username, args.block_type as string, args.x as number, args.y as number, args.z as number);
-      return result.message;
+      case "mc_flee":
+        return await fn((args.distance as number) || 20);
+      case "minecraft_pillar_up":
+        return await fn((args.height as number) || 1);
     }
   }
 
@@ -283,6 +281,7 @@ export async function handleCoreTool(
     case "mc_status": return await mc_status();
     case "mc_gather": return await mc_gather(args.block as string, (args.count as number) || 1, (args.max_distance as number) || 32);
     case "mc_craft": return await mc_craft(args.item as string, (args.count as number) || 1, (args.autoGather as boolean) || false);
+    case "mc_farm": return await mc_farm();
     case "mc_build": return await mc_build(args.preset as any, (args.size as any) || "small");
     case "mc_navigate": return await mc_navigate({ x: args.x as any, y: args.y as any, z: args.z as any, target_block: args.target_block as any, target_entity: args.target_entity as any, max_distance: args.max_distance as any });
     case "mc_combat": return await mc_combat(args.target as any, (args.flee_at_hp as number) || 4);
@@ -290,13 +289,11 @@ export async function handleCoreTool(
     case "mc_store": return await mc_store(args.action as any, args.item_name as any, args.count as any, args.chest_x as any, args.chest_y as any, args.chest_z as any, args.keep_items as any);
     case "mc_chat": return await mc_chat(args.message as any);
     case "mc_connect": return await mc_connect({ action: (args.action as any) || "connect", username: args.username as any, host: args.host as any, port: args.port as any, version: args.version as any });
+    case "mc_flee": return await mc_flee((args.distance as number) || 20);
+    case "minecraft_pillar_up": return await minecraft_pillar_up((args.height as number) || 1);
     case "mc_smelt": {
       const username = botManager.requireSingleBot();
       return await botManager.smeltItem(username, args.item_name as string, (args.count as number) || 1);
-    }
-    case "mc_flee": {
-      const username = botManager.requireSingleBot();
-      return await botManager.flee(username, (args.distance as number) || 20);
     }
     case "mc_place_block": {
       const username = botManager.requireSingleBot();

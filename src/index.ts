@@ -128,6 +128,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Route: Tier 1 core tools (mc_*)
     if (name in coreTools) {
       result = await handleCoreTool(name, toolArgs);
+      // After mc_connect, refresh tools/list so Tier 2 tools (based on bot state) become visible
+      if (name === "mc_connect" && toolArgs.action !== "disconnect") {
+        try {
+          await server.sendToolListChanged();
+        } catch (_) { /* ignore */ }
+      }
     }
     // Route: Tier 2 situational tools
     else if (name in tier2ToolDefs) {

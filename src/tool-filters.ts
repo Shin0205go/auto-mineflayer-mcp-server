@@ -34,6 +34,10 @@ export const TIER1_CORE_TOOLS = new Set([
   "minecraft_use_item_on_block",
   // Farming (till + plant + bone_meal + harvest + craft bread)
   "mc_farm",
+  // Flee from danger (always visible — Tier 2 caching prevents dynamic visibility)
+  "mc_flee",
+  // Pillar up (always visible — essential for cave escape)
+  "minecraft_pillar_up",
   // Hot-reload after code changes
   "mc_reload",
   // Tool search is always visible for Tier 3 discovery
@@ -200,6 +204,23 @@ export const TIER2_TOOLS: Tier2Tool[] = [
     },
   },
   {
+    name: "minecraft_pillar_up",
+    condition: (username: string) => {
+      try {
+        const inventory = botManager.getInventory(username);
+        // Show when bot has stackable building blocks (cobblestone, dirt, netherrack, etc.)
+        return inventory.some(item =>
+          item.name === "cobblestone" || item.name === "dirt" ||
+          item.name === "netherrack" || item.name === "stone" ||
+          item.name.includes("_planks") || item.name === "sandstone" ||
+          item.name === "deepslate"
+        );
+      } catch {
+        return false;
+      }
+    },
+  },
+  {
     name: "mc_enter_portal",
     condition: (username: string) => {
       try {
@@ -332,6 +353,19 @@ export const tier2ToolDefs: Record<string, { description: string; inputSchema: o
       required: ["item_name"],
     },
   },
+  minecraft_pillar_up: {
+    description: "Build a pillar upward by jump-placing blocks. Use to climb out of caves or reach higher locations. Max 15 blocks per call. Requires cobblestone/dirt/building blocks in inventory.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        height: {
+          type: "number",
+          description: "Number of blocks to pillar up (default: 1, max: 15)",
+        },
+      },
+      required: [],
+    },
+  },
   mc_enter_portal: {
     description: "Enter a nearby Nether/End portal to teleport. Appears when a portal is within 10 blocks.",
     inputSchema: {
@@ -395,6 +429,10 @@ export async function handleTier2Tool(
       if (!itemName) throw new Error("item_name is required");
       // equipItem auto-detects the correct slot (hand/head/torso/legs/feet)
       return await botManager.equipItem(username, itemName);
+    }
+    case "minecraft_pillar_up": {
+      const height = Math.min((args.height as number) || 1, 15);
+      return await botManager.pillarUp(username, height);
     }
     case "mc_enter_portal": {
       return await botManager.enterPortal(username);
