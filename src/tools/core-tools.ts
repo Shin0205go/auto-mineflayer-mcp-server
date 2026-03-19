@@ -451,48 +451,55 @@ export async function mc_farm(): Promise<string> {
             if (dirtInv2 && dirtInv2.count >= seedCount) {
               logs.push("No natural dirt near water — placing dirt blocks from inventory.");
               const waterPos = farWater.position;
-              const placeY = waterPos.y; // same Y as water surface
-              // Place dirt adjacent to water (within 4 blocks for irrigation)
+              // Strategy: find surface level near water, then place dirt ON TOP of solid ground
               let placedCount = 0;
-              for (let pdx = -2; pdx <= 2 && placedCount < seedCount; pdx++) {
-                for (let pdz = -2; pdz <= 2 && placedCount < seedCount; pdz++) {
+              for (let pdx = -3; pdx <= 3 && placedCount < seedCount; pdx++) {
+                for (let pdz = -3; pdz <= 3 && placedCount < seedCount; pdz++) {
                   if (pdx === 0 && pdz === 0) continue; // skip water position
+                  if (Math.abs(pdx) + Math.abs(pdz) > 4) continue; // stay within irrigation range
                   const px = waterPos.x + pdx, pz = waterPos.z + pdz;
-                  // Find a solid block to place on, or place on existing ground
-                  for (let pdy = 0; pdy <= 2; pdy++) {
-                    const py = placeY + pdy;
-                    const targetBlock = bot.blockAt(new (bot.entity.position.constructor as any)(px, py, pz));
-                    const aboveTarget = bot.blockAt(new (bot.entity.position.constructor as any)(px, py + 1, pz));
-                    const above2Target = bot.blockAt(new (bot.entity.position.constructor as any)(px, py + 2, pz));
-                    // Place dirt on solid ground with air above
-                    if (targetBlock && TILLABLE.has(targetBlock.name) && aboveTarget?.name === "air" && above2Target?.name === "air") {
-                      farmCoords.push({ x: px, y: py, z: pz });
-                      placedCount++;
-                      break;
-                    }
-                    // Place dirt on air if there's a solid block below
-                    if (targetBlock?.name === "air" && aboveTarget?.name === "air") {
-                      const belowTarget = bot.blockAt(new (bot.entity.position.constructor as any)(px, py - 1, pz));
-                      if (belowTarget && belowTarget.name !== "air" && belowTarget.name !== "water") {
+                  // Scan from high to low to find the surface (first solid block with air above)
+                  for (let py = waterPos.y + 3; py >= waterPos.y - 3; py--) {
+                    const block = bot.blockAt(new (bot.entity.position.constructor as any)(px, py, pz));
+                    const above1 = bot.blockAt(new (bot.entity.position.constructor as any)(px, py + 1, pz));
+                    const above2 = bot.blockAt(new (bot.entity.position.constructor as any)(px, py + 2, pz));
+                    if (!block || !above1 || !above2) continue;
+                    // Found solid ground with 2 air blocks above = surface
+                    if (block.name !== "air" && block.name !== "water" &&
+                        above1.name === "air" && above2.name === "air") {
+                      // If already tillable, just use it
+                      if (TILLABLE.has(block.name)) {
+                        farmCoords.push({ x: px, y: py, z: pz });
+                        placedCount++;
+                        logs.push(`Found tillable ${block.name} at (${px},${py},${pz})`);
+                      } else {
+                        // Place dirt ON TOP of this solid block
+                        const placeY = py + 1;
                         try {
-                          await botManager.placeBlock(username, "dirt", px, py, pz);
-                          const check = bot.blockAt(new (bot.entity.position.constructor as any)(px, py, pz));
+                          // Move close before placing
+                          const dist = Math.sqrt((bot.entity.position.x - px) ** 2 + (bot.entity.position.z - pz) ** 2);
+                          if (dist > 4) {
+                            await botManager.moveTo(username, px, py + 1, pz);
+                          }
+                          await botManager.placeBlock(username, "dirt", px, placeY, pz);
+                          const check = bot.blockAt(new (bot.entity.position.constructor as any)(px, placeY, pz));
                           if (check && check.name === "dirt") {
-                            farmCoords.push({ x: px, y: py, z: pz });
+                            farmCoords.push({ x: px, y: placeY, z: pz });
                             placedCount++;
-                            logs.push(`Placed dirt near water at (${px},${py},${pz})`);
+                            logs.push(`Placed dirt on ${block.name} at (${px},${placeY},${pz})`);
+                          } else {
+                            logs.push(`Dirt placement failed at (${px},${placeY},${pz}) — got ${check?.name}`);
                           }
                         } catch (e) {
-                          // skip
+                          logs.push(`Place dirt error at (${px},${placeY},${pz}): ${e}`);
                         }
-                        break;
                       }
+                      break; // found surface for this XZ, move to next
                     }
-                    if (targetBlock && targetBlock.name !== "air" && !TILLABLE.has(targetBlock.name)) break;
                   }
                 }
               }
-              logs.push(`Placed ${placedCount} dirt blocks near water for farming`);
+              logs.push(`Placed/found ${placedCount} farm spots near water`);
             } else {
               logs.push("No dirt in inventory to place near water.");
             }
