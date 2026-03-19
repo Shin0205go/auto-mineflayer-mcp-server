@@ -17,6 +17,7 @@ mcpServers:
         AGENT_TYPE: "game"
         MC_HOST: "localhost"
         MC_PORT: "25565"
+        BOT_USERNAME: "Claude1"
         VIEWER: "0"
 hooks:
   PreToolUse:

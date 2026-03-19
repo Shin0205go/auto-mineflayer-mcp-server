@@ -197,12 +197,70 @@ function handleRequest(line: string): boolean {
       const requestId = msg.id;
       log("Intercepted mc_reload — performing full process restart");
 
-      restartChild().then(() => {
+      restartChild().then(async () => {
         // Send tools/list_changed notification to Claude Code
         sendToClient({
           jsonrpc: "2.0",
           method: "notifications/tools/list_changed",
         });
+
+        // Auto-reconnect: send mc_connect to the new child
+        const username = process.env.BOT_USERNAME || "";
+        const host = process.env.MC_HOST || "localhost";
+        const port = parseInt(process.env.MC_PORT || "25565");
+        let reconnectResult = "";
+
+        if (username && child && child.stdin && !child.killed) {
+          log(`Auto-reconnecting bot: ${username}@${host}:${port}`);
+          try {
+            reconnectResult = await new Promise<string>((resolve) => {
+              const connectId = `_proxy_reconnect_${Date.now()}`;
+              const connectReq = JSON.stringify({
+                jsonrpc: "2.0",
+                id: connectId,
+                method: "tools/call",
+                params: {
+                  name: "mc_connect",
+                  arguments: { action: "connect", username, host, port },
+                },
+              });
+
+              const timeout = setTimeout(() => {
+                log("Auto-reconnect timeout");
+                resolve("Auto-reconnect: timeout (bot may need manual mc_connect)");
+              }, 15_000);
+
+              // Intercept the response for our reconnect call
+              const interceptor = (data: Buffer) => {
+                const text = data.toString();
+                for (const line of text.split("\n")) {
+                  const trimmed = line.trim();
+                  if (!trimmed) continue;
+                  try {
+                    const resp = JSON.parse(trimmed);
+                    if (resp.id === connectId) {
+                      clearTimeout(timeout);
+                      child!.stdout!.removeListener("data", interceptor);
+                      const content = resp.result?.content?.[0]?.text || "connected";
+                      log(`Auto-reconnect result: ${content.substring(0, 100)}`);
+                      resolve(`Auto-reconnect: ${content}`);
+                      return;
+                    }
+                  } catch { /* not JSON */ }
+                  // Forward non-reconnect messages to client
+                  process.stdout.write(trimmed + "\n");
+                }
+              };
+
+              child!.stdout!.on("data", interceptor);
+              child!.stdin!.write(connectReq + "\n");
+            });
+          } catch (err: any) {
+            reconnectResult = `Auto-reconnect failed: ${err.message}`;
+          }
+        } else if (!username) {
+          reconnectResult = "No BOT_USERNAME env var — call mc_connect manually.";
+        }
 
         // Send success response
         sendToClient({
@@ -211,7 +269,7 @@ function handleRequest(line: string): boolean {
           result: {
             content: [{
               type: "text",
-              text: "Full hot-reload complete (process restart).\nAll modules reloaded including bot-manager.\nBot connection reset — use mc_connect to reconnect.\ntools/list_changed notification sent.",
+              text: `Full hot-reload complete (process restart).\nAll modules reloaded including bot-manager.\n${reconnectResult}\ntools/list_changed notification sent.`,
             }],
           },
         });
