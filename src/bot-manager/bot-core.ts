@@ -396,7 +396,7 @@ export class BotCore extends EventEmitter {
             // NETHER SAFETY: Restrict risky movements to prevent lava deaths and cliff falls
             movements.allowFreeMotion = !isNether;
             movements.allowParkour = false; // DISABLED in all dimensions (prevents fall damage)
-            movements.maxDropDown = isNether ? 1 : 3; // Reduced to 3 (safer fall limit)
+            movements.maxDropDown = isNether ? 1 : 2; // Match spawn setting (3 caused ravine falls)
 
             bot.pathfinder.setMovements(movements);
             console.error(`[BotManager] Pathfinder updated for ${newDimension}: allowFreeMotion=${movements.allowFreeMotion}, allowParkour=${movements.allowParkour}, maxDropDown=${movements.maxDropDown}`);

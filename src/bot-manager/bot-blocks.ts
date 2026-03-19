@@ -353,8 +353,8 @@ export async function digBlock(
       .map(block => block.id);
     bot.pathfinder.movements.allowParkour = false; // Disable parkour for more predictable movement
     bot.pathfinder.movements.allowSprinting = false; // Disable sprinting to be more careful
-    bot.pathfinder.movements.maxDropDown = 10; // Allow larger drops
-    bot.pathfinder.movements.infiniteLiquidDropdownDistance = true; // Allow dropping into water from any height
+    bot.pathfinder.movements.maxDropDown = 2; // SAFETY: prevent cliff jumps (was 10, caused 20-block falls in ravines)
+    bot.pathfinder.movements.infiniteLiquidDropdownDistance = false; // SAFETY: don't drop into water from height
 
     // First try: Get close with pathfinder
     // Temporarily enable digging to reach difficult blocks
