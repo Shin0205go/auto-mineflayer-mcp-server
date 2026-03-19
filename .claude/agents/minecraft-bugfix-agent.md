@@ -4,7 +4,7 @@ description: "Use this agent when you need to autonomously play Minecraft using 
 model: sonnet
 color: green
 memory: project
-maxTurns: 10
+maxTurns: 30
 background: true
 permissionMode: dontAsk
 mcpServers:

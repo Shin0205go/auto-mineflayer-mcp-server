@@ -394,8 +394,29 @@ export async function mc_farm(): Promise<string> {
       matching: (b: any) => b.name === "water",
       maxDistance: 10,
     });
-    if (!waterBlock) {
-      logs.push("No water within 10 blocks — farmland may dry out. Searching for water source...");
+    if (waterBlock) {
+      // Filter farmCoords to only include blocks within 4 blocks of water (irrigation range)
+      const wp = waterBlock.position;
+      const beforeCount = farmCoords.length;
+      for (let i = farmCoords.length - 1; i >= 0; i--) {
+        const fc = farmCoords[i];
+        const dist = Math.abs(fc.x - wp.x) + Math.abs(fc.z - wp.z); // Manhattan distance on XZ
+        const yDiff = Math.abs(fc.y - wp.y);
+        if (dist > 4 || yDiff > 1) {
+          farmCoords.splice(i, 1);
+        }
+      }
+      if (farmCoords.length < beforeCount) {
+        logs.push(`Filtered farmCoords: ${beforeCount} → ${farmCoords.length} (within 4 blocks of water at ${wp.x},${wp.y},${wp.z})`);
+      }
+    }
+    if (!waterBlock || farmCoords.length === 0) {
+      // No water nearby or no valid farm spots near water
+      if (!waterBlock) {
+        logs.push("No water within 10 blocks — farmland may dry out. Searching for water source...");
+      } else {
+        logs.push("No farmable blocks within irrigation range of nearby water. Searching for better water source...");
+      }
       const farWater = bot.findBlock({
         matching: (b: any) => b.name === "water",
         maxDistance: 64,
@@ -404,15 +425,15 @@ export async function mc_farm(): Promise<string> {
         logs.push(`Found water at (${farWater.position.x}, ${farWater.position.y}, ${farWater.position.z}), moving close...`);
         try {
           await botManager.moveTo(username, farWater.position.x, farWater.position.y, farWater.position.z);
-          // Re-scan for tillable blocks near water
-          const newPos = bot.entity.position;
-          const nbx = Math.floor(newPos.x), nby = Math.floor(newPos.y), nbz = Math.floor(newPos.z);
+          // Re-scan for tillable blocks near water — MUST be within 4 blocks of water for irrigation
+          const waterX = farWater.position.x, waterY = farWater.position.y, waterZ = farWater.position.z;
           farmCoords.length = 0;
-          for (let dx2 = -3; dx2 <= 3 && farmCoords.length < seedCount; dx2++) {
-            for (let dz2 = -3; dz2 <= 3 && farmCoords.length < seedCount; dz2++) {
-              const cx = nbx + dx2, cz = nbz + dz2;
+          for (let dx2 = -4; dx2 <= 4 && farmCoords.length < seedCount; dx2++) {
+            for (let dz2 = -4; dz2 <= 4 && farmCoords.length < seedCount; dz2++) {
+              if (Math.abs(dx2) + Math.abs(dz2) > 4) continue; // Manhattan distance <= 4 from water
+              const cx = waterX + dx2, cz = waterZ + dz2;
               for (let dy2 = 0; dy2 >= -5; dy2--) {
-                const cy = nby + dy2;
+                const cy = waterY + dy2;
                 const gb = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy, cz));
                 const ab = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy + 1, cz));
                 const a2b = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy + 2, cz));
@@ -424,12 +445,128 @@ export async function mc_farm(): Promise<string> {
               }
             }
           }
+          // If no natural tillable blocks near water, place dirt from inventory
+          if (farmCoords.length === 0) {
+            const dirtInv2 = botManager.getInventory(username).find((i: any) => i.name === "dirt");
+            if (dirtInv2 && dirtInv2.count >= seedCount) {
+              logs.push("No natural dirt near water — placing dirt blocks from inventory.");
+              const waterPos = farWater.position;
+              const placeY = waterPos.y; // same Y as water surface
+              // Place dirt adjacent to water (within 4 blocks for irrigation)
+              let placedCount = 0;
+              for (let pdx = -2; pdx <= 2 && placedCount < seedCount; pdx++) {
+                for (let pdz = -2; pdz <= 2 && placedCount < seedCount; pdz++) {
+                  if (pdx === 0 && pdz === 0) continue; // skip water position
+                  const px = waterPos.x + pdx, pz = waterPos.z + pdz;
+                  // Find a solid block to place on, or place on existing ground
+                  for (let pdy = 0; pdy <= 2; pdy++) {
+                    const py = placeY + pdy;
+                    const targetBlock = bot.blockAt(new (bot.entity.position.constructor as any)(px, py, pz));
+                    const aboveTarget = bot.blockAt(new (bot.entity.position.constructor as any)(px, py + 1, pz));
+                    const above2Target = bot.blockAt(new (bot.entity.position.constructor as any)(px, py + 2, pz));
+                    // Place dirt on solid ground with air above
+                    if (targetBlock && TILLABLE.has(targetBlock.name) && aboveTarget?.name === "air" && above2Target?.name === "air") {
+                      farmCoords.push({ x: px, y: py, z: pz });
+                      placedCount++;
+                      break;
+                    }
+                    // Place dirt on air if there's a solid block below
+                    if (targetBlock?.name === "air" && aboveTarget?.name === "air") {
+                      const belowTarget = bot.blockAt(new (bot.entity.position.constructor as any)(px, py - 1, pz));
+                      if (belowTarget && belowTarget.name !== "air" && belowTarget.name !== "water") {
+                        try {
+                          await botManager.placeBlock(username, "dirt", px, py, pz);
+                          const check = bot.blockAt(new (bot.entity.position.constructor as any)(px, py, pz));
+                          if (check && check.name === "dirt") {
+                            farmCoords.push({ x: px, y: py, z: pz });
+                            placedCount++;
+                            logs.push(`Placed dirt near water at (${px},${py},${pz})`);
+                          }
+                        } catch (e) {
+                          // skip
+                        }
+                        break;
+                      }
+                    }
+                    if (targetBlock && targetBlock.name !== "air" && !TILLABLE.has(targetBlock.name)) break;
+                  }
+                }
+              }
+              logs.push(`Placed ${placedCount} dirt blocks near water for farming`);
+            } else {
+              logs.push("No dirt in inventory to place near water.");
+            }
+          }
           logs.push(`Near-water farm locations found: ${farmCoords.length}`);
         } catch (e) {
           logs.push(`Failed to move to water: ${e}`);
         }
       } else {
-        logs.push("No water found within 64 blocks — farmland will be dry (crops may not grow).");
+        // No water within 64 blocks — try to create water source or search further
+        logs.push("No water found within 64 blocks.");
+
+        // Option 1: Use water_bucket if we have one
+        const waterBucket = botManager.getInventory(username).find((i: any) => i.name === "water_bucket");
+        if (waterBucket) {
+          logs.push("Have water_bucket — placing water source next to farm.");
+          try {
+            const waterX = bx, waterY = by - 1, waterZ = bz;
+            await botManager.placeBlock(username, "water_bucket", waterX, waterY, waterZ);
+            logs.push(`Placed water at (${waterX},${waterY},${waterZ})`);
+          } catch (e) {
+            logs.push(`Failed to place water: ${e}`);
+          }
+        } else {
+          // Option 2: Craft bucket from iron_ingots if available
+          const ironIngots = botManager.getInventory(username).find((i: any) => i.name === "iron_ingot");
+          if (ironIngots && ironIngots.count >= 3) {
+            logs.push("Have iron_ingots — crafting bucket to fetch water.");
+            try {
+              const craftResult = await getHighLevel().minecraft_craft_chain(username, "bucket", false);
+              logs.push(`Craft bucket: ${craftResult}`);
+            } catch (e) {
+              logs.push(`Craft bucket failed: ${e}`);
+            }
+          }
+
+          // Option 3: Search wider (200 blocks) for water
+          logs.push("Searching up to 200 blocks for water...");
+          const veryFarWater = bot.findBlock({
+            matching: (b: any) => b.name === "water",
+            maxDistance: 200,
+          });
+          if (veryFarWater) {
+            logs.push(`Found water at (${veryFarWater.position.x}, ${veryFarWater.position.y}, ${veryFarWater.position.z}), moving there...`);
+            try {
+              await botManager.moveTo(username, veryFarWater.position.x, veryFarWater.position.y + 1, veryFarWater.position.z);
+              // Re-scan for tillable blocks near water
+              const newPos2 = bot.entity.position;
+              const nbx2 = Math.floor(newPos2.x), nby2 = Math.floor(newPos2.y), nbz2 = Math.floor(newPos2.z);
+              farmCoords.length = 0;
+              for (let dx3 = -3; dx3 <= 3 && farmCoords.length < seedCount; dx3++) {
+                for (let dz3 = -3; dz3 <= 3 && farmCoords.length < seedCount; dz3++) {
+                  const cx = nbx2 + dx3, cz = nbz2 + dz3;
+                  for (let dy3 = 0; dy3 >= -5; dy3--) {
+                    const cy = nby2 + dy3;
+                    const gb = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy, cz));
+                    const ab = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy + 1, cz));
+                    const a2b = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy + 2, cz));
+                    if (gb && TILLABLE.has(gb.name) && ab?.name === "air" && a2b?.name === "air") {
+                      farmCoords.push({ x: cx, y: cy, z: cz });
+                      break;
+                    }
+                    if (gb && gb.name !== "air" && !TILLABLE.has(gb.name)) break;
+                  }
+                }
+              }
+              logs.push(`Near-water farm locations found: ${farmCoords.length}`);
+            } catch (e) {
+              logs.push(`Failed to move to water: ${e}`);
+            }
+          } else {
+            logs.push("No water found within 200 blocks — farming not possible here. Move to a river/ocean biome.");
+          }
+        }
       }
     } else {
       logs.push(`Water source nearby at (${waterBlock.position.x}, ${waterBlock.position.y}, ${waterBlock.position.z}) — farmland will stay moist.`);
@@ -439,6 +576,18 @@ export async function mc_farm(): Promise<string> {
   // Step 3: Till then immediately plant each block (till+plant per block, with wait)
   const plantedCoords: Array<{ x: number; y: number; z: number }> = [];
   for (const fc of farmCoords) {
+    // Move close to the block before tilling (must be within 4 blocks)
+    try {
+      const botPos = bot.entity.position;
+      const dist = botPos.distanceTo(new (bot.entity.position.constructor as any)(fc.x + 0.5, fc.y + 1, fc.z + 0.5));
+      if (dist > 3.5) {
+        await botManager.moveTo(username, fc.x + 1, fc.y + 1, fc.z);
+        logs.push(`Moved to (${fc.x + 1},${fc.y + 1},${fc.z}) for tilling`);
+      }
+    } catch (e) {
+      logs.push(`Move to farm block failed: ${e}`);
+    }
+
     // Till the block
     try {
       const tillResult = await botManager.tillSoil(username, fc.x, fc.y, fc.z);
@@ -463,6 +612,10 @@ export async function mc_farm(): Promise<string> {
       logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): farmland confirmed`);
     }
 
+    // Enable sneaking to prevent farmland trampling during movement
+    bot.setControlState("sneak", true);
+    await new Promise(r => setTimeout(r, 100));
+
     // Navigate NEXT TO the farmland (not on top — walking on farmland tramples it!)
     try {
       await botManager.moveTo(username, fc.x + 1, fc.y + 1, fc.z);
@@ -471,6 +624,11 @@ export async function mc_farm(): Promise<string> {
         await botManager.moveTo(username, fc.x - 1, fc.y + 1, fc.z);
       } catch (_) {}
     }
+
+    // Disable sneaking
+    bot.setControlState("sneak", false);
+    await new Promise(r => setTimeout(r, 100));
+
     // Re-verify farmland hasn't been trampled
     {
       const { Vec3: Vec3Cls } = await import("vec3");
@@ -507,11 +665,22 @@ export async function mc_farm(): Promise<string> {
   if (boneMealInv && boneMealInv.count > 0) {
     const { Vec3: Vec3Cls } = await import("vec3");
     for (const fc of plantedCoords) {
+      // Move close to crop before applying bone_meal
+      try {
+        const bDist = bot.entity.position.distanceTo(new Vec3Cls(fc.x + 0.5, fc.y + 1, fc.z + 0.5));
+        if (bDist > 3.5) {
+          await botManager.moveTo(username, fc.x + 1, fc.y + 1, fc.z);
+        }
+      } catch (_) { /* best effort */ }
       for (let attempt = 0; attempt < 8; attempt++) {
         try {
-          // Check whether crop exists at fc.y+1 or fc.y
+          // Check whether crop exists at fc.y+1 — bone_meal must target the crop block, not farmland
           const cropAbove = bot.blockAt(new Vec3Cls(fc.x, fc.y + 1, fc.z));
-          const targetY = (cropAbove && cropAbove.name === "wheat") ? fc.y + 1 : fc.y;
+          if (!cropAbove || cropAbove.name !== "wheat") {
+            logs.push(`No wheat crop at (${fc.x},${fc.y + 1},${fc.z}) — got "${cropAbove?.name}". Skipping bone_meal.`);
+            break;
+          }
+          const targetY = fc.y + 1; // always target crop, not farmland
           const boneResult = await botManager.useItemOnBlock(username, "bone_meal", fc.x, targetY, fc.z);
           logs.push(`Bone_meal at (${fc.x},${targetY},${fc.z}): ${boneResult}`);
           await new Promise(r => setTimeout(r, 200));

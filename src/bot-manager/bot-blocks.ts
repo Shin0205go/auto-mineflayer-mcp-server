@@ -4,6 +4,10 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 
 import type { ManagedBot } from "./types.js";
+
+// Global sequence counter for block_place packets (Minecraft 1.19+ requires incrementing IDs)
+let _blockPlaceSequence = 0;
+export function nextBlockPlaceSequence(): number { return ++_blockPlaceSequence; }
 import {
   requiresPickaxe,
   requiresAxe,
@@ -1445,7 +1449,7 @@ export async function useItemOnBlock(
             cursorY: 1.0,
             cursorZ: 0.5,
             insideBlock: false,
-            sequence: 0,
+            sequence: nextBlockPlaceSequence(),
             worldBorderHit: false
           });
           await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1672,7 +1676,7 @@ export async function useItemOnBlock(
                 cursorY: 0.5,
                 cursorZ: 0.5,
                 insideBlock: false,
-                sequence: 0,
+                sequence: nextBlockPlaceSequence(),
                 worldBorderHit: false,
               });
               await new Promise(resolve => setTimeout(resolve, 1500));
@@ -1707,7 +1711,7 @@ export async function useItemOnBlock(
                 cursorY: 1.0,
                 cursorZ: 0.5,
                 insideBlock: false,
-                sequence: 0,
+                sequence: nextBlockPlaceSequence(),
                 worldBorderHit: false,
               });
               await new Promise(resolve => setTimeout(resolve, 1500));
@@ -1800,10 +1804,14 @@ export async function useItemOnBlock(
       await bot.lookAt(pos.offset(0.5, 1.0, 0.5), true);
       await new Promise(resolve => setTimeout(resolve, 200));
 
-      // Attempt 1: activateBlock with explicit direction (UP face) and cursor on top
+      // Attempt 1: activateBlock (simple call — no extra args, most compatible)
       try {
-        console.error(`[useItemOnBlock] Hoe tilling: activateBlock on "${block.name}" at (${x},${y},${z}) with UP direction`);
-        await bot.activateBlock(block, new Vec3(0, 1, 0), new Vec3(0.5, 1.0, 0.5));
+        console.error(`[useItemOnBlock] Hoe tilling: activateBlock on "${block.name}" at (${x},${y},${z})`);
+        // Re-fetch block to ensure fresh reference
+        const freshBlock = bot.blockAt(pos);
+        if (freshBlock) {
+          await bot.activateBlock(freshBlock);
+        }
         await new Promise(resolve => setTimeout(resolve, 500));
         // Check if block became farmland
         const after1 = bot.blockAt(pos);
@@ -1836,7 +1844,7 @@ export async function useItemOnBlock(
             cursorY: 1.0,
             cursorZ: 0.5,
             insideBlock: false,
-            sequence: 0,
+            sequence: nextBlockPlaceSequence(),
             worldBorderHit: false,
           });
           await new Promise(resolve => setTimeout(resolve, 500));
@@ -1925,7 +1933,7 @@ export async function useItemOnBlock(
             cursorY: 1.0,
             cursorZ: 0.5,
             insideBlock: false,
-            sequence: 0,
+            sequence: nextBlockPlaceSequence(),
             worldBorderHit: false,
           });
           await new Promise(resolve => setTimeout(resolve, 500));

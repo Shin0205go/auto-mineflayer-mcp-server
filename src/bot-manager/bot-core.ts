@@ -276,6 +276,22 @@ export class BotCore extends EventEmitter {
         bot.pathfinder.setMovements(movements);
         console.error(`[BotManager] Pathfinder configured: canDig=true, allow1by1towers=true, scaffoldingBlocks=${movements.scafoldingBlocks.length} types`);
 
+        // PATCH: Fix mineflayer's block_place sequence bug (hardcoded 0 in both
+        // generic_place.js and inventory.js activateBlock).
+        // Minecraft 1.19+ requires incrementing sequence IDs for block_place packets.
+        // Without this fix, activateBlock (hoe tilling, seed planting, bucket use, etc.) silently fails.
+        {
+          let placeSequence = 0;
+          const origWrite = bot._client.write.bind(bot._client);
+          (bot._client as any).write = function(name: string, data: any) {
+            if (name === 'block_place' && data && typeof data.sequence !== 'undefined') {
+              data.sequence = ++placeSequence;
+            }
+            return origWrite(name, data);
+          };
+          console.error(`[BotManager] Patched _client.write to fix block_place sequence (mineflayer bug)`);
+        }
+
         // Check game mode - auto-switch to survival if not
         const gameMode = bot.game?.gameMode;
         console.error(`[BotManager] ${config.username} game mode: ${gameMode}`);
