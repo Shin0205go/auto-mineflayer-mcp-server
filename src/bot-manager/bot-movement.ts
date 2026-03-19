@@ -117,6 +117,9 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
     let pathResetCount = 0;
     let notMovingCount = 0;
 
+    // Collect cleanup callbacks for listeners added after finish() is defined
+    const cleanupCallbacks: Array<() => void> = [];
+
     const finish = (result: { success: boolean; message: string; stuckReason?: string }) => {
       if (resolved) return;
       resolved = true;
@@ -124,6 +127,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       bot.removeListener("goal_reached", onGoalReached);
       bot.removeListener("path_reset", onPathReset);
       bot.removeListener("goal_updated", onGoalUpdated);
+      for (const cb of cleanupCallbacks) cb();
       try { bot.pathfinder.setGoal(null); } catch (_) {}
       resolve(result);
     };
@@ -286,6 +290,27 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         notMovingCount = 0;
       }
     }, 500);
+
+    // SAFETY: Use physicsTick for instant fall detection (500ms interval is too slow)
+    let lastPhysicsY = start.y;
+    const onPhysicsTick = () => {
+      if (resolved) return;
+      const cy = bot.entity.position.y;
+      const drop = lastPhysicsY - cy;
+      if (drop > 3) {
+        console.error(`[MoveTo] PHYSICS FALL: ${drop.toFixed(1)} blocks (${lastPhysicsY.toFixed(1)} → ${cy.toFixed(1)}). Emergency stop!`);
+        bot.pathfinder.stop();
+        bot.clearControlStates();
+        finish({
+          success: false,
+          message: `Navigation stopped: fell ${drop.toFixed(1)} blocks at (${bot.entity.position.x.toFixed(1)}, ${cy.toFixed(1)}, ${bot.entity.position.z.toFixed(1)}). Unsafe terrain — use mc_tunnel(direction="up") to climb safely.`,
+          stuckReason: "fall_detected"
+        });
+      }
+      lastPhysicsY = cy;
+    };
+    bot.on("physicsTick", onPhysicsTick);
+    cleanupCallbacks.push(() => bot.removeListener("physicsTick", onPhysicsTick));
 
     // Set the goal AFTER checkInterval is initialized (see comment above)
     bot.pathfinder.setGoal(goal);

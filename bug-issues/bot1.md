@@ -747,4 +747,23 @@ Bot needs to explore further (200+ blocks) to find animals.
   2. mc_navigate should refuse to pathfind in ravines (detect large Y gaps in terrain nearby)
   3. Food priority: never enter dangerous terrain without food
 - **Status**: Investigating. 6th death.
+
+---
+
+## [2026-03-20] Death: Killed by Zombie during chest operations (7th death)
+- **Cause**: Bot was stationary during mc_store deposit_all_except at chest (5,101,25). Zombie approached and killed bot while it was repeatedly failing to deposit items.
+- **Coordinates**: Near (5, 101, 25)
+- **Last Actions**:
+  1. Navigated to chest at (5,101,25)
+  2. mc_store deposit_all_except — all deposits failed with various errors
+  3. Bot was stationary for extended time, zombie killed it
+- **Root Causes**:
+  1. **mc_store deposit errors**: Multiple deposit failures ("inventory unchanged after 3s wait", "GoalChanged", "Chest open timeout") kept bot stationary
+  2. **No hostile mob awareness during chest operations**: Bot doesn't check for threats while performing storage
+  3. **Midnight = zombie spawns**: Dangerous to do extended stationary operations at night
+- **Items Lost**: stone_hoe, obsidian x4, dirt x29, torch x64, white_wool x1, cobblestone x~200 (dropped at death location, keepInventory partial?)
+- **Fix Needed**:
+  1. mc_store should check for hostile mobs before/during operations
+  2. Bot should not perform extended stationary operations at night without shelter
+- **Status**: Recorded. 7th death.
 - **Status**: Recorded. 5th death. Witch ranged attack during navigation.
