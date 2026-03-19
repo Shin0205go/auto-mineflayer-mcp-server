@@ -1273,19 +1273,252 @@ export async function exploreForBiome(
 }
 
 /**
+ * Dig a staircase upward — safe way to escape ravines/caves
+ * Digs 2-high staircase pattern: dig above + ahead, place block below to step up, repeat.
+ * Each step gains 1 Y level. Uses north direction for horizontal component.
+ */
+async function digStaircaseUp(managed: ManagedBot, height: number = 10): Promise<string> {
+  const bot = managed.bot;
+  const startPos = bot.entity.position.clone();
+  const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+
+  // Stop all movement
+  bot.pathfinder.setGoal(null);
+  bot.clearControlStates();
+  try { bot.stopDigging(); } catch { /* ignore */ }
+  await new Promise(r => setTimeout(r, 150));
+
+  // Auto-equip best pickaxe
+  const pickaxePriority = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe", "wooden_pickaxe"];
+  let equippedTool = "empty hand";
+  for (const toolName of pickaxePriority) {
+    const tool = bot.inventory.items().find(i => i.name === toolName);
+    if (tool) {
+      await bot.equip(tool, "hand");
+      equippedTool = toolName;
+      break;
+    }
+  }
+  if (equippedTool === "empty hand") {
+    throw new Error("Cannot dig staircase - no pickaxe! Craft one first.");
+  }
+
+  // Find scaffolding block (cobblestone, dirt, etc.) for step placement
+  const scaffoldNames = ["cobblestone", "cobbled_deepslate", "dirt", "netherrack", "stone"];
+  const getScaffoldItem = () => {
+    for (const name of scaffoldNames) {
+      const item = bot.inventory.items().find(i => i.name === name);
+      if (item) return item;
+    }
+    return null;
+  };
+
+  let blocksClimbed = 0;
+  const oresFound: Record<string, number> = {};
+
+  // Use north as horizontal direction for staircase
+  const hDir = { dx: 0, dz: -1 };
+
+  console.error(`[Staircase] Starting upward staircase from (${Math.floor(startPos.x)}, ${Math.floor(startPos.y)}, ${Math.floor(startPos.z)}), height ${height}`);
+
+  for (let i = 0; i < height; i++) {
+    const curX = Math.floor(bot.entity.position.x);
+    const curY = Math.floor(bot.entity.position.y);
+    const curZ = Math.floor(bot.entity.position.z);
+
+    // Step pattern: dig the block ahead at feet level, head level, and one above head
+    // Then jump-place a block under feet to gain +1 Y
+    const aheadX = curX + hDir.dx;
+    const aheadZ = curZ + hDir.dz;
+
+    // Dig blocks: ahead at Y+0, Y+1, Y+2 (feet, head, above head of next position)
+    const blocksToDig = [
+      { x: aheadX, y: curY + 1, z: aheadZ },  // head level ahead
+      { x: aheadX, y: curY + 2, z: aheadZ },  // above head ahead (ceiling of next step)
+      { x: aheadX, y: curY, z: aheadZ },       // feet level ahead
+    ];
+
+    // Check for lava before digging
+    let lavaFound = false;
+    for (const bp of blocksToDig) {
+      for (const [cx, cy, cz] of [[0,0,0],[0,1,0],[0,-1,0],[hDir.dx,0,hDir.dz]]) {
+        const checkBlock = bot.blockAt(new Vec3(bp.x + cx, bp.y + cy, bp.z + cz));
+        if (checkBlock?.name === "lava") {
+          lavaFound = true;
+          break;
+        }
+      }
+      if (lavaFound) break;
+    }
+    if (lavaFound) {
+      return `Staircase stopped: LAVA detected! Climbed ${blocksClimbed}/${height} blocks. Position: (${curX}, ${curY}, ${curZ}).`;
+    }
+
+    // Dig the blocks
+    for (const bp of blocksToDig) {
+      const block = bot.blockAt(new Vec3(bp.x, bp.y, bp.z));
+      if (!block || block.name === "air" || block.name === "water" || block.hardness < 0) continue;
+      if (block.name.includes("_ore")) {
+        oresFound[block.name] = (oresFound[block.name] || 0) + 1;
+      }
+      try {
+        await bot.lookAt(new Vec3(bp.x + 0.5, bp.y + 0.5, bp.z + 0.5));
+        // Re-equip pickaxe (might have been unequipped)
+        const pick = bot.inventory.items().find(i => i.name === equippedTool);
+        if (pick) await bot.equip(pick, "hand");
+        await bot.dig(block, true);
+        await new Promise(r => setTimeout(r, 100));
+      } catch (err) {
+        console.error(`[Staircase] Failed to dig ${block.name}: ${err}`);
+      }
+    }
+
+    // Now place a scaffold block ahead at curY to create a step, then walk onto it
+    const scaffold = getScaffoldItem();
+    if (scaffold) {
+      try {
+        // Place block at (aheadX, curY, aheadZ) — the floor of the step ahead
+        // We need a reference block below it
+        const belowBlock = bot.blockAt(new Vec3(aheadX, curY - 1, aheadZ));
+        if (belowBlock && belowBlock.name !== "air" && belowBlock.name !== "water") {
+          await bot.equip(scaffold, "hand");
+          await bot.lookAt(new Vec3(aheadX + 0.5, curY - 0.5, aheadZ + 0.5));
+          await bot.placeBlock(belowBlock, new Vec3(0, 1, 0));
+          await new Promise(r => setTimeout(r, 200));
+        }
+      } catch (err) {
+        console.error(`[Staircase] Failed to place step: ${err}`);
+        // Continue anyway — might still be able to jump up
+      }
+    }
+
+    // Move onto the step: walk forward and jump
+    bot.setControlState("forward", true);
+    bot.setControlState("jump", true);
+    await new Promise(r => setTimeout(r, 400));
+    bot.clearControlStates();
+    await new Promise(r => setTimeout(r, 300));
+
+    // Check if we actually gained height
+    const newY = Math.floor(bot.entity.position.y);
+    if (newY > curY) {
+      blocksClimbed += (newY - curY);
+      console.error(`[Staircase] Step ${i + 1}: Y ${curY} → ${newY} (climbed +${newY - curY})`);
+    } else {
+      console.error(`[Staircase] Step ${i + 1}: No height gain (Y=${newY}). Retrying with jump-place...`);
+      // Try jump-placing under self (pillar style)
+      const scaffoldRetry = getScaffoldItem();
+      if (scaffoldRetry) {
+        try {
+          const belowSelf = bot.blockAt(new Vec3(curX, curY - 1, curZ));
+          if (belowSelf && belowSelf.name !== "air") {
+            // Dig above first
+            const above1 = bot.blockAt(new Vec3(curX, curY + 2, curZ));
+            if (above1 && above1.name !== "air" && above1.hardness >= 0) {
+              const pick = bot.inventory.items().find(i => i.name === equippedTool);
+              if (pick) await bot.equip(pick, "hand");
+              await bot.lookAt(new Vec3(curX + 0.5, curY + 2.5, curZ + 0.5));
+              await bot.dig(above1, true);
+              await new Promise(r => setTimeout(r, 100));
+            }
+            // Jump-place
+            await bot.equip(scaffoldRetry, "hand");
+            bot.setControlState("jump", true);
+            await new Promise(r => setTimeout(r, 200));
+            try {
+              await bot.placeBlock(belowSelf, new Vec3(0, 1, 0));
+            } catch { /* ignore */ }
+            bot.clearControlStates();
+            await new Promise(r => setTimeout(r, 300));
+            const afterJumpY = Math.floor(bot.entity.position.y);
+            if (afterJumpY > curY) {
+              blocksClimbed += (afterJumpY - curY);
+              console.error(`[Staircase] Jump-place: Y ${curY} → ${afterJumpY}`);
+            }
+          }
+        } catch (err) {
+          console.error(`[Staircase] Jump-place failed: ${err}`);
+        }
+      }
+    }
+
+    // Check HP
+    if (bot.health < 5) {
+      console.error(`[Staircase] HP low (${bot.health}), stopping`);
+      break;
+    }
+
+    // Check if we reached open sky
+    const headBlock = bot.blockAt(new Vec3(
+      Math.floor(bot.entity.position.x),
+      Math.floor(bot.entity.position.y) + 3,
+      Math.floor(bot.entity.position.z)
+    ));
+    if (headBlock?.name === "air") {
+      // Check if sky is visible (no solid blocks for several blocks above)
+      let skyVisible = true;
+      for (let dy = 3; dy < 10; dy++) {
+        const above = bot.blockAt(new Vec3(
+          Math.floor(bot.entity.position.x),
+          Math.floor(bot.entity.position.y) + dy,
+          Math.floor(bot.entity.position.z)
+        ));
+        if (above && above.name !== "air" && above.name !== "water") {
+          skyVisible = false;
+          break;
+        }
+      }
+      if (skyVisible) {
+        console.error(`[Staircase] Reached open sky!`);
+        break;
+      }
+    }
+  }
+
+  // Collect items
+  await new Promise(r => setTimeout(r, 500));
+  const inventoryAfter = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+  const itemsCollected = inventoryAfter - inventoryBefore;
+
+  const finalPos = bot.entity.position;
+  let result = `Staircase up: climbed ${blocksClimbed} blocks (Y: ${Math.floor(startPos.y)} → ${Math.floor(finalPos.y)}) with ${equippedTool}.`;
+  result += ` Position: (${Math.floor(finalPos.x)}, ${Math.floor(finalPos.y)}, ${Math.floor(finalPos.z)}).`;
+
+  if (blocksClimbed < height && bot.health >= 5) {
+    result += ` Reached open sky or surface.`;
+  } else if (bot.health < 5) {
+    result += ` STOPPED: HP too low (${bot.health.toFixed(1)}).`;
+  }
+
+  result += ` Items collected: ${itemsCollected}.`;
+
+  if (Object.keys(oresFound).length > 0) {
+    const oreList = Object.entries(oresFound).map(([name, count]) => `${name}x${count}`).join(", ");
+    result += ` ORES FOUND: ${oreList}!`;
+  }
+
+  return result;
+}
+
+/**
  * Dig a 1x2 tunnel in a direction
  * Auto-equips pickaxe, collects items, reports ores found
  */
 export async function digTunnel(
   managed: ManagedBot,
-  direction: "north" | "south" | "east" | "west" | "down",
+  direction: "north" | "south" | "east" | "west" | "down" | "up",
   length: number = 10
 ): Promise<string> {
   const bot = managed.bot;
   const startPos = bot.entity.position.clone();
   const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
 
-  // Direction vectors (no "up" - use pillar_up for that)
+  // Handle "up" direction separately — staircase mining upward
+  if (direction === "up") {
+    return await digStaircaseUp(managed, length);
+  }
+
+  // Direction vectors for horizontal and down
   const dirVectors: Record<string, { dx: number; dy: number; dz: number }> = {
     north: { dx: 0, dy: 0, dz: -1 },
     south: { dx: 0, dy: 0, dz: 1 },
@@ -1296,7 +1529,7 @@ export async function digTunnel(
 
   const dir = dirVectors[direction];
   if (!dir) {
-    throw new Error(`Invalid direction: ${direction}. Use north/south/east/west/down (for up, use pillar_up)`);
+    throw new Error(`Invalid direction: ${direction}. Use north/south/east/west/down/up`);
   }
 
   // Stop all movement and digging first to prevent conflicts

@@ -1288,10 +1288,22 @@ export async function mc_smelt(item_name: string, count: number = 1): Promise<st
   return await botManager.smeltItem(username, item_name, count);
 }
 
+// ─── mc_tunnel ────────────────────────────────────────────────────────────────
+
+export async function mc_tunnel(direction: string, length: number = 10): Promise<string> {
+  const username = botManager.requireSingleBot();
+  const validDirs = ["north", "south", "east", "west", "down", "up"] as const;
+  const dir = direction as typeof validDirs[number];
+  if (!validDirs.includes(dir)) {
+    throw new Error(`Invalid direction: ${direction}. Use: ${validDirs.join(", ")}`);
+  }
+  return await botManager.digTunnel(username, dir, length);
+}
+
 // ─── Registry registration (for hot-reload) ─────────────────────────────────
 
 registry.coreTools = {
   mc_status, mc_gather, mc_craft, mc_build, mc_navigate,
   mc_combat, mc_eat, mc_store, mc_chat, mc_connect,
-  mc_flee, minecraft_pillar_up, mc_smelt,
+  mc_flee, minecraft_pillar_up, mc_smelt, mc_tunnel,
 };

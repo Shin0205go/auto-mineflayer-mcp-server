@@ -601,6 +601,16 @@ Bot needs to explore further (200+ blocks) to find animals.
 
 ---
 
+## [2026-03-19] Deaths: Fall + Zombie (Session current reconnect)
+
+- **Cause**: Bot died twice before this session reconnect. Chat log: "Claude1 fell from a high place" then "Claude1 was slain by Zombie". Likely from cave navigation at low HP/hunger before reconnect.
+- **Location**: OW near (58, 80, -4) / cave area
+- **Last Actions**: Cave escape sequence from Y=61 to Y=80, hunger=0, HP=9.2 before reconnect
+- **Outcome**: Respawned HP=20, Hunger=20 (keepInventory=true). Now at (−2, 100, 6) birch_forest
+- **Status**: Recorded. Continuing gameplay.
+
+---
+
 ## [2026-03-19] Death: Slain by Zombie while exploring for food (HP=17→0)
 
 - **Cause**: Bot was exploring far from base searching for animals (no food in inventory). Navigating at night/evening, zombie killed bot. HP was 17 at start of exploration but midnight arrived during travel.
@@ -614,3 +624,127 @@ Bot needs to explore further (200+ blocks) to find animals.
 - **Root Cause**: No animals anywhere in 128+ block radius (depopulated area). Long exploration at night with no armor. Iron sword equipped but zombie still lethal.
 - **Fix Needed**: Abort exploration if approaching night (ticks > 11500) and no shelter/bed available
 - **Status**: Recorded. Bot respawned HP=16.3, built emergency shelter. Continuing.
+
+---
+
+## [2026-03-20] Death: Fall from high place (HP=1, starvation + mc_drop displacement)
+
+- **Cause**: Bot was at HP=1, Hunger=0 from chronic starvation. mc_drop moved bot 15 blocks away from dropped items, which displaced bot into a deep ravine area. Bot fell from high place and died.
+- **Location**: OW near ravine at approximately (9-17, 85-97, 3-7)
+- **Coordinates**: Near ravine between farm plots and base
+- **Last Actions**:
+  1. Multiple sessions of mc_drop cobblestone → re-pickup loop (cobblestone dropped, bot moved 15 blocks, but next mc_drop moved back toward previous drop zone)
+  2. HP dropped from 10→7→5→1 over several sessions due to starvation (hunger=0 continuously)
+  3. mc_farm successfully grew some wheat but never enough for bread (need 3, kept getting 1-2)
+  4. iron_sword + bucket crafted successfully in final session
+  5. Chat showed: "Claude1 fell from a high place" — fatal fall with HP=1
+- **Root Causes**:
+  1. **Chronic food crisis**: No animals within 128+ blocks, mc_farm only yields 1 wheat per call (need 3 for bread)
+  2. **mc_drop displacement**: 15-block move-away sends bot to dangerous terrain (ravine edge)
+  3. **HP=1 makes any damage fatal**: Even 1-block fall = death
+- **Outcome**: Respawned with keepInventory=true. iron_sword + bucket retained.
+- **Fix Needed**:
+  1. mc_farm should try harder to find/place multiple farmland plots in one call
+  2. mc_drop should check terrain safety before moving (avoid ravine edges)
+  3. When HP <= 3, bot should stay completely still and only do inventory/craft actions
+- **Status**: Recorded. Continuing with keepInventory respawn.
+
+## [2026-03-20] Death: Fall from high place (2nd time) — ravine/cliff area near new base
+- **Cause**: Bot fell from high place in cliff/ravine area near new base at (~63, 84, -114)
+- **Coordinates**: Near (63, 84, -114) — large exposed stone ravine/cliff area
+- **Last Actions**:
+  1. Previous agent crafted 2 chests + crafting_table, placed at (63-65, 84, -114)
+  2. Bot was operating in exposed cliff/ravine terrain with large drops
+  3. Hunger was at 1 (critical) — likely starvation damage + fall
+  4. Chat showed: "Claude1 hit the ground too hard"
+- **Root Causes**:
+  1. **Dangerous terrain**: Bot operating in cliff/ravine area with large elevation changes
+  2. **No pathfinding safety**: mc_navigate doesn't avoid cliff edges
+  3. **Hunger 1**: Starvation damage may have reduced HP before fall
+  4. **Recurring pattern**: Same death type as previous (fall from high place)
+- **Outcome**: Respawned with keepInventory=true. Items retained.
+- **Fix Needed**:
+  1. Bot should avoid operating near cliff edges — stay on flat terrain
+  2. mc_navigate needs terrain safety check (avoid paths near drops >3 blocks)
+  3. Food crisis must be resolved before any exploration/movement
+  4. Consider adding fall damage prevention (water bucket MLG or avoid high areas)
+- **Status**: Recorded. 2nd fall death — this is a systemic issue with terrain safety.
+
+## [2026-03-20] Death: Slain by Zombie (3rd death) — night combat at HP=3.5
+- **Cause**: Bot was slain by Zombie at night. HP had dropped to 3.5 from fall damage/starvation before engaging.
+- **Coordinates**: Near (68, 80, 8) — ravine area
+- **Last Actions**:
+  1. Agent connected, found HP=11, midnight, multiple hostiles
+  2. Tried to navigate to chest (64, 84, -114) — 50 blocks away
+  3. Safety system blocked: "Cannot move 50.6 blocks with critical HP(3.5/20)"
+  4. HP dropped from 11→3.5 during navigation attempt
+  5. Tried mc_combat(target="zombie") — "No zombie found nearby"
+  6. Killed by zombie while searching
+- **Root Causes**:
+  1. **Night + low HP**: Bot was at HP=11 at midnight with multiple hostiles
+  2. **Failed to shelter**: Should have built shelter instead of navigating 50 blocks
+  3. **HP dropped during movement**: Navigation through hostile terrain drained HP
+  4. **No food**: Cannot recover HP without food
+- **Outcome**: Respawned with keepInventory=true. HP=20, Hunger=20. Near chest at (12, 92, 6).
+- **Fix Needed**:
+  1. When HP<10 at night, do NOT navigate — build immediate shelter (mc_build)
+  2. Food crisis is the root cause of all deaths — must be resolved first
+  3. Agent should check time of day and act accordingly (night=shelter, day=farm)
+- **Status**: Recorded. 3rd death. Pattern: low HP + no food + dangerous activity = death.
+
+## [2026-03-20] Death: Drowned (4th death) — water source during mc_farm
+- **Cause**: Bot drowned while farming near water source. HP was 0.67 before recovery, then recovered to 16 via bread, but drowned during mc_farm water navigation.
+- **Coordinates**: Near water at (8-12, 96-101, 9-31) — farm area
+- **Last Actions**:
+  1. HP started at 1.7, Hunger 0 — critical
+  2. mc_farm x4, crafted and ate 3 breads
+  3. HP recovered from 0.67 to 16, Hunger to 17
+  4. During final mc_farm, bot moved near water for irrigation
+  5. "Claude1 drowned" — bot got stuck underwater
+- **Root Causes**:
+  1. **mc_farm moves bot into water**: Farm tool navigates near water sources for irrigation, sometimes INTO water
+  2. **Low HP + water**: At HP<2, even brief submersion can be fatal
+  3. **No breath management**: Bot doesn't surface when underwater
+- **Fix Needed**:
+  1. mc_farm should navigate NEAR water, not INTO water
+  2. Add drowning prevention: check if bot head is underwater, surface immediately
+  3. When HP<5, avoid water-adjacent activities
+- **Fix Applied**: commit abf2a0e — mc_farm now finds a solid land block adjacent to water and navigates there instead of into the water block itself. Both 64-block and 200-block water search paths fixed.
+- **Status**: Fixed (code). 4th death. Drowning during farming.
+
+## [2026-03-20] Death: Killed by Witch using magic (5th death)
+- **Cause**: Witch attacked bot with magic potions. Bot had HP=10, fled successfully (11.4 blocks away), but witch continued ranged attack during mc_navigate. Bot died while navigating to chest at (9,96,4) from position (20,108,-15).
+- **Coordinates**: Near (20, 108, -15)
+- **Last Actions**:
+  1. mc_status showed HP=10, witch + creeper nearby
+  2. mc_flee — fled 11.4 blocks from witch
+  3. mc_status — still HP=10, witch + creeper in area
+  4. mc_navigate to chest — killed by witch during navigation
+- **Root Causes**:
+  1. **mc_flee insufficient distance**: 11.4 blocks is within witch's 16-block attack range
+  2. **No food in inventory**: Could not heal before navigating
+  3. **HP=10 too low for any activity near hostile mobs**: Should have fled further
+- **Fix Needed**:
+  1. mc_flee should flee at least 20 blocks from witches (they have 16-block range)
+  2. Agent should not navigate while hostile mobs are in range with HP<=10
+- **Status**: Recorded. 5th death.
+
+---
+
+## [2026-03-20] Death: Starvation + fall damage in ravine (6th death)
+- **Cause**: Bot fell repeatedly in ravine despite maxDropDown=2 fix. Hunger=0, no food, HP dropped from 14.3→2.3 due to combined fall damage + starvation. Fatal starvation at Y=58.
+- **Coordinates**: (-11.5, 58, 6.5)
+- **Last Actions**:
+  1. mc_navigate(target_block="crafting_table") at Y=72 — fell to Y=63
+  2. mc_navigate(target_block="crafting_table") — fell further to Y=58
+  3. Hunger=0, HP=2.3, no food — starvation death
+- **Root Causes**:
+  1. **bot-blocks.ts maxDropDown=10 was fixed to 2, but moveTo pathfinder still causes falls**: The pathfinder plans routes near ravine edges where Minecraft physics push bot off ledges. maxDropDown only controls planned drops, not physics-induced falls near edges.
+  2. **No food obtained in multiple sessions**: Bot trapped in ravine, unable to reach surface farm area
+  3. **Ravine is a death trap**: Y=72→Y=58 in two navigation attempts despite safety fixes
+- **Fix Needed**:
+  1. Add staircase-mining escape tool: dig 1-block-wide staircase upward (safe, guaranteed)
+  2. mc_navigate should refuse to pathfind in ravines (detect large Y gaps in terrain nearby)
+  3. Food priority: never enter dangerous terrain without food
+- **Status**: Investigating. 6th death.
+- **Status**: Recorded. 5th death. Witch ranged attack during navigation.

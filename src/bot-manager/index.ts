@@ -188,7 +188,7 @@ export class BotManager extends BotCore {
 
   async digTunnel(
     username: string,
-    direction: "north" | "south" | "east" | "west" | "down",
+    direction: "north" | "south" | "east" | "west" | "down" | "up",
     length: number = 10
   ): Promise<string> {
     const managed = this.getBotByUsername(username);

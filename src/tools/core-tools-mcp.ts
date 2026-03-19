@@ -21,6 +21,7 @@ import {
   mc_flee,
   minecraft_pillar_up,
   mc_smelt,
+  mc_tunnel,
 } from "./core-tools.js";
 import { registry } from "../tool-handler-registry.js";
 import { botManager } from "../bot-manager/index.js";
@@ -198,6 +199,18 @@ export const coreTools = {
     },
   },
 
+  mc_tunnel: {
+    description: "Dig a tunnel in any direction. Use 'up' to staircase-mine upward (safe way to escape ravines/caves). Auto-equips pickaxe, detects lava.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        direction: { type: "string", enum: ["north", "south", "east", "west", "up", "down"], description: "Direction to dig. 'up' = staircase mining upward." },
+        length: { type: "number", default: 10, description: "Number of blocks to dig" },
+      },
+      required: ["direction"],
+    },
+  },
+
   minecraft_pillar_up: {
     description: "Build a pillar upward by jump-placing blocks (cobblestone/dirt). Use to climb out of caves or reach higher locations. Max 15 blocks per call.",
     inputSchema: {
@@ -276,6 +289,8 @@ export async function handleCoreTool(
         return await fn((args.height as number) || 1);
       case "mc_smelt":
         return await fn(args.item_name as string, (args.count as number) || 1);
+      case "mc_tunnel":
+        return await fn(args.direction as string, (args.length as number) || 10);
     }
   }
 
@@ -295,6 +310,7 @@ export async function handleCoreTool(
     case "mc_flee": return await mc_flee((args.distance as number) || 20);
     case "minecraft_pillar_up": return await minecraft_pillar_up((args.height as number) || 1);
     case "mc_smelt": return await mc_smelt(args.item_name as string, (args.count as number) || 1);
+    case "mc_tunnel": return await mc_tunnel(args.direction as string, (args.length as number) || 10);
     case "mc_place_block": {
       const username = botManager.requireSingleBot();
       const result = await botManager.placeBlock(username, args.block_type as string, args.x as number, args.y as number, args.z as number);
