@@ -34,6 +34,8 @@ export const TIER1_CORE_TOOLS = new Set([
   "minecraft_use_item_on_block",
   // Farming (till + plant + bone_meal + harvest + craft bread)
   "mc_farm",
+  // Smelting (raw_iron, raw_gold, etc.)
+  "mc_smelt",
   // Flee from danger (always visible — Tier 2 caching prevents dynamic visibility)
   "mc_flee",
   // Pillar up (always visible — essential for cave escape)

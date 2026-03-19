@@ -1247,10 +1247,17 @@ export async function minecraft_pillar_up(height: number = 1): Promise<string> {
   return await botManager.pillarUp(username, clampedHeight);
 }
 
+// ─── mc_smelt ─────────────────────────────────────────────────────────────────
+
+export async function mc_smelt(item_name: string, count: number = 1): Promise<string> {
+  const username = botManager.requireSingleBot();
+  return await botManager.smeltItem(username, item_name, count);
+}
+
 // ─── Registry registration (for hot-reload) ─────────────────────────────────
 
 registry.coreTools = {
   mc_status, mc_gather, mc_craft, mc_build, mc_navigate,
   mc_combat, mc_eat, mc_store, mc_chat, mc_connect,
-  mc_flee, minecraft_pillar_up,
+  mc_flee, minecraft_pillar_up, mc_smelt,
 };

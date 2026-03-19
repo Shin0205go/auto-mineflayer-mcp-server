@@ -20,6 +20,7 @@ import {
   mc_connect,
   mc_flee,
   minecraft_pillar_up,
+  mc_smelt,
 } from "./core-tools.js";
 import { registry } from "../tool-handler-registry.js";
 import { botManager } from "../bot-manager/index.js";
@@ -273,6 +274,8 @@ export async function handleCoreTool(
         return await fn((args.distance as number) || 20);
       case "minecraft_pillar_up":
         return await fn((args.height as number) || 1);
+      case "mc_smelt":
+        return await fn(args.item_name as string, (args.count as number) || 1);
     }
   }
 
@@ -291,10 +294,7 @@ export async function handleCoreTool(
     case "mc_connect": return await mc_connect({ action: (args.action as any) || "connect", username: args.username as any, host: args.host as any, port: args.port as any, version: args.version as any });
     case "mc_flee": return await mc_flee((args.distance as number) || 20);
     case "minecraft_pillar_up": return await minecraft_pillar_up((args.height as number) || 1);
-    case "mc_smelt": {
-      const username = botManager.requireSingleBot();
-      return await botManager.smeltItem(username, args.item_name as string, (args.count as number) || 1);
-    }
+    case "mc_smelt": return await mc_smelt(args.item_name as string, (args.count as number) || 1);
     case "mc_place_block": {
       const username = botManager.requireSingleBot();
       const result = await botManager.placeBlock(username, args.block_type as string, args.x as number, args.y as number, args.z as number);
