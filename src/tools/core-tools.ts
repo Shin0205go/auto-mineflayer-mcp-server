@@ -394,7 +394,30 @@ export async function mc_farm(): Promise<string> {
       if (farWater) {
         logs.push(`Found water at (${farWater.position.x}, ${farWater.position.y}, ${farWater.position.z}), moving close...`);
         try {
-          await botManager.moveTo(username, farWater.position.x, farWater.position.y, farWater.position.z);
+          // Navigate to a LAND block adjacent to water, NOT into the water itself (prevents drowning)
+          const wp = farWater.position;
+          let landTarget = { x: wp.x, y: wp.y, z: wp.z };
+          let foundLand = false;
+          for (const [ddx, ddz] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]]) {
+            const lx = wp.x + ddx, lz = wp.z + ddz;
+            for (let ly = wp.y + 1; ly >= wp.y - 1; ly--) {
+              const lb = bot.blockAt(new (bot.entity.position.constructor as any)(lx, ly, lz));
+              const labove = bot.blockAt(new (bot.entity.position.constructor as any)(lx, ly + 1, lz));
+              if (lb && lb.name !== "air" && lb.name !== "water" && lb.name !== "lava" &&
+                  labove && (labove.name === "air" || labove.name === "grass" || labove.name === "tall_grass")) {
+                landTarget = { x: lx, y: ly + 1, z: lz };
+                foundLand = true;
+                break;
+              }
+            }
+            if (foundLand) break;
+          }
+          if (!foundLand) {
+            logs.push("Warning: No land block found adjacent to water, navigating 2 blocks away from water.");
+            landTarget = { x: wp.x + 2, y: wp.y + 1, z: wp.z };
+          }
+          logs.push(`Navigating to land near water at (${landTarget.x}, ${landTarget.y}, ${landTarget.z})`);
+          await botManager.moveTo(username, landTarget.x, landTarget.y, landTarget.z);
           // Re-scan for tillable blocks near water — MUST be within 4 blocks of water for irrigation
           const waterX = farWater.position.x, waterY = farWater.position.y, waterZ = farWater.position.z;
           farmCoords.length = 0;
@@ -513,9 +536,20 @@ export async function mc_farm(): Promise<string> {
             maxDistance: 200,
           });
           if (veryFarWater) {
-            logs.push(`Found water at (${veryFarWater.position.x}, ${veryFarWater.position.y}, ${veryFarWater.position.z}), moving there...`);
+            logs.push(`Found water at (${veryFarWater.position.x}, ${veryFarWater.position.y}, ${veryFarWater.position.z}), moving near...`);
             try {
-              await botManager.moveTo(username, veryFarWater.position.x, veryFarWater.position.y + 1, veryFarWater.position.z);
+              // Navigate to land adjacent to water, not into it (prevents drowning)
+              const vwp = veryFarWater.position;
+              let vLandTarget = { x: vwp.x + 2, y: vwp.y + 1, z: vwp.z };
+              for (const [vdx, vdz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+                const vlx = vwp.x + vdx, vlz = vwp.z + vdz;
+                const vlb = bot.blockAt(new (bot.entity.position.constructor as any)(vlx, vwp.y, vlz));
+                if (vlb && vlb.name !== "water" && vlb.name !== "air" && vlb.name !== "lava") {
+                  vLandTarget = { x: vlx, y: vwp.y + 1, z: vlz };
+                  break;
+                }
+              }
+              await botManager.moveTo(username, vLandTarget.x, vLandTarget.y, vLandTarget.z);
               // Re-scan for tillable blocks near water
               const newPos2 = bot.entity.position;
               const nbx2 = Math.floor(newPos2.x), nby2 = Math.floor(newPos2.y), nbz2 = Math.floor(newPos2.z);
