@@ -350,19 +350,38 @@ export async function mc_farm(): Promise<string> {
   }
 
   if (farmCoords.length === 0) {
-    // Fallback: place dirt blocks from inventory and till them
-    logs.push("No natural dirt found nearby — placing dirt blocks from inventory.");
-    for (let i = 0; i < seedCount; i++) {
-      const cx = bx + i;
-      const cy = by - 1;
-      const cz = bz + 1;
-      try {
-        const placeResult = await botManager.placeBlock(username, "dirt", cx, cy, cz);
-        logs.push(`Placed dirt at (${cx},${cy},${cz}): ${placeResult.message}`);
-        farmCoords.push({ x: cx, y: cy, z: cz });
-      } catch (e) {
-        logs.push(`Place dirt failed: ${e}`);
+    // Fallback: place dirt blocks from inventory on AIR blocks only
+    const dirtInv = botManager.getInventory(username).find((i: any) => i.name === "dirt");
+    if (dirtInv && dirtInv.count >= seedCount) {
+      logs.push("No natural dirt found nearby — placing dirt blocks from inventory on air blocks.");
+      // Find air blocks at ground level where we can place dirt
+      for (let dx = -3; dx <= 3 && farmCoords.length < seedCount; dx++) {
+        for (let dz = -3; dz <= 3 && farmCoords.length < seedCount; dz++) {
+          const cx = bx + dx;
+          const cz = bz + dz;
+          const cy = by - 1;
+          const groundBlock = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy, cz));
+          const aboveBlock = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy + 1, cz));
+          // Only place dirt where there's air (or replaceable block) and air above
+          if (groundBlock && groundBlock.name === "air" && aboveBlock && aboveBlock.name === "air") {
+            try {
+              const placeResult = await botManager.placeBlock(username, "dirt", cx, cy, cz);
+              // Verify the block actually became dirt
+              const check = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy, cz));
+              if (check && check.name === "dirt") {
+                logs.push(`Placed dirt at (${cx},${cy},${cz}): success`);
+                farmCoords.push({ x: cx, y: cy, z: cz });
+              } else {
+                logs.push(`Placed dirt at (${cx},${cy},${cz}): failed (block is ${check?.name})`);
+              }
+            } catch (e) {
+              logs.push(`Place dirt failed at (${cx},${cy},${cz}): ${e}`);
+            }
+          }
+        }
       }
+    } else {
+      logs.push("No natural dirt found nearby and not enough dirt in inventory to place.");
     }
   }
 
@@ -437,28 +456,46 @@ export async function mc_farm(): Promise<string> {
         const b = bot.blockAt(new Vec3Cls(fc.x, fc.y, fc.z));
         if (b && b.name === "farmland") { farmlandConfirmed = true; break; }
       }
-      logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): ${farmlandConfirmed ? "farmland confirmed" : "still not farmland, proceeding anyway"}`);
+      if (!farmlandConfirmed) {
+        logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): NOT farmland — skipping this location`);
+        continue;
+      }
+      logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): farmland confirmed`);
     }
 
-    // Navigate close to the block before planting (must be within reach)
+    // Navigate NEXT TO the farmland (not on top — walking on farmland tramples it!)
     try {
-      await botManager.moveTo(username, fc.x, fc.y + 1, fc.z);
-    } catch (_) {}
+      await botManager.moveTo(username, fc.x + 1, fc.y + 1, fc.z);
+    } catch (_) {
+      try {
+        await botManager.moveTo(username, fc.x - 1, fc.y + 1, fc.z);
+      } catch (_) {}
+    }
+    // Re-verify farmland hasn't been trampled
+    {
+      const { Vec3: Vec3Cls } = await import("vec3");
+      const recheck = bot.blockAt(new Vec3Cls(fc.x, fc.y, fc.z));
+      if (!recheck || recheck.name !== "farmland") {
+        logs.push(`Farmland at (${fc.x},${fc.y},${fc.z}) was trampled! Now: ${recheck?.name}. Skipping.`);
+        continue;
+      }
+    }
 
     // Plant seeds ON TOP of farmland (same x,y,z — seeds go on top face)
     try {
       const plantResult = await botManager.useItemOnBlock(username, seeds.name, fc.x, fc.y, fc.z);
       logs.push(`Plant ${seeds.name} at (${fc.x},${fc.y},${fc.z}): ${plantResult}`);
-      // Wait a tick for seed to register
-      await new Promise(r => setTimeout(r, 100));
+      // Wait for seed to register on server
+      await new Promise(r => setTimeout(r, 500));
       // Check if crop appeared above farmland
-      const cropBlock = bot.blockAt(new (bot.entity.position.constructor as any)(fc.x, fc.y + 1, fc.z));
+      const { Vec3: Vec3Cls2 } = await import("vec3");
+      const cropBlock = bot.blockAt(new Vec3Cls2(fc.x, fc.y + 1, fc.z));
       if (cropBlock && cropBlock.name === "wheat") {
         logs.push(`Crop confirmed at (${fc.x},${fc.y + 1},${fc.z})`);
         plantedCoords.push(fc);
       } else {
-        logs.push(`Crop not visible at (${fc.x},${fc.y + 1},${fc.z}) — got "${cropBlock?.name ?? 'null'}"`);
-        plantedCoords.push(fc); // Try bone-mealing anyway
+        logs.push(`Crop not visible at (${fc.x},${fc.y + 1},${fc.z}) — got "${cropBlock?.name ?? 'null'}" — skipping`);
+        // Don't add to plantedCoords — no point bone-mealing a non-existent crop
       }
     } catch (e) {
       logs.push(`Plant failed at (${fc.x},${fc.y},${fc.z}): ${e}`);
@@ -494,43 +531,77 @@ export async function mc_farm(): Promise<string> {
     logs.push("No bone_meal — crops will grow naturally (takes several minutes).");
   }
 
-  // Step 5: Harvest wheat — wait for growth then dig each crop directly
+  // Step 5: Harvest wheat — only harvest mature crops (age >= 7)
   let wheatGathered = false;
-  // Wait up to 10s for natural growth if no bone_meal (tick-based growth)
-  // With bone_meal we already applied it; crops at Y+1 should be wheat now
+  const hasBoneMeal = boneMealInv && boneMealInv.count > 0;
+
+  // If no bone_meal, crops need several minutes to grow naturally.
+  // Don't waste time waiting — just report that seeds are planted.
+  if (!hasBoneMeal && plantedCoords.length > 0) {
+    logs.push("Seeds planted! Wheat needs ~5 minutes to grow without bone_meal.");
+    logs.push("Come back later to harvest, or find bone_meal (kill skeletons → bone → craft bone_meal).");
+  }
+
+  // Check for any already-mature wheat nearby (from previous plantings)
+  // and harvest bone-mealed crops
   await new Promise(r => setTimeout(r, 500));
 
   for (const fc of plantedCoords) {
     const cropY = fc.y + 1;
     try {
-      // Move close to the crop
-      await botManager.moveTo(username, fc.x, cropY, fc.z);
-      // Check what block is actually there
       const freshBot = botManager.getBot(username);
       const { Vec3: Vec3Cls } = await import("vec3");
       const cropPos = new Vec3Cls(fc.x, cropY, fc.z);
       const cropBlock = freshBot?.blockAt(cropPos);
-      logs.push(`Harvest check (${fc.x},${cropY},${fc.z}): block="${cropBlock?.name ?? 'null'}"`);
       if (cropBlock && cropBlock.name === "wheat") {
-        await freshBot!.dig(cropBlock);
-        await new Promise(r => setTimeout(r, 300));
-        await botManager.collectNearbyItems(username);
-        logs.push(`Harvested wheat at (${fc.x},${cropY},${fc.z})`);
-        wheatGathered = true;
+        // Check age — only harvest if fully grown (age >= 7)
+        const props = cropBlock && (cropBlock as any).getProperties ? (cropBlock as any).getProperties() : null;
+        const age = props?.age ?? (cropBlock as any).metadata;
+        if (age >= 7) {
+          await botManager.moveTo(username, fc.x, cropY, fc.z);
+          await freshBot!.dig(cropBlock);
+          await new Promise(r => setTimeout(r, 300));
+          await botManager.collectNearbyItems(username);
+          logs.push(`Harvested mature wheat (age=${age}) at (${fc.x},${cropY},${fc.z})`);
+          wheatGathered = true;
+        } else {
+          logs.push(`Wheat at (${fc.x},${cropY},${fc.z}) still growing (age=${age}/7) — skipping`);
+        }
       }
     } catch (e) {
-      logs.push(`Harvest at (${fc.x},${cropY},${fc.z}) failed: ${e}`);
+      logs.push(`Harvest check at (${fc.x},${cropY},${fc.z}) failed: ${e}`);
     }
   }
 
-  // Also try gather_resources as fallback for any wheat within 16 blocks
+  // Also check for any mature wheat within 16 blocks (from older plantings)
   if (!wheatGathered) {
     try {
-      const harvestResult = await getHighLevel().minecraft_gather_resources(username, [{ name: "wheat", count: seedCount }], 16);
-      logs.push(`Harvest fallback: ${harvestResult}`);
-      wheatGathered = harvestResult.includes("wheat:") && !harvestResult.includes("wheat: 0/");
+      const freshBot = botManager.getBot(username);
+      const { Vec3: Vec3Cls } = await import("vec3");
+      if (freshBot) {
+        const wheatBlocks = freshBot.findBlocks({ matching: (block: any) => {
+          if (block.name !== "wheat") return false;
+          const p = block.getProperties ? block.getProperties() : null;
+          return (p?.age ?? block.metadata) >= 7;
+        }, maxDistance: 16, count: 10 });
+        if (wheatBlocks.length > 0) {
+          logs.push(`Found ${wheatBlocks.length} mature wheat nearby — harvesting`);
+          for (const pos of wheatBlocks) {
+            try {
+              await botManager.moveTo(username, pos.x, pos.y, pos.z);
+              const wb = freshBot.blockAt(pos);
+              if (wb) {
+                await freshBot.dig(wb);
+                await new Promise(r => setTimeout(r, 300));
+                await botManager.collectNearbyItems(username);
+                wheatGathered = true;
+              }
+            } catch { /* skip */ }
+          }
+        }
+      }
     } catch (e) {
-      logs.push(`Harvest fallback failed: ${e}`);
+      logs.push(`Nearby wheat scan failed: ${e}`);
     }
   }
 

@@ -1782,24 +1782,165 @@ export async function useItemOnBlock(
         await bot.activateBlock(block);
       }
     } else if (itemName.includes("_hoe") || itemName === "hoe") {
-      // Hoe tilling: send block_place packet with the hoe on the TOP face of dirt/grass
-      // bot.activateBlock works but let's also try block_place directly for reliability
+      // Hoe tilling: use activateBlock first (most reliable), then block_place as fallback
+      let tilled = false;
+
+      // Re-equip hoe to ensure it's in hand (activateBlock uses held item)
+      const hoeItem = bot.inventory.items().find(i => i.name === itemName);
+      if (hoeItem) {
+        await bot.equip(hoeItem, "hand");
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      const heldBefore = bot.heldItem;
+      const botPos = bot.entity.position;
+      const distToBlock = botPos.distanceTo(pos);
+      console.error(`[useItemOnBlock] Hoe tilling DEBUG: held="${heldBefore?.name}", block="${block.name}" at (${x},${y},${z}), botPos=(${botPos.x.toFixed(1)},${botPos.y.toFixed(1)},${botPos.z.toFixed(1)}), dist=${distToBlock.toFixed(1)}`);
+
+      // Look at the TOP of the block (not center) - hoe needs top face
+      await bot.lookAt(pos.offset(0.5, 1.0, 0.5), true);
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Attempt 1: activateBlock with explicit direction (UP face) and cursor on top
       try {
-        (bot as any)._client.write('block_place', {
-          hand: 0,
-          location: { x: pos.x, y: pos.y, z: pos.z },
-          direction: 1, // top face
-          cursorX: 0.5,
-          cursorY: 1.0,
-          cursorZ: 0.5,
-          insideBlock: false,
-          sequence: 0,
-          worldBorderHit: false,
-        });
-        await new Promise(resolve => setTimeout(resolve, 200));
+        console.error(`[useItemOnBlock] Hoe tilling: activateBlock on "${block.name}" at (${x},${y},${z}) with UP direction`);
+        await bot.activateBlock(block, new Vec3(0, 1, 0), new Vec3(0.5, 1.0, 0.5));
+        await new Promise(resolve => setTimeout(resolve, 500));
+        // Check if block became farmland
+        const after1 = bot.blockAt(pos);
+        console.error(`[useItemOnBlock] Hoe tilling: after activateBlock, block="${after1?.name}" at (${x},${y},${z})`);
+        if (after1 && after1.name === "farmland") {
+          tilled = true;
+          console.error(`[useItemOnBlock] Hoe tilling SUCCESS via activateBlock`);
+        }
       } catch (e) {
-        console.error(`[useItemOnBlock] block_place for hoe failed: ${e}, trying activateBlock`);
-        await bot.activateBlock(block);
+        console.error(`[useItemOnBlock] activateBlock for hoe failed: ${e}`);
+      }
+
+      // Attempt 2: block_place packet (fallback) - re-equip and retry
+      if (!tilled) {
+        // Re-equip in case activateBlock changed held item
+        const hoeItem2 = bot.inventory.items().find(i => i.name === itemName);
+        if (hoeItem2) {
+          await bot.equip(hoeItem2, "hand");
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        await bot.lookAt(pos.offset(0.5, 1.0, 0.5), true);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        try {
+          console.error(`[useItemOnBlock] Hoe tilling: block_place packet fallback, held="${bot.heldItem?.name}"`);
+          (bot as any)._client.write('block_place', {
+            hand: 0,
+            location: { x: pos.x, y: pos.y, z: pos.z },
+            direction: 1, // top face
+            cursorX: 0.5,
+            cursorY: 1.0,
+            cursorZ: 0.5,
+            insideBlock: false,
+            sequence: 0,
+            worldBorderHit: false,
+          });
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const after2 = bot.blockAt(pos);
+          console.error(`[useItemOnBlock] Hoe tilling: after block_place, block="${after2?.name}" at (${x},${y},${z})`);
+          if (after2 && after2.name === "farmland") {
+            tilled = true;
+            console.error(`[useItemOnBlock] Hoe tilling SUCCESS via block_place`);
+          }
+        } catch (e) {
+          console.error(`[useItemOnBlock] block_place for hoe failed: ${e}`);
+        }
+      }
+
+      // Attempt 3: activateItem (use_item packet) while looking at block top - another approach
+      if (!tilled) {
+        const hoeItem3 = bot.inventory.items().find(i => i.name === itemName);
+        if (hoeItem3) {
+          await bot.equip(hoeItem3, "hand");
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        await bot.lookAt(pos.offset(0.5, 1.0, 0.5), true);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        try {
+          console.error(`[useItemOnBlock] Hoe tilling: activateItem fallback, held="${bot.heldItem?.name}"`);
+          bot.activateItem(false); // main hand
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const after3 = bot.blockAt(pos);
+          console.error(`[useItemOnBlock] Hoe tilling: after activateItem, block="${after3?.name}" at (${x},${y},${z})`);
+          if (after3 && after3.name === "farmland") {
+            tilled = true;
+            console.error(`[useItemOnBlock] Hoe tilling SUCCESS via activateItem`);
+          }
+        } catch (e) {
+          console.error(`[useItemOnBlock] activateItem for hoe failed: ${e}`);
+        }
+      }
+
+      if (!tilled) {
+        console.error(`[useItemOnBlock] Hoe tilling FAILED: block is still "${bot.blockAt(pos)?.name}" at (${x},${y},${z}). Held="${bot.heldItem?.name}", botPos=(${bot.entity.position.x.toFixed(1)},${bot.entity.position.y.toFixed(1)},${bot.entity.position.z.toFixed(1)})`);
+      }
+    } else if (itemName.includes("_seeds") || itemName === "seeds") {
+      // Seeds: plant on farmland using placeBlock (top face)
+      // activateBlock may not work for seed placement in some versions
+      let planted = false;
+
+      // Attempt 1: bot.placeBlock (standard mineflayer method)
+      try {
+        console.error(`[useItemOnBlock] Planting ${itemName}: placeBlock on "${block.name}" at (${x},${y},${z})`);
+        await bot.placeBlock(block, new Vec3(0, 1, 0)); // top face
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const above = bot.blockAt(pos.offset(0, 1, 0));
+        if (above && above.name !== "air") {
+          planted = true;
+          console.error(`[useItemOnBlock] Planting SUCCESS via placeBlock: ${above.name}`);
+        }
+      } catch (e) {
+        console.error(`[useItemOnBlock] placeBlock for ${itemName} failed: ${e}`);
+      }
+
+      // Attempt 2: activateBlock (fallback)
+      if (!planted) {
+        try {
+          console.error(`[useItemOnBlock] Planting ${itemName}: activateBlock fallback`);
+          await bot.activateBlock(block);
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const above = bot.blockAt(pos.offset(0, 1, 0));
+          if (above && above.name !== "air") {
+            planted = true;
+            console.error(`[useItemOnBlock] Planting SUCCESS via activateBlock: ${above.name}`);
+          }
+        } catch (e) {
+          console.error(`[useItemOnBlock] activateBlock for ${itemName} failed: ${e}`);
+        }
+      }
+
+      // Attempt 3: block_place packet (raw packet fallback)
+      if (!planted) {
+        try {
+          console.error(`[useItemOnBlock] Planting ${itemName}: block_place packet fallback`);
+          (bot as any)._client.write('block_place', {
+            hand: 0,
+            location: { x: pos.x, y: pos.y, z: pos.z },
+            direction: 1, // top face
+            cursorX: 0.5,
+            cursorY: 1.0,
+            cursorZ: 0.5,
+            insideBlock: false,
+            sequence: 0,
+            worldBorderHit: false,
+          });
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const above = bot.blockAt(pos.offset(0, 1, 0));
+          if (above && above.name !== "air") {
+            planted = true;
+            console.error(`[useItemOnBlock] Planting SUCCESS via block_place: ${above.name}`);
+          }
+        } catch (e) {
+          console.error(`[useItemOnBlock] block_place for ${itemName} failed: ${e}`);
+        }
+      }
+
+      if (!planted) {
+        console.error(`[useItemOnBlock] Planting FAILED: no crop appeared above (${x},${y},${z})`);
       }
     } else {
       // For other items, use activateBlock

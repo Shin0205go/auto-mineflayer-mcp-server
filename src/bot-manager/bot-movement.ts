@@ -1740,39 +1740,134 @@ export async function enterPortal(managed: ManagedBot, portalType?: "nether_port
       }
     }
 
-    // Clear all movement controls — bot must stand still inside portal for ~4s to trigger teleport
+    // Verify bot is actually inside the portal block
+    const feetBlock = bot.blockAt(bot.entity.position.floored());
+    const botPos = bot.entity.position;
+    console.error(`[Portal] Pre-teleport check: bot at (${botPos.x.toFixed(2)}, ${botPos.y.toFixed(2)}, ${botPos.z.toFixed(2)}), feet block: ${feetBlock?.name}`);
+
+    // If not inside portal, walk into it using actual movement
+    if (feetBlock?.name !== activePortalName) {
+      console.error(`[Portal] Bot is NOT inside portal block, walking in...`);
+      const portalCenter = lowestPortal.position.offset(0.5, 0, 0.5);
+      await bot.lookAt(portalCenter);
+      bot.setControlState("forward", true);
+      // Walk forward for 2 seconds to ensure we're inside
+      await new Promise(r => setTimeout(r, 2000));
+      bot.clearControlStates();
+      await new Promise(r => setTimeout(r, 300));
+      const newFeetBlock = bot.blockAt(bot.entity.position.floored());
+      console.error(`[Portal] After walking: feet block: ${newFeetBlock?.name}, pos: (${bot.entity.position.x.toFixed(2)}, ${bot.entity.position.y.toFixed(2)}, ${bot.entity.position.z.toFixed(2)})`);
+    }
+
+    // Clear all movement — bot must stand completely still inside portal for ~4s
     bot.clearControlStates();
     bot.pathfinder.setGoal(null);
-    console.error(`[Portal] All controls cleared, standing still to trigger teleport...`);
+    console.error(`[Portal] Standing still inside portal, waiting for teleport...`);
 
-    // Wait for dimension change (teleport) — portals need ~4s standing inside
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error("Portal teleport timeout after 30 seconds"));
-      }, 30000);
+    // Wait for dimension change with retry logic
+    // Each attempt: walk into portal center, stand still for 10s, check dimension
+    const portalCenter = lowestPortal.position.offset(0.5, 0, 0.5);
+    const maxAttempts = 3;
 
-      const onSpawn = () => {
-        const newDimension = bot.game.dimension;
-        if (newDimension !== startDimension) {
-          cleanup();
-          const dimName = String(newDimension).includes("nether") ? "Nether" :
-                         String(newDimension).includes("overworld") ? "Overworld" :
-                         String(newDimension).includes("end") ? "End" : String(newDimension);
-          resolve(`Teleported to ${dimName} via portal. Position: (${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.y)}, ${Math.round(bot.entity.position.z)})`);
-        }
-      };
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      console.error(`[Portal] Teleport attempt ${attempt}/${maxAttempts}...`);
 
-      const cleanup = () => {
-        clearTimeout(timeout);
-        bot.removeListener("spawn", onSpawn);
-        // Re-add portals to blocksToAvoid after transition
+      const result = await new Promise<string | null>((resolve) => {
+        let done = false;
+
+        const timeout = setTimeout(() => {
+          if (!done) {
+            done = true;
+            bot.removeListener("spawn", onSpawn);
+            // Final dimension check
+            if (bot.game.dimension !== startDimension) {
+              resolve(getDimName(bot.game.dimension));
+            } else {
+              resolve(null); // timed out
+            }
+          }
+        }, 10000);
+
+        const onSpawn = () => {
+          // Delay check — dimension may update slightly after spawn
+          setTimeout(() => {
+            if (!done && bot.game.dimension !== startDimension) {
+              done = true;
+              clearTimeout(timeout);
+              bot.removeListener("spawn", onSpawn);
+              resolve(getDimName(bot.game.dimension));
+            }
+          }, 300);
+        };
+
+        bot.on("spawn", onSpawn);
+
+        // Also poll every 1s as fallback
+        const poller = setInterval(() => {
+          if (done) { clearInterval(poller); return; }
+          if (bot.game.dimension !== startDimension) {
+            done = true;
+            clearTimeout(timeout);
+            clearInterval(poller);
+            bot.removeListener("spawn", onSpawn);
+            resolve(getDimName(bot.game.dimension));
+          }
+        }, 1000);
+
+        // Clean up poller when done
+        setTimeout(() => clearInterval(poller), 11000);
+      });
+
+      if (result) {
+        // Success — teleported!
         if (netherPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.add(netherPortalId);
         if (endPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.add(endPortalId);
-      };
+        return `Teleported to ${result} via portal. Position: (${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.y)}, ${Math.round(bot.entity.position.z)})`;
+      }
 
-      bot.on("spawn", onSpawn);
-    });
+      // Failed — walk out and back in to reset the portal's 4-second timer
+      if (attempt < maxAttempts) {
+        console.error(`[Portal] Attempt ${attempt} failed. Walking out and back in...`);
+
+        // Determine step-out direction based on portal axis
+        const portalState = lowestPortal.getProperties() as any;
+        const portalAxis = portalState?.axis as string | undefined;
+        const stepOutOffset = portalAxis === "x"
+          ? new Vec3(0, 0, 2)    // step out along Z
+          : new Vec3(2, 0, 0);   // step out along X
+
+        const stepOutPos = portalCenter.plus(stepOutOffset);
+
+        // Walk out
+        await bot.lookAt(stepOutPos);
+        bot.setControlState("forward", true);
+        await new Promise(r => setTimeout(r, 1500));
+        bot.clearControlStates();
+        await new Promise(r => setTimeout(r, 500));
+
+        // Walk back in
+        await bot.lookAt(portalCenter);
+        bot.setControlState("forward", true);
+        await new Promise(r => setTimeout(r, 2000));
+        bot.clearControlStates();
+        await new Promise(r => setTimeout(r, 300));
+
+        const checkBlock = bot.blockAt(bot.entity.position.floored());
+        console.error(`[Portal] Re-entered portal, feet block: ${checkBlock?.name}`);
+      }
+    }
+
+    // All attempts failed
+    if (netherPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.add(netherPortalId);
+    if (endPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.add(endPortalId);
+    throw new Error(`Portal teleport failed after ${maxAttempts} attempts (~30s). Bot feet block: ${bot.blockAt(bot.entity.position.floored())?.name}. The bot may not be physically inside the portal block.`);
+
+    function getDimName(dim: any): string {
+      const d = String(dim);
+      return d.includes("nether") ? "Nether" :
+             d.includes("overworld") ? "Overworld" :
+             d.includes("end") ? "End" : d;
+    }
   } catch (err) {
     // Re-add portals to blocksToAvoid on failure
     if (netherPortalId !== undefined) bot.pathfinder.movements.blocksToAvoid.add(netherPortalId);

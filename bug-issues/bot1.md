@@ -582,3 +582,35 @@ Bot needs to explore further (200+ blocks) to find animals.
   ```
 - **Bot State**: HP=5, Hunger=0, Position=(152, 60, -22), gold armor + iron_sword + ender_pearl x12
 - **Status**: BLOCKED. Awaiting admin action.
+
+---
+
+## [2026-03-18] Death: Slain by Skeleton during mc_gather iron_ore at night
+
+- **Cause**: mc_gather(iron_ore, max_distance=64) navigated bot to surface at night with no armor. Skeleton shot and killed bot.
+- **Location**: Surface birch_forest ~(-7, 94, 1)
+- **Coordinates**: ~(-7, 94, 1) overworld, midnight
+- **Last Actions**:
+  1. Night (midnight), no armor equipped
+  2. mc_gather(iron_ore, count=4, max_distance=64) navigated bot to open surface
+  3. Skeleton shot bot — "Claude1 was shot by Skeleton"
+- **Item Loss**: cooked_beef x8 lost (9 → 1), iron_ingot x2 retained (keepInventory=true)
+- **Root Cause**: mc_gather does not check for hostile mobs or night conditions before navigating. Bot was exposed on surface at midnight without armor.
+- **Fix Needed**: mc_gather should check threats before moving to target block, or avoid surface navigation at night when HP < 15 and no armor
+- **Status**: Recorded. Continuing gameplay.
+
+---
+
+## [2026-03-19] Death: Slain by Zombie while exploring for food (HP=17→0)
+
+- **Cause**: Bot was exploring far from base searching for animals (no food in inventory). Navigating at night/evening, zombie killed bot. HP was 17 at start of exploration but midnight arrived during travel.
+- **Location**: OW ~(45, 96, -71) old_growth_birch_forest
+- **Coordinates**: ~(45, 96, -71)
+- **Last Actions**:
+  1. Started at (-9, 109, 11) with HP=17, hunger=11, no food
+  2. Searched sheep/cow/pig/chicken within 64 blocks at 3 locations — all empty
+  3. Navigated to (-69, 101, 60) then to (45, 98, -69) — no animals found
+  4. Midnight arrived, zombie killed bot: "Claude1 was slain by Zombie"
+- **Root Cause**: No animals anywhere in 128+ block radius (depopulated area). Long exploration at night with no armor. Iron sword equipped but zombie still lethal.
+- **Fix Needed**: Abort exploration if approaching night (ticks > 11500) and no shelter/bed available
+- **Status**: Recorded. Bot respawned HP=16.3, built emergency shelter. Continuing.

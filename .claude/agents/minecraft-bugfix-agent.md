@@ -4,6 +4,20 @@ description: "Use this agent when you need to autonomously play Minecraft using 
 model: sonnet
 color: green
 memory: project
+maxTurns: 10
+background: true
+permissionMode: dontAsk
+mcpServers:
+  - mineflayer:
+      type: stdio
+      command: /opt/homebrew/opt/node@20/bin/node
+      args:
+        - /Users/shingo/Develop/auto-mineflayer-mcp-server/dist/mcp-proxy.js
+      env:
+        AGENT_TYPE: "game"
+        MC_HOST: "localhost"
+        MC_PORT: "25565"
+        VIEWER: "0"
 hooks:
   PreToolUse:
     - matcher: "Bash"
