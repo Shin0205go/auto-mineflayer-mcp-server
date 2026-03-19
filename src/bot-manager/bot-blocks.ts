@@ -728,18 +728,36 @@ export async function digBlock(
     bot.pathfinder.setGoal(null);
     try { bot.stopDigging(); } catch (_) { /* ignore if not digging */ }
 
+    // Critical: wait for pathfinder to fully release control
+    // pathfinder.setGoal(null) is async in effect — physics ticks may still apply momentum
+    await delay(200);
+    bot.clearControlStates(); // clear again after pathfinder settles
+
     // Wait until bot velocity is near zero (fully stopped)
-    for (let waitTick = 0; waitTick < 20; waitTick++) {
+    for (let waitTick = 0; waitTick < 30; waitTick++) {
       const vel = bot.entity.velocity;
-      if (Math.abs(vel.x) < 0.01 && Math.abs(vel.y) < 0.01 && Math.abs(vel.z) < 0.01) break;
+      // Use stricter threshold — even 0.005 blocks/tick can cause server-side position update
+      if (Math.abs(vel.x) < 0.003 && Math.abs(vel.z) < 0.003 && Math.abs(vel.y) < 0.08) break;
       bot.clearControlStates();
-      await delay(100);
+      await delay(50);
     }
 
     // Ensure bot is on ground before digging
     for (let groundTick = 0; groundTick < 20; groundTick++) {
       if (bot.entity.onGround) break;
       await delay(100);
+    }
+
+    // Final stabilization: wait for position to stop changing
+    {
+      let prevPos = bot.entity.position.clone();
+      for (let stabilize = 0; stabilize < 10; stabilize++) {
+        await delay(50);
+        const pos = bot.entity.position;
+        const drift = Math.abs(pos.x - prevPos.x) + Math.abs(pos.z - prevPos.z);
+        if (drift < 0.001) break;
+        prevPos = pos.clone();
+      }
     }
 
     // Re-check block exists before digging
@@ -767,32 +785,60 @@ export async function digBlock(
           return `Failed to dig ${blockName}: Too far away (${currentDist.toFixed(1)} blocks). Move closer first.`;
         }
 
-        // Clear movements again and retry
-        bot.clearControlStates();
-        bot.pathfinder.setGoal(null);
-        try { bot.stopDigging(); } catch (_) { /* ignore if not digging */ }
-
-        // Wait until bot velocity is near zero (fully stopped)
-        for (let waitTick = 0; waitTick < 15; waitTick++) {
-          const vel = bot.entity.velocity;
-          if (Math.abs(vel.x) < 0.01 && Math.abs(vel.z) < 0.01) break;
+        // Retry up to 2 more times with longer stabilization
+        let retrySuccess = false;
+        for (let retry = 0; retry < 2; retry++) {
           bot.clearControlStates();
-          await delay(100);
-        }
+          bot.pathfinder.setGoal(null);
+          try { bot.stopDigging(); } catch (_) {}
 
-        // Re-check and re-acquire the block reference
-        const blockRetry = bot.blockAt(blockPos);
-        if (!blockRetry || blockRetry.name === "air") {
-          return `Block at (${x}, ${y}, ${z}) no longer exists`;
-        }
+          // Longer stabilization on retry
+          await delay(500);
+          bot.clearControlStates();
 
-        try {
-          await bot.lookAt(blockRetry.position.offset(0.5, 0.5, 0.5));
-          await delay(50);
-          await bot.dig(blockRetry, true);
-          console.error(`[Dig] Retry successful for ${blockName}`);
-        } catch (retryError: any) {
-          return `Failed to dig ${blockName}: ${retryError.message}`;
+          // Wait for velocity to settle
+          for (let waitTick = 0; waitTick < 20; waitTick++) {
+            const vel = bot.entity.velocity;
+            if (Math.abs(vel.x) < 0.003 && Math.abs(vel.z) < 0.003) break;
+            await delay(50);
+          }
+
+          // Wait for position stability
+          let prevRetryPos = bot.entity.position.clone();
+          for (let s = 0; s < 10; s++) {
+            await delay(50);
+            const p = bot.entity.position;
+            if (Math.abs(p.x - prevRetryPos.x) + Math.abs(p.z - prevRetryPos.z) < 0.001) break;
+            prevRetryPos = p.clone();
+          }
+
+          const blockRetry = bot.blockAt(blockPos);
+          if (!blockRetry || blockRetry.name === "air") {
+            return `Block at (${x}, ${y}, ${z}) no longer exists`;
+          }
+
+          const retryDist = bot.entity.position.distanceTo(blockPos);
+          if (retryDist > REACH_DISTANCE) {
+            console.error(`[Dig] Retry ${retry+1}: too far (${retryDist.toFixed(1)}), aborting`);
+            return `Failed to dig ${blockName}: Too far away (${retryDist.toFixed(1)} blocks) after retry.`;
+          }
+
+          try {
+            await bot.lookAt(blockRetry.position.offset(0.5, 0.5, 0.5));
+            await delay(100);
+            await bot.dig(blockRetry, true);
+            console.error(`[Dig] Retry ${retry+1} successful for ${blockName}`);
+            retrySuccess = true;
+            break;
+          } catch (retryError: any) {
+            console.error(`[Dig] Retry ${retry+1} failed: ${retryError.message}`);
+            if (retry === 1) {
+              return `Failed to dig ${blockName} after 3 attempts: ${retryError.message}. Bot may be on unstable ground.`;
+            }
+          }
+        }
+        if (!retrySuccess) {
+          return `Failed to dig ${blockName}: Digging keeps being aborted. Bot position may be unstable.`;
         }
       } else {
         return `Failed to dig ${blockName}: ${digError.message}`;
