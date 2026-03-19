@@ -349,40 +349,10 @@ export async function mc_farm(): Promise<string> {
     }
   }
 
+  // NOTE: Don't place dirt from inventory here — water check (Step 2b) will handle
+  // dirt placement near water to ensure irrigation. Placing dirt far from water wastes blocks.
   if (farmCoords.length === 0) {
-    // Fallback: place dirt blocks from inventory on AIR blocks only
-    const dirtInv = botManager.getInventory(username).find((i: any) => i.name === "dirt");
-    if (dirtInv && dirtInv.count >= seedCount) {
-      logs.push("No natural dirt found nearby — placing dirt blocks from inventory on air blocks.");
-      // Find air blocks at ground level where we can place dirt
-      for (let dx = -3; dx <= 3 && farmCoords.length < seedCount; dx++) {
-        for (let dz = -3; dz <= 3 && farmCoords.length < seedCount; dz++) {
-          const cx = bx + dx;
-          const cz = bz + dz;
-          const cy = by - 1;
-          const groundBlock = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy, cz));
-          const aboveBlock = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy + 1, cz));
-          // Only place dirt where there's air (or replaceable block) and air above
-          if (groundBlock && groundBlock.name === "air" && aboveBlock && aboveBlock.name === "air") {
-            try {
-              const placeResult = await botManager.placeBlock(username, "dirt", cx, cy, cz);
-              // Verify the block actually became dirt
-              const check = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy, cz));
-              if (check && check.name === "dirt") {
-                logs.push(`Placed dirt at (${cx},${cy},${cz}): success`);
-                farmCoords.push({ x: cx, y: cy, z: cz });
-              } else {
-                logs.push(`Placed dirt at (${cx},${cy},${cz}): failed (block is ${check?.name})`);
-              }
-            } catch (e) {
-              logs.push(`Place dirt failed at (${cx},${cy},${cz}): ${e}`);
-            }
-          }
-        }
-      }
-    } else {
-      logs.push("No natural dirt found nearby and not enough dirt in inventory to place.");
-    }
+    logs.push("No natural tillable blocks nearby — will check water proximity before placing dirt.");
   }
 
   logs.push(`Farm locations: ${farmCoords.map(c => `(${c.x},${c.y},${c.z})`).join(", ")}`);
