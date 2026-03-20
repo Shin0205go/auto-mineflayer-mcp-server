@@ -1,3 +1,33 @@
+## [2026-03-21] Bug: Fall death during mc_flee - Session 18
+
+- **Cause**: `mc_flee()` calculates a horizontal flee target and uses pathfinder with `maxDropDown=2`. When fleeing in a direction with terrain drop-offs (caves, ravines, cliffs), the pathfinder descends 2 blocks at a time repeatedly until a fatal fall occurs. Bot was at Y=68-70 underground with witch (W) + skeleton (E) — fled into cave terrain and fell.
+- **Location**: `src/bot-manager/bot-movement.ts` `flee()` function line ~1110
+- **Coordinates**: Died near (8, 69, 11), respawned at (-5, 117, 4)
+- **Last Actions**:
+  1. mc_status — HP=3.5, witch at 11.7 blocks W, skeleton at 15.1 blocks E
+  2. minecraft_pillar_up(height=6) — only got 2 blocks (partial, placement failed)
+  3. mc_flee(distance=50) — fled 14.5 blocks (insufficient)
+  4. mc_flee(distance=50) — fled 11.2 blocks
+  5. mc_flee(distance=50) — "Claude1 fell from a high place" — DEATH
+- **Fix Applied**: Set `bot.pathfinder.movements.maxDropDown = 0` during flee to prevent any cliff drops. Restore to previous value after flee completes. This means flee may not move as far in terrain with drops, but the bot survives.
+- **Status**: Fixed in `src/bot-manager/bot-movement.ts`
+
+---
+
+## [2026-03-20] Bug: Death by Zombie during sheep combat - Session 16
+
+- **Cause**: Called `mc_combat(target="sheep")` at night while a zombie was nearby. The combat tool targeted the sheep but the zombie attacked the bot fatally. The mc_combat tool does not check for nearby hostile mobs before engaging passive targets.
+- **Location**: `src/tools/core-tools.ts` mc_combat - no hostile mob check when targeting passive mobs at night
+- **Coordinates**: Died near (-17, 114, -95), respawned at (7.5, 120, 8.6) base
+- **Last Actions**:
+  1. mc_status — HP=20, Hunger=20, night time (ticks=13433)
+  2. mc_combat(target="sheep") — zombie attacked bot while targeting sheep
+  3. Death: "Claude1 was doomed to fall by Zombie"
+- **Fix Applied**: Behavioral: avoid mc_combat on passive targets at night. Code fix needed: mc_combat should warn or refuse to target passive mobs when hostile mobs are nearby.
+- **Status**: Behavioral fix applied (avoid night combat on passives). Code fix pending.
+
+---
+
 ## [2026-03-20] Bug: Fall death - "Claude1 hit the ground too hard"
 
 - **Cause**: Bot fell from a high place during previous session. Likely cliff traversal or pathfinder chose a path over a ravine/edge.
@@ -6,6 +36,21 @@
 - **Last Actions**: Unknown from previous session
 - **Fix Applied**: Monitoring. Existing mc_tunnel tool and fall detection exist. Still investigating root cause.
 - **Status**: Investigating
+
+---
+
+## [2026-03-20] Bug: Fall death during food emergency - Session 15
+
+- **Cause**: During food emergency (HP=4, hunger=0), bot was navigating toward sheep at (-64, 112, -128). mc_navigate failed with "Path blocked" multiple times. Bot attempted intermediate waypoint navigation and fell from elevation ~114 to lower ground.
+- **Location**: `src/tools/core-tools.ts` mc_navigate - pathfinder accepts unsafe high-elevation moves when blocked
+- **Coordinates**: Died near (-17, 114, -95), respawned at spawn point
+- **Last Actions**:
+  1. mc_navigate to sheep at 155 blocks - path blocked
+  2. mc_navigate to intermediate (-30, 81, -50) - path blocked, "5 blocks lower"
+  3. mc_navigate to (-40, 112, -110) - path blocked, fell from high place
+- **Fix Applied**: None yet. Root cause: when pathfinder reports "path blocked", bot still moves partial distance and can end up at cliff edges.
+- **Notes**: keepInventory=true so no items lost. HP/hunger restored to 20/20 on respawn. This death was caused by unsafe navigation during an emergency, not combat.
+- **Status**: Investigating - need to prevent pathfinder from dropping bot off cliffs when navigating to blocked targets
 
 ---
 

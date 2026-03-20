@@ -936,15 +936,17 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
       new Vec3(curX, feetY - 2, curZ),
     ];
     let blockBelow: ReturnType<typeof bot.blockAt> = null;
+    console.error(`[Pillar] Looking for block below: pos=(${bot.entity.position.x.toFixed(2)}, ${bot.entity.position.y.toFixed(2)}, ${bot.entity.position.z.toFixed(2)}), feetY=${feetY}, bx=${bx}, bz=${bz}, curX=${curX}, curZ=${curZ}`);
     for (const pos of candidates) {
       const b = bot.blockAt(pos);
+      console.error(`[Pillar]   candidate (${pos.x},${pos.y},${pos.z}): ${b?.name ?? "null"} bb=${(b as any)?.boundingBox ?? "?"}`);
       if (b && b.name !== "air" && b.name !== "cave_air" && b.name !== "water" && b.name !== "void_air") {
         blockBelow = b;
         break;
       }
     }
     if (!blockBelow) {
-      console.error(`[Pillar] No block below to place against at Y=${feetY - 1}`);
+      console.error(`[Pillar] No block below to place against at Y=${feetY - 1}. All candidates were air/water/null.`);
       break;
     }
 
@@ -1108,6 +1110,14 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     const fleeTarget = bot.entity.position.plus(direction.scaled(distance));
     const startPos = bot.entity.position.clone();
 
+    // SAFETY: Disable drop-downs during flee to prevent cliff falls that cause death.
+    // A bot that cannot flee horizontally due to terrain is safer staying put than
+    // falling off a cliff at low HP. Restore previous setting after flee completes.
+    const prevMaxDropDown = bot.pathfinder.movements?.maxDropDown ?? 2;
+    if (bot.pathfinder.movements) {
+      bot.pathfinder.movements.maxDropDown = 0;
+    }
+
     const goal = new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3);
     bot.pathfinder.setGoal(goal);
 
@@ -1138,6 +1148,11 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       }, 200);
     });
 
+    // Restore previous maxDropDown after flee completes
+    if (bot.pathfinder.movements) {
+      bot.pathfinder.movements.maxDropDown = prevMaxDropDown;
+    }
+
     const distMoved = bot.entity.position.distanceTo(startPos);
     if (hostile) {
       const newDist = bot.entity.position.distanceTo(hostile.position);
@@ -1147,10 +1162,13 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[Flee] Error during flee: ${errMsg}`);
-    // Stop all movement controls to prevent stuck state
+    // Stop all movement controls and restore maxDropDown to prevent stuck state
     try {
       bot.clearControlStates();
       bot.pathfinder.setGoal(null);
+      if (bot.pathfinder.movements) {
+        bot.pathfinder.movements.maxDropDown = 2; // restore safe default
+      }
     } catch { /* bot may be disconnected */ }
     return `Flee interrupted: ${errMsg}`;
   }
