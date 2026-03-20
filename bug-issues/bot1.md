@@ -1,3 +1,14 @@
+## [2026-03-21] Bug: Fall death near ravine - Session 19
+
+- **Cause**: "Claude1 hit the ground too hard" — fatal fall near a ravine. Bot walked off cliff edge or pathfinder allowed a drop into ravine. Previous fix set `maxDropDown=0` during mc_flee, but bot may have fallen during normal navigation near ravine terrain.
+- **Location**: Likely `src/bot-manager/bot-movement.ts` or `src/tools/core-tools.ts` mc_navigate — pathfinder maxDropDown may still allow falls during standard navigation near cliffs/ravines.
+- **Coordinates**: Death location unknown (near ravine). Respawned at (-7, 103, -6) birch_forest biome.
+- **Last Actions**: Normal gameplay near ravine area. Fall death, not flee-related.
+- **Fix Applied**: Investigation needed — check if mc_navigate also needs maxDropDown restrictions near cliff terrain.
+- **Status**: Investigating
+
+---
+
 ## [2026-03-21] Bug: Fall death during mc_flee - Session 18
 
 - **Cause**: `mc_flee()` calculates a horizontal flee target and uses pathfinder with `maxDropDown=2`. When fleeing in a direction with terrain drop-offs (caves, ravines, cliffs), the pathfinder descends 2 blocks at a time repeatedly until a fatal fall occurs. Bot was at Y=68-70 underground with witch (W) + skeleton (E) — fled into cave terrain and fell.

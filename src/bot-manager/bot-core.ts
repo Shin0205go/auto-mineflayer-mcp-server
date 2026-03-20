@@ -247,7 +247,7 @@ export class BotCore extends EventEmitter {
         movements.allowFreeMotion = !isNether; // Disable in Nether (prevent lava jumps)
         movements.allowParkour = false; // DISABLED in all dimensions (prevent gap jumps that can fail → fall damage)
         movements.allowSprinting = true;
-        movements.maxDropDown = isNether ? 1 : 2; // Reduced from 3 to 2 in Overworld (3-block drops cause fall damage in hilly terrain)
+        movements.maxDropDown = isNether ? 1 : 1; // SAFETY: 1-block max drop prevents fall damage (2 caused ravine deaths near cliffs)
 
         // Don't break blocks that would cause issues
         movements.dontMineUnderFallingBlock = true;
@@ -396,7 +396,7 @@ export class BotCore extends EventEmitter {
             // NETHER SAFETY: Restrict risky movements to prevent lava deaths and cliff falls
             movements.allowFreeMotion = !isNether;
             movements.allowParkour = false; // DISABLED in all dimensions (prevents fall damage)
-            movements.maxDropDown = isNether ? 1 : 2; // Match spawn setting (3 caused ravine falls)
+            movements.maxDropDown = isNether ? 1 : 1; // SAFETY: 1-block max drop in Overworld to prevent ravine fall deaths
 
             bot.pathfinder.setMovements(movements);
             console.error(`[BotManager] Pathfinder updated for ${newDimension}: allowFreeMotion=${movements.allowFreeMotion}, allowParkour=${movements.allowParkour}, maxDropDown=${movements.maxDropDown}`);

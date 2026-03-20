@@ -1113,7 +1113,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     // SAFETY: Disable drop-downs during flee to prevent cliff falls that cause death.
     // A bot that cannot flee horizontally due to terrain is safer staying put than
     // falling off a cliff at low HP. Restore previous setting after flee completes.
-    const prevMaxDropDown = bot.pathfinder.movements?.maxDropDown ?? 2;
+    const prevMaxDropDown = bot.pathfinder.movements?.maxDropDown ?? 1;
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.maxDropDown = 0;
     }
@@ -1167,7 +1167,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       bot.clearControlStates();
       bot.pathfinder.setGoal(null);
       if (bot.pathfinder.movements) {
-        bot.pathfinder.movements.maxDropDown = 2; // restore safe default
+        bot.pathfinder.movements.maxDropDown = 1; // restore safe default (1-block max drop prevents fall damage)
       }
     } catch { /* bot may be disconnected */ }
     return `Flee interrupted: ${errMsg}`;
