@@ -896,12 +896,19 @@ export async function mc_navigate(
 
   // Navigate to coordinates
   if (args.x !== undefined && args.y !== undefined && args.z !== undefined) {
+    // Coerce to numbers (MCP may pass as strings)
+    const nx = Number(args.x);
+    const ny = Number(args.y);
+    const nz = Number(args.z);
+    if (isNaN(nx) || isNaN(ny) || isNaN(nz)) {
+      return `Invalid coordinates: x=${args.x}, y=${args.y}, z=${args.z}`;
+    }
     // For long distances, move in segments (from movement.ts logic)
     const pos = botManager.getPosition(username);
     if (pos) {
-      const dx = args.x - pos.x;
-      const dy = args.y - pos.y;
-      const dz = args.z - pos.z;
+      const dx = nx - pos.x;
+      const dy = ny - pos.y;
+      const dz = nz - pos.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
       if (dist > 50) {
@@ -911,21 +918,21 @@ export async function mc_navigate(
         for (let i = 1; i <= steps; i++) {
           const curPos = botManager.getPosition(username);
           if (!curPos) break;
-          const rdx = args.x - curPos.x;
-          const rdy = args.y - curPos.y;
-          const rdz = args.z - curPos.z;
+          const rdx = nx - curPos.x;
+          const rdy = ny - curPos.y;
+          const rdz = nz - curPos.z;
           const remainDist = Math.sqrt(rdx * rdx + rdy * rdy + rdz * rdz);
           if (remainDist < 3) break;
           const t = Math.min(segmentSize / remainDist, 1.0);
           const ix = curPos.x + rdx * t;
           const iz = curPos.z + rdz * t;
-          const iy = remainDist <= segmentSize ? args.y : (curPos.y + rdy * t);
+          const iy = remainDist <= segmentSize ? ny : (curPos.y + rdy * t);
           lastResult = await botManager.moveTo(username, ix, iy, iz);
         }
-        return lastResult || await botManager.moveTo(username, args.x, args.y, args.z);
+        return lastResult || await botManager.moveTo(username, nx, ny, nz);
       }
     }
-    return await botManager.moveTo(username, args.x, args.y, args.z);
+    return await botManager.moveTo(username, nx, ny, nz);
   }
 
   return "Provide coordinates (x, y, z), target_block, or target_entity";
@@ -1248,14 +1255,14 @@ export async function mc_connect(
 
   await botManager.connect({ host, port, username, version });
 
-  // Start prismarine-viewer if VIEWER=1 env var is set
+  // Start prismarine-viewer via persistent viewer server if VIEWER=1
   if (process.env.VIEWER === "1") {
     const viewerPort = parseInt(process.env.VIEWER_PORT || "3007");
     try {
-      const { default: prismarineViewer } = await import("prismarine-viewer");
+      const { onBotConnected } = await import("../viewer-server.js");
       const bot = botManager.getBot(username);
       if (bot) {
-        prismarineViewer.mineflayer(bot, { port: viewerPort, firstPerson: false });
+        await onBotConnected(bot, username, viewerPort);
         console.error(`[Viewer] Started at http://localhost:${viewerPort}`);
       }
     } catch (e) {

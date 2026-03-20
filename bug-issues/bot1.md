@@ -1,3 +1,25 @@
+## [2026-03-20] Bug: Fall death - "Claude1 hit the ground too hard"
+
+- **Cause**: Bot fell from a high place during previous session. Likely cliff traversal or pathfinder chose a path over a ravine/edge.
+- **Location**: Unknown - occurred in previous session
+- **Coordinates**: Respawned at (4.5, 90, -4.5) birch_forest
+- **Last Actions**: Unknown from previous session
+- **Fix Applied**: Monitoring. Existing mc_tunnel tool and fall detection exist. Still investigating root cause.
+- **Status**: Investigating
+
+---
+
+## [2026-03-20] Bug: mc_navigate x/y/z coordinates cause "x.toFixed is not a function"
+
+- **Cause**: MCP client passes coordinate parameters as strings (JSON number type not always preserved). `moveTo()` receives string instead of number, fails on `.toFixed()` call.
+- **Location**: `src/tools/core-tools.ts` mc_navigate function, coordinate navigation branch
+- **Coordinates**: (4.5, 90, -4.5)
+- **Last Actions**: Called `mc_navigate(x=12, y=89, z=4)` to navigate to wheat block
+- **Fix Applied**: Added `Number()` coercion + NaN validation for x/y/z before passing to moveTo. Updated all references in the segmented navigation loop to use coerced nx/ny/nz values.
+- **Status**: Fixed (commit pending)
+
+---
+
 ## [2026-03-17] Bug: AutoFlee fires when approaching portal (within 3 blocks, HP<=10)
 
 - **Cause**: AutoFlee triggered at HP=7.8 when bot was 2-3 blocks from portal entry point. The portal block suppression only checked if bot was INSIDE portal, but flee was redirecting the pathfinder goal before bot stepped in.
@@ -767,3 +789,57 @@ Bot needs to explore further (200+ blocks) to find animals.
   2. Bot should not perform extended stationary operations at night without shelter
 - **Status**: Recorded. 7th death.
 - **Status**: Recorded. 5th death. Witch ranged attack during navigation.
+
+---
+
+## [2026-03-20] Deaths: fall x2 + witch x2 + zombie x1 (8th-12th deaths)
+
+- **Cause**: Multiple deaths in session gap before this reconnect:
+  1. "Claude1 fell from a high place" (x2) — ravine fall deaths, maxDropDown=2 fix insufficient
+  2. "Claude1 was killed by Witch using magic" (x2) — witch ranged potions, flee didn't persist
+  3. "Claude1 was slain by Zombie" — zombie melee at low HP
+- **Location**: `src/bot-manager/bot-survival.ts` — AutoFlee threshold and distance
+- **Coordinates**: Unknown (died before this session reconnect)
+- **Last Actions**: Previous session navigating in ravine area near Y=84
+- **Fix Needed**:
+  1. Fall deaths: ravine navigation needs stronger avoidance
+  2. Witch deaths: flee distance must exceed witch's 16-block attack range (flee >= 25 blocks)
+  3. Zombie death: flee should trigger at HP <= 12 not HP <= 10 for safer margin
+- **Status**: Recorded. 8th-12th deaths.
+
+---
+
+## [2026-03-20] Death: Fall during mc_gather short_grass (13th death)
+- **Cause**: Bot fell from height while gathering short_grass. mc_gather navigated to grass near cliff/ravine edge, bot was pushed off by physics.
+- **Death message**: "Claude hit the ground too hard"
+- **Coordinates**: Somewhere between (14, 62, 43) and (-70, 118, -11) (respawn)
+- **Last Actions**:
+  1. mc_flee from creeper (success)
+  2. mc_gather(block="short_grass", count=10) — fell during navigation to grass
+- **Root Causes**:
+  1. **mc_gather uses pathfinder which routes near cliff edges**: Same root cause as deaths #6, #8-12
+  2. **Hunger=0 meant no HP regen**: Any fall damage is permanent
+  3. **physicsTick fall detection didn't prevent death**: Fall was likely instant/fatal
+- **Fix Needed**:
+  1. mc_gather should inherit maxDropDown=2 safety settings
+  2. Consider refusing navigation when Hunger=0 and HP<6
+- **Status**: Recorded. 13th death.
+
+---
+
+## [2026-03-20] Death: Starvation (Hunger=0, HP=1 → death) (14th death)
+
+- **Cause**: Bot in birch_forest with no food in inventory. Hunger=0, HP dropped to 1 due to starvation damage. No nearby animals (pig/cow/sheep/chicken). sweet_berry_bush not found within 50 blocks. Safety guard in mc_navigate blocked navigation at critical HP. Zombie killed bot at HP=1.
+- **Death Message**: "Claude1 was slain by Zombie"
+- **Coordinates**: ~(18, 75, -35) birch_forest
+- **Last Actions**:
+  1. HP=10, Hunger=0 — no food, no animals nearby
+  2. mc_combat(target="sheep") — no sheep found nearby
+  3. mc_navigate(target_entity="sheep", max_distance=200) — 133 blocks away, unreachable
+  4. mc_navigate(target_entity="pig", max_distance=200) — path blocked
+  5. mc_navigate(target_entity="chicken", max_distance=200) — blocked by critical HP safety guard
+  6. mc_gather(block="sweet_berry_bush") — 0 found within 50 blocks
+  7. HP=1 from starvation damage, Zombie killed
+- **Root Cause**: No persistent food farm established. Bot relies on hunting but animals are sparse/unreachable.
+- **Fix Needed**: Need wheat farm or animal pen before Phase 5 diamond mining to prevent starvation during extended mining sessions.
+- **Status**: Recorded. 14th death. Starvation.
