@@ -144,12 +144,13 @@ export async function minecraft_gather_resources(
           }
         }
 
-        // Danger check before mining — scan 16 blocks (not 8).
-        // Skeletons shoot from ~20 blocks; at 8-block radius they're already in lethal range.
+        // Danger check before mining — scan 20 blocks to match skeleton attack range.
+        // Skeletons shoot from ~20 blocks; at 16-block radius they can start shooting before detected.
         // Bot2 bug: skeleton at 12 blocks was undetected, shot bot to HP 8 during gather.
+        // Bot2 bug: skeleton threats undetected at 16-block scan while skeleton shot from ~18 blocks.
         const bot = botManager.getBot(username);
         if (bot) {
-          const danger = checkDangerNearby(bot, 16);
+          const danger = checkDangerNearby(bot, 20);
           if (danger.dangerous) {
             console.error(`[GatherResources] Danger detected: ${danger.hostileCount} hostile(s), nearest: ${danger.nearestHostile?.name} at ${danger.nearestHostile?.distance.toFixed(1)}m, action: ${danger.recommendation}`);
             if (danger.recommendation === "flee") {

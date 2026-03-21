@@ -1068,8 +1068,16 @@ export async function mc_navigate(
     // Bot1 Session 44: hunger=0, navigated to find animals, fell into cave, drowned.
     // Bot3 Death #11: hunger=0, navigated to farm, fell into ravine.
     // Without food, HP only declines. Long navigation = guaranteed death.
-    if (hunger <= 0 && hp < 10 && !hasFood) {
-      return `[REFUSED] Cannot navigate while starving — HP=${hp}, hunger=0, no food in inventory. HP will only decrease. Find food first: mc_combat(target="cow"), mc_combat(target="pig"), or mc_eat. Short-range movement only (mc_flee, dig shelter).`;
+    if (hunger <= 0 && !hasFood) {
+      // At hunger=0 without food, HP only declines — any navigation leads to death.
+      // Bot1 Sessions 28,35,44: died at HP 10-14 navigating with hunger=0, no food.
+      // Previous threshold (hp < 10) was too lenient — mobs + starvation killed at HP 14.
+      // Block all non-emergency navigation when starving without food.
+      if (hp < 15) {
+        return `[REFUSED] Cannot navigate while starving — HP=${hp}, hunger=0, no food in inventory. HP will only decrease. Find food first: mc_combat(target="cow"), mc_combat(target="pig"), or mc_eat. Short-range movement only (mc_flee, dig shelter).`;
+      }
+      // Even at HP >= 15, warn strongly — starvation drains HP and mob hits are cumulative.
+      nightWarning += `\n[STARVATION WARNING] Hunger=0, no food. HP will only decline. Find food urgently.`;
     }
 
     if (isNight) {
@@ -1363,6 +1371,25 @@ export async function mc_combat(
     if (isPassiveTarget) {
       const combatBot = botManager.getBot(username);
       if (combatBot) {
+        // Night + no armor: refuse passive hunts entirely.
+        // Bot1 Session 16: died to zombie while fighting sheep at night.
+        // Passive hunts take time (chase + kill + collect), during which new mobs spawn.
+        // The hostile check below only catches EXISTING hostiles — it misses mobs that
+        // spawn during the hunt. At night without armor, this is consistently fatal.
+        const huntTime = combatBot.time?.timeOfDay ?? 0;
+        const huntIsNight = huntTime > 12541 || huntTime < 100;
+        if (huntIsNight) {
+          let huntArmorCount = 0;
+          for (const slotName of ["head", "torso", "legs", "feet"] as const) {
+            const slot = combatBot.inventory.slots[combatBot.getEquipmentDestSlot(slotName)];
+            if (slot && slot.name.includes("_")) huntArmorCount++;
+          }
+          const huntHp = combatBot.health ?? 20;
+          if (huntArmorCount <= 1 && huntHp < 14) {
+            return `[REFUSED] Too dangerous to hunt ${target} at night without armor — HP=${huntHp.toFixed(1)}, armor=${huntArmorCount}/4. Mobs spawn during passive hunts and attack while bot is chasing ${target}. Wait for dawn, equip armor, or use mc_eat to raise HP first.`;
+          }
+        }
+
         // Use centralized isHostileMob() instead of inline list with substring matching.
         // Bug fix: inline "zombie".includes() falsely matched "zombified_piglin" (neutral mob).
         const nearbyHostiles: Array<{ name: string; dist: number }> = [];
