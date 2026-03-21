@@ -169,6 +169,12 @@ export async function mc_status(): Promise<string> {
     if (threats.length > 0) {
       warnings.push(`NIGHT DANGER: ${threats.length} hostile(s) nearby. Do NOT navigate or engage — mc_flee or dig 1x1x2 shelter and wait for dawn.`);
     }
+    // NO ARMOR warning: Bot1 Sessions 16-42, Bot2/Bot3 multiple deaths at night without armor.
+    // Many bots navigate/gather/combat at night with empty armor slots, taking full damage from mobs.
+    // Warn explicitly so the agent equips armor before any night action.
+    if (armorItems.length <= 1) {
+      warnings.push(`NO ARMOR: Only ${armorItems.length}/4 armor slots equipped. Mobs deal full damage without armor. Craft and equip armor (iron_helmet, iron_chestplate, iron_leggings, iron_boots) before any night activity.`);
+    }
     if (hasBed) {
       warnings.push("You have a bed. Use mc_sleep NOW to skip night and reset phantom insomnia timer.");
     } else {
@@ -314,7 +320,10 @@ export async function mc_gather(
         const monBot = botManager.getBot(username);
         if (!monBot) { clearInterval(hpCheckInterval); return; }
         const monHp = monBot.health ?? 20;
-        if (monHp < 6) {
+        // Bot1: died at HP 6-8 during gather from single zombie/skeleton hit (4-8 damage).
+        // Bot2: skeleton shot from HP 20→8 during gather. A single hit at HP<8 is often lethal.
+        // Threshold raised from 6 to 8 to give the agent time to react before death.
+        if (monHp < 8) {
           clearInterval(hpCheckInterval);
           try { monBot.pathfinder?.stop(); } catch (_) {}
           resolve(`[ABORTED] mc_gather stopped: HP dropped to ${monHp.toFixed(1)} during gathering. Use mc_flee or mc_eat before retrying.`);
@@ -1306,11 +1315,16 @@ export async function mc_navigate(
               const foodNote = segHasFood ? "" : " No food in inventory — HP cannot regenerate.";
               return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10} at night.${foodNote} Current position: ${posStr}. Use mc_flee, build shelter (dig 1x1x2 + cover), or mc_eat before continuing.`;
             }
-            // Abort if starving (hunger=0) with low HP — starvation drains HP and mobs finish the job
-            if (segHunger <= 0 && segHp <= 10) {
+            // Abort if starving or near-starvation with low HP — starvation drains HP and mobs finish the job.
+            // Bot1 Session 28: HP=14, hunger=1, died during multi-segment navigation because hunger
+            // hit 0 mid-travel (HP can't regen) and mobs killed bot. Previous threshold (hunger<=0 && HP<=10)
+            // was too lenient — bot kept navigating with hunger near 0 until HP dropped below 10.
+            // New: abort at hunger<=2 with no food (hunger will hit 0 during travel) AND HP<=14.
+            const starvationDanger = (segHunger <= 0 && segHp <= 12) || (segHunger <= 2 && !segHasFood && segHp <= 14);
+            if (starvationDanger) {
               const curPos2 = botManager.getPosition(username);
               const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
-              return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10}, hunger=0 (starving). Current position: ${posStr}. Find food immediately (mc_combat cow/pig, mc_eat) before continuing.`;
+              return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10}, hunger=${Math.round(segHunger)} (starving). Current position: ${posStr}. Find food immediately (mc_combat cow/pig, mc_eat) before continuing.`;
             }
             // Mid-segment hostile threat scan: abort if hostile mobs spawned nearby at night.
             // Bot1 Sessions 20-44: 15+ deaths from mobs spawning between segments during night nav.
