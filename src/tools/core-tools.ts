@@ -930,9 +930,17 @@ export async function mc_farm(): Promise<string> {
         logs.push(`[ABORTED] mc_farm timed out during bone meal phase.`);
         break;
       }
-      const bmDanger = checkDangerNearby(bot, 16);
+      // Use 20-block radius to match skeleton shooting range (~20 blocks).
+      // Previously used 16 — inconsistent with other mc_farm phases that use 20.
+      const bmDanger = checkDangerNearby(bot, 20);
       if (bmDanger.dangerous) {
         logs.push(`[ABORTED] Hostile detected during bone meal: ${bmDanger.nearestHostile?.name}. Stopping.`);
+        break;
+      }
+      // HP monitoring: abort if bot is taking damage from any source
+      const bmHp = bot.health ?? 20;
+      if (bmHp < 10) {
+        logs.push(`[ABORTED] HP critically low during bone meal (${bmHp.toFixed(1)}/20). Stopping farm to survive.`);
         break;
       }
       // Move close to crop before applying bone_meal
@@ -987,6 +995,21 @@ export async function mc_farm(): Promise<string> {
 
   for (const fc of plantedCoords) {
     const cropY = fc.y + 1;
+    // Safety: hostile + HP check during harvest — harvest involves moveTo + dig per block,
+    // leaving bot exposed. Bot2: HP 20→1 during stationary farm operations.
+    const harvestDanger = checkDangerNearby(bot, 20);
+    if (harvestDanger.dangerous) {
+      const hd = harvestDanger.nearestHostile
+        ? `${harvestDanger.nearestHostile.name} at ${harvestDanger.nearestHostile.distance.toFixed(1)} blocks`
+        : `${harvestDanger.hostileCount} hostile(s)`;
+      logs.push(`[ABORTED] Hostile detected during harvest: ${hd}. Stopping.`);
+      break;
+    }
+    const harvestHp = bot.health ?? 20;
+    if (harvestHp < 10) {
+      logs.push(`[ABORTED] HP critically low during harvest (${harvestHp.toFixed(1)}/20). Stopping farm to survive.`);
+      break;
+    }
     try {
       const freshBot = botManager.getBot(username);
       const { Vec3: Vec3Cls } = await import("vec3");
@@ -1026,6 +1049,16 @@ export async function mc_farm(): Promise<string> {
         if (wheatBlocks.length > 0) {
           logs.push(`Found ${wheatBlocks.length} mature wheat nearby — harvesting`);
           for (const pos of wheatBlocks) {
+            // Safety: hostile + HP check per block during nearby wheat harvest
+            const scanDanger = checkDangerNearby(freshBot, 20);
+            if (scanDanger.dangerous) {
+              logs.push(`[ABORTED] Hostile detected during nearby wheat harvest. Stopping.`);
+              break;
+            }
+            if ((freshBot.health ?? 20) < 10) {
+              logs.push(`[ABORTED] HP low during nearby wheat harvest (${(freshBot.health ?? 20).toFixed(1)}). Stopping.`);
+              break;
+            }
             try {
               await botManager.moveTo(username, pos.x, pos.y, pos.z);
               const wb = freshBot.blockAt(pos);
