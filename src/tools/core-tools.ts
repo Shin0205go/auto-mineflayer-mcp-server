@@ -355,6 +355,8 @@ export async function mc_farm(): Promise<string> {
   if (!bot) throw new Error("Not connected");
 
   const logs: string[] = [];
+  const FARM_TIMEOUT_MS = 120000; // 120s global timeout, same as mc_gather
+  const farmStartTime = Date.now();
 
   // Check for required items
   const inv = botManager.getInventory(username);
@@ -368,6 +370,18 @@ export async function mc_farm(): Promise<string> {
   }
   if (!seeds) {
     return "mc_farm: No seeds in inventory. Find wheat_seeds by breaking tall grass.";
+  }
+
+  // Safety: Check for hostile mobs before starting long farming operation.
+  // Skeletons can shoot from ~20 blocks, so scan 16 blocks for any hostiles.
+  // Bug report: bot2 was killed by skeleton during mc_farm because no safety check existed.
+  const danger = checkDangerNearby(bot, 16);
+  if (danger.dangerous) {
+    const hp = Math.round((bot.health ?? 20) * 10) / 10;
+    const threatDesc = danger.nearestHostile
+      ? `${danger.nearestHostile.name} at ${danger.nearestHostile.distance.toFixed(1)} blocks`
+      : `${danger.hostileCount} hostile(s)`;
+    return `[REFUSED] Too dangerous to farm — ${threatDesc} nearby, HP=${hp}. Use mc_flee or mc_combat to clear threats first, or wait for daytime.`;
   }
 
   const pos = bot.entity.position;
@@ -661,6 +675,22 @@ export async function mc_farm(): Promise<string> {
   // Step 3: Till then immediately plant each block (till+plant per block, with wait)
   const plantedCoords: Array<{ x: number; y: number; z: number }> = [];
   for (const fc of farmCoords) {
+    // Timeout check: abort if farming has taken too long
+    if (Date.now() - farmStartTime > FARM_TIMEOUT_MS) {
+      logs.push(`[ABORTED] mc_farm timed out after ${FARM_TIMEOUT_MS / 1000}s.`);
+      break;
+    }
+
+    // Mid-farm hostile check: abort if enemies approach during farming
+    const midDanger = checkDangerNearby(bot, 16);
+    if (midDanger.dangerous) {
+      const threatDesc = midDanger.nearestHostile
+        ? `${midDanger.nearestHostile.name} at ${midDanger.nearestHostile.distance.toFixed(1)} blocks`
+        : `${midDanger.hostileCount} hostile(s)`;
+      logs.push(`[ABORTED] Hostile detected during farming: ${threatDesc}. Stopping to avoid death.`);
+      break;
+    }
+
     // Move close to the block before tilling (must be within 4 blocks)
     try {
       const botPos = bot.entity.position;
@@ -750,6 +780,16 @@ export async function mc_farm(): Promise<string> {
   if (boneMealInv && boneMealInv.count > 0) {
     const { Vec3: Vec3Cls } = await import("vec3");
     for (const fc of plantedCoords) {
+      // Safety checks during bone meal application
+      if (Date.now() - farmStartTime > FARM_TIMEOUT_MS) {
+        logs.push(`[ABORTED] mc_farm timed out during bone meal phase.`);
+        break;
+      }
+      const bmDanger = checkDangerNearby(bot, 16);
+      if (bmDanger.dangerous) {
+        logs.push(`[ABORTED] Hostile detected during bone meal: ${bmDanger.nearestHostile?.name}. Stopping.`);
+        break;
+      }
       // Move close to crop before applying bone_meal
       try {
         const bDist = bot.entity.position.distanceTo(new Vec3Cls(fc.x + 0.5, fc.y + 1, fc.z + 0.5));
