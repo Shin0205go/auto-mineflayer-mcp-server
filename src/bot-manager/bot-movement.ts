@@ -111,6 +111,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
     let resolved = false;
     let noProgressCount = 0;
     let maxHeightReached = start.y;
+    let underwaterTicks = 0; // Track consecutive checks with head underwater
     // Declare checkInterval first to avoid TDZ issues when event handlers fire early
     let checkInterval: ReturnType<typeof setInterval> | null = null;
     let lastPos = start.clone();
@@ -236,6 +237,30 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         return;
       }
 
+      // SAFETY: Detect prolonged water submersion — abort if head is underwater for too long.
+      // Bot1 Session 44: pathfinder routed through underground water, bot drowned.
+      // liquidCost=10000 discourages water paths but doesn't prevent canDig from opening water caves.
+      // 4 consecutive checks = 2 seconds underwater — enough to confirm it's not a brief crossing.
+      const headBlock = bot.blockAt(currentPos.offset(0, 1.6, 0).floor());
+      if (headBlock && (headBlock.name === "water" || headBlock.name === "flowing_water")) {
+        underwaterTicks++;
+        if (underwaterTicks >= 4) {
+          console.error(`[MoveTo] DROWNING RISK: Head underwater for ${underwaterTicks} checks at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Aborting navigation.`);
+          bot.pathfinder.stop();
+          bot.clearControlStates();
+          // Try to swim up
+          bot.setControlState("jump", true);
+          finish({
+            success: false,
+            message: `Navigation stopped: underwater at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Drowning risk. Swim up (jump) and navigate on the surface.`,
+            stuckReason: "underwater"
+          });
+          return;
+        }
+      } else {
+        underwaterTicks = 0;
+      }
+
       // SAFETY: Track maximum height reached during pathfinding
       // If bot goes much higher than start or target, pathfinder may be taking unsafe route
       if (currentPos.y > maxHeightReached) {
@@ -244,6 +269,24 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         if (heightGain > 8) {
           console.error(`[MoveTo] WARNING: Bot climbing too high (${heightGain.toFixed(1)} blocks above start). May take dangerous falling route.`);
         }
+      }
+
+      // SAFETY: Detect underground cave routing — abort if bot descends far below start
+      // when target is at or above start Y. With canDig=true, pathfinder may dig into
+      // cave systems below the surface instead of navigating around obstacles on the surface.
+      // Bot1 Session 44: navigated to (100,96,0) from surface, ended at Y=72 in cave, drowned.
+      // Bot3 Death #11: navigated to farm, fell into ravine via pathfinder digging.
+      // Threshold: 8 blocks below start Y (covers normal terrain variation but catches cave routing).
+      const yDescentFromStart = start.y - currentPos.y;
+      const targetIsAtOrAboveStart = y >= start.y - 5; // target within 5 blocks below start is "surface-level"
+      if (targetIsAtOrAboveStart && yDescentFromStart > 8) {
+        console.error(`[MoveTo] UNDERGROUND ROUTING DETECTED: Bot descended ${yDescentFromStart.toFixed(1)} blocks below start (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}) while target Y=${y.toFixed(1)} is at/above start. Pathfinder is routing through caves. Aborting.`);
+        finish({
+          success: false,
+          message: `Navigation stopped: pathfinder routed underground (Y=${start.y.toFixed(0)} → Y=${currentPos.y.toFixed(0)}, target Y=${y.toFixed(0)}). Bot was descending into cave system. Try navigating in shorter segments or to a different waypoint.`,
+          stuckReason: "underground_routing"
+        });
+        return;
       }
 
       // Distance-based success check (use strict range=2 matching GoalNear, not loose <3)
