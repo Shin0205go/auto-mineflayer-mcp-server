@@ -4,6 +4,7 @@ const { goals } = pkg;
 const { GoalBlock } = goals;
 import type { ManagedBot } from "./types.js";
 import { isHostileMob, checkGroundBelow, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
+import { equipArmor } from "./bot-items.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -580,6 +581,20 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
       } catch (_) {
         // continue even if eat fails
       }
+    }
+  }
+
+  // Auto-equip armor at night before any movement — prevents deaths during
+  // mc_gather, mc_navigate, and any other tool that calls moveTo internally.
+  // Bot1 Sessions 35-45: 10+ deaths from navigating at night without armor.
+  // Bot2: skeleton shot during mc_farm/mc_gather with no armor.
+  // mc_navigate already auto-equips, but mc_gather and other callers skip it.
+  // Adding here ensures ALL movement at night has armor protection.
+  if (!isDaytime) {
+    try {
+      await equipArmor(bot);
+    } catch (_) {
+      // Continue without armor — better than not moving
     }
   }
 

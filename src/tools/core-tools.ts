@@ -221,6 +221,29 @@ export async function mc_gather(
 ): Promise<string> {
   const username = botManager.requireSingleBot();
 
+  // Safety: Warn (not refuse) during nighttime with nearby hostiles.
+  // mc_gather is a long-running operation (up to 120s). Bot is stationary while mining,
+  // exposed to mob attacks. Bot1: mc_gather(short_grass) timed out 120s, mobs killed bot.
+  // Bot2: HP dropped during gather with skeleton nearby.
+  // Unlike mc_farm (which REFUSES at night), mc_gather only warns because gathering
+  // basic resources (wood, cobblestone) may be critical for survival even at night.
+  // However, if hostiles are already nearby, refuse outright.
+  const gatherBot = botManager.getBot(username);
+  if (gatherBot) {
+    const gatherTime = gatherBot.time?.timeOfDay ?? 0;
+    const gatherIsNight = gatherTime > 12541 || gatherTime < 100;
+    if (gatherIsNight) {
+      const danger = checkDangerNearby(gatherBot, 20);
+      if (danger.dangerous) {
+        const gatherHp = Math.round((gatherBot.health ?? 20) * 10) / 10;
+        const threatDesc = danger.nearestHostile
+          ? `${danger.nearestHostile.name} at ${danger.nearestHostile.distance.toFixed(1)} blocks`
+          : `${danger.hostileCount} hostile(s)`;
+        return `[REFUSED] Too dangerous to gather at night — ${threatDesc} nearby, HP=${gatherHp}. Gathering is a long operation (up to 120s) and bot is stationary/vulnerable. Use mc_flee or mc_combat to clear threats first, or wait for daytime.`;
+      }
+    }
+  }
+
   // Special case: wheat — only harvest mature crops (age >= 7), never auto-farm.
   // Use mc_farm() explicitly to plant new crops. mc_gather('wheat') collects only.
   if (block === "wheat") {
