@@ -130,10 +130,26 @@ export async function minecraft_gather_resources(
           }
         }
 
-        // Danger check before mining
+        // HP abort check: if HP is critically low, stop gathering immediately.
+        // Bot1: HP dropped from mob attacks during gather, continued mining at HP 3, died.
+        // Bot2: skeleton shot bot to HP 1 during gather loop — no abort triggered.
+        // Gathering is non-essential compared to survival; abort and let agent decide next action.
+        const hpCheckBot = botManager.getBot(username);
+        if (hpCheckBot) {
+          const gatherHp = hpCheckBot.health ?? 20;
+          if (gatherHp < 6) {
+            console.error(`[GatherResources] HP ABORT: HP=${gatherHp.toFixed(1)} — too low to continue gathering safely.`);
+            results.push(`${item.name}: ${collected}/${targetCount} (ABORTED: HP=${gatherHp.toFixed(1)}, too dangerous to continue)`);
+            break;
+          }
+        }
+
+        // Danger check before mining — scan 16 blocks (not 8).
+        // Skeletons shoot from ~20 blocks; at 8-block radius they're already in lethal range.
+        // Bot2 bug: skeleton at 12 blocks was undetected, shot bot to HP 8 during gather.
         const bot = botManager.getBot(username);
         if (bot) {
-          const danger = checkDangerNearby(bot, 8);
+          const danger = checkDangerNearby(bot, 16);
           if (danger.dangerous) {
             console.error(`[GatherResources] Danger detected: ${danger.hostileCount} hostile(s), nearest: ${danger.nearestHostile?.name} at ${danger.nearestHostile?.distance.toFixed(1)}m, action: ${danger.recommendation}`);
             if (danger.recommendation === "flee") {

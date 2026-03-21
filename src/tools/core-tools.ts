@@ -221,17 +221,25 @@ export async function mc_gather(
 ): Promise<string> {
   const username = botManager.requireSingleBot();
 
-  // Safety: Warn (not refuse) during nighttime with nearby hostiles.
+  // Safety: Auto-equip armor before gathering at night.
   // mc_gather is a long-running operation (up to 120s). Bot is stationary while mining,
   // exposed to mob attacks. Bot1: mc_gather(short_grass) timed out 120s, mobs killed bot.
-  // Bot2: HP dropped during gather with skeleton nearby.
-  // Unlike mc_farm (which REFUSES at night), mc_gather only warns because gathering
-  // basic resources (wood, cobblestone) may be critical for survival even at night.
-  // However, if hostiles are already nearby, refuse outright.
+  // Bot2: skeleton shot bot from HP 20→8 during gather because no armor equipped.
+  // mc_navigate and mc_combat auto-equip armor, but mc_gather did not — fixed here.
   const gatherBot = botManager.getBot(username);
   if (gatherBot) {
     const gatherTime = gatherBot.time?.timeOfDay ?? 0;
     const gatherIsNight = gatherTime > 12541 || gatherTime < 100;
+
+    // Auto-equip armor at night — mobs can spawn and attack during long gather operations.
+    if (gatherIsNight) {
+      try {
+        await botManager.equipArmor(username);
+      } catch {
+        // Continue without armor
+      }
+    }
+
     if (gatherIsNight) {
       const danger = checkDangerNearby(gatherBot, 20);
       if (danger.dangerous) {

@@ -1462,12 +1462,24 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       (bot.pathfinder.movements as any).liquidCost = prevLiquidCost;
     }
 
+    // Post-flee safety: detect if bot fell into a cave or hole during flee.
+    // Bot2 bug: mc_flee dropped bot from Y=80 to Y=56 (cave hole), trapped underground.
+    // Even with maxDropDown=0, the bot can end up lower if terrain crumbles or pathing
+    // glitches near cave openings. Warn the caller so they can take corrective action.
+    const endPos = bot.entity.position;
+    const yDescent = startPos.y - endPos.y;
+    let caveWarning = "";
+    if (yDescent > 5) {
+      console.error(`[Flee] WARNING: Bot descended ${yDescent.toFixed(1)} blocks during flee (Y=${startPos.y.toFixed(1)} → Y=${endPos.y.toFixed(1)}). May be trapped underground.`);
+      caveWarning = ` [WARNING] Fell ${yDescent.toFixed(0)} blocks during flee (Y=${startPos.y.toFixed(0)}→${endPos.y.toFixed(0)}). May be underground — use minecraft_pillar_up or mc_navigate to return to surface.`;
+    }
+
     const distMoved = bot.entity.position.distanceTo(startPos);
     if (hostile) {
       const newDist = bot.entity.position.distanceTo(hostile.position);
-      return `Fled from ${fleeFromName}! Now ${newDist.toFixed(1)} blocks away`;
+      return `Fled from ${fleeFromName}! Now ${newDist.toFixed(1)} blocks away` + caveWarning;
     }
-    return `Fled ${distMoved.toFixed(1)} blocks from ${fleeFromName}!`;
+    return `Fled ${distMoved.toFixed(1)} blocks from ${fleeFromName}!` + caveWarning;
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[Flee] Error during flee: ${errMsg}`);
