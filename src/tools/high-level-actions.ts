@@ -85,8 +85,24 @@ export async function minecraft_gather_resources(
 
     console.error(`[GatherResources] Target: ${item.name} x${targetCount}`);
 
+    // Track unreachable block positions to avoid retrying the same stuck location.
+    // Bot1 bug: mc_gather found coal_ore "nearby" but moveTo couldn't reach it (Y-level
+    // mismatch / terrain obstacle), so it kept retrying the same block for 120s until timeout.
+    const failedPositions: Set<string> = new Set();
+    const posKey = (px: number, py: number, pz: number) =>
+      `${Math.floor(px)},${Math.floor(py)},${Math.floor(pz)}`;
+
     while (collected < targetCount && attempts < maxAttempts) {
       attempts++;
+
+      // Early exit: if too many unique positions failed, all nearby blocks are unreachable.
+      // Bot1 bug: coal_ore/birch_log showed "nearby" but all instances were on cliff faces or
+      // across Y-level gaps, causing 120s timeout. Break early to let bot try something else.
+      if (failedPositions.size >= 5) {
+        console.error(`[GatherResources] ${failedPositions.size} positions unreachable — all nearby ${item.name} appear inaccessible.`);
+        results.push(`${item.name}: ${collected}/${targetCount} (${failedPositions.size} blocks found but all unreachable — try moving to a different area)`);
+        break;
+      }
 
       // Retry strategy: after 3 consecutive failures, change approach
       if (consecutiveFailures >= 3) {
@@ -171,6 +187,16 @@ export async function minecraft_gather_resources(
         const y = parseFloat(posMatch[2]);
         const z = parseFloat(posMatch[3]);
 
+        // Skip blocks we've already failed to reach — prevents retrying the same
+        // unreachable block until the 120s outer timeout fires.
+        // Bot1 bug: coal_ore/birch_log "nearby" but path blocked, retried same block for 120s.
+        const pk = posKey(x, y, z);
+        if (failedPositions.has(pk)) {
+          console.error(`[GatherResources] Skipping already-failed position (${pk})`);
+          consecutiveFailures++;
+          continue;
+        }
+
         console.error(`[GatherResources] Found ${blockNameToMine} at (${x}, ${y}, ${z})`);
 
         // Safety check: Skip only if target is far above bot (floating island / sky structure)
@@ -204,6 +230,7 @@ export async function minecraft_gather_resources(
         }
         if (!moveResult.includes("Reached") && !moveResult.includes("Moved")) {
           console.error(`[GatherResources] Move failed: ${moveResult}`);
+          failedPositions.add(pk);
           consecutiveFailures++;
           continue; // Try finding another block
         }

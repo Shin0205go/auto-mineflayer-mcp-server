@@ -1074,11 +1074,39 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
   // in caves with irregular terrain, leading to "Placement failed" on the next iteration.
   bot.setControlState("sneak", true);
 
+  // Lock the pillar column (X, Z) to the initial block position.
+  // Bot1 bug: after each jump-place cycle, the bot drifts slightly (0.1-0.3 blocks),
+  // causing Math.floor to snap to an adjacent column on later iterations.
+  // This made blockBelow lookup fail ("Placement failed" after 1 block).
+  // By locking the column, all iterations place on the same X/Z pillar.
+  const pillarX = Math.floor(bot.entity.position.x);
+  const pillarZ = Math.floor(bot.entity.position.z);
+
   for (let i = 0; i < targetHeight; i++) {
-    // Use Math.floor for all axes consistently
-    const curX = Math.floor(bot.entity.position.x);
+    // Use locked pillar column for X/Z, only Y changes
+    const curX = pillarX;
     const currentY = Math.floor(bot.entity.position.y);
-    const curZ = Math.floor(bot.entity.position.z);
+    const curZ = pillarZ;
+
+    // Re-center bot on the pillar column center before each jump.
+    // Bot1 bug: position drifts 0.1-0.3 blocks per jump cycle, eventually leaving
+    // the pillar column entirely. lookAt the block center to nudge the bot back.
+    const pillarCenterX = pillarX + 0.5;
+    const pillarCenterZ = pillarZ + 0.5;
+    const driftX = Math.abs(bot.entity.position.x - pillarCenterX);
+    const driftZ = Math.abs(bot.entity.position.z - pillarCenterZ);
+    if (driftX > 0.3 || driftZ > 0.3) {
+      console.error(`[Pillar] Re-centering: drift=(${driftX.toFixed(2)}, ${driftZ.toFixed(2)})`);
+      // Look straight down at pillar center to nudge position back
+      try {
+        await bot.lookAt(new Vec3(pillarCenterX, bot.entity.position.y - 1, pillarCenterZ));
+        // Brief forward walk while sneaking to re-center
+        bot.setControlState("forward", true);
+        await new Promise(r => setTimeout(r, 150));
+        bot.setControlState("forward", false);
+        await new Promise(r => setTimeout(r, 200));
+      } catch (_) { /* ignore */ }
+    }
 
     // Check if we've reached open sky (when untilSky mode is enabled)
     if (untilSky) {
@@ -1144,15 +1172,16 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     await bot.equip(scaffold, "hand");
 
     // 3. Get block below feet to place against
-    // Try multiple candidate positions to find a solid block below
+    // Use the locked pillar column as primary candidate — this is where we've been
+    // placing blocks. Fall back to actual position if pillar column is air.
     const feetY = Math.floor(bot.entity.position.y);
     const bx = Math.floor(bot.entity.position.x);
     const bz = Math.floor(bot.entity.position.z);
     const candidates = [
-      new Vec3(bx, feetY - 1, bz),
-      new Vec3(curX, feetY - 1, curZ),
-      new Vec3(bx, feetY - 2, bz),
-      new Vec3(curX, feetY - 2, curZ),
+      new Vec3(pillarX, feetY - 1, pillarZ),  // Pillar column (most reliable)
+      new Vec3(bx, feetY - 1, bz),            // Actual position
+      new Vec3(pillarX, feetY - 2, pillarZ),   // Pillar column -2
+      new Vec3(bx, feetY - 2, bz),            // Actual position -2
     ];
     let blockBelow: ReturnType<typeof bot.blockAt> = null;
     console.error(`[Pillar] Looking for block below: pos=(${bot.entity.position.x.toFixed(2)}, ${bot.entity.position.y.toFixed(2)}, ${bot.entity.position.z.toFixed(2)}), feetY=${feetY}, bx=${bx}, bz=${bz}, curX=${curX}, curZ=${curZ}`);
