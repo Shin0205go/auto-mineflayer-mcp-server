@@ -292,25 +292,52 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
     }, 500);
 
     // SAFETY: Use physicsTick for instant fall detection (500ms interval is too slow)
+    // Track BOTH per-tick drops (to catch sudden falls) AND cumulative fall distance
+    // (to catch gradual acceleration off cliff edges where per-tick is small but total is huge).
     let lastPhysicsY = start.y;
+    let fallStartY: number | null = null;  // Y when falling started (null = not falling)
     const onPhysicsTick = () => {
       if (resolved) return;
       const cy = bot.entity.position.y;
-      const drop = lastPhysicsY - cy;
-      if (drop > 3) {
-        console.error(`[MoveTo] PHYSICS FALL: ${drop.toFixed(1)} blocks (${lastPhysicsY.toFixed(1)} → ${cy.toFixed(1)}). Emergency stop!`);
-        bot.pathfinder.stop();
-        bot.clearControlStates();
-        finish({
-          success: false,
-          message: `Navigation stopped: fell ${drop.toFixed(1)} blocks at (${bot.entity.position.x.toFixed(1)}, ${cy.toFixed(1)}, ${bot.entity.position.z.toFixed(1)}). Unsafe terrain — use mc_tunnel(direction="up") to climb safely.`,
-          stuckReason: "fall_detected"
-        });
+      const tickDrop = lastPhysicsY - cy;
+
+      if (tickDrop > 0.05) {
+        // Bot is descending this tick — track cumulative fall
+        if (fallStartY === null) {
+          fallStartY = lastPhysicsY;  // Mark where fall began
+        }
+        const totalFall = fallStartY - cy;
+
+        // Stop immediately if cumulative fall exceeds 3 blocks
+        if (totalFall > 3) {
+          console.error(`[MoveTo] PHYSICS FALL: ${totalFall.toFixed(1)} blocks cumulative (started at Y=${fallStartY.toFixed(1)}, now Y=${cy.toFixed(1)}). Emergency stop!`);
+          bot.pathfinder.stop();
+          bot.clearControlStates();
+          finish({
+            success: false,
+            message: `Navigation stopped: fell ${totalFall.toFixed(1)} blocks at (${bot.entity.position.x.toFixed(1)}, ${cy.toFixed(1)}, ${bot.entity.position.z.toFixed(1)}). Unsafe terrain — use mc_tunnel(direction="up") to climb safely.`,
+            stuckReason: "fall_detected"
+          });
+          lastPhysicsY = cy;
+          return;
+        }
+      } else {
+        // Bot is not descending (ascending or level) — reset fall tracking
+        fallStartY = null;
       }
+
       lastPhysicsY = cy;
     };
     bot.on("physicsTick", onPhysicsTick);
     cleanupCallbacks.push(() => bot.removeListener("physicsTick", onPhysicsTick));
+
+    // SAFETY: Enforce maxDropDown=1 immediately before setting goal.
+    // Although bot-core.ts sets this at initialization, it can be silently overridden
+    // by mineflayer-pathfinder internals or dimension-change handlers between calls.
+    // Setting it here guarantees it is always active for this navigation call.
+    if (bot.pathfinder.movements) {
+      bot.pathfinder.movements.maxDropDown = 1;
+    }
 
     // Set the goal AFTER checkInterval is initialized (see comment above)
     bot.pathfinder.setGoal(goal);
