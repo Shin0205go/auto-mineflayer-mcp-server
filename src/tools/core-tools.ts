@@ -372,6 +372,18 @@ export async function mc_farm(): Promise<string> {
     return "mc_farm: No seeds in inventory. Find wheat_seeds by breaking tall grass.";
   }
 
+  // Safety: Refuse farming at night — farming is a long, stationary operation that
+  // leaves the bot exposed to hostile mob spawns. Multiple deaths from this pattern:
+  // Bot1: killed by creeper during night mc_farm, Bot2: skeleton shot from HP 20→1 during dirt placement,
+  // Bot3 Bug #19: mc_farm at night led to mob surround.
+  // Farming should only happen during safe daylight hours.
+  const farmTimeOfDay = bot.time?.timeOfDay ?? 0;
+  const farmIsNight = farmTimeOfDay > 12541 || farmTimeOfDay < 100;
+  if (farmIsNight) {
+    const farmHp = Math.round((bot.health ?? 20) * 10) / 10;
+    return `[REFUSED] Too dangerous to farm at night (time=${farmTimeOfDay}). Mobs spawn during the long farming operation and bot is stationary/vulnerable. Wait for dawn (mc_sleep if you have a bed) or build shelter. HP=${farmHp}.`;
+  }
+
   // Safety: Check for hostile mobs before starting long farming operation.
   // Skeletons can shoot from ~20 blocks, so scan 20 blocks (not 16) for any hostiles.
   // Bug report: bot2 was killed by skeleton during mc_farm because safety radius was too small.
