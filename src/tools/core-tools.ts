@@ -373,9 +373,9 @@ export async function mc_farm(): Promise<string> {
   }
 
   // Safety: Check for hostile mobs before starting long farming operation.
-  // Skeletons can shoot from ~20 blocks, so scan 16 blocks for any hostiles.
-  // Bug report: bot2 was killed by skeleton during mc_farm because no safety check existed.
-  const danger = checkDangerNearby(bot, 16);
+  // Skeletons can shoot from ~20 blocks, so scan 20 blocks (not 16) for any hostiles.
+  // Bug report: bot2 was killed by skeleton during mc_farm because safety radius was too small.
+  const danger = checkDangerNearby(bot, 20);
   if (danger.dangerous) {
     const hp = Math.round((bot.health ?? 20) * 10) / 10;
     const threatDesc = danger.nearestHostile
@@ -533,9 +533,13 @@ export async function mc_farm(): Promise<string> {
               logs.push("No natural dirt near water — placing dirt blocks from inventory.");
               const waterPos = farWater.position;
               // Strategy: find surface level near water, then place dirt ON TOP of solid ground
+              // Cap consecutive failures to avoid spending too long stationary (vulnerable to mobs).
+              // Bot2: 19 consecutive placement failures while skeleton shot bot from HP 20 to 1.
               let placedCount = 0;
-              for (let pdx = -3; pdx <= 3 && placedCount < seedCount; pdx++) {
-                for (let pdz = -3; pdz <= 3 && placedCount < seedCount; pdz++) {
+              let consecutivePlaceFails = 0;
+              const MAX_PLACE_FAILS = 5;
+              for (let pdx = -3; pdx <= 3 && placedCount < seedCount && consecutivePlaceFails < MAX_PLACE_FAILS; pdx++) {
+                for (let pdz = -3; pdz <= 3 && placedCount < seedCount && consecutivePlaceFails < MAX_PLACE_FAILS; pdz++) {
                   if (pdx === 0 && pdz === 0) continue; // skip water position
                   if (Math.abs(pdx) + Math.abs(pdz) > 4) continue; // stay within irrigation range
                   const px = waterPos.x + pdx, pz = waterPos.z + pdz;
@@ -567,11 +571,14 @@ export async function mc_farm(): Promise<string> {
                           if (check && check.name === "dirt") {
                             farmCoords.push({ x: px, y: placeY, z: pz });
                             placedCount++;
+                            consecutivePlaceFails = 0;
                             logs.push(`Placed dirt on ${block.name} at (${px},${placeY},${pz})`);
                           } else {
+                            consecutivePlaceFails++;
                             logs.push(`Dirt placement failed at (${px},${placeY},${pz}) — got ${check?.name}`);
                           }
                         } catch (e) {
+                          consecutivePlaceFails++;
                           logs.push(`Place dirt error at (${px},${placeY},${pz}): ${e}`);
                         }
                       }
@@ -579,6 +586,9 @@ export async function mc_farm(): Promise<string> {
                     }
                   }
                 }
+              }
+              if (consecutivePlaceFails >= MAX_PLACE_FAILS) {
+                logs.push(`[ABORTED] Dirt placement stopped after ${MAX_PLACE_FAILS} consecutive failures — terrain unsuitable near water.`);
               }
               logs.push(`Placed/found ${placedCount} farm spots near water`);
             } else {
@@ -682,7 +692,8 @@ export async function mc_farm(): Promise<string> {
     }
 
     // Mid-farm hostile check: abort if enemies approach during farming
-    const midDanger = checkDangerNearby(bot, 16);
+    // Use 20-block radius to match skeleton shooting range (~20 blocks).
+    const midDanger = checkDangerNearby(bot, 20);
     if (midDanger.dangerous) {
       const threatDesc = midDanger.nearestHostile
         ? `${midDanger.nearestHostile.name} at ${midDanger.nearestHostile.distance.toFixed(1)} blocks`

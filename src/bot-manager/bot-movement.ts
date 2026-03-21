@@ -416,6 +416,11 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       bot.pathfinder.movements.maxDropDown = 2; // Allow 2-block drops for rugged terrain (physics fall detector catches >3)
       bot.pathfinder.movements.allowFreeMotion = false; // Prevent cliff falls from skipped path nodes
       bot.pathfinder.movements.allow1by1towers = true; // Allow pillar up to reach higher terrain
+      // Re-apply liquidCost every call — bot-core.ts sets it at init, but pathfinder
+      // internals or dimension-change handlers can silently reset it. Without this,
+      // pathfinder routes through rivers/water at Y=61-62, causing repeated drowned deaths.
+      // Bot1 Sessions 31-34,40b,44: 6+ deaths from pathfinder choosing water-level routes.
+      (bot.pathfinder.movements as any).liquidCost = 10000;
       // Enable scaffolding with available blocks (dirt, cobblestone, netherrack)
       const scaffoldBlocks: number[] = [];
       const mcData = (bot as any).registry || require("minecraft-data")(bot.version);
