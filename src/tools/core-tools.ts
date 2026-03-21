@@ -893,6 +893,45 @@ export async function mc_navigate(
   }
 ): Promise<string> {
   const username = botManager.requireSingleBot();
+  const bot = botManager.getBot(username);
+
+  // Night-time safety: auto-equip armor and detect nearby hostiles
+  let nightWarning = "";
+  if (bot) {
+    const timeOfDay = bot.time?.timeOfDay ?? 0;
+    const isNight = timeOfDay > 12541 || timeOfDay < 100; // night/midnight/pre-dawn
+    if (isNight) {
+      // Auto-equip armor before navigating at night
+      try {
+        await botManager.equipArmor(username);
+      } catch {
+        // Continue without armor
+      }
+
+      // Scan for nearby hostile threats
+      const hostileNames = ["zombie", "skeleton", "creeper", "spider", "enderman", "witch", "pillager", "vindicator", "phantom", "drowned", "husk", "stray"];
+      const nearbyHostiles: Array<{ name: string; dist: number }> = [];
+      const entities = Object.values(bot.entities);
+      for (const entity of entities) {
+        if (!entity || !entity.position || entity === bot.entity) continue;
+        const dist = entity.position.distanceTo(bot.entity.position);
+        if (dist > 24) continue;
+        const name = entity.name?.toLowerCase() ?? "";
+        if (hostileNames.some(h => name.includes(h))) {
+          nearbyHostiles.push({ name, dist: Math.round(dist * 10) / 10 });
+        }
+      }
+      if (nearbyHostiles.length > 0) {
+        const hp = Math.round(bot.health * 10) / 10;
+        const threatList = nearbyHostiles
+          .sort((a, b) => a.dist - b.dist)
+          .slice(0, 5)
+          .map(h => `${h.name}(${h.dist}m)`)
+          .join(", ");
+        nightWarning = `\n[NIGHT WARNING] HP=${hp}, ${nearbyHostiles.length} hostile(s) nearby: ${threatList}. Consider mc_flee or shelter before long navigation.`;
+      }
+    }
+  }
 
   // Navigate to entity
   if (args.target_entity) {
@@ -925,7 +964,8 @@ export async function mc_navigate(
       return `Found ${args.target_entity} in entity list but could not get position`;
     }
 
-    return await botManager.moveTo(username, closestPos.x, closestPos.y, closestPos.z);
+    const moveResult = await botManager.moveTo(username, closestPos.x, closestPos.y, closestPos.z);
+    return moveResult + nightWarning;
   }
 
   // Navigate to block type
@@ -943,8 +983,8 @@ export async function mc_navigate(
     const x = parseFloat(posMatch[1]);
     const y = parseFloat(posMatch[2]);
     const z = parseFloat(posMatch[3]);
-    const moveResult = await botManager.moveTo(username, x, y, z);
-    return `${findResult}\n${moveResult}`;
+    const blockMoveResult = await botManager.moveTo(username, x, y, z);
+    return `${findResult}\n${blockMoveResult}` + nightWarning;
   }
 
   // Navigate to coordinates
@@ -986,16 +1026,18 @@ export async function mc_navigate(
           if (lastResult.includes("Cannot reach") || lastResult.includes("Path blocked") || lastResult.includes("timeout")) {
             consecutiveFailures++;
             if (consecutiveFailures >= 2) {
-              return `Navigation stopped after ${i}/${steps} segments: ${lastResult}. Stuck at current position — try a different route or clear obstacles.`;
+              return `Navigation stopped after ${i}/${steps} segments: ${lastResult}. Stuck at current position — try a different route or clear obstacles.` + nightWarning;
             }
           } else {
             consecutiveFailures = 0;
           }
         }
-        return lastResult || await botManager.moveTo(username, nx, ny, nz);
+        const segResult = lastResult || await botManager.moveTo(username, nx, ny, nz);
+        return segResult + nightWarning;
       }
     }
-    return await botManager.moveTo(username, nx, ny, nz);
+    const directResult = await botManager.moveTo(username, nx, ny, nz);
+    return directResult + nightWarning;
   }
 
   return "Provide coordinates (x, y, z), target_block, or target_entity";
@@ -1037,7 +1079,37 @@ export async function mc_combat(
   // Do NOT call collectNearbyItems again here — it would run after items are already
   // collected and return "No items nearby", creating misleading output.
   if (target) {
-    return await botManager.fight(username, target, fleeAtHp);
+    // Warn about nearby hostiles when targeting passive mobs (sheep, cow, pig, chicken, etc.)
+    // Bot1 Session 16: died to zombie while fighting sheep. Bot3 deaths #1,#3: similar pattern.
+    const passiveMobs = ["sheep", "cow", "pig", "chicken", "rabbit", "horse", "donkey", "mule", "mooshroom", "llama", "fox", "goat", "frog", "turtle", "salmon", "cod", "squid"];
+    const isPassiveTarget = passiveMobs.some(p => target!.toLowerCase().includes(p));
+    let hostileWarning = "";
+    if (isPassiveTarget) {
+      const combatBot = botManager.getBot(username);
+      if (combatBot) {
+        const hostileNames = ["zombie", "skeleton", "creeper", "spider", "enderman", "witch", "drowned", "husk", "stray", "phantom", "pillager", "vindicator"];
+        const nearbyHostiles: Array<{ name: string; dist: number }> = [];
+        for (const entity of Object.values(combatBot.entities)) {
+          if (!entity || !entity.position || entity === combatBot.entity) continue;
+          const dist = entity.position.distanceTo(combatBot.entity.position);
+          if (dist > 20) continue;
+          const eName = entity.name?.toLowerCase() ?? "";
+          if (hostileNames.some(h => eName.includes(h))) {
+            nearbyHostiles.push({ name: eName, dist: Math.round(dist * 10) / 10 });
+          }
+        }
+        if (nearbyHostiles.length > 0) {
+          const threatList = nearbyHostiles
+            .sort((a, b) => a.dist - b.dist)
+            .slice(0, 5)
+            .map(h => `${h.name}(${h.dist}m)`)
+            .join(", ");
+          hostileWarning = `\n[DANGER] ${nearbyHostiles.length} hostile(s) nearby while hunting ${target}: ${threatList}. Kill or flee hostiles FIRST.`;
+        }
+      }
+    }
+    const fightResult = await botManager.fight(username, target, fleeAtHp);
+    return fightResult + hostileWarning;
   }
 
   // Attack nearest hostile
