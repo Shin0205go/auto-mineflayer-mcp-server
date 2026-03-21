@@ -161,6 +161,28 @@ export async function mc_status(): Promise<string> {
     // Ignore
   }
 
+  // Warnings: actionable alerts based on current state.
+  // Bot1 Sessions 20-43: 20+ deaths from ignoring night danger, no food, and phantom spawns.
+  const warnings: string[] = [];
+  const isNight = timeOfDay > 12541 || timeOfDay < 100;
+  if (isNight) {
+    const hasBed = inventory.some(i => i.name.includes("_bed"));
+    if (threats.length > 0) {
+      warnings.push(`NIGHT DANGER: ${threats.length} hostile(s) nearby. Do NOT navigate or engage — mc_flee or dig 1x1x2 shelter and wait for dawn.`);
+    }
+    if (hasBed) {
+      warnings.push("You have a bed. Use mc_sleep NOW to skip night and reset phantom insomnia timer.");
+    } else {
+      warnings.push("PHANTOM RISK: Sleeping in a bed resets insomnia. Without sleep for 3+ nights, Phantoms will spawn and attack from above. Craft a bed (3 wool + 3 planks) when possible.");
+    }
+  }
+  if (food <= 0 && health < 10) {
+    warnings.push(`STARVATION: Hunger=${food}, HP=${Math.round(health*10)/10}. Find food IMMEDIATELY — mc_combat(cow/pig/chicken) or mc_eat. Do NOT navigate long distances.`);
+  }
+  if (foodItems.length === 0 && food < 10) {
+    warnings.push("NO FOOD in inventory. Hunger will deplete. Hunt animals (mc_combat cow/pig) or harvest crops before it's critical.");
+  }
+
   const result = {
     health: Math.round(health * 10) / 10,
     hunger: Math.round(food * 10) / 10,
@@ -179,6 +201,7 @@ export async function mc_status(): Promise<string> {
       slots_used: inventory.length,
     },
     threats,
+    ...(warnings.length > 0 ? { warnings } : {}),
     nearby_resources: nearbyResources,
     infrastructure: {
       crafting_table: infra.crafting_table,
