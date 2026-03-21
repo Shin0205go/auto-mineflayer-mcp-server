@@ -111,13 +111,17 @@ export async function openChest(
   // Check current distance
   const initialDistance = bot.entity.position.distanceTo(chestPos);
 
-  // If too far, try to move closer
+  // If too far, try to move closer (with timeout to prevent hang)
   if (initialDistance > 4) {
     const GoalGetToBlock = goals.GoalGetToBlock;
 
     try {
-      await bot.pathfinder.goto(new GoalGetToBlock(chestPos.x, chestPos.y, chestPos.z));
+      await Promise.race([
+        bot.pathfinder.goto(new GoalGetToBlock(chestPos.x, chestPos.y, chestPos.z)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Navigation timeout")), 15000))
+      ]);
     } catch (err) {
+      try { bot.pathfinder.setGoal(null); } catch (_) {}
       throw new Error(`Chest at (${x}, ${y}, ${z}) is ${initialDistance.toFixed(1)} blocks away and unreachable. Move closer manually first.`);
     }
 
@@ -244,7 +248,15 @@ export async function storeInChest(
   const distance = bot.entity.position.distanceTo(chestPos);
   if (distance > 3) {
     const goal = new goals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 2);
-    await bot.pathfinder.goto(goal);
+    try {
+      await Promise.race([
+        bot.pathfinder.goto(goal),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Navigation timeout")), 15000))
+      ]);
+    } catch (_) {
+      try { bot.pathfinder.setGoal(null); } catch (__) {}
+      throw new Error(`Cannot reach chest at (${chestPos.x}, ${chestPos.y}, ${chestPos.z}) — ${distance.toFixed(1)} blocks away. Move closer first.`);
+    }
   }
 
   // Acquire chest lock to prevent multi-bot sync bugs
@@ -376,7 +388,15 @@ export async function takeFromChest(
   const distance = bot.entity.position.distanceTo(chestPos);
   if (distance > 3) {
     const goal = new goals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 2);
-    await bot.pathfinder.goto(goal);
+    try {
+      await Promise.race([
+        bot.pathfinder.goto(goal),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Navigation timeout")), 15000))
+      ]);
+    } catch (_) {
+      try { bot.pathfinder.setGoal(null); } catch (__) {}
+      throw new Error(`Cannot reach chest at (${chestPos.x}, ${chestPos.y}, ${chestPos.z}) — ${distance.toFixed(1)} blocks away. Move closer first.`);
+    }
   }
 
   // Acquire chest lock to prevent multi-bot sync bugs
@@ -569,28 +589,62 @@ export async function listChest(managed: ManagedBot): Promise<string> {
   const pos = chestBlock.position;
   const distance = bot.entity.position.distanceTo(pos);
 
-  // Navigate to chest if too far
+  // Navigate to chest if too far (with timeout to prevent infinite hang)
   if (distance > 4) {
     const GoalGetToBlock = goals.GoalGetToBlock;
     try {
-      await bot.pathfinder.goto(new GoalGetToBlock(pos.x, pos.y, pos.z));
+      await Promise.race([
+        bot.pathfinder.goto(new GoalGetToBlock(pos.x, pos.y, pos.z)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Navigation timeout")), 15000))
+      ]);
     } catch (_) {
+      try { bot.pathfinder.setGoal(null); } catch (__) {}
       return `Chest found at (${pos.x}, ${pos.y}, ${pos.z}) but cannot reach it (${distance.toFixed(1)} blocks away).`;
     }
+
+    // Verify we're close enough now
+    const finalDistance = bot.entity.position.distanceTo(pos);
+    if (finalDistance > 4) {
+      return `Chest at (${pos.x}, ${pos.y}, ${pos.z}) is ${finalDistance.toFixed(1)} blocks away after navigation. Move closer manually.`;
+    }
+  }
+
+  // Close any currently open window to prevent "in use" errors
+  if (bot.currentWindow) {
+    bot.closeWindow(bot.currentWindow);
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
 
   // Wait a moment to prevent timing issues
   await new Promise(resolve => setTimeout(resolve, 500));
 
-  const chest = await bot.openContainer(chestBlock);
-  const items = chest.containerItems();
+  // Open chest with timeout to prevent hang (matches openChest behavior)
+  let chest: any;
+  try {
+    chest = await Promise.race([
+      bot.openContainer(chestBlock),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Chest open timeout")), 5000))
+    ]);
+  } catch (err) {
+    return `Cannot open chest at (${pos.x}, ${pos.y}, ${pos.z}). It may be obstructed or in use. Error: ${err}`;
+  }
+
+  // Wait for chest window contents to be populated by server
+  await new Promise(resolve => setTimeout(resolve, 500));
+
+  let items = chest.containerItems();
+  // Retry once if empty (server may need more time to send contents)
+  if (items.length === 0) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    items = chest.containerItems();
+  }
 
   if (items.length === 0) {
     chest.close();
     return `Chest at (${pos.x}, ${pos.y}, ${pos.z}) is empty.`;
   }
 
-  const itemList = items.map(i => `${i.name}(${i.count})`).join(", ");
+  const itemList = items.map((i: any) => `${i.name}(${i.count})`).join(", ");
   chest.close();
   return `Chest at (${pos.x}, ${pos.y}, ${pos.z}): ${itemList}`;
 }

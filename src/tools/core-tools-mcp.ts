@@ -96,7 +96,7 @@ export const coreTools = {
       type: "object" as const,
       properties: {
         target: { type: "string", description: "Entity name (e.g., 'zombie', 'cow', 'blaze')" },
-        flee_at_hp: { type: "number", default: 6, description: "Flee when HP drops below this (default 6). Use 10 for blazes/ghasts." },
+        flee_at_hp: { type: "number", default: 8, description: "Flee when HP drops below this (default 8). Use 10 for blazes/ghasts." },
       },
       required: [],
     },
@@ -269,7 +269,7 @@ export async function handleCoreTool(
           max_distance: args.max_distance,
         });
       case "mc_combat":
-        return await fn(args.target, (args.flee_at_hp as number) || 6);
+        return await fn(args.target, (args.flee_at_hp as number) || 8);
       case "mc_drop":
         return await fn(args.item_name, args.count);
       case "mc_eat":
@@ -302,7 +302,7 @@ export async function handleCoreTool(
     case "mc_farm": return await mc_farm();
     case "mc_build": return await mc_build(args.preset as any, (args.size as any) || "small");
     case "mc_navigate": return await mc_navigate({ x: args.x as any, y: args.y as any, z: args.z as any, target_block: args.target_block as any, target_entity: args.target_entity as any, max_distance: args.max_distance as any });
-    case "mc_combat": return await mc_combat(args.target as any, (args.flee_at_hp as number) || 6);
+    case "mc_combat": return await mc_combat(args.target as any, (args.flee_at_hp as number) || 8);
     case "mc_eat": return await mc_eat(args.food as any);
     case "mc_store": return await mc_store(args.action as any, args.item_name as any, args.count as any, args.chest_x as any, args.chest_y as any, args.chest_z as any, args.keep_items as any);
     case "mc_chat": return await mc_chat(args.message as any);

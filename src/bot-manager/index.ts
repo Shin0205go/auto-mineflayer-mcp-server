@@ -1,4 +1,5 @@
 import { BotCore } from "./bot-core.js";
+import { Vec3 } from "vec3";
 import type { BotConfig, ManagedBot, ChatMessage, GameEvent } from "./types.js";
 
 // Import bot-info functions
@@ -394,6 +395,15 @@ export class BotManager extends BotCore {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
     const bot = managed.bot;
+
+    // Validate target block is tillable
+    const targetBlock = bot.blockAt(new Vec3(x, y, z));
+    const tillableBlocks = ["grass_block", "dirt", "dirt_path", "coarse_dirt", "rooted_dirt"];
+    if (!targetBlock || !tillableBlocks.includes(targetBlock.name)) {
+      const actualName = targetBlock ? targetBlock.name : "unknown/air";
+      throw new Error(`Cannot till ${actualName} at (${x}, ${y}, ${z}). Only tillable blocks: ${tillableBlocks.join(", ")}. Use mc_status to find nearby grass_block or dirt.`);
+    }
+
     const hoeTypes = ["netherite_hoe", "diamond_hoe", "iron_hoe", "stone_hoe", "wooden_hoe"];
     const hoe = hoeTypes.map(h => bot.inventory.items().find((i: any) => i.name === h)).find(Boolean);
     if (!hoe) {
@@ -466,7 +476,7 @@ export class BotManager extends BotCore {
     return await attackBasic(managed, entityName);
   }
 
-  async fight(username: string, entityName?: string, fleeHealthThreshold: number = 6): Promise<string> {
+  async fight(username: string, entityName?: string, fleeHealthThreshold: number = 8): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
 

@@ -1138,7 +1138,7 @@ export async function mc_navigate(
 
 export async function mc_combat(
   targetOrArgs?: string | { target?: string; flee_at_hp?: number; fleeAtHp?: number; collect_items?: boolean },
-  fleeAtHpArg: number = 6
+  fleeAtHpArg: number = 8
 ): Promise<string> {
   const username = botManager.requireSingleBot();
 
