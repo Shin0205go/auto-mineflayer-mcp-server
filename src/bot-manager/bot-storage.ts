@@ -108,11 +108,14 @@ export async function openChest(
     throw new Error(`No chest at (${x}, ${y}, ${z}). Found: ${chestBlock?.name || "nothing"}`);
   }
 
-  // Check current distance
+  // Check current distance — also check Y difference separately.
+  // Bug #18: bot at Y=94 couldn't open chest at Y=96. 3D distance was 2.1 (within 4-block check)
+  // but Minecraft server requires the player to be at the chest's Y level (±1) for interaction.
   const initialDistance = bot.entity.position.distanceTo(chestPos);
+  const yDiff = Math.abs(bot.entity.position.y - chestPos.y);
 
-  // If too far, try to move closer (with timeout to prevent hang)
-  if (initialDistance > 4) {
+  // Navigate closer if too far OR if Y difference is too large for block interaction
+  if (initialDistance > 4 || yDiff > 1.5) {
     const GoalGetToBlock = goals.GoalGetToBlock;
 
     try {
@@ -122,13 +125,14 @@ export async function openChest(
       ]);
     } catch (err) {
       try { bot.pathfinder.setGoal(null); } catch (_) {}
-      throw new Error(`Chest at (${x}, ${y}, ${z}) is ${initialDistance.toFixed(1)} blocks away and unreachable. Move closer manually first.`);
+      throw new Error(`Chest at (${x}, ${y}, ${z}) is ${initialDistance.toFixed(1)} blocks away (Y diff: ${yDiff.toFixed(1)}) and unreachable. Move closer manually first.`);
     }
 
-    // Verify we're close enough now
+    // Verify we're close enough now — check both distance and Y level
     const finalDistance = bot.entity.position.distanceTo(chestPos);
-    if (finalDistance > 4) {
-      throw new Error(`Still too far from chest (${finalDistance.toFixed(1)} blocks). Move closer manually.`);
+    const finalYDiff = Math.abs(bot.entity.position.y - chestPos.y);
+    if (finalDistance > 4 || finalYDiff > 2) {
+      throw new Error(`Still too far from chest (${finalDistance.toFixed(1)} blocks, Y diff: ${finalYDiff.toFixed(1)}). Move closer manually.`);
     }
   }
 
@@ -243,19 +247,21 @@ export async function storeInChest(
     throw new Error(`No ${itemName} in inventory. Have: ${inventory}`);
   }
 
-  // Move closer to chest to ensure we're within interaction range (1.5 blocks)
+  // Move closer to chest to ensure we're within interaction range
+  // Also check Y difference — chest at different Y level causes openContainer timeout
   const chestPos = chestBlock.position;
   const distance = bot.entity.position.distanceTo(chestPos);
-  if (distance > 3) {
-    const goal = new goals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 2);
+  const storeYDiff = Math.abs(bot.entity.position.y - chestPos.y);
+  if (distance > 3 || storeYDiff > 1.5) {
+    const GoalGetToBlock = goals.GoalGetToBlock;
     try {
       await Promise.race([
-        bot.pathfinder.goto(goal),
+        bot.pathfinder.goto(new GoalGetToBlock(chestPos.x, chestPos.y, chestPos.z)),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Navigation timeout")), 15000))
       ]);
     } catch (_) {
       try { bot.pathfinder.setGoal(null); } catch (__) {}
-      throw new Error(`Cannot reach chest at (${chestPos.x}, ${chestPos.y}, ${chestPos.z}) — ${distance.toFixed(1)} blocks away. Move closer first.`);
+      throw new Error(`Cannot reach chest at (${chestPos.x}, ${chestPos.y}, ${chestPos.z}) — ${distance.toFixed(1)} blocks away (Y diff: ${storeYDiff.toFixed(1)}). Move closer first.`);
     }
   }
 
@@ -383,19 +389,21 @@ export async function takeFromChest(
     throw new Error("No chest within 4 blocks. Move closer to a chest or specify coordinates (x, y, z) to target a specific chest.");
   }
 
-  // Move closer to chest to ensure we're within interaction range (1.5 blocks)
+  // Move closer to chest to ensure we're within interaction range
+  // Also check Y difference — chest at different Y level causes openContainer timeout
   const chestPos = chestBlock.position;
   const distance = bot.entity.position.distanceTo(chestPos);
-  if (distance > 3) {
-    const goal = new goals.GoalNear(chestPos.x, chestPos.y, chestPos.z, 2);
+  const takeYDiff = Math.abs(bot.entity.position.y - chestPos.y);
+  if (distance > 3 || takeYDiff > 1.5) {
+    const GoalGetToBlock = goals.GoalGetToBlock;
     try {
       await Promise.race([
-        bot.pathfinder.goto(goal),
+        bot.pathfinder.goto(new GoalGetToBlock(chestPos.x, chestPos.y, chestPos.z)),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Navigation timeout")), 15000))
       ]);
     } catch (_) {
       try { bot.pathfinder.setGoal(null); } catch (__) {}
-      throw new Error(`Cannot reach chest at (${chestPos.x}, ${chestPos.y}, ${chestPos.z}) — ${distance.toFixed(1)} blocks away. Move closer first.`);
+      throw new Error(`Cannot reach chest at (${chestPos.x}, ${chestPos.y}, ${chestPos.z}) — ${distance.toFixed(1)} blocks away (Y diff: ${takeYDiff.toFixed(1)}). Move closer first.`);
     }
   }
 
@@ -588,9 +596,11 @@ export async function listChest(managed: ManagedBot): Promise<string> {
 
   const pos = chestBlock.position;
   const distance = bot.entity.position.distanceTo(pos);
+  const listYDiff = Math.abs(bot.entity.position.y - pos.y);
 
-  // Navigate to chest if too far (with timeout to prevent infinite hang)
-  if (distance > 4) {
+  // Navigate to chest if too far OR Y difference too large for block interaction
+  // Bug #18: bot at Y=94 couldn't interact with chest at Y=96 despite being within 4-block 3D distance
+  if (distance > 4 || listYDiff > 1.5) {
     const GoalGetToBlock = goals.GoalGetToBlock;
     try {
       await Promise.race([
@@ -599,13 +609,14 @@ export async function listChest(managed: ManagedBot): Promise<string> {
       ]);
     } catch (_) {
       try { bot.pathfinder.setGoal(null); } catch (__) {}
-      return `Chest found at (${pos.x}, ${pos.y}, ${pos.z}) but cannot reach it (${distance.toFixed(1)} blocks away).`;
+      return `Chest found at (${pos.x}, ${pos.y}, ${pos.z}) but cannot reach it (${distance.toFixed(1)} blocks away, Y diff: ${listYDiff.toFixed(1)}).`;
     }
 
     // Verify we're close enough now
     const finalDistance = bot.entity.position.distanceTo(pos);
-    if (finalDistance > 4) {
-      return `Chest at (${pos.x}, ${pos.y}, ${pos.z}) is ${finalDistance.toFixed(1)} blocks away after navigation. Move closer manually.`;
+    const finalYDiff = Math.abs(bot.entity.position.y - pos.y);
+    if (finalDistance > 4 || finalYDiff > 2) {
+      return `Chest at (${pos.x}, ${pos.y}, ${pos.z}) is ${finalDistance.toFixed(1)} blocks away (Y diff: ${finalYDiff.toFixed(1)}) after navigation. Move closer manually.`;
     }
   }
 

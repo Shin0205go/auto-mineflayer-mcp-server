@@ -999,6 +999,11 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
 
   let blocksPlaced = 0;
 
+  // Keep sneak ON throughout the entire pillar to prevent drifting off the edge.
+  // Bug #17: releasing sneak between placements caused the bot to walk off the 1-block pillar
+  // in caves with irregular terrain, leading to "Placement failed" on the next iteration.
+  bot.setControlState("sneak", true);
+
   for (let i = 0; i < targetHeight; i++) {
     // Use Math.floor for all axes consistently
     const curX = Math.floor(bot.entity.position.x);
@@ -1102,8 +1107,7 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
         await new Promise(r => setTimeout(r, 200));
       }
 
-      // Sneak to stay centered, then jump
-      bot.setControlState("sneak", true);
+      // Sneak is already on (set before loop) — just wait briefly for stability, then jump
       await new Promise(r => setTimeout(r, 250));
 
       // Save reference block position before jumping
@@ -1157,10 +1161,8 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
         await new Promise(r => setTimeout(r, 300));
       }
 
-      // Keep sneaking until we land on the new block
+      // Wait to land on the new block (sneak stays on to prevent drift)
       await new Promise(r => setTimeout(r, 500));
-      bot.setControlState("sneak", false);
-      await new Promise(r => setTimeout(r, 300)); // Wait to stabilize
     }
 
     if (!placed) {
@@ -1168,6 +1170,10 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
       break;
     }
   }
+
+  // Release sneak after pillar is complete
+  bot.setControlState("sneak", false);
+  await new Promise(r => setTimeout(r, 200));
 
   const finalY = bot.entity.position.y;
   const gained = finalY - startY;
