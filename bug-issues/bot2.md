@@ -12,6 +12,18 @@
 
 ---
 
+### [2026-03-22] スケルトンのthreats未検知でHP8まで低下
+
+- **症状**: 夜間スケルトンに攻撃されHP20→8まで低下。mc_statusのthreatsが空のままでアラートなし
+- **原因**: `mc_status`の脅威スキャン半径が16ブロックだったが、スケルトンは最大約20ブロックから矢を射てる。`danger.dangerous`がfalseの場合は脅威リストを構築しないロジックも問題
+- **Location**: `src/tools/core-tools.ts` L83-108
+- **Coordinates**: x:11, y:101, z:18 (birch_forest)
+- **Last Actions**: 夜間拠点付近で待機中にスケルトンに射撃された
+- **Fix Applied**: スキャン半径を16→24に拡大。`danger.dangerous`チェックを削除し常に独立スキャン実施。cave_spider/slime/magma_cube/zoglin/hoglinをhostileリストに追加
+- **Status**: 修正済み (npm run build 成功)
+
+---
+
 ### [2026-02-15] minecraft_move_to が目標座標に到達しない
 - **症状**: `minecraft_move_to(x, y, z)`を呼んでも、実際の位置が変わらない、または目標と異なる座標に移動する
 - **例**: `move_to(-71, 89, -49)` → 実際はY=90に移動。`move_to(-69, 62, -52)` → 実際はY=63に移動し、その後同じコマンドで位置が変わらない
@@ -964,6 +976,17 @@
 **修正済み (autofix-26, 2026-02-23)**: インベントリが満杯（36スロット全使用）の場合、`chest.withdraw()` がサイレントに失敗していた。`src/bot-manager/bot-storage.ts` に `usedSlots >= MAX_INVENTORY_SLOTS` チェックを追加し、満杯の場合は明確なエラーメッセージを返すよう修正。ボットがアイテムを先に捨てるべきと認識できるようになった。
 
 **修正済み (autofix-28, 2026-02-23)**: Session 85 で死亡原因となった「HP 1.5/20 でのサバイバル戦闘試行」バグを修正。`src/tools/high-level-actions.ts` の `minecraft_survival_routine` に HP < 5/20 チェックを追加。危険なモブへの戦闘を flee に強制変更、食料動物狩りも HP < 5 時はスキップして `minecraft_respawn` を使用するよう促す。
+
+---
+
+### [2026-03-22] 夜間ゾンビに殺害（リスポーン）
+- **症状**: 夜間にmc_navigate実行中、ゾンビに接近されHP 3.4まで低下後flee。その後HP/Hunger全回復でリスポーン
+- **座標**: (-2, 90, 2)付近、地上
+- **直前の行動**: mc_navigate(chest), mc_combat(zombie) → flee → 死亡
+- **原因**: 夜間移動でゾンビが隣接。HP=6.6の状態でゾンビと交戦したため致命的ダメージ
+- **影響**: keepInventory=trueのためアイテムは保持。HPとhunger全回復でリスポーン
+- **教訓**: 夜間は移動を避け、安全な場所で待機すべき。HP低い状態での夜間移動禁止
+- **ステータス**: リスポーン済み。HP=20, Hunger=20で復活
 
 ---
 

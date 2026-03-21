@@ -80,30 +80,28 @@ export async function mc_status(): Promise<string> {
     }
   }
 
-  // Threats
-  const danger = checkDangerNearby(bot, 16);
+  // Threats - scan radius 24 to catch skeletons/ranged mobs beyond 16 blocks
+  const THREAT_RADIUS = 24;
+  const danger = checkDangerNearby(bot, THREAT_RADIUS);
   const threats: Array<{ type: string; distance: number; direction: string }> = [];
-  if (danger.dangerous && danger.nearestHostile) {
-    // Get all hostiles from nearby entities
-    const entities = Object.values(bot.entities);
-    for (const entity of entities) {
-      if (!entity || !entity.position || entity === bot.entity) continue;
-      const dist = entity.position.distanceTo(bot.entity.position);
-      if (dist > 16) continue;
-      // Check if hostile (has entity type or name matching common hostiles)
-      const name = entity.name ?? (entity as any).username ?? "unknown";
-      const hostileNames = ["zombie", "skeleton", "creeper", "spider", "enderman", "witch", "pillager", "vindicator", "phantom", "drowned", "husk", "stray", "blaze", "ghast", "wither_skeleton", "piglin_brute"];
-      if (hostileNames.some(h => name.toLowerCase().includes(h))) {
-        const dx = entity.position.x - pos.x;
-        const dz = entity.position.z - pos.z;
-        let dir = "";
-        if (Math.abs(dz) > Math.abs(dx)) {
-          dir = dz < 0 ? "north" : "south";
-        } else {
-          dir = dx > 0 ? "east" : "west";
-        }
-        threats.push({ type: name, distance: Math.round(dist * 10) / 10, direction: dir });
+  // Always scan entities independently (don't gate on danger.dangerous to avoid missing edge cases)
+  const hostileNames = ["zombie", "skeleton", "creeper", "spider", "enderman", "witch", "pillager", "vindicator", "phantom", "drowned", "husk", "stray", "blaze", "ghast", "wither_skeleton", "piglin_brute", "cave_spider", "slime", "magma_cube", "zoglin", "hoglin"];
+  const entities = Object.values(bot.entities);
+  for (const entity of entities) {
+    if (!entity || !entity.position || entity === bot.entity) continue;
+    const dist = entity.position.distanceTo(bot.entity.position);
+    if (dist > THREAT_RADIUS) continue;
+    const name = entity.name ?? (entity as any).username ?? "unknown";
+    if (hostileNames.some(h => name.toLowerCase().includes(h))) {
+      const dx = entity.position.x - pos.x;
+      const dz = entity.position.z - pos.z;
+      let dir = "";
+      if (Math.abs(dz) > Math.abs(dx)) {
+        dir = dz < 0 ? "north" : "south";
+      } else {
+        dir = dx > 0 ? "east" : "west";
       }
+      threats.push({ type: name, distance: Math.round(dist * 10) / 10, direction: dir });
     }
   }
 
