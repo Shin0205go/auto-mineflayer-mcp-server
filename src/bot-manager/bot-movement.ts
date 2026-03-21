@@ -1283,8 +1283,31 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
       // Only try to place if we reached a reasonable jump height
       if (peakReached || bot.entity.position.y - jumpBaseY > 0.5) {
         try {
-          // Re-fetch the block at saved position for a fresh reference
-          const freshBlock = bot.blockAt(savedBlockPos) || blockBelow;
+          // Re-fetch the block at saved position for a fresh reference.
+          // Fallback: if savedBlockPos returns air/null (stale reference after placement),
+          // search directly below the bot's CURRENT position during the jump.
+          // Bot1 bug: "Placement failed" after 1 block — freshBlock was null because
+          // savedBlockPos pointed to the OLD block below, not the newly placed one.
+          let freshBlock = bot.blockAt(savedBlockPos);
+          if (!freshBlock || freshBlock.name === "air" || freshBlock.name === "cave_air") {
+            // Fallback: check block directly below current feet position
+            const curJumpPos = bot.entity.position;
+            const belowCandidates = [
+              new Vec3(pillarX, Math.floor(curJumpPos.y) - 1, pillarZ),
+              new Vec3(Math.floor(curJumpPos.x), Math.floor(curJumpPos.y) - 1, Math.floor(curJumpPos.z)),
+              new Vec3(pillarX, Math.floor(curJumpPos.y), pillarZ),
+              new Vec3(Math.floor(curJumpPos.x), Math.floor(curJumpPos.y), Math.floor(curJumpPos.z)),
+            ];
+            for (const bp of belowCandidates) {
+              const candidate = bot.blockAt(bp);
+              if (candidate && candidate.name !== "air" && candidate.name !== "cave_air" && candidate.name !== "void_air") {
+                freshBlock = candidate;
+                console.error(`[Pillar] Used fallback block: ${candidate.name} at (${bp.x},${bp.y},${bp.z})`);
+                break;
+              }
+            }
+          }
+          if (!freshBlock) freshBlock = blockBelow;
 
           // Place on top of block below (this puts block at feet level, lifting us up)
           await bot.placeBlock(freshBlock!, new Vec3(0, 1, 0));
@@ -1474,12 +1497,29 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       caveWarning = ` [WARNING] Fell ${yDescent.toFixed(0)} blocks during flee (Y=${startPos.y.toFixed(0)}→${endPos.y.toFixed(0)}). May be underground — use minecraft_pillar_up or mc_navigate to return to surface.`;
     }
 
+    // Post-flee auto-eat: after fleeing, HP is often critically low from the attack
+    // that triggered the flee. Without eating immediately, the next mob encounter
+    // or starvation tick kills the bot before the agent can react.
+    // Bot1 Sessions 23,24,28,30: fled with HP<8, died to next mob before agent could mc_eat.
+    // Bot2: fled with HP 3.3, immediately surrounded again and died.
+    const postFleeHp = bot.health ?? 20;
+    if (postFleeHp < 14) {
+      const foodItem = bot.inventory.items().find((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
+      if (foodItem) {
+        try {
+          await bot.equip(foodItem, "hand");
+          await bot.consume();
+          console.error(`[Flee] Post-flee auto-ate ${foodItem.name} (HP: ${postFleeHp.toFixed(1)} → ${bot.health?.toFixed(1)})`);
+        } catch (_) { /* ignore eat errors */ }
+      }
+    }
+
     const distMoved = bot.entity.position.distanceTo(startPos);
     if (hostile) {
       const newDist = bot.entity.position.distanceTo(hostile.position);
-      return `Fled from ${fleeFromName}! Now ${newDist.toFixed(1)} blocks away` + caveWarning;
+      return `Fled from ${fleeFromName}! Now ${newDist.toFixed(1)} blocks away. HP: ${(bot.health ?? 0).toFixed(1)}/20` + caveWarning;
     }
-    return `Fled ${distMoved.toFixed(1)} blocks from ${fleeFromName}!` + caveWarning;
+    return `Fled ${distMoved.toFixed(1)} blocks from ${fleeFromName}! HP: ${(bot.health ?? 0).toFixed(1)}/20` + caveWarning;
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[Flee] Error during flee: ${errMsg}`);

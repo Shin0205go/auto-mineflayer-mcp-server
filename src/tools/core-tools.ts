@@ -303,8 +303,32 @@ export async function mc_gather(
   const timeoutPromise = new Promise<string>((_, reject) =>
     setTimeout(() => reject(new Error(`mc_gather timed out after ${GATHER_TIMEOUT_MS / 1000}s. Block "${block}" may be unreachable. Try moving to a different area first.`)), GATHER_TIMEOUT_MS)
   );
+  // HP monitoring: periodically check HP during gather and abort if critically low.
+  // Bot1: mc_gather(short_grass) ran 120s while mobs attacked, HP dropped to 3.
+  // Bot2: skeleton shot bot from HP 20→8 during gather — no mid-operation abort.
+  // The gather_resources function has per-iteration HP checks, but between iterations
+  // (during moveTo + dig), no check runs. This interval catches HP drops in real-time.
+  const hpMonitorPromise = new Promise<string>((resolve) => {
+    const hpCheckInterval = setInterval(() => {
+      try {
+        const monBot = botManager.getBot(username);
+        if (!monBot) { clearInterval(hpCheckInterval); return; }
+        const monHp = monBot.health ?? 20;
+        if (monHp < 6) {
+          clearInterval(hpCheckInterval);
+          try { monBot.pathfinder?.stop(); } catch (_) {}
+          resolve(`[ABORTED] mc_gather stopped: HP dropped to ${monHp.toFixed(1)} during gathering. Use mc_flee or mc_eat before retrying.`);
+        }
+      } catch (_) {
+        clearInterval(hpCheckInterval);
+      }
+    }, 1000);
+    // Clean up interval when gather completes (will be garbage collected, but be explicit)
+    gatherPromise.finally(() => clearInterval(hpCheckInterval));
+    timeoutPromise.catch(() => clearInterval(hpCheckInterval));
+  });
   try {
-    return await Promise.race([gatherPromise, timeoutPromise]);
+    return await Promise.race([gatherPromise, timeoutPromise, hpMonitorPromise]);
   } catch (e) {
     // Stop pathfinder on timeout
     try { botManager.getBot(username)?.pathfinder?.stop(); } catch (_) {}
