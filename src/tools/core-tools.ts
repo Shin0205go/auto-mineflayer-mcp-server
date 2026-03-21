@@ -1099,6 +1099,20 @@ export async function mc_navigate(
               const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
               return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10}, hunger=0 (starving). Current position: ${posStr}. Find food immediately (mc_combat cow/pig, mc_eat) before continuing.`;
             }
+            // Auto-eat between segments when HP is low and food is available.
+            // Bot1 Sessions 28,30,35: HP dropped during multi-segment travel but food in
+            // inventory was never consumed because each segment was < 30 blocks (moveTo
+            // auto-eat threshold). Eating here prevents cumulative HP decay across segments.
+            if (segHp < 14 && segHasFood) {
+              const segFoodItem = segBot.inventory.items().find((item: any) => segFoodNames.has(item.name));
+              if (segFoodItem) {
+                try {
+                  await segBot.equip(segFoodItem, "hand");
+                  await segBot.consume();
+                  console.error(`[Navigate] Auto-ate ${segFoodItem.name} between segments (HP: ${segHp.toFixed(1)} → ${segBot.health?.toFixed(1)})`);
+                } catch (_) { /* ignore eat errors */ }
+              }
+            }
           }
 
           const curPos = botManager.getPosition(username);
@@ -1151,6 +1165,20 @@ export async function mc_combat(
     fleeAtHp = targetOrArgs.flee_at_hp ?? targetOrArgs.fleeAtHp ?? fleeAtHpArg;
   } else {
     target = targetOrArgs as string | undefined;
+  }
+
+  // Pre-combat HP safety check: refuse combat when HP is critically low.
+  // Bot1 Sessions 23,25,28,29: entered combat at HP<10, died before flee threshold triggered.
+  // Bot3 Deaths #1,#3,#9: combat at low HP against hostile/neutral mobs.
+  // Passive food mobs (cow, pig, chicken) are exempted — they don't fight back.
+  const combatBot = botManager.getBot(username);
+  if (combatBot) {
+    const combatHp = combatBot.health ?? 20;
+    const passiveFoodMobs = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "mule", "mooshroom", "llama", "goat", "salmon", "cod", "squid", "turtle"];
+    const isPassiveFood = target ? passiveFoodMobs.some(p => target!.toLowerCase().includes(p)) : false;
+    if (!isPassiveFood && combatHp < 6) {
+      return `[REFUSED] HP too low for combat (${combatHp.toFixed(1)}/20). Hostile mobs can kill in 1-2 hits at this HP. Use mc_eat to heal first, or mc_flee to escape. If no food available, dig a 1x1x2 shelter hole and wait.`;
+    }
   }
 
   // Auto-equip best weapon and armor

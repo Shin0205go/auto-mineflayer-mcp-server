@@ -714,15 +714,17 @@ export async function fight(
       return `Fled! Health was ${health}. Attacked ${attackCount} times.` + getBriefStatus(bot);
     }
 
-    // Creeper proximity check: flee if any creeper is within 8 blocks during combat.
+    // Creeper proximity check: flee if any creeper is within 12 blocks during combat.
     // Bot1 Sessions 24, 27, 30, 33: creeper explosions while fighting other mobs.
     // Creepers sneak up during combat movement — must detect and flee immediately.
+    // Radius raised from 8 to 12: bot1 Session 27 had creeper at 11.8 blocks that exploded
+    // because bot moved toward zombie (closing distance) and creeper approached simultaneously.
     if (targetName !== "creeper") {
       const nearbyCreeper = Object.values(bot.entities).find(e => {
         if (!e || e === bot.entity || !e.position) return false;
         const eName = e.name?.toLowerCase() ?? "";
         if (!eName.includes("creeper")) return false;
-        return e.position.distanceTo(bot.entity.position) < 8;
+        return e.position.distanceTo(bot.entity.position) < 12;
       });
       if (nearbyCreeper) {
         const creeperDist = nearbyCreeper.position.distanceTo(bot.entity.position).toFixed(1);
