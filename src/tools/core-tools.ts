@@ -85,14 +85,15 @@ export async function mc_status(): Promise<string> {
   const danger = checkDangerNearby(bot, THREAT_RADIUS);
   const threats: Array<{ type: string; distance: number; direction: string }> = [];
   // Always scan entities independently (don't gate on danger.dangerous to avoid missing edge cases)
-  const hostileNames = ["zombie", "skeleton", "creeper", "spider", "enderman", "witch", "pillager", "vindicator", "phantom", "drowned", "husk", "stray", "blaze", "ghast", "wither_skeleton", "piglin_brute", "cave_spider", "slime", "magma_cube", "zoglin", "hoglin"];
+  // Use centralized isHostileMob() instead of inline list with substring matching.
+  // Bug: inline "zombie".includes() falsely matched "zombified_piglin" (neutral mob).
   const entities = Object.values(bot.entities);
   for (const entity of entities) {
     if (!entity || !entity.position || entity === bot.entity) continue;
     const dist = entity.position.distanceTo(bot.entity.position);
     if (dist > THREAT_RADIUS) continue;
     const name = entity.name ?? (entity as any).username ?? "unknown";
-    if (hostileNames.some(h => name.toLowerCase().includes(h))) {
+    if (isHostileMob(bot, name.toLowerCase())) {
       const dx = entity.position.x - pos.x;
       const dz = entity.position.z - pos.z;
       let dir = "";
@@ -1045,16 +1046,15 @@ export async function mc_navigate(
         // Continue without armor
       }
 
-      // Scan for nearby hostile threats
-      const hostileNames = ["zombie", "skeleton", "creeper", "spider", "enderman", "witch", "pillager", "vindicator", "phantom", "drowned", "husk", "stray", "zombified_piglin"];
+      // Scan for nearby hostile threats using centralized isHostileMob().
+      // Bug fix: inline list with .includes() falsely matched "zombified_piglin" via "zombie" substring.
       const nearbyHostiles: Array<{ name: string; dist: number }> = [];
-      const entities = Object.values(bot.entities);
-      for (const entity of entities) {
+      for (const entity of Object.values(bot.entities)) {
         if (!entity || !entity.position || entity === bot.entity) continue;
         const dist = entity.position.distanceTo(bot.entity.position);
         if (dist > 24) continue;
         const name = entity.name?.toLowerCase() ?? "";
-        if (hostileNames.some(h => name.includes(h))) {
+        if (isHostileMob(bot, name)) {
           nearbyHostiles.push({ name, dist: Math.round(dist * 10) / 10 });
         }
       }
@@ -1336,14 +1336,15 @@ export async function mc_combat(
     if (isPassiveTarget) {
       const combatBot = botManager.getBot(username);
       if (combatBot) {
-        const hostileNames = ["zombie", "skeleton", "creeper", "spider", "enderman", "witch", "drowned", "husk", "stray", "phantom", "pillager", "vindicator", "zombified_piglin"];
+        // Use centralized isHostileMob() instead of inline list with substring matching.
+        // Bug fix: inline "zombie".includes() falsely matched "zombified_piglin" (neutral mob).
         const nearbyHostiles: Array<{ name: string; dist: number }> = [];
         for (const entity of Object.values(combatBot.entities)) {
           if (!entity || !entity.position || entity === combatBot.entity) continue;
           const dist = entity.position.distanceTo(combatBot.entity.position);
           if (dist > 20) continue;
           const eName = entity.name?.toLowerCase() ?? "";
-          if (hostileNames.some(h => eName.includes(h))) {
+          if (isHostileMob(combatBot, eName)) {
             nearbyHostiles.push({ name: eName, dist: Math.round(dist * 10) / 10 });
           }
         }
