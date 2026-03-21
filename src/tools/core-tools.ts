@@ -286,26 +286,39 @@ export async function mc_craft(
     // Not enough raw material in inventory — fall through to craft_chain for auto-gather
   }
 
-  if (count === 1) {
-    // Use craft_chain for dependency resolution
-    return await getHighLevel().minecraft_craft_chain(username, item, autoGather);
-  }
-
-  // For count > 1 non-smelt items, craft multiple times
-  const results: string[] = [];
-  for (let i = 0; i < count; i++) {
-    try {
-      const result = await getHighLevel().minecraft_craft_chain(username, item, autoGather);
-      results.push(result);
-    } catch (err) {
-      results.push(`Attempt ${i + 1} failed: ${err}`);
-      break;
+  // Wrap entire craft operation in 180s timeout to prevent hangs (autoGather can trigger long gather loops)
+  const CRAFT_TIMEOUT_MS = 180000;
+  const craftPromise = async () => {
+    if (count === 1) {
+      return await getHighLevel().minecraft_craft_chain(username, item, autoGather);
     }
-  }
 
-  const inventory = botManager.getInventory(username);
-  const invStr = inventory.map(i => `${i.name}(${i.count})`).join(", ");
-  return `Crafted ${item} x${count}. ${results.join("; ")}. Inventory: ${invStr}`;
+    // For count > 1 non-smelt items, craft multiple times
+    const results: string[] = [];
+    for (let i = 0; i < count; i++) {
+      try {
+        const result = await getHighLevel().minecraft_craft_chain(username, item, autoGather);
+        results.push(result);
+      } catch (err) {
+        results.push(`Attempt ${i + 1} failed: ${err}`);
+        break;
+      }
+    }
+
+    const inventory = botManager.getInventory(username);
+    const invStr = inventory.map(i => `${i.name}(${i.count})`).join(", ");
+    return `Crafted ${item} x${count}. ${results.join("; ")}. Inventory: ${invStr}`;
+  };
+
+  try {
+    return await Promise.race([
+      craftPromise(),
+      new Promise<string>((_, reject) => setTimeout(() => reject(new Error(`mc_craft timed out after ${CRAFT_TIMEOUT_MS / 1000}s crafting ${item} x${count}`)), CRAFT_TIMEOUT_MS))
+    ]);
+  } catch (e) {
+    try { botManager.getBot(username)?.pathfinder?.stop(); } catch (_) {}
+    return e instanceof Error ? e.message : String(e);
+  }
 }
 
 // ─── mc_farm ─────────────────────────────────────────────────────────────────
@@ -955,6 +968,7 @@ export async function mc_navigate(
         const segmentSize = 50;
         const steps = Math.ceil(dist / segmentSize);
         let lastResult = "";
+        let consecutiveFailures = 0;
         for (let i = 1; i <= steps; i++) {
           const curPos = botManager.getPosition(username);
           if (!curPos) break;
@@ -968,6 +982,15 @@ export async function mc_navigate(
           const iz = curPos.z + rdz * t;
           const iy = remainDist <= segmentSize ? ny : (curPos.y + rdy * t);
           lastResult = await botManager.moveTo(username, ix, iy, iz);
+          // Check if segment failed — stop early instead of wasting turns
+          if (lastResult.includes("Cannot reach") || lastResult.includes("Path blocked") || lastResult.includes("timeout")) {
+            consecutiveFailures++;
+            if (consecutiveFailures >= 2) {
+              return `Navigation stopped after ${i}/${steps} segments: ${lastResult}. Stuck at current position — try a different route or clear obstacles.`;
+            }
+          } else {
+            consecutiveFailures = 0;
+          }
         }
         return lastResult || await botManager.moveTo(username, nx, ny, nz);
       }

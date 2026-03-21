@@ -302,10 +302,13 @@ export async function storeInChest(
     throw new Error(`Failed to deposit into chest: ${err}`);
   }
 
-  // Wait for inventory sync
-  // Extended from 1.5s to 3s to ensure server-side chest window updates propagate
-  // and multi-bot access doesn't cause silent failures
-  await new Promise(resolve => setTimeout(resolve, 3000));
+  // Wait for inventory sync — event-driven with timeout fallback
+  // Previous 3s fixed wait was too slow for batch deposits
+  await new Promise<void>(resolve => {
+    const onUpdate = () => { clearTimeout(timer); resolve(); };
+    const timer = setTimeout(() => { bot.inventory.removeListener("updateSlot", onUpdate); resolve(); }, 1500);
+    bot.inventory.once("updateSlot", onUpdate);
+  });
 
   // Verify items were actually removed from inventory (i.e., deposit succeeded)
   const invCountAfter = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);
@@ -462,9 +465,13 @@ export async function takeFromChest(
     throw new Error(`Failed to withdraw from chest: ${err}`);
   }
 
-  // Wait for inventory to sync (multi-bot chest access needs more time)
-  // Extended to 5s to prevent item void bug
-  await new Promise(resolve => setTimeout(resolve, 5000));
+  // Wait for inventory to sync — use event-driven approach with timeout fallback
+  // Previous 5s fixed wait was too slow for batch operations (15 items = 75s+)
+  await new Promise<void>(resolve => {
+    const onUpdate = () => { clearTimeout(timer); resolve(); };
+    const timer = setTimeout(() => { bot.inventory.removeListener("updateSlot", onUpdate); resolve(); }, 2000);
+    bot.inventory.once("updateSlot", onUpdate);
+  });
 
   // Verify items were actually withdrawn
   const inventoryAfter = bot.inventory.items().filter(i => i.name === itemName).reduce((sum, i) => sum + i.count, 0);

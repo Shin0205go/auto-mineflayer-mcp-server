@@ -965,3 +965,13 @@
 
 **修正済み (autofix-28, 2026-02-23)**: Session 85 で死亡原因となった「HP 1.5/20 でのサバイバル戦闘試行」バグを修正。`src/tools/high-level-actions.ts` の `minecraft_survival_routine` に HP < 5/20 チェックを追加。危険なモブへの戦闘を flee に強制変更、食料動物狩りも HP < 5 時はスキップして `minecraft_respawn` を使用するよう促す。
 
+---
+
+### [2026-03-21] 洞窟/峡谷に落下して死亡（リスポーン）
+- **症状**: 拠点整地タスク中、birch_log収集のmc_gatherがタイムアウト。その後Y:96からY:67まで落下。洞窟内でpillar_upもnavigateも失敗し脱出不能。食料なし、HPとhungerが低下して死亡→リスポーン
+- **座標**: 拠点付近(6, 96, 0)から落下→(3, 67, 0)付近の洞窟
+- **直前の行動**: mc_gather(birch_log, 20)がタイムアウト→mc_navigate試行中に落下
+- **原因**: mc_gatherのパスファインダーが安全でないルートを選択し、洞窟/峡谷に落下。pillar_upが正常動作せず脱出不能
+- **影響**: keepInventory=trueのためアイテムは保持。HPとhunger全回復でリスポーン。iron_swordを紛失（原因不明）
+- **教訓**: 拠点付近の地下に大きな空洞がある。gather時にmax_distanceを制限すべき
+

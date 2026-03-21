@@ -103,7 +103,7 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
   );
 
   let collectedCount = 0;
-  const maxAttempts = Math.min(items.length, 5); // Limit attempts
+  const maxAttempts = Math.min(items.length, 15); // Allow up to 15 collection attempts (mob drops can be 8+)
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     // Re-scan for items each attempt

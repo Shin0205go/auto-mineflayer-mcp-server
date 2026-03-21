@@ -1,3 +1,212 @@
+## [2026-03-21] Bug: Claude1 slain by Zombie - Session 41
+
+- **Cause**: HP dropped to 8 at night (midnight) with no food. Was navigating rugged old_growth_birch_forest terrain trying to reach base chest. Zombie killed bot before reaching safety.
+- **Location**: ~(-9, 114, -8) old_growth_birch_forest
+- **Coordinates**: (-9.0, 114.0, -8.0)
+- **Last Actions**: Navigating to chest at (-9, 99, 4) to get food. Multiple navigate failures due to path blocked. Killed by zombie at midnight.
+- **Fix Applied**: None. Root cause: low HP + no food + night navigation in rugged terrain.
+- **Status**: Recorded. Respawned with full HP/hunger at (8, 87, 6). keepInventory=true.
+
+---
+
+## [2026-03-21] Bug: Claude1 drowned - Session 40b (observed by Claude2)
+
+- **Cause**: "Claude1 drowned" — Claude1 drowned after respawning from zombie death. Likely fell into water while navigating.
+- **Location**: Unknown
+- **Coordinates**: Unknown
+- **Last Actions**: Claude1 had just respawned after zombie death. Was navigating east to hunt cows.
+- **Fix Applied**: None. Root cause: respawn position + navigation at night near water.
+- **Status**: Recorded by Claude2.
+
+---
+
+## [2026-03-21] Bug: Claude1 slain by Zombie - Session 40 (observed by Claude2)
+
+- **Cause**: "Claude1 was slain by Zombie" — Claude1 was hunting cows east of base at night.
+- **Location**: Unknown (east of base, birch_forest area)
+- **Coordinates**: Unknown
+- **Last Actions**: Claude1 was reported to be heading east to hunt cows. It was nighttime (tick ~15933).
+- **Fix Applied**: None. Root cause: navigating/hunting at night without sufficient armor/food protection.
+- **Status**: Recorded by Claude2. keepInventory=true so items preserved.
+
+---
+
+## [2026-03-21] Bug: Claude1 fell from high place at spawn - Session 39
+
+- **Cause**: "Claude1 fell from a high place" — Respawned at y=123, fell while stationary (possibly from trying to craft at high elevation).
+- **Location**: ~(-9, 123, 5) spawn area
+- **Coordinates**: (-9.0, 123.0, 5.0)
+- **Last Actions**: Respawned at y=123 after zombie death. Tried mc_sleep (no bed), tried mc_craft (bed), fell during craft attempt.
+- **Fix Applied**: None. Root cause: spawn point is at y=123, bot falls off edge when idle.
+- **Status**: Recorded. Now morning (tick 1513). Continuing east safely.
+
+---
+
+## [2026-03-21] Bug: Claude1 slain by Zombie during night navigation - Session 38
+
+- **Cause**: "Claude1 was slain by Zombie" — Navigating east at midnight (tick ~22213). Zombie attacked at ~(77, 82, -5) while path was blocked.
+- **Location**: ~(77, 82, -5)
+- **Coordinates**: (77.0, 82.0, -5.0) then respawn (-9, 123, 5)
+- **Last Actions**: Navigating east from respawn at (-5, 100, -7). Path blocked multiple times, descended to y=82. Zombie killed bot.
+- **Fix Applied**: None. Root cause: navigating at night with no armor (only iron_boots) and no food.
+- **Status**: Recorded. Respawned at (-9, 123, 5). Waiting for dawn before navigating.
+
+---
+
+## [2026-03-21] Bug: Claude1 fell to death navigating east - Session 37
+
+- **Cause**: Fall death while navigating around x=259, y=61, z=22 area. Path was blocked and bot fell into ravine/cliff when attempting alternate route.
+- **Location**: ~(259, 61, 22)
+- **Coordinates**: (259.1, 61.1, 22.0) then respawn (-5.3, 100, -7.7)
+- **Last Actions**: Navigating east from x=144 toward cow at (333, 69, 64). Multiple hops at y=61-64. Tried shifting Z to get around obstacle. Fell.
+- **Fix Applied**: None yet. Root cause: pathfinder descended to y=61 during east navigation, hit ravine area ~x=259.
+- **Status**: Recorded. Respawned at (-5, 100, -7). It is midnight - must wait or navigate carefully.
+
+---
+
+## [2026-03-21] Bug: Claude1 slain by Zombie Villager - Session 36
+
+- **Cause**: "Claude1 was slain by Zombie Villager" — Immediately after respawn at (0, 96, -1), navigated to x=100. Zombie Villager killed bot before reaching destination.
+- **Location**: ~(0, 96, -1) spawn area
+- **Coordinates**: (0.0, 96.0, -1.0)
+- **Last Actions**: Respawned after Skeleton death. First navigate call to x=100. Death message appeared during navigation.
+- **Fix Applied**: None. Root cause: Zombie Villager in spawn area, bot has no armor after respawn.
+- **Status**: Recorded. Respawned. Continuing east.
+
+---
+
+## [2026-03-21] Bug: Claude1 shot by Skeleton - Session 35
+
+- **Cause**: "Claude1 was shot by Skeleton" — Navigating east at ~x=108, Y=75, Z=6. HP was already low (6.8) with no food. Skeleton shot bot to death.
+- **Location**: ~(108, 75, 6)
+- **Coordinates**: (108.5, 75.0, 6.5)
+- **Last Actions**: Repeated mc_navigate hops east through old_growth_birch_forest, all paths blocked. HP=6.8, no food in inventory.
+- **Fix Applied**: None. Root cause: low HP + no food + skeleton in dense forest. Need to eat wheat or avoid prolonged blocked navigation near skeletons.
+- **Status**: Recorded. Respawned. Continuing east.
+
+---
+
+## [2026-03-21] Bug: Claude1 slain by Drowned x2 - Session 34
+
+- **Cause**: "Claude1 was slain by Drowned" — Navigating east at ~x=232, Y=61, Z=52. HP hit 0 while drowned were 6-7 blocks away. Second death: mc_flee triggered but Drowned killed bot before escape.
+- **Location**: ~(232, 61, 52)
+- **Coordinates**: (232.7, 61, 52.3)
+- **Last Actions**: mc_navigate hops east, reached x=227, then moved to x=232. Status showed HP=0, two Drowned at 6-7 blocks. mc_flee executed but second death occurred.
+- **Fix Applied**: None. Root cause: Y=61-62 near water/river, Drowned spawn. Need to route above Y=65 past x=200.
+- **Status**: Recorded. Respawned at base. Continuing east.
+
+---
+
+## [2026-03-21] Bug: Claude1 blown up by Creeper - Session 33
+
+- **Cause**: "Claude1 was blown up by Creeper" — Just respawned, moving east at x=50, Y=91. Creeper exploded during navigate call.
+- **Location**: ~(52, 91, 6)
+- **Coordinates**: (52, 91, 6)
+- **Last Actions**: Respawned from Drowned death, attempted mc_navigate to x=50.
+- **Fix Applied**: None. Root cause: Creepers still present near base area. Night/dawn timing.
+- **Status**: Recorded. Continuing east.
+
+---
+
+## [2026-03-21] Bug: Claude1 slain by Drowned - Session 32
+
+- **Cause**: "Claude1 was slain by Drowned" — Navigating east at ~x=248-280, Y=62, Z=17. Drowned killed bot near river/water area.
+- **Location**: ~(248-280, 62, 17)
+- **Coordinates**: ~(260, 62, 17) estimated
+- **Last Actions**: mc_navigate hops east from base toward cow at (333,69,64). Reached x=248, then next hop to x=280 triggered death.
+- **Fix Applied**: None. Root cause: Y=62 near water level, Drowned spawn in rivers.
+- **Status**: Recorded. Respawned. Continuing east.
+
+---
+
+## [2026-03-21] Bug: Claude1 slain by Drowned - Session 31
+
+- **Cause**: "Claude1 was slain by Drowned" — Navigating east at night. Reached x=233 before a Drowned killed the bot. Likely in or near water.
+- **Location**: ~(233, 61, 55)
+- **Coordinates**: ~(233, 61, 55)
+- **Last Actions**: mc_navigate hops east, reached x=213 then x=233. Next hop to x=265 triggered death message.
+- **Fix Applied**: None. Root cause: Navigating at night through water/river areas where Drowned spawn. Y=61 is near water level.
+- **Status**: Recorded. Respawned at (0.5, 97.4, 11.5). Continuing east.
+
+---
+
+## [2026-03-21] Bug: Claude1 blown up by Creeper - Session 30
+
+- **Cause**: "Claude1 was blown up by Creeper" — Bot had HP=6, navigating east at night through forest. Bot was moving in 20-block hops trying to reach cow at (333, 69, 64). A creeper exploded during mc_navigate call.
+- **Location**: ~(180, 66, 40), birch_forest area, midnight
+- **Coordinates**: ~(180, 66, 40)
+- **Last Actions**: mc_navigate hops east → killed spider at (64, 80, 6) → continued east → blown up by creeper at ~x=180
+- **Fix Applied**: None. Root cause: Navigating at night with low HP (6) through forest. Creeper snuck up during path execution. Lesson: Should either wait for day or keep HP > 10 at night to give more buffer.
+- **Status**: Recorded. Respawned with keepInventory at (10, 97, -6), HP=20, Hunger=20.
+
+---
+
+## [2026-03-21] Bug: Claude1 slain by Zombie - Session 29
+
+- **Cause**: "Claude1 was slain by Zombie" — Bot had HP=4.3, Hunger=13, night time, zombie 11.7m north. Agent had just loaded tools and read status but bot was already in critical HP at night with a zombie in close range. Bot died before any survival action could be taken.
+- **Location**: (356, 64, 123), birch_forest
+- **Coordinates**: (356, 64, 123)
+- **Last Actions**: Previous session left bot at HP=4.3 at night with zombie nearby. Session started, checked chat, bot was already dead.
+- **Fix Applied**: None yet. Root cause: Session resumed with bot at critically low HP (4.3) at night with mob in range. The bot should have pillar-upped or fled immediately at end of previous session before stopping. Lesson: Never end a session with HP < 8 at night without safety measures.
+- **Status**: Recorded. Respawned with keepInventory.
+
+---
+
+## [2026-03-21] Bug: Claude1 slain by Zombie - Session 28
+
+- **Cause**: "Claude1 was slain by Zombie" — Bot at Hunger=1, HP=14, traveling east through old_growth_birch_forest at night. mc_combat(zombie) killed 2 zombies but one hit the bot. With hunger at 1 and unable to regenerate HP, a zombie finally killed the bot.
+- **Location**: Around (51-74, 73-79, -18 to -49) old_growth_birch_forest, midnight.
+- **Coordinates**: Death at approximately (74, 73, -49) or nearby.
+- **Last Actions**: mc_navigate east → mc_combat(zombie) x2 → mc_navigate(70, 75, -18) → slain by zombie.
+- **Fix Applied**: None. Root cause: Bot navigating at night with critical hunger (1) and HP 14 with no food. Cannot regenerate HP. Any zombie hit is dangerous. Lesson: Do NOT navigate at night with critical hunger/HP. Either wait for day or use flee_at_hp higher to avoid zombie contact.
+- **Status**: Recorded. Respawned with keepInventory at (-10, 114, 5), HP=20, Hunger=20.
+
+---
+
+## [2026-03-21] Bug: Claude1 blown up by Creeper - Session 27
+
+- **Cause**: "Claude1 was blown up by Creeper" — During mc_combat(zombie), a creeper at 11.8 blocks east exploded. The zombie combat caused movement that brought the bot near the creeper.
+- **Location**: Around (-39, 74, -6) old_growth_birch_forest, night.
+- **Coordinates**: Death during zombie combat at night.
+- **Last Actions**: mc_status showed creeper 11.8 blocks east + spider 12.4 blocks north. Then mc_combat(zombie) → blown up by creeper.
+- **Fix Applied**: None yet. Root cause: mc_combat doesn't flee from creepers before engaging zombies. Need to flee from creepers first, THEN engage zombies. Or: mc_combat should have flee_at_hp high enough to survive one hit, but creeper explosions are 1-shot from close range.
+- **Status**: Recorded. Died, respawned with keepInventory at (-14, 100, -11).
+
+---
+
+## [2026-03-21] Bug: Claude1 fell from a high place - Session 26
+
+- **Cause**: "Claude1 fell from a high place" — mc_navigate(x=10, y=116, z=4) caused fall. Bot was at y=116 surface, pathfinder tried to navigate and bot fell to y=86, losing ~5 HP.
+- **Location**: Started at (-7, 116, 4), fell to (6, 86, -1) birch_forest.
+- **Coordinates**: Fall from y=116 to y=86 = 30 block drop.
+- **Last Actions**: Dropped junk items → mc_navigate(x=10, y=116, z=4) → fell off cliff.
+- **Fix Applied**: None yet. Root cause: maxDropDown setting too permissive. The recent fixes (commits 5539442, 822389e) reduced maxDropDown to 1 but this fall still occurred. May need to investigate why pathfinder took a 30-block cliff path.
+- **Status**: Recorded. HP now 14.8, no immediate danger.
+
+---
+
+## [2026-03-21] Bug: Claude1 slain by Zombie - Session 25
+
+- **Cause**: "Claude1 was slain by Zombie" — Bot at 0.8 HP with no food, trying to navigate to chest at (-1, 88, -2). Zombie attacked during navigation and killed bot.
+- **Location**: (-1.7, 103, -9.8) birch_forest, daytime.
+- **Coordinates**: Death around (-1.7, 103, -9.8). Respawned at (-2.7, 94, 2.7).
+- **Last Actions**: mc_navigate to chest → killed by zombie. HP was already 0.8 — critical. Had no food in inventory.
+- **Fix Applied**: None. Root cause: After previous respawn (Session 24), bot took damage (likely fall damage from height 82 → 83 area, or hit by mob) before reaching safety. With 0.8 HP and no food, any mob contact = death. Lesson: After respawn, IMMEDIATELY check HP and navigate to chest for food. Do NOT explore with 0.8 HP.
+- **Status**: Recorded.
+
+---
+
+## [2026-03-21] Bug: Claude1 blown up by Creeper - Session 24
+
+- **Cause**: "Claude1 was blown up by Creeper" — Bot was at HP 11.2 with no food, attempted mc_combat(zombie) at dawn with creeper at 5.2 blocks east. mc_combat triggered flee but creeper exploded first.
+- **Location**: (8.4, 73, -0.5) birch_forest at dawn/day transition.
+- **Coordinates**: Death around (8, 73, -1). Respawned at (-0.5, 82, -3.4).
+- **Last Actions**: mc_flee (from creeper at 5.4 blocks) → mc_combat(zombie, flee_at_hp=8) → "Fled! Health was 0. Attacked 0 times." — creeper exploded during flee.
+- **Fix Applied**: None. Root cause: (1) No armor worn despite having iron_sword; (2) Engaged combat with creeper at close range (5 blocks) — must maintain 7+ block distance from creepers; (3) HP was already 11.2 before engagement. Lesson: NEVER approach creeper within 6 blocks. Always craft and equip armor before any mob combat.
+- **Status**: Recorded.
+
+---
+
 ## [2026-03-21] Bug: Claude1 slain by Zombie - Session 23
 
 - **Cause**: "Claude1 was slain by Zombie" — Bot was at HP 0.6 with hunger 8, multiple zombies nearby after flee was too slow. mc_flee triggered but death occurred before escape completed.

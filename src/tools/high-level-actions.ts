@@ -97,6 +97,28 @@ export async function minecraft_gather_resources(
       }
 
       try {
+        // Auto-eat check before mining — prevent starvation during long gather loops
+        const botForEat = botManager.getBot(username);
+        if (botForEat) {
+          const hunger = (botForEat as any).food ?? 20;
+          const hp = botForEat.health ?? 20;
+          if (hunger <= 6 || hp <= 10) {
+            const foodItems = botForEat.inventory.items().filter((fi: any) => {
+              const n = fi.name;
+              return n === "bread" || n === "cooked_beef" || n === "cooked_porkchop" || n === "cooked_chicken" ||
+                     n === "cooked_mutton" || n === "apple" || n === "golden_apple" || n === "carrot" ||
+                     n === "baked_potato" || n === "cooked_salmon" || n === "cooked_cod" || n === "cooked_rabbit";
+            });
+            if (foodItems.length > 0) {
+              console.error(`[GatherResources] Auto-eat: hunger=${hunger}, HP=${hp.toFixed(1)}, eating ${foodItems[0].name}`);
+              try {
+                await botForEat.equip(foodItems[0], "hand");
+                await botForEat.consume();
+              } catch (_) { /* continue even if eat fails */ }
+            }
+          }
+        }
+
         // Danger check before mining
         const bot = botManager.getBot(username);
         if (bot) {

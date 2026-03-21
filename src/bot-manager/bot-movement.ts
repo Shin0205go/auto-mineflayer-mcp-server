@@ -338,6 +338,18 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.maxDropDown = 1;
       bot.pathfinder.movements.allowFreeMotion = false; // Prevent cliff falls from skipped path nodes
+      bot.pathfinder.movements.allow1by1towers = true; // Allow pillar up to reach higher terrain
+      // Enable scaffolding with available blocks (dirt, cobblestone, netherrack)
+      const scaffoldBlocks: number[] = [];
+      const mcData = (bot as any).registry || require("minecraft-data")(bot.version);
+      for (const name of ["dirt", "cobblestone", "netherrack", "cobbled_deepslate"]) {
+        const block = mcData.blocksByName[name];
+        if (block) scaffoldBlocks.push(block.id);
+      }
+      if (scaffoldBlocks.length > 0) {
+        bot.pathfinder.movements.scafoldingBlocks = scaffoldBlocks;
+      }
+      // Note: canPlaceOn is not a valid Movements property; scaffolding + allow1by1towers handles bridging
     }
 
     // Set the goal AFTER checkInterval is initialized (see comment above)
