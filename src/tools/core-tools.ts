@@ -1042,15 +1042,25 @@ export async function mc_navigate(
           // Between-segment safety check: abort if HP dropped critically during travel.
           // Bot1 Sessions 21-42: 15+ deaths from HP dropping during multi-segment night navigation.
           // The initial HP check passes (HP>10), but mobs whittle HP down between segments.
+          // Also check hunger: at hunger=0, HP drains from starvation and can't regenerate.
+          // Bot1 Session 28: started HP=14/hunger=1, died during navigation as hunger hit 0.
           const segBot = botManager.getBot(username);
           if (segBot) {
             const segHp = segBot.health ?? 0;
+            const segHunger = (segBot as any).food ?? 20;
             const segTime = segBot.time?.timeOfDay ?? 0;
             const segIsNight = segTime > 12541 || segTime < 100;
+            // Abort at night with low HP
             if (segHp <= 8 && segIsNight) {
               const curPos2 = botManager.getPosition(username);
               const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
               return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10} at night. Current position: ${posStr}. Use mc_flee, build shelter (dig 1x1x2 + cover), or mc_eat before continuing.`;
+            }
+            // Abort if starving (hunger=0) with low HP — starvation drains HP and mobs finish the job
+            if (segHunger <= 0 && segHp <= 10) {
+              const curPos2 = botManager.getPosition(username);
+              const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
+              return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10}, hunger=0 (starving). Current position: ${posStr}. Find food immediately (mc_combat cow/pig, mc_eat) before continuing.`;
             }
           }
 
