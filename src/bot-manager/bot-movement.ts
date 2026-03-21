@@ -276,10 +276,11 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       // cave systems below the surface instead of navigating around obstacles on the surface.
       // Bot1 Session 44: navigated to (100,96,0) from surface, ended at Y=72 in cave, drowned.
       // Bot3 Death #11: navigated to farm, fell into ravine via pathfinder digging.
-      // Threshold: 8 blocks below start Y (covers normal terrain variation but catches cave routing).
+      // Threshold: 5 blocks below start Y (tightened from 8 — bot got stuck in caves at 6-7 blocks depth).
+      // Normal hilly terrain varies by 3-4 blocks; 5 catches cave routing early enough to recover.
       const yDescentFromStart = start.y - currentPos.y;
       const targetIsAtOrAboveStart = y >= start.y - 5; // target within 5 blocks below start is "surface-level"
-      if (targetIsAtOrAboveStart && yDescentFromStart > 8) {
+      if (targetIsAtOrAboveStart && yDescentFromStart > 5) {
         console.error(`[MoveTo] UNDERGROUND ROUTING DETECTED: Bot descended ${yDescentFromStart.toFixed(1)} blocks below start (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}) while target Y=${y.toFixed(1)} is at/above start. Pathfinder is routing through caves. Aborting.`);
         finish({
           success: false,
@@ -383,8 +384,9 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         }
         const totalFall = fallStartY - cy;
 
-        // Stop immediately if cumulative fall exceeds 2 blocks (tightened from 3 — fall damage starts at 4 blocks, need margin for detection lag)
-        if (totalFall > 2) {
+        // Stop immediately if cumulative fall exceeds 3 blocks (fall damage starts at 4 blocks).
+        // Threshold raised from 2→3 to avoid false-positives on planned 2-block drops (maxDropDown=2).
+        if (totalFall > 3) {
           console.error(`[MoveTo] PHYSICS FALL: ${totalFall.toFixed(1)} blocks cumulative (started at Y=${fallStartY.toFixed(1)}, now Y=${cy.toFixed(1)}). Emergency stop!`);
           bot.pathfinder.stop();
           bot.clearControlStates();
@@ -411,7 +413,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
     // by mineflayer-pathfinder internals or dimension-change handlers between calls.
     // Setting them here guarantees they are always active for this navigation call.
     if (bot.pathfinder.movements) {
-      bot.pathfinder.movements.maxDropDown = 1;
+      bot.pathfinder.movements.maxDropDown = 2; // Allow 2-block drops for rugged terrain (physics fall detector catches >3)
       bot.pathfinder.movements.allowFreeMotion = false; // Prevent cliff falls from skipped path nodes
       bot.pathfinder.movements.allow1by1towers = true; // Allow pillar up to reach higher terrain
       // Enable scaffolding with available blocks (dirt, cobblestone, netherrack)
@@ -1312,7 +1314,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       bot.clearControlStates();
       bot.pathfinder.setGoal(null);
       if (bot.pathfinder.movements) {
-        bot.pathfinder.movements.maxDropDown = 1; // restore safe default (1-block max drop prevents fall damage)
+        bot.pathfinder.movements.maxDropDown = 2; // restore safe default (2-block max drop, physics fall detector catches >3)
       }
     } catch { /* bot may be disconnected */ }
     return `Flee interrupted: ${errMsg}`;
