@@ -561,10 +561,15 @@ export async function mc_farm(): Promise<string> {
                         // Place dirt ON TOP of this solid block
                         const placeY = py + 1;
                         try {
-                          // Move close before placing
-                          const dist = Math.sqrt((bot.entity.position.x - px) ** 2 + (bot.entity.position.z - pz) ** 2);
-                          if (dist > 4) {
-                            await botManager.moveTo(username, px, py + 1, pz);
+                          // Move close before placing — use 3D distance (Y matters for reach)
+                          // and move to an adjacent position, not on top of the target.
+                          // Bot3 Bug #20: placement failed because bot was too far or
+                          // tried to stand at an unsupported Y-level.
+                          const bpx = bot.entity.position.x, bpy = bot.entity.position.y, bpz = bot.entity.position.z;
+                          const dist3d = Math.sqrt((bpx - px) ** 2 + (bpy - (py + 1)) ** 2 + (bpz - pz) ** 2);
+                          if (dist3d > 3.5) {
+                            // Move to adjacent solid ground, not on the target itself
+                            await botManager.moveTo(username, px + 1, py + 1, pz);
                           }
                           await botManager.placeBlock(username, "dirt", px, placeY, pz);
                           const check = bot.blockAt(new (bot.entity.position.constructor as any)(px, placeY, pz));
@@ -702,6 +707,13 @@ export async function mc_farm(): Promise<string> {
       break;
     }
 
+    // Enable sneaking BEFORE moving near the block — prevents farmland trampling
+    // if the pathfinder routes over tilled soil during approach or planting.
+    // Bot3 Bug #20, Bot2 Bug: farmland reverts to dirt because bot walks on it
+    // between tilling and planting. Sneaking prevents this.
+    bot.setControlState("sneak", true);
+    await new Promise(r => setTimeout(r, 100));
+
     // Move close to the block before tilling (must be within 4 blocks)
     try {
       const botPos = bot.entity.position;
@@ -720,6 +732,7 @@ export async function mc_farm(): Promise<string> {
       logs.push(`Till (${fc.x},${fc.y},${fc.z}): ${tillResult}`);
     } catch (e) {
       logs.push(`Till failed at (${fc.x},${fc.y},${fc.z}): ${e}`);
+      bot.setControlState("sneak", false);
       continue;
     }
     // Poll for farmland state — up to 1 second (server may take several ticks)
@@ -733,14 +746,11 @@ export async function mc_farm(): Promise<string> {
       }
       if (!farmlandConfirmed) {
         logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): NOT farmland — skipping this location`);
+        bot.setControlState("sneak", false);
         continue;
       }
       logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): farmland confirmed`);
     }
-
-    // Enable sneaking to prevent farmland trampling during movement
-    bot.setControlState("sneak", true);
-    await new Promise(r => setTimeout(r, 100));
 
     // Navigate NEXT TO the farmland (not on top — walking on farmland tramples it!)
     try {
@@ -785,6 +795,9 @@ export async function mc_farm(): Promise<string> {
       logs.push(`Plant failed at (${fc.x},${fc.y},${fc.z}): ${e}`);
     }
   }
+
+  // Safety: ensure sneak is released after farming loop (in case of unexpected break path)
+  bot.setControlState("sneak", false);
 
   // Step 4: Apply bone_meal for instant growth (up to 8x per crop)
   const boneMealInv = botManager.getInventory(username).find(i => i.name === "bone_meal");
@@ -1068,8 +1081,12 @@ export async function mc_navigate(
       return `Found ${args.target_entity} in entity list but could not get position`;
     }
 
-    const moveResult = await botManager.moveTo(username, closestPos.x, closestPos.y, closestPos.z);
-    return moveResult + nightWarning;
+    // Delegate to coordinate-based navigation which has segmented HP checks,
+    // auto-eating, and starvation detection for long distances (>50 blocks).
+    // Bot1 Sessions 12,31-34,37: deaths during long-distance entity navigation
+    // (e.g., navigating to pig at 64 blocks) that bypassed all segment safety checks.
+    const entityNavResult = await mc_navigate({ x: closestPos.x, y: closestPos.y, z: closestPos.z });
+    return `Found ${args.target_entity} at (${closestPos.x.toFixed(1)}, ${closestPos.y.toFixed(1)}, ${closestPos.z.toFixed(1)}), ${closestDist.toFixed(1)} blocks away.\n${entityNavResult}`;
   }
 
   // Navigate to block type
@@ -1087,8 +1104,10 @@ export async function mc_navigate(
     const x = parseFloat(posMatch[1]);
     const y = parseFloat(posMatch[2]);
     const z = parseFloat(posMatch[3]);
-    const blockMoveResult = await botManager.moveTo(username, x, y, z);
-    return `${findResult}\n${blockMoveResult}` + nightWarning;
+    // Delegate to coordinate-based navigation which has segmented HP checks,
+    // auto-eating, and starvation detection for long distances (>50 blocks).
+    const blockNavResult = await mc_navigate({ x, y, z });
+    return `${findResult}\n${blockNavResult}`;
   }
 
   // Navigate to coordinates
