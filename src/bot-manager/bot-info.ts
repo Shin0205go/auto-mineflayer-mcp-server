@@ -485,27 +485,33 @@ export function findEntities(bot: Bot, entityType?: string, maxDistance: number 
         const type = (e.type || "").toLowerCase();
         const searchType = entityType.toLowerCase();
 
-        // より柔軟な検索: 複数のパターンを試す
-        const patterns = [
-          searchType,  // 完全一致
-          searchType.charAt(0).toUpperCase() + searchType.slice(1),  // 先頭大文字
-          `minecraft:${searchType}`,  // namespace付き
-          `entity.${searchType}.name`,  // display name形式
-        ];
+        // Exact match is always OK
+        if (name === searchType || displayName === searchType || type === searchType) {
+          return true;
+        }
 
-        // name, displayName, typeのいずれかがパターンに一致するかチェック
-        return patterns.some(pattern =>
-          name === pattern.toLowerCase() ||
-          name.includes(pattern.toLowerCase()) ||
-          displayName === pattern.toLowerCase() ||
-          displayName.includes(pattern.toLowerCase()) ||
-          type === pattern.toLowerCase() ||
-          type.includes(pattern.toLowerCase())
-        ) ||
-        // 部分一致も試す（cowがcow_entityなどの場合に対応）
-        name.includes(searchType) ||
-        displayName.includes(searchType) ||
-        type.includes(searchType);
+        // Substring match — but reject if target is passive and entity is hostile.
+        // Same fix as fight() in bot-survival.ts: "pig" must NOT match "zombified_piglin".
+        // Bot1 death: fight("pig") matched zombified_piglin; same risk in findEntities.
+        const substringMatch =
+          name.includes(searchType) ||
+          displayName.includes(searchType) ||
+          type.includes(searchType);
+        if (substringMatch) {
+          const targetIsHostile = isHostileMob(bot, searchType);
+          if (!targetIsHostile && isHostileMob(bot, name)) {
+            return false; // passive target should not match hostile entity
+          }
+          return true;
+        }
+
+        // Also check namespace and display name format patterns
+        const namespacedSearch = `minecraft:${searchType}`;
+        if (name.includes(namespacedSearch) || type.includes(namespacedSearch)) {
+          return true;
+        }
+
+        return false;
       }
       return true;
     })

@@ -9,7 +9,7 @@
  */
 
 import { botManager } from "../bot-manager/index.js";
-import { checkDangerNearby } from "../bot-manager/minecraft-utils.js";
+import { checkDangerNearby, isHostileMob } from "../bot-manager/minecraft-utils.js";
 import { setAgentType } from "../agent-state.js";
 import { registry } from "../tool-handler-registry.js";
 
@@ -1095,15 +1095,32 @@ export async function mc_navigate(
     let closestDist = Infinity;
     let closestPos: { x: number; y: number; z: number } | null = null;
 
+    // Determine if the requested target is itself hostile (same logic as fight() in bot-survival.ts).
+    // If searching for a passive mob name like "pig", we must NOT match hostile mobs
+    // that contain the substring (e.g., "zombified_piglin").
+    // Bot1 death: fight("pig") matched zombified_piglin. Same risk exists in navigation.
+    const targetLower = args.target_entity.toLowerCase();
+    const targetIsHostile = isHostileMob(bot, targetLower);
+
     for (const entity of entities) {
       if (!entity || !entity.position) continue;
-      const name = entity.name ?? (entity as any).username ?? "";
-      if (name.toLowerCase().includes(args.target_entity.toLowerCase())) {
-        const dist = entity.position.distanceTo(bot.entity.position);
-        if (dist < closestDist) {
-          closestDist = dist;
-          closestPos = { x: entity.position.x, y: entity.position.y, z: entity.position.z };
-        }
+      const eName = (entity.name ?? "").toLowerCase();
+      const eDisplayName = ((entity as any).displayName ?? "").toLowerCase();
+      const eUsername = ((entity as any).username ?? "").toLowerCase();
+
+      // Exact match is always OK
+      const exactMatch = eName === targetLower || eDisplayName === targetLower || eUsername === targetLower;
+      if (!exactMatch) {
+        // Substring match — but reject if target is passive and match is hostile
+        const substringMatch = eName.includes(targetLower) || eDisplayName.includes(targetLower);
+        if (!substringMatch) continue;
+        if (!targetIsHostile && isHostileMob(bot, eName)) continue;
+      }
+
+      const dist = entity.position.distanceTo(bot.entity.position);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestPos = { x: entity.position.x, y: entity.position.y, z: entity.position.z };
       }
     }
 
