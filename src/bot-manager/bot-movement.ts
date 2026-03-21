@@ -1175,16 +1175,39 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
         resolve();
       }, 8000);
 
+      const fleeStartTime = Date.now();
       const check = setInterval(() => {
         try {
           const distMoved = bot.entity.position.distanceTo(startPos);
+          const elapsed = Date.now() - fleeStartTime;
 
-          // Success: moved enough distance or reached target
-          if (distMoved >= distance * 0.7 || !bot.pathfinder.isMoving()) {
+          // Success: moved enough distance
+          if (distMoved >= distance * 0.7) {
             clearInterval(check);
             clearTimeout(timeout);
             try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
             resolve();
+            return;
+          }
+
+          // Only check isMoving() after minimum 2s to prevent premature exit.
+          // Pathfinder may briefly report isMoving()=false during path recalculation,
+          // especially with maxDropDown=0 on rough terrain. Give it time to find a path.
+          if (elapsed > 2000 && !bot.pathfinder.isMoving()) {
+            // Pathfinder gave up — try a new flee direction (perpendicular)
+            if (elapsed < 5000 && distMoved < distance * 0.3) {
+              // Rotate flee direction 90 degrees and retry
+              const curPos = bot.entity.position;
+              const angle = Math.atan2(fleeTarget.z - curPos.z, fleeTarget.x - curPos.x) + Math.PI / 2;
+              const retryTarget = curPos.offset(Math.cos(angle) * distance, 0, Math.sin(angle) * distance);
+              const retryGoal = new goals.GoalNear(retryTarget.x, retryTarget.y, retryTarget.z, 3);
+              try { bot.pathfinder.setGoal(retryGoal); } catch { /* ignore */ }
+            } else {
+              clearInterval(check);
+              clearTimeout(timeout);
+              try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+              resolve();
+            }
           }
         } catch {
           // Bot entity may be invalid if disconnected during flee
