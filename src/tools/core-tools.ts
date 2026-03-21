@@ -1176,7 +1176,18 @@ export async function mc_navigate(
           const t = Math.min(segmentSize / remainDist, 1.0);
           const ix = curPos.x + rdx * t;
           const iz = curPos.z + rdz * t;
-          const iy = remainDist <= segmentSize ? ny : (curPos.y + rdy * t);
+          // SAFETY: For intermediate segments, keep Y at bot's current level instead of
+          // interpolating downward. Linear Y interpolation sends the pathfinder into caves
+          // when target is lower than start (e.g., target Y=62, start Y=96 -> intermediate
+          // targets at Y=85, Y=74, Y=63... each one triggers cave routing).
+          // The moveTo cave detection (bot-movement.ts L274-291) only fires when
+          // targetIsAtOrAboveStart, so a lower target Y bypasses that safety check entirely.
+          // Bot1 Sessions 31-34,44: 6+ drowning deaths from pathfinder routing through
+          // water at Y=61-62 during multi-segment navigation to lower-Y targets.
+          // Bot3 Death #11: fell into ravine during multi-segment nav to farm.
+          // Fix: only use the actual target Y on the final segment (remainDist <= segmentSize).
+          const isFinalSegment = remainDist <= segmentSize;
+          const iy = isFinalSegment ? ny : curPos.y;
           lastResult = await botManager.moveTo(username, ix, iy, iz);
           // Check if segment failed — stop early instead of wasting turns
           if (lastResult.includes("Cannot reach") || lastResult.includes("Path blocked") || lastResult.includes("timeout")) {

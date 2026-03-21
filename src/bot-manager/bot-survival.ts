@@ -452,6 +452,25 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         return `Fled from ${target.name} at low HP (${bot.health}/20) after ${attacks} attacks. Eat food and try again.`;
       }
 
+      // Creeper proximity check: abort if creeper within 12 blocks during non-creeper combat.
+      // fight() has this check but attack() was missing it.
+      // Bot1 Sessions 24, 27, 30, 33: creeper explosions while fighting other mobs.
+      // Creepers approach silently during combat — must detect and flee immediately.
+      if (target.name !== "creeper") {
+        const nearbyCreeper = Object.values(bot.entities).find(e => {
+          if (!e || e === bot.entity || !e.position) return false;
+          const eName = e.name?.toLowerCase() ?? "";
+          if (!eName.includes("creeper")) return false;
+          return e.position.distanceTo(bot.entity.position) < 12;
+        });
+        if (nearbyCreeper) {
+          const creeperDist = nearbyCreeper.position.distanceTo(bot.entity.position).toFixed(1);
+          console.error(`[Attack] Creeper detected ${creeperDist}m away during ${target.name} combat! Aborting!`);
+          bot.pathfinder.setGoal(null);
+          return `[CREEPER ABORT] Creeper detected ${creeperDist}m away during ${target.name} combat. Attacked ${attacks} times. Use mc_flee to escape creeper first.`;
+        }
+      }
+
       // Check if target still exists
       const currentTarget = Object.values(bot.entities).find(e => e.id === targetId);
       if (!currentTarget) {
