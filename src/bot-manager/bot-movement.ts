@@ -262,22 +262,36 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       }
 
       // SAFETY: Track maximum height reached during pathfinding
-      // If bot goes much higher than start or target, pathfinder may be taking unsafe route
+      // If bot goes much higher than start or target, pathfinder may be taking unsafe route.
+      // Bot3 Death #4: pathfinder routed to Y=112 when going from Y=9 to Y=64, then fell.
+      // Abort if bot climbs more than 15 blocks above BOTH start and target — this means
+      // the pathfinder is taking a dangerous high-altitude route that risks a lethal fall.
       if (currentPos.y > maxHeightReached) {
         maxHeightReached = currentPos.y;
-        const heightGain = currentPos.y - start.y;
-        if (heightGain > 8) {
-          console.error(`[MoveTo] WARNING: Bot climbing too high (${heightGain.toFixed(1)} blocks above start). May take dangerous falling route.`);
+        const heightAboveStart = currentPos.y - start.y;
+        const heightAboveTarget = currentPos.y - y;
+        if (heightAboveStart > 15 && heightAboveTarget > 15) {
+          console.error(`[MoveTo] DANGEROUS HIGH ROUTE: Bot climbed ${heightAboveStart.toFixed(1)} blocks above start and ${heightAboveTarget.toFixed(1)} above target (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}, target Y=${y.toFixed(1)}). Aborting to prevent fall death.`);
+          finish({
+            success: false,
+            message: `Navigation stopped: pathfinder climbed too high (Y=${currentPos.y.toFixed(0)}, start Y=${start.y.toFixed(0)}, target Y=${y.toFixed(0)}). High-altitude route risks lethal fall. Try shorter segments or a different waypoint.`,
+            stuckReason: "high_route"
+          });
+          return;
+        }
+        if (heightAboveStart > 8) {
+          console.error(`[MoveTo] WARNING: Bot climbing too high (${heightAboveStart.toFixed(1)} blocks above start). May take dangerous falling route.`);
         }
       }
 
-      // SAFETY: Detect underground cave routing — abort if bot descends far below start
-      // when target is at or above start Y. With canDig=true, pathfinder may dig into
-      // cave systems below the surface instead of navigating around obstacles on the surface.
+      // SAFETY: Detect underground cave routing — abort if bot descends far below expected path.
+      // Case 1: Target is at/above start — bot should NOT descend more than 5 blocks below start.
+      // Case 2: Target is below start — bot should NOT descend more than 10 blocks below target Y.
+      //   The pathfinder may legitimately descend when target is lower, but it should converge
+      //   toward target Y, not dive far below it through cave systems.
       // Bot1 Session 44: navigated to (100,96,0) from surface, ended at Y=72 in cave, drowned.
       // Bot3 Death #11: navigated to farm, fell into ravine via pathfinder digging.
-      // Threshold: 5 blocks below start Y (tightened from 8 — bot got stuck in caves at 6-7 blocks depth).
-      // Normal hilly terrain varies by 3-4 blocks; 5 catches cave routing early enough to recover.
+      // Bot3 Death #4: navigated from Y=9 to Y=64, pathfinder went to Y=112 then fell.
       const yDescentFromStart = start.y - currentPos.y;
       const targetIsAtOrAboveStart = y >= start.y - 5; // target within 5 blocks below start is "surface-level"
       if (targetIsAtOrAboveStart && yDescentFromStart > 5) {
@@ -288,6 +302,21 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
           stuckReason: "underground_routing"
         });
         return;
+      }
+      // Case 2: target is significantly below start — allow descent but abort if bot overshoots
+      // target Y by more than 10 blocks. This catches cave routing when navigating downhill.
+      // E.g., target at Y=51 from Y=96: bot should descend toward Y=51, not to Y=30 via cave.
+      if (!targetIsAtOrAboveStart) {
+        const yBelowTarget = y - currentPos.y; // positive if bot is below target
+        if (yBelowTarget > 10) {
+          console.error(`[MoveTo] CAVE OVERSHOOT DETECTED: Bot at Y=${currentPos.y.toFixed(1)} is ${yBelowTarget.toFixed(1)} blocks below target Y=${y.toFixed(1)} (started at Y=${start.y.toFixed(1)}). Pathfinder overshot into cave. Aborting.`);
+          finish({
+            success: false,
+            message: `Navigation stopped: pathfinder descended too far below target (Y=${currentPos.y.toFixed(0)}, target Y=${y.toFixed(0)}). Cave routing detected. Try navigating in shorter segments.`,
+            stuckReason: "underground_routing"
+          });
+          return;
+        }
       }
 
       // SAFETY: Mid-navigation hostile mob detection — abort if HP is low and hostiles are closing in.

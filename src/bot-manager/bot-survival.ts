@@ -754,6 +754,32 @@ export async function fight(
       }
     }
 
+    // Mid-combat hostile check when fighting PASSIVE mobs (cow, pig, sheep, etc.).
+    // Bot1 Session 16: killed by zombie while fighting sheep.
+    // Bot3 Deaths #1, #3, #5: killed by hostile mobs during passive mob hunts.
+    // When the bot moves toward a passive target, it may enter hostile mob range.
+    // Abort and flee if any hostile is within 8 blocks during passive mob combat.
+    if (entityName) {
+      const passiveFoodMobs = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "mule", "mooshroom", "llama", "goat", "salmon", "cod", "squid", "turtle"];
+      const isPassiveHunt = passiveFoodMobs.some(p => entityName.toLowerCase().includes(p));
+      if (isPassiveHunt) {
+        const nearbyHostile = Object.values(bot.entities).find(e => {
+          if (!e || e === bot.entity || !e.position) return false;
+          const eName = e.name?.toLowerCase() ?? "";
+          if (!isHostileMob(bot, eName)) return false;
+          return e.position.distanceTo(bot.entity.position) < 8;
+        });
+        if (nearbyHostile) {
+          const hostileName = nearbyHostile.name ?? "hostile";
+          const hostileDist = nearbyHostile.position.distanceTo(bot.entity.position).toFixed(1);
+          console.error(`[Fight] Hostile ${hostileName} at ${hostileDist}m during ${entityName} hunt! Aborting to flee.`);
+          bot.pathfinder.setGoal(null);
+          await flee(managed, 20);
+          return `[HOSTILE ABORT] Fled from ${hostileName} (${hostileDist}m away) during ${entityName} hunt. Attacked ${attackCount} times. Clear hostiles first, then re-hunt.` + getBriefStatus(bot);
+        }
+      }
+    }
+
     // Re-find target (it might have moved or died)
     target = Object.values(bot.entities).find(e => e.id === targetId) || null;
     if (!target) {
