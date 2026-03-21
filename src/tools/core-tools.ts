@@ -1016,6 +1016,21 @@ export async function mc_navigate(
         let lastResult = "";
         let consecutiveFailures = 0;
         for (let i = 1; i <= steps; i++) {
+          // Between-segment safety check: abort if HP dropped critically during travel.
+          // Bot1 Sessions 21-42: 15+ deaths from HP dropping during multi-segment night navigation.
+          // The initial HP check passes (HP>10), but mobs whittle HP down between segments.
+          const segBot = botManager.getBot(username);
+          if (segBot) {
+            const segHp = segBot.health ?? 0;
+            const segTime = segBot.time?.timeOfDay ?? 0;
+            const segIsNight = segTime > 12541 || segTime < 100;
+            if (segHp <= 8 && segIsNight) {
+              const curPos2 = botManager.getPosition(username);
+              const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
+              return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10} at night. Current position: ${posStr}. Use mc_flee, build shelter (dig 1x1x2 + cover), or mc_eat before continuing.`;
+            }
+          }
+
           const curPos = botManager.getPosition(username);
           if (!curPos) break;
           const rdx = nx - curPos.x;
