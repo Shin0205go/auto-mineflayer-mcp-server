@@ -1032,6 +1032,18 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
       }
     }
 
+    // SAFETY: Abort if water is at or above head level — drowning risk.
+    // Bot3 Death #6: drowned during pillar_up because water blocks flooded the column.
+    // Check Y+1 (head) and Y+2 (above head) for water. If either is water, stop.
+    for (const yOff of [1, 2]) {
+      const waterCheck = bot.blockAt(new Vec3(curX, currentY + yOff, curZ));
+      if (waterCheck && (waterCheck.name === "water" || waterCheck.name === "flowing_water")) {
+        console.error(`[Pillar] WATER at Y=${currentY + yOff} (${waterCheck.name}). Aborting to prevent drowning.`);
+        bot.setControlState("sneak", false);
+        return `Pillared up ${(bot.entity.position.y - startY).toFixed(1)} blocks (placed ${blocksPlaced}/${targetHeight}). STOPPED: Water detected at Y=${currentY + yOff} — drowning risk. Move away from water first.${getBriefStatus(managed)}`;
+      }
+    }
+
     // 1. Dig blocks above if needed (Y+2 and Y+3 for jump clearance)
     for (const yOffset of [2, 3]) {
       const blockAbove = bot.blockAt(new Vec3(curX, currentY + yOffset, curZ));
@@ -1040,7 +1052,15 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
         try {
           const pickaxe = bot.inventory.items().find(i => i.name.includes("pickaxe"));
           if (pickaxe) await bot.equip(pickaxe, "hand");
-          bot.clearControlStates();
+          // Only stop forward/back/left/right movement, but KEEP sneak ON.
+          // Bug #17: bot.clearControlStates() released sneak, causing drift off the 1-block pillar
+          // in caves, leading to "Placement failed" on subsequent iterations.
+          bot.setControlState("forward", false);
+          bot.setControlState("back", false);
+          bot.setControlState("left", false);
+          bot.setControlState("right", false);
+          bot.setControlState("jump", false);
+          bot.setControlState("sprint", false);
           await new Promise(r => setTimeout(r, 100));
           await bot.dig(blockAbove);
         } catch (e) {
@@ -1087,8 +1107,14 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     // 4. Jump and place - retry up to 3 times per level
     let placed = false;
     for (let attempt = 0; attempt < 3 && !placed; attempt++) {
-      // Re-center on the block before each attempt
-      bot.clearControlStates();
+      // Re-center on the block before each attempt — stop movement but KEEP sneak.
+      // Bug #17: clearControlStates() released sneak, causing drift off pillar in caves.
+      bot.setControlState("forward", false);
+      bot.setControlState("back", false);
+      bot.setControlState("left", false);
+      bot.setControlState("right", false);
+      bot.setControlState("jump", false);
+      bot.setControlState("sprint", false);
       await new Promise(r => setTimeout(r, 150));
 
       // Re-fetch blockBelow in case position shifted
