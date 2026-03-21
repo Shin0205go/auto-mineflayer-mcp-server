@@ -714,6 +714,25 @@ export async function fight(
       return `Fled! Health was ${health}. Attacked ${attackCount} times.` + getBriefStatus(bot);
     }
 
+    // Creeper proximity check: flee if any creeper is within 8 blocks during combat.
+    // Bot1 Sessions 24, 27, 30, 33: creeper explosions while fighting other mobs.
+    // Creepers sneak up during combat movement — must detect and flee immediately.
+    if (targetName !== "creeper") {
+      const nearbyCreeper = Object.values(bot.entities).find(e => {
+        if (!e || e === bot.entity || !e.position) return false;
+        const eName = e.name?.toLowerCase() ?? "";
+        if (!eName.includes("creeper")) return false;
+        return e.position.distanceTo(bot.entity.position) < 8;
+      });
+      if (nearbyCreeper) {
+        const creeperDist = nearbyCreeper.position.distanceTo(bot.entity.position).toFixed(1);
+        console.error(`[Fight] Creeper detected ${creeperDist}m away during ${targetName} combat! Emergency flee!`);
+        bot.pathfinder.setGoal(null);
+        await flee(managed, 20);
+        return `[CREEPER ABORT] Fled from creeper (${creeperDist}m away) during ${targetName} combat. Attacked ${attackCount} times. Re-engage after creeper leaves.` + getBriefStatus(bot);
+      }
+    }
+
     // Re-find target (it might have moved or died)
     target = Object.values(bot.entities).find(e => e.id === targetId) || null;
     if (!target) {
