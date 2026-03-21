@@ -909,7 +909,7 @@ export async function mc_navigate(
       }
 
       // Scan for nearby hostile threats
-      const hostileNames = ["zombie", "skeleton", "creeper", "spider", "enderman", "witch", "pillager", "vindicator", "phantom", "drowned", "husk", "stray"];
+      const hostileNames = ["zombie", "skeleton", "creeper", "spider", "enderman", "witch", "pillager", "vindicator", "phantom", "drowned", "husk", "stray", "zombified_piglin"];
       const nearbyHostiles: Array<{ name: string; dist: number }> = [];
       const entities = Object.values(bot.entities);
       for (const entity of entities) {
