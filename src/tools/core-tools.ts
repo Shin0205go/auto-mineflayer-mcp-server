@@ -923,6 +923,28 @@ export async function mc_navigate(
   if (bot) {
     const timeOfDay = bot.time?.timeOfDay ?? 0;
     const isNight = timeOfDay > 12541 || timeOfDay < 100; // night/midnight/pre-dawn
+    const hp = Math.round((bot.health ?? 20) * 10) / 10;
+    const hunger = Math.round(((bot as any).food ?? 20) * 10) / 10;
+
+    // Check if bot has any food in inventory
+    const navFoodNames = new Set([
+      "bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton",
+      "cooked_rabbit", "cooked_cod", "cooked_salmon", "baked_potato", "golden_apple",
+      "golden_carrot", "apple", "melon_slice", "sweet_berries", "carrot", "potato",
+      "beetroot", "dried_kelp", "cookie", "pumpkin_pie", "mushroom_stew",
+      "rabbit_stew", "beetroot_soup", "suspicious_stew", "rotten_flesh",
+    ]);
+    const inv = botManager.getInventory(username);
+    const hasFood = inv.some(i => navFoodNames.has(i.name));
+
+    // BLOCK navigation when starving with no food — regardless of time of day.
+    // Bot1 Session 44: hunger=0, navigated to find animals, fell into cave, drowned.
+    // Bot3 Death #11: hunger=0, navigated to farm, fell into ravine.
+    // Without food, HP only declines. Long navigation = guaranteed death.
+    if (hunger <= 0 && hp < 10 && !hasFood) {
+      return `[REFUSED] Cannot navigate while starving — HP=${hp}, hunger=0, no food in inventory. HP will only decrease. Find food first: mc_combat(target="cow"), mc_combat(target="pig"), or mc_eat. Short-range movement only (mc_flee, dig shelter).`;
+    }
+
     if (isNight) {
       // Auto-equip armor before navigating at night
       try {
@@ -945,7 +967,6 @@ export async function mc_navigate(
         }
       }
       if (nearbyHostiles.length > 0) {
-        const hp = Math.round(bot.health * 10) / 10;
         const closestDist = nearbyHostiles.sort((a, b) => a.dist - b.dist)[0].dist;
         const threatList = nearbyHostiles
           .slice(0, 5)
@@ -954,8 +975,13 @@ export async function mc_navigate(
         // BLOCK navigation when HP is dangerously low at night with nearby hostiles.
         // Bot1 Sessions 20-42: 15+ deaths from navigating at night with low HP near mobs.
         // Navigating exposes the bot to mob attacks during pathfinder movement.
-        if (hp <= 10 && closestDist <= 16) {
-          return `[REFUSED] Too dangerous to navigate at night — HP=${hp}, ${nearbyHostiles.length} hostile(s) nearby: ${threatList}. Use mc_flee first, then mc_navigate. Or build shelter (dig 1x1x2 hole + place block overhead) and wait for dawn.`;
+        // Raise threshold to HP<=14 when bot has no food — HP can't regenerate so any
+        // damage from mobs during navigation is permanent and cumulative.
+        // Bot1 Session 28: HP=14, hunger=1, died during night navigation.
+        const hpThreshold = hasFood ? 10 : 14;
+        if (hp <= hpThreshold && closestDist <= 16) {
+          const noFoodNote = hasFood ? "" : " No food — HP cannot regenerate.";
+          return `[REFUSED] Too dangerous to navigate at night — HP=${hp}, ${nearbyHostiles.length} hostile(s) nearby: ${threatList}.${noFoodNote} Use mc_flee first, then mc_navigate. Or build shelter (dig 1x1x2 hole + place block overhead) and wait for dawn.`;
         }
         nightWarning = `\n[NIGHT WARNING] HP=${hp}, ${nearbyHostiles.length} hostile(s) nearby: ${threatList}. Consider mc_flee or shelter before long navigation.`;
       }
@@ -1050,11 +1076,24 @@ export async function mc_navigate(
             const segHunger = (segBot as any).food ?? 20;
             const segTime = segBot.time?.timeOfDay ?? 0;
             const segIsNight = segTime > 12541 || segTime < 100;
-            // Abort at night with low HP
-            if (segHp <= 8 && segIsNight) {
+            // Check food availability mid-travel for smarter thresholds
+            const segInv = botManager.getInventory(username);
+            const segFoodNames = new Set([
+              "bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton",
+              "cooked_rabbit", "cooked_cod", "cooked_salmon", "baked_potato", "golden_apple",
+              "golden_carrot", "apple", "melon_slice", "sweet_berries", "carrot", "potato",
+              "beetroot", "dried_kelp", "cookie", "pumpkin_pie", "mushroom_stew",
+              "rabbit_stew", "beetroot_soup", "suspicious_stew", "rotten_flesh",
+            ]);
+            const segHasFood = segInv.some(item => segFoodNames.has(item.name));
+            // Abort at night with low HP — use higher threshold when no food since HP can't regen.
+            // Bot1 Session 28: HP=14/hunger=1, died during multi-segment night navigation.
+            const nightHpThreshold = segHasFood ? 8 : 12;
+            if (segHp <= nightHpThreshold && segIsNight) {
               const curPos2 = botManager.getPosition(username);
               const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
-              return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10} at night. Current position: ${posStr}. Use mc_flee, build shelter (dig 1x1x2 + cover), or mc_eat before continuing.`;
+              const foodNote = segHasFood ? "" : " No food in inventory — HP cannot regenerate.";
+              return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10} at night.${foodNote} Current position: ${posStr}. Use mc_flee, build shelter (dig 1x1x2 + cover), or mc_eat before continuing.`;
             }
             // Abort if starving (hunger=0) with low HP — starvation drains HP and mobs finish the job
             if (segHunger <= 0 && segHp <= 10) {
