@@ -3,7 +3,7 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 const { GoalBlock } = goals;
 import type { ManagedBot } from "./types.js";
-import { isHostileMob, checkGroundBelow } from "./minecraft-utils.js";
+import { isHostileMob, checkGroundBelow, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -570,14 +570,7 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   // Bug fix (bot1.md 2026-03-16): Bot had HP=4.5, food=16 but skipped eating because hunger check passed.
   // Now: if HP < 14 AND food items in inventory, eat before moving long distances.
   if (hp < 14 && distance > 30) {
-    const foodItems = bot.inventory.items().filter((item: any) => {
-      const n = item.name;
-      return n === "bread" || n === "cooked_beef" || n === "cooked_porkchop" || n === "cooked_chicken" ||
-             n === "cooked_mutton" || n === "apple" || n === "golden_apple" || n === "carrot" ||
-             n === "baked_potato" || n === "melon_slice" || n === "cooked_rabbit" || n === "cooked_salmon" ||
-             n === "cooked_cod" || n === "mushroom_stew" || n === "rabbit_stew" || n === "beef" ||
-             n === "porkchop" || n === "chicken" || n === "mutton" || n === "potato" || n === "beetroot";
-    });
+    const foodItems = bot.inventory.items().filter((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
     if (foodItems.length > 0) {
       console.error(`[Move] HP=${hp.toFixed(1)}, eating ${foodItems[0].name} before ${distance.toFixed(1)}-block move...`);
       try {
@@ -604,14 +597,7 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     // If hunger=0 AND no food in inventory AND no hostile mobs nearby, allow movement at HP≥2.
     // Rationale: staying put guarantees death (starvation + no recovery); moving to find food is the only path.
     const hungerLevel = (bot as any).food ?? 20;
-    const hasFoodInInventory = bot.inventory.items().some((item: any) => {
-      const n = item.name;
-      return n === "bread" || n === "cooked_beef" || n === "cooked_porkchop" || n === "cooked_chicken" ||
-             n === "cooked_mutton" || n === "apple" || n === "golden_apple" || n === "carrot" ||
-             n === "baked_potato" || n === "melon_slice" || n === "cooked_rabbit" || n === "cooked_salmon" ||
-             n === "cooked_cod" || n === "mushroom_stew" || n === "rabbit_stew" || n === "beef" ||
-             n === "porkchop" || n === "chicken" || n === "mutton" || n === "potato" || n === "beetroot";
-    });
+    const hasFoodInInventory = bot.inventory.items().some((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
     const isStarvationDeadlock = hungerLevel === 0 && !hasFoodInInventory && !hasHostileNearby;
 
     // During daytime with no hostile mobs nearby, allow movement at HP≥2 (starvation deadlock prevention)

@@ -1,5 +1,5 @@
 import { botManager } from "../bot-manager/index.js";
-import { checkDangerNearby, canPickaxeHarvest, getRequiredPickaxeTier } from "../bot-manager/minecraft-utils.js";
+import { checkDangerNearby, canPickaxeHarvest, getRequiredPickaxeTier, EDIBLE_FOOD_NAMES } from "../bot-manager/minecraft-utils.js";
 import { registry } from "../tool-handler-registry.js";
 
 /**
@@ -103,12 +103,7 @@ export async function minecraft_gather_resources(
           const hunger = (botForEat as any).food ?? 20;
           const hp = botForEat.health ?? 20;
           if (hunger <= 6 || hp <= 10) {
-            const foodItems = botForEat.inventory.items().filter((fi: any) => {
-              const n = fi.name;
-              return n === "bread" || n === "cooked_beef" || n === "cooked_porkchop" || n === "cooked_chicken" ||
-                     n === "cooked_mutton" || n === "apple" || n === "golden_apple" || n === "carrot" ||
-                     n === "baked_potato" || n === "cooked_salmon" || n === "cooked_cod" || n === "cooked_rabbit";
-            });
+            const foodItems = botForEat.inventory.items().filter((fi: any) => EDIBLE_FOOD_NAMES.has(fi.name));
             if (foodItems.length > 0) {
               console.error(`[GatherResources] Auto-eat: hunger=${hunger}, HP=${hp.toFixed(1)}, eating ${foodItems[0].name}`);
               try {

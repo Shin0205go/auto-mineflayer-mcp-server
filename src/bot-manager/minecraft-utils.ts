@@ -59,6 +59,26 @@ export function isLogBlock(blockName: string): boolean {
   return blockName.includes("_log");
 }
 
+/**
+ * Comprehensive set of edible food item names for auto-eat checks.
+ * Used by moveTo, mc_navigate segments, minecraft_gather_resources, etc.
+ * Includes rotten_flesh as emergency food — bots frequently die with
+ * rotten_flesh in inventory because earlier hardcoded lists excluded it.
+ * Bug pattern: bot1/bot2/bot3 all had deaths where auto-eat couldn't find
+ * food despite rotten_flesh being in inventory.
+ */
+export const EDIBLE_FOOD_NAMES = new Set([
+  "bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton",
+  "cooked_rabbit", "cooked_cod", "cooked_salmon", "baked_potato", "golden_apple",
+  "golden_carrot", "apple", "melon_slice", "sweet_berries", "carrot", "potato",
+  "beetroot", "dried_kelp", "cookie", "pumpkin_pie", "mushroom_stew",
+  "rabbit_stew", "beetroot_soup", "suspicious_stew",
+  // Raw meats — edible but less effective
+  "beef", "porkchop", "chicken", "mutton", "rabbit", "cod", "salmon",
+  // Emergency food — better than starving
+  "rotten_flesh",
+]);
+
 /** Check if item is food (can be eaten) */
 export function isFoodItem(bot: Bot, itemName: string): boolean {
   // Check if item has food property in registry

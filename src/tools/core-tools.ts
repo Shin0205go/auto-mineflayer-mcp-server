@@ -9,7 +9,7 @@
  */
 
 import { botManager } from "../bot-manager/index.js";
-import { checkDangerNearby, isHostileMob } from "../bot-manager/minecraft-utils.js";
+import { checkDangerNearby, isHostileMob, EDIBLE_FOOD_NAMES } from "../bot-manager/minecraft-utils.js";
 import { setAgentType } from "../agent-state.js";
 import { registry } from "../tool-handler-registry.js";
 
@@ -583,6 +583,16 @@ export async function mc_farm(): Promise<string> {
                     // Found solid ground with 2 air blocks above = surface
                     if (block.name !== "air" && block.name !== "water" &&
                         above1.name === "air" && above2.name === "air") {
+                      // Skip positions at or below water level — bot can't reliably place
+                      // dirt on submerged rocks or cliff faces next to water.
+                      // Bot2 Bug: 17 consecutive "got air" failures placing dirt near water.
+                      // Bot3 Bug #20: dirt placement failed at water-adjacent positions.
+                      if (py <= waterPos.y) {
+                        // Only accept if block is already tillable (natural dirt near water is fine)
+                        if (!TILLABLE.has(block.name)) {
+                          continue; // skip non-tillable blocks at/below water level
+                        }
+                      }
                       // If already tillable, just use it
                       if (TILLABLE.has(block.name)) {
                         farmCoords.push({ x: px, y: py, z: pz });
@@ -1020,15 +1030,8 @@ export async function mc_navigate(
     const hunger = Math.round(((bot as any).food ?? 20) * 10) / 10;
 
     // Check if bot has any food in inventory
-    const navFoodNames = new Set([
-      "bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton",
-      "cooked_rabbit", "cooked_cod", "cooked_salmon", "baked_potato", "golden_apple",
-      "golden_carrot", "apple", "melon_slice", "sweet_berries", "carrot", "potato",
-      "beetroot", "dried_kelp", "cookie", "pumpkin_pie", "mushroom_stew",
-      "rabbit_stew", "beetroot_soup", "suspicious_stew", "rotten_flesh",
-    ]);
     const inv = botManager.getInventory(username);
-    const hasFood = inv.some(i => navFoodNames.has(i.name));
+    const hasFood = inv.some(i => EDIBLE_FOOD_NAMES.has(i.name));
 
     // BLOCK navigation when starving with no food — regardless of time of day.
     // Bot1 Session 44: hunger=0, navigated to find animals, fell into cave, drowned.
@@ -1195,14 +1198,7 @@ export async function mc_navigate(
             const segIsNight = segTime > 12541 || segTime < 100;
             // Check food availability mid-travel for smarter thresholds
             const segInv = botManager.getInventory(username);
-            const segFoodNames = new Set([
-              "bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton",
-              "cooked_rabbit", "cooked_cod", "cooked_salmon", "baked_potato", "golden_apple",
-              "golden_carrot", "apple", "melon_slice", "sweet_berries", "carrot", "potato",
-              "beetroot", "dried_kelp", "cookie", "pumpkin_pie", "mushroom_stew",
-              "rabbit_stew", "beetroot_soup", "suspicious_stew", "rotten_flesh",
-            ]);
-            const segHasFood = segInv.some(item => segFoodNames.has(item.name));
+            const segHasFood = segInv.some(item => EDIBLE_FOOD_NAMES.has(item.name));
             // Abort at night with low HP — use higher threshold when no food since HP can't regen.
             // Bot1 Session 28: HP=14/hunger=1, died during multi-segment night navigation.
             const nightHpThreshold = segHasFood ? 8 : 12;
@@ -1223,7 +1219,7 @@ export async function mc_navigate(
             // inventory was never consumed because each segment was < 30 blocks (moveTo
             // auto-eat threshold). Eating here prevents cumulative HP decay across segments.
             if (segHp < 14 && segHasFood) {
-              const segFoodItem = segBot.inventory.items().find((item: any) => segFoodNames.has(item.name));
+              const segFoodItem = segBot.inventory.items().find((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
               if (segFoodItem) {
                 try {
                   await segBot.equip(segFoodItem, "hand");
