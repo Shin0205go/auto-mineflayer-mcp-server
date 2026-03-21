@@ -289,6 +289,38 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         return;
       }
 
+      // SAFETY: Mid-navigation hostile mob detection — abort if HP is low and hostiles are closing in.
+      // Bot1 Sessions 27-44: 20+ deaths from mobs attacking during pathfinder movement at night.
+      // The pre-navigation REFUSED check in core-tools.ts only blocks when hostiles are already nearby,
+      // but mobs spawn/approach DURING travel. Short-distance (<50 block) navigation has no segment checks.
+      // This catches the gap: every 500ms, if it's night and HP is dropping with hostiles nearby, abort.
+      const navHp = bot.health ?? 20;
+      const navTime = bot.time?.timeOfDay ?? 0;
+      const navIsNight = navTime > 12541 || navTime < 100;
+      if (navIsNight && navHp <= 10) {
+        const nearHostiles: Array<{ name: string; dist: number }> = [];
+        for (const entity of Object.values(bot.entities)) {
+          if (!entity || !entity.position || entity === bot.entity) continue;
+          const eDist = entity.position.distanceTo(currentPos);
+          if (eDist > 16) continue;
+          const eName = entity.name?.toLowerCase() ?? "";
+          if (isHostileMob(bot, eName)) {
+            nearHostiles.push({ name: eName, dist: Math.round(eDist * 10) / 10 });
+          }
+        }
+        if (nearHostiles.length > 0) {
+          const closestThreat = nearHostiles.sort((a, b) => a.dist - b.dist)[0];
+          const threatList = nearHostiles.slice(0, 3).map(h => `${h.name}(${h.dist}m)`).join(", ");
+          console.error(`[MoveTo] NIGHT DANGER: HP=${navHp.toFixed(1)}, ${nearHostiles.length} hostile(s) nearby: ${threatList}. Aborting navigation.`);
+          finish({
+            success: false,
+            message: `Navigation aborted: HP=${Math.round(navHp*10)/10} at night with ${nearHostiles.length} hostile(s) nearby (${threatList}). Current position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee, build shelter, or wait for dawn.`,
+            stuckReason: "night_danger"
+          });
+          return;
+        }
+      }
+
       // Distance-based success check (use strict range=2 matching GoalNear, not loose <3)
       // Using <3 caused false success when bot starts within 3 blocks of target without moving
       if (currentDist < 2) {
