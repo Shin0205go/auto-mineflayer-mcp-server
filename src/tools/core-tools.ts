@@ -243,7 +243,20 @@ export async function mc_gather(
     }
   }
 
-  return await getHighLevel().minecraft_gather_resources(username, [{ name: block, count }], maxDistance);
+  // Global timeout: mc_gather should never take more than 120s total
+  // Prevents infinite hang when pathfinder can't reach blocks (e.g. in caves)
+  const GATHER_TIMEOUT_MS = 120000;
+  const gatherPromise = getHighLevel().minecraft_gather_resources(username, [{ name: block, count }], maxDistance);
+  const timeoutPromise = new Promise<string>((_, reject) =>
+    setTimeout(() => reject(new Error(`mc_gather timed out after ${GATHER_TIMEOUT_MS / 1000}s. Block "${block}" may be unreachable. Try moving to a different area first.`)), GATHER_TIMEOUT_MS)
+  );
+  try {
+    return await Promise.race([gatherPromise, timeoutPromise]);
+  } catch (e) {
+    // Stop pathfinder on timeout
+    try { botManager.getBot(username)?.pathfinder?.stop(); } catch (_) {}
+    return e instanceof Error ? e.message : String(e);
+  }
 }
 
 // ─── mc_craft ────────────────────────────────────────────────────────────────
