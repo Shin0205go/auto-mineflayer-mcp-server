@@ -1162,6 +1162,25 @@ export async function mc_navigate(
     }
   }
 
+  // Pre-navigation proactive eat: consume food before starting ANY navigation if HP < 18.
+  // Bot1 Sessions 28,30,35: HP dropped during travel but food in inventory was never consumed.
+  // The between-segment auto-eat only triggers for dist>50 multi-segment nav. Short-distance
+  // navigations (<=50 blocks) skip it entirely, so bot starts travel with low HP and dies
+  // to first mob hit. Eating BEFORE navigation maintains HP buffer for the entire journey.
+  if (bot) {
+    const preNavHp = bot.health ?? 20;
+    if (preNavHp < 18) {
+      const preNavFood = bot.inventory.items().find((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
+      if (preNavFood) {
+        try {
+          await bot.equip(preNavFood, "hand");
+          await bot.consume();
+          console.error(`[Navigate] Pre-nav auto-ate ${preNavFood.name} (HP: ${preNavHp.toFixed(1)} → ${bot.health?.toFixed(1)})`);
+        } catch (_) { /* ignore eat errors */ }
+      }
+    }
+  }
+
   // Navigate to entity
   if (args.target_entity) {
     // Use filtered findEntities to check existence — passing entityType applies
@@ -1404,6 +1423,41 @@ export async function mc_combat(
     const isPassiveFood = target ? passiveFoodMobs.some(p => target!.toLowerCase().includes(p)) : false;
     if (!isPassiveFood && combatHp < 6) {
       return `[REFUSED] HP too low for combat (${combatHp.toFixed(1)}/20). Hostile mobs can kill in 1-2 hits at this HP. Use mc_eat to heal first, or mc_flee to escape. If no food available, dig a 1x1x2 shelter hole and wait.`;
+    }
+  }
+
+  // Pre-combat creeper proximity check: refuse ALL combat when a creeper is within 8 blocks.
+  // Bot1 Sessions 24,27: called mc_combat(zombie) while creeper at 5-11 blocks. Combat movement
+  // brought bot near creeper, which exploded (up to 49 damage unarmored, lethal at any HP).
+  // The existing creeper check only applies to passive targets. Creepers are lethal during ANY
+  // combat because the bot moves toward its target, potentially closing distance to the creeper.
+  if (combatBot && target) {
+    for (const entity of Object.values(combatBot.entities)) {
+      if (!entity || !entity.position || entity === combatBot.entity) continue;
+      const eName = entity.name?.toLowerCase() ?? "";
+      if (eName !== "creeper") continue;
+      const creeperDist = entity.position.distanceTo(combatBot.entity.position);
+      if (creeperDist <= 8) {
+        return `[REFUSED] Creeper detected ${creeperDist.toFixed(1)} blocks away — too dangerous to engage ${target}. Creeper explosion deals up to 49 damage, lethal at any HP without blast protection armor. Use mc_flee first to escape the creeper, THEN engage ${target}.`;
+      }
+    }
+  }
+
+  // Pre-combat proactive eat: consume food before fighting if HP < 16.
+  // Bot1 Sessions 23,28,29: started combat at HP 10-14 with food in inventory, never ate,
+  // died during combat when flee threshold triggered too late. Eating before combat provides
+  // HP buffer that can mean the difference between surviving a hit and dying.
+  if (combatBot) {
+    const preCombatHp = combatBot.health ?? 20;
+    if (preCombatHp < 16) {
+      const preCombatFood = combatBot.inventory.items().find((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
+      if (preCombatFood) {
+        try {
+          await combatBot.equip(preCombatFood, "hand");
+          await combatBot.consume();
+          console.error(`[Combat] Pre-combat auto-ate ${preCombatFood.name} (HP: ${preCombatHp.toFixed(1)} → ${combatBot.health?.toFixed(1)})`);
+        } catch (_) { /* ignore eat errors */ }
+      }
     }
   }
 
