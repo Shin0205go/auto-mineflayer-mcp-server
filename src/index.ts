@@ -283,6 +283,17 @@ async function reloadModules(): Promise<string> {
 
 // Start the server
 async function main() {
+  // Start persistent viewer server if VIEWER=1
+  if (process.env.VIEWER === "1") {
+    const viewerPort = parseInt(process.env.VIEWER_PORT || "3007");
+    try {
+      const { startViewerServer } = await import("./viewer-server.js");
+      startViewerServer(viewerPort);
+    } catch (e) {
+      console.error(`[Main] Failed to start viewer server: ${e}`);
+    }
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Mineflayer MCP Server v2.0 running on stdio");

@@ -199,20 +199,47 @@ export async function mc_gather(
 ): Promise<string> {
   const username = botManager.requireSingleBot();
 
-  // Special case: gathering wheat when none nearby — auto-farm if bot has seeds + hoe
+  // Special case: wheat — only harvest mature crops (age >= 7), never auto-farm.
+  // Use mc_farm() explicitly to plant new crops. mc_gather('wheat') collects only.
   if (block === "wheat") {
-    const inv = botManager.getInventory(username);
-    const seeds = inv.find(i => i.name.includes("_seeds"));
-    const hasHoe = inv.some(i => i.name.includes("_hoe"));
-    // Check if there's actual wheat to gather first
     const bot = botManager.getBot(username);
-    const existingWheat = bot?.findBlock({
-      matching: (b: any) => b.name === "wheat",
-      maxDistance: maxDistance,
-    });
-    if (!existingWheat && seeds && hasHoe) {
-      // No wheat nearby — auto-farm using mc_farm sequence
-      return await mc_farm();
+    if (bot) {
+      const { Vec3 } = await import("vec3");
+      const matureWheat = bot.findBlocks({
+        matching: (b: any) => {
+          if (b.name !== "wheat") return false;
+          const props = b.getProperties ? b.getProperties() : null;
+          const age = props?.age ?? b.metadata ?? 0;
+          return age >= 7;
+        },
+        maxDistance: maxDistance,
+        count: count * 2,
+      });
+      if (matureWheat.length === 0) {
+        return `No mature wheat found within ${maxDistance} blocks. Wheat crops need more time to grow (age 7/7). Use mc_farm() to plant new seeds.`;
+      }
+      // Harvest the mature wheat blocks directly
+      let gathered = 0;
+      const logs: string[] = [];
+      for (const pos of matureWheat) {
+        if (gathered >= count) break;
+        try {
+          await botManager.moveTo(username, pos.x, pos.y, pos.z);
+          const wb = bot.blockAt(pos);
+          if (wb && wb.name === "wheat") {
+            await bot.dig(wb);
+            await new Promise(r => setTimeout(r, 300));
+            await botManager.collectNearbyItems(username);
+            gathered++;
+            logs.push(`Harvested wheat at (${pos.x},${pos.y},${pos.z})`);
+          }
+        } catch (e) {
+          logs.push(`Failed at (${pos.x},${pos.y},${pos.z}): ${e}`);
+        }
+      }
+      const inv = botManager.getInventory(username);
+      const wheatInInv = inv.find(i => i.name === "wheat");
+      return `Gathered ${gathered} wheat. ${logs.join("; ")}. Wheat in inventory: ${wheatInInv?.count ?? 0}`;
     }
   }
 
@@ -970,19 +997,15 @@ export async function mc_combat(
   }
 
   // Attack target
+  // Note: fight() and attack() both call collectNearbyItems internally after the kill.
+  // Do NOT call collectNearbyItems again here — it would run after items are already
+  // collected and return "No items nearby", creating misleading output.
   if (target) {
-    const result = await botManager.fight(username, target, fleeAtHp);
-    // Wait for drops to spawn (server needs time to create item entities)
-    await new Promise(r => setTimeout(r, 1500));
-    const collected = await botManager.collectNearbyItems(username);
-    return collected ? `${result}\nCollected: ${collected}` : result;
+    return await botManager.fight(username, target, fleeAtHp);
   }
 
   // Attack nearest hostile
-  const result = await botManager.attack(username);
-  await new Promise(r => setTimeout(r, 1500));
-  const collected = await botManager.collectNearbyItems(username);
-  return collected ? `${result}\nCollected: ${collected}` : result;
+  return await botManager.attack(username);
 }
 
 // ─── mc_drop ─────────────────────────────────────────────────────────────────

@@ -464,8 +464,9 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
           });
         }
         // Endermen teleport before dying — use wider search and longer wait
+        // 800ms gives the server time to spawn drop item entities (was 500ms, too short)
         const isEnderman = target.name === "enderman";
-        await delay(isEnderman ? 1000 : 500);
+        await delay(isEnderman ? 1000 : 800);
         let collectionResult = "Collection not attempted";
         try {
           collectionResult = await collectNearbyItems(managed, isEnderman ? { searchRadius: 16, waitRetries: 12 } : undefined);
@@ -716,8 +717,9 @@ export async function fight(
         });
       }
       // Endermen teleport before dying — use wider search and longer wait
+      // 800ms gives the server time to spawn drop item entities (was 500ms, too short)
       const isEnderman = targetName === "enderman";
-      await delay(isEnderman ? 1000 : 500);
+      await delay(isEnderman ? 1000 : 800);
       let collectionResult = "Collection not attempted";
       try {
         collectionResult = await collectNearbyItems(managed, isEnderman ? { searchRadius: 16, waitRetries: 12 } : undefined);

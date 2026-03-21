@@ -18,7 +18,8 @@ mcpServers:
         MC_HOST: "localhost"
         MC_PORT: "25565"
         BOT_USERNAME: "Claude1"
-        VIEWER: "0"
+        VIEWER: "1"
+        VIEWER_PORT: "3007"
 hooks:
   PreToolUse:
     - matcher: "Bash"

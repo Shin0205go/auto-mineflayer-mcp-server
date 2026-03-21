@@ -128,6 +128,12 @@ export async function openChest(
     }
   }
 
+  // Close any currently open window to prevent "in use" errors on reconnect
+  if (bot.currentWindow) {
+    bot.closeWindow(bot.currentWindow);
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+
   // Wait a moment to prevent timing issues
   await new Promise(resolve => setTimeout(resolve, 500));
 

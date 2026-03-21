@@ -223,11 +223,14 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
         // Final wait for pickup to trigger
         await delay(300);
       } else {
-        // Use pathfinder for longer distances
+        // Use pathfinder for longer distances.
+        // Use Math.round (not Math.floor) for Y — items float at fractional Y values
+        // (e.g. 107.125 above grass). Math.floor(107.125) = 107 which is inside the
+        // ground block, causing pathfinder to fail. Math.round keeps us on the surface.
         const goal = new goals.GoalNear(
-          Math.floor(itemPos.x),
-          Math.floor(itemPos.y),
-          Math.floor(itemPos.z),
+          Math.round(itemPos.x),
+          Math.round(itemPos.y),
+          Math.round(itemPos.z),
           1
         );
         bot.pathfinder.setGoal(goal);

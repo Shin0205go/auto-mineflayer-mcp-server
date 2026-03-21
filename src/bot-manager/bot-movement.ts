@@ -308,8 +308,8 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         }
         const totalFall = fallStartY - cy;
 
-        // Stop immediately if cumulative fall exceeds 3 blocks
-        if (totalFall > 3) {
+        // Stop immediately if cumulative fall exceeds 2 blocks (tightened from 3 — fall damage starts at 4 blocks, need margin for detection lag)
+        if (totalFall > 2) {
           console.error(`[MoveTo] PHYSICS FALL: ${totalFall.toFixed(1)} blocks cumulative (started at Y=${fallStartY.toFixed(1)}, now Y=${cy.toFixed(1)}). Emergency stop!`);
           bot.pathfinder.stop();
           bot.clearControlStates();
@@ -331,12 +331,13 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
     bot.on("physicsTick", onPhysicsTick);
     cleanupCallbacks.push(() => bot.removeListener("physicsTick", onPhysicsTick));
 
-    // SAFETY: Enforce maxDropDown=1 immediately before setting goal.
-    // Although bot-core.ts sets this at initialization, it can be silently overridden
+    // SAFETY: Enforce safe movement settings immediately before setting goal.
+    // Although bot-core.ts sets these at initialization, they can be silently overridden
     // by mineflayer-pathfinder internals or dimension-change handlers between calls.
-    // Setting it here guarantees it is always active for this navigation call.
+    // Setting them here guarantees they are always active for this navigation call.
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.maxDropDown = 1;
+      bot.pathfinder.movements.allowFreeMotion = false; // Prevent cliff falls from skipped path nodes
     }
 
     // Set the goal AFTER checkInterval is initialized (see comment above)
@@ -617,7 +618,7 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   }
 
   // SAFETY CHECK: If target is significantly lower, prevent fall damage
-  // Pathfinder handles moderate height changes with digging/towers (maxDropDown=4)
+  // Pathfinder handles moderate height changes with digging/towers (maxDropDown=1, enforced in moveToBasic)
   // Only block extreme drops (>50 blocks) where pathfinder would likely fail or time out
   // EXCEPTION: Allow if target is water (no fall damage in water)
   const currentY = bot.entity.position.y;

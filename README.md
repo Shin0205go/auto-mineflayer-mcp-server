@@ -1,462 +1,171 @@
 # Mineflayer MCP Server
 
-**Claude AIエージェントがMinecraftを自律的にプレイするためのスキルベースMCPサーバー**
+**Claude AIエージェントがMinecraftを自律プレイするMCPサーバー**
 
-```
-    ┌────────────────────────┐
-    │    🤖 Claude Bot       │  ← スキルベース自律プレイ
-    │                        │
-    │   📦 resource-gathering│  ← 自動リソース収集
-    │   🏠 building          │  ← 構造物建築
-    │   ⚙️ crafting-chain    │  ← 複数段階クラフト
-    │   💚 survival          │  ← サバイバル最適化
-    │   🗺️ exploration       │  ← エリア探索
-    │   🧠 自己改善          │  ← 行動最適化
-    └────────────────────────┘
-```
-
-## 機能
-
-### スキルベースアーキテクチャ
-- **Game Agent**: 30個の厳選MCPツール + スキルシステムで自律プレイ
-- **Dev Agent**: 全ツールアクセス + ソースコード修正 + 設定チューニング
-- **エージェント分離**: Game Agentは低レベル操作を知らず、スキル経由でのみアクセス
-
-### 高レベルスキル（新規）
-- **resource-gathering** - 自動リソース収集（木材、石、鉱石）
-- **building** - シェルター・壁・プラットフォーム・塔の建築
-- **crafting-chain** - 複数段階クラフト自動化（素材収集含む）
-- **survival** - サバイバル最適化（食料・シェルター・ツール）
-- **exploration** - スパイラルパターン探索（バイオーム・村・資源）
-
-### 既存スキル
-- **iron-mining** - 鉄鉱石採掘→精錬→ツール作成
-- **diamond-mining** - ダイヤモンド探索・採掘
-- **bed-crafting** - 羊探索→羊毛収集→ベッド作成
-- **nether-gate** - 黒曜石収集→ポータル建設
-
-### 自己改善システム
-- **ソースコード修正** - ツール失敗を検知→Claude SDKで修正→ビルド→再起動
-- **行動チューニング** - ループ結果を分析→性格/優先度/閾値を調整
-- **進化履歴** - 設定変更の履歴を自動記録
-
-### マルチエージェント
-- **複数ボット** - Claude, Claude2を同時起動可能
-- **エージェント掲示板** - 複数AI間のリアルタイム連携
+Mineflayer + MCPプロトコルで、Claude Codeから直接Minecraftを操作。
+`minecraft-bugfix-agent`による自律プレイ＋リアルタイムバグ修正。
 
 ## セットアップ
-
-### 1. インストール
 
 ```bash
 npm install
 npm run build
 ```
 
-### 2. 環境変数
+## 起動
 
 ```bash
-cp .env.example .env
-# MC_HOST, MC_PORT, ANTHROPIC_API_KEY を設定
-```
-
-### 3. Minecraftサーバー準備
-
-- Java Edition サーバーを起動
-- **オペレーター権限が必要**（`/op Claude`）
-- シングルプレイの「LANに公開」でもOK
-
-## 起動方法
-
-### 推奨: 完全自律改善ループ
-
-**Claude Codeベースの完全自律システム** - プレイ・デバッグ・修正・コミット・プッシュを無限ループで自動実行
-
-```bash
-# MCP WSサーバーを起動（別ターミナル）
-npm run start:mcp-ws
-
-# 完全自律改善ループ（無限実行）
-./scripts/self-improve-minecraft.sh
-```
-
-**動作フロー:**
-1. **プレイ**: Claude Code（sonnetモデル）が5分間Minecraftをプレイ
-2. **エラー検出**: ツール失敗やバグを自動検出
-3. **ソースコード修正**: エラー原因を分析してTypeScriptコードを修正
-4. **ビルド**: `npm run build` で自動ビルド
-5. **コミット**: 修正内容をGitに自動コミット
-6. **プッシュ**: リモートリポジトリに自動プッシュ
-7. **次のループ**: 前回のログを含めて再度プレイ開始
-
-**特徴:**
-- ✅ 完全自律（人間の介入不要）
-- ✅ 無限ループ（Ctrl+Cで停止）
-- ✅ ループごとに10分タイムアウト
-- ✅ 自動Git管理（コミット+プッシュ）
-- ✅ ログ自動保存（`agent_logs/loop_*.log`）
-- ✅ 前回のログを次のループに引き継ぎ
-
-**実績:**
-- 24時間で75+ループ完了
-- 20+件の自動バグフィックスコミット
-- インベントリ管理、アイテム収集、クラフトタイミングなどの改善を自動実現
-
-### 代替: Dev Agent + Game Agent
-
-MCP経由のエージェント連携システム
-
-```bash
-# MCP WSサーバーを起動（別ターミナル）
-npm run start:mcp-ws
-
-# Dev Agent + Game Agent（自己改善モード）
-npm run start:self-improve
-```
-
-Dev AgentがGame Agentを管理し、ツール失敗時にソースコード修正、行動問題時に設定チューニングを自動実行。
-
-### 個別起動
-
-```bash
-# Game Agent単体
-npm run start:game-agent
-
-# Dev Agent単体（Game Agent管理なし）
-npm run start:dev-agent
-
-# 掲示板サーバー
-npm run board
-
-# MCPサーバー（stdio）- Claude Desktop用
+# MCPサーバー起動（stdio）- Claude Code / Claude Desktop用
 npm start
+
+# 開発モード（ウォッチ）
+npm run dev
 ```
 
-### マルチエージェント
+## アーキテクチャ: 3-Tier Tool System
 
-```bash
-# 2体目のClaude（別名）
-BOT_USERNAME=Claude2 MC_PORT=58896 npm run start:game-agent
-```
-
-## アーキテクチャ
-
-### エージェントタイプ別ツールアクセス
+48+ の低レベルツールを11個のコアツールに統合。
 
 ```
-┌─────────────────┐                  ┌──────────────────┐
-│   Game Agent    │                  │    Dev Agent     │
-│                 │                  │                  │
-│ MCPツール30個   │                  │ 全ツール30個     │
-│ ├ 接続・状態    │                  │ (制限なし)       │
-│ ├ 高レベル操作  │                  │                  │
-│ ├ 記憶・学習    │                  │ デバッグ・開発用 │
-│ └ スキル実行    │                  │                  │
-│                 │                  │                  │
-│ 低レベル操作    │                  │ 低レベル操作     │
-│   ↓             │                  │   ↓              │
-│ スキル経由のみ  │                  │ 直接アクセス不可 │
-│                 │                  │ (内部関数のみ)   │
-└─────────────────┘                  └──────────────────┘
-```
-
-### 実装階層
-
-```
-┌──────────────────────┐
-│  Game Agent (30 MCP) │  ← MCPツール30個
-└──────────┬───────────┘
+┌─────────────────────────┐
+│  Claude Code / Agent    │  ← minecraft-bugfix-agent
+└──────────┬──────────────┘
+           │ MCP (stdio)
+┌──────────▼──────────────┐
+│  Tier 1: Core Tools     │  ← 10 + search_tools（常時表示）
+│  Tier 2: Situational    │  ← 条件付き表示（夜間、低HP等）
+│  Tier 3: Legacy         │  ← search_tools経由で検索可能
+└──────────┬──────────────┘
            │
-┌──────────▼───────────┐
-│  Skills (SKILL.md)   │  ← スキル知識
-└──────────┬───────────┘
-           │
-┌──────────▼───────────┐
-│  High-Level Tools    │  ← 5個の高レベルツール
-│  (high-level-actions)│     (minecraft_gather_resources等)
-└──────────┬───────────┘
-           │
-┌──────────▼───────────┐
-│  Internal Functions  │  ← 80個の内部関数
-│  (非MCP)             │     (dig, place, craft等)
-└──────────┬───────────┘
-           │
-┌──────────▼───────────┐
-│  Bot Manager         │  ← 11モジュール
-│  (Mineflayer API)    │
-└──────────────────────┘
+┌──────────▼──────────────┐
+│  Bot Manager (11モジュール) │  ← Mineflayer API
+│  bot-core / bot-movement│
+│  bot-blocks / bot-items │
+│  bot-crafting / etc.    │
+└─────────────────────────┘
 ```
 
-## Game Agent用MCPツール（30個）
+### Tier 1: コアツール（常時表示）
 
-### 接続・状態（6個）
-- `minecraft_connect` - サーバーに接続（agentType指定）
-- `minecraft_disconnect` - 切断
-- `minecraft_get_state` - **統合状態取得**（位置、HP、空腹、インベントリ、周囲、エンティティ、バイオームを一括取得）
-- `minecraft_chat` - チャット送信
-- `minecraft_get_chat_messages` - チャット履歴
-- `subscribe_events` - イベント購読
+| ツール | 機能 |
+|--------|------|
+| `mc_status` | HP・満腹度・位置・インベントリ・脅威・近くのリソースを一括取得 |
+| `mc_gather` | ブロックの探索・移動・採掘・回収（木材・石・鉱石） |
+| `mc_craft` | 依存関係自動解決クラフト（autoGather対応） |
+| `mc_build` | プリセット建築（シェルター・壁・塔） |
+| `mc_navigate` | 座標・ブロック・エンティティへの移動 |
+| `mc_combat` | 戦闘（最適武器自動装備・ドロップ回収） |
+| `mc_eat` | 食事（生肉は近くのかまどで自動調理） |
+| `mc_store` | チェスト操作（一覧・預入・引出・一括保管） |
+| `mc_chat` | チャット送受信 |
+| `mc_connect` | サーバー接続・切断 |
+| `search_tools` | Tier 3ツールの検索・発見 |
 
-### 高レベル操作（5個）
-- `minecraft_gather_resources` - 自動リソース収集
-- `minecraft_build_structure` - 建築
-- `minecraft_craft_chain` - 複数段階クラフト
-- `minecraft_survival_routine` - サバイバル最適化
-- `minecraft_explore_area` - エリア探索
+### Tier 2: 条件付きツール
 
-### 記憶・学習（5個）
-- `save_memory` - 重要情報を記憶
-- `recall_memory` - 記憶を参照
-- `log_experience` - 経験を記録
-- `get_recent_experiences` - 経験取得
-- `list_agent_skills` - 利用可能なスキル一覧
-- `get_agent_skill` - スキル詳細取得
+| ツール | 表示条件 |
+|--------|----------|
+| `mc_sleep` | 夜間（timeOfDay > 12541） |
+| `mc_flee` | HP < 10 |
+| `mc_death_recovery` | リスポーン後 |
 
-### エージェント連携（4個）
-- `agent_board_read` - 掲示板を読む
-- `agent_board_write` - 掲示板に書く
-- `agent_board_wait` - 新着メッセージ待機
-- `agent_board_clear` - クリア
+### Tier 3: レガシーツール
 
-### タスク管理（4個）
-- `task_create`, `task_list`, `task_get`, `task_update`
+`search_tools` で検索可能。Tier 1で対応できない場合の最終手段。
 
-### Dev Agent専用（6個）
-- `dev_subscribe` - ツールログ購読
-- `dev_get_tool_logs` - ログ取得
-- `dev_get_failure_summary` - 失敗サマリー
-- `dev_clear_logs` - ログクリア
-- `dev_get_config` - 設定取得
-- `dev_save_config` - 設定保存
-- 等...
+## minecraft-bugfix-agent
 
-**設計原則**: 低レベル操作（dig, place, move_to, craft等）はMCPツールとして公開されません。すべて内部関数として実装され、高レベルツール経由でのみ使用されます。
+Claude Codeのカスタムエージェント。自律的にMinecraftをプレイしながら、遭遇したバグをリアルタイムで修正。
 
-## スキル使用例
+### 設定
 
-### 初日のサバイバル
+`.claude/agents/minecraft-bugfix-agent.md` で定義:
+- **モデル**: sonnet（高速）
+- **最大ターン**: 30
+- **権限**: dontAsk（自律操作）
+- **MCPサーバー**: mineflayer（stdio経由、プロキシ使用）
+
+### 使い方
 
 ```
-1. minecraft_connect { username: "Claude", agentType: "game" }
-2. minecraft_get_state  → 全状態を一括取得
-3. get_agent_skill { skill_name: "survival" }
-4. survival スキル実行 (priority: "auto")
-   → 自動で食料確保 → ツール作成 → シェルター建築
+# Claude Codeで起動
+> minecraft-bugfix-agentを起動してPhase 2を進めて
+
+# またはcronで自動監視
+> エージェントの状態を10分ごとに確認して、完了したら再起動
 ```
 
-### リソース収集
+## マルチボット協調
 
-```
-1. minecraft_get_state  → 現在状態確認
-2. get_agent_skill { skill_name: "resource-gathering" }
-3. resource-gathering スキル実行
-   items: [{ name: "oak_log", count: 20 }]
-   → 自動で木を探索・伐採・回収
-```
+Claude1（リーダー）+ Claude2〜7（フォロワー）。最終目標: エンダードラゴン討伐。
 
-### 建築
+### フェーズ
 
-```
-1. minecraft_get_state  → インベントリ確認
-2. get_agent_skill { skill_name: "building" }
-3. building スキル実行
-   type: "shelter", size: "medium"
-   → 地面整地 → 材料確認 → 自動建築
-```
+| Phase | 目標 | 完了条件 |
+|-------|------|----------|
+| 1 | 拠点確立 | 作業台・かまど・チェスト3個・シェルター |
+| 2 | 食料安定化 | 畑or牧場、チェストに食料20個以上 |
+| 3 | 石ツール | 全員が石ピッケル・斧・剣 |
+| 4 | 鉄装備 | 全員が鉄ピッケル+鉄の剣 |
+| 5 | ダイヤ | エンチャント台設置 |
+| 6 | ネザー | ブレイズロッド7本+エンダーパール12個 |
+| 7 | エンド要塞 | ポータル起動 |
+| 8 | 討伐 | エンダードラゴン撃破 |
 
-## 自己改善の仕組み
-
-### 完全自律改善ループ（推奨）
-
-**scripts/self-improve-minecraft.sh** - Claude Codeによる完全自律システム
-
-```
-┌─────────────────────────────────────────┐
-│  Loop #1 (commit: abc123)               │
-│  ┌───────────────────────────────────┐  │
-│  │ 1. Minecraftプレイ（5分間）       │  │
-│  │    - サバイバル                   │  │
-│  │    - リソース収集                 │  │
-│  │    - エラー発生？                 │  │
-│  └───────────────────────────────────┘  │
-│               ↓                         │
-│  ┌───────────────────────────────────┐  │
-│  │ 2. エラー分析                     │  │
-│  │    - ソースコード読込             │  │
-│  │    - 原因特定                     │  │
-│  └───────────────────────────────────┘  │
-│               ↓                         │
-│  ┌───────────────────────────────────┐  │
-│  │ 3. コード修正                     │  │
-│  │    - Editツールで修正             │  │
-│  │    - npm run build                │  │
-│  └───────────────────────────────────┘  │
-│               ↓                         │
-│  ┌───────────────────────────────────┐  │
-│  │ 4. Git管理                        │  │
-│  │    - git commit                   │  │
-│  │    - git push                     │  │
-│  └───────────────────────────────────┘  │
-└─────────────────────────────────────────┘
-               ↓
-┌─────────────────────────────────────────┐
-│  Loop #2 (commit: def456)               │
-│  - 前回のログを含めて再実行             │
-│  - 修正済みコードでプレイ               │
-└─────────────────────────────────────────┘
-               ↓
-            無限ループ...
-```
-
-**技術詳細:**
-- **実行**: `cat prompt.md | claude --dangerously-skip-permissions --print --model sonnet`
-- **タイムアウト**: 10分（macOS互換の手動実装）
-- **ログ**: `agent_logs/loop_${N}_${COMMIT}_${TIMESTAMP}.log`
-- **Git検出**: コミットハッシュ比較（`git diff --quiet`は使わない）
-- **プッシュ**: 新コミット検出時に自動実行
-- **前回ログ**: 最新100行をプロンプトに含める
-
-**実行コマンド:**
-```bash
-./scripts/self-improve-minecraft.sh  # 無限ループ（Ctrl+Cで停止）
-```
-
-**ログ確認:**
-```bash
-# 最新ログを表示
-tail -f agent_logs/loop_*.log | tail -1
-
-# 統計確認
-ls -l agent_logs/
-```
-
-### Dev Agent方式（代替）
-
-**src/agent/dev-agent.ts** - MCP経由のエージェント連携
-
-#### 1. ソースコード修正
-
-```
-ツール失敗（3件以上）
-  ↓
-Dev Agentが失敗パターン分析
-  ↓
-Claude SDK Editツールでソースコード修正
-  ↓
-TypeScript構文チェック
-  ↓
-npm run build
-  ↓
-Game Agent再起動
-```
-
-#### 2. 行動チューニング
-
-```
-Game Agentループ完了（5回 or 3分）
-  ↓
-ループ結果をMCP経由で送信
-  ↓
-Dev Agentが行動分析
-  ↓
-learning/agent-config.json更新
-  ↓
-Game Agent次ループで設定リロード
-```
-
-## ディレクトリ構造
+## 主要ファイル
 
 ```
 src/
-├── index.ts              # MCPサーバー (stdio)
-├── mcp-ws-server.ts      # MCPサーバー (WebSocket) + ツールフィルタリング
-├── bot-manager/          # Mineflayerボット管理（11モジュール）
-│   ├── index.ts          # 統合エクスポート
-│   ├── bot-core.ts       # 接続・基本機能
-│   ├── bot-info.ts       # 情報取得
-│   ├── bot-movement.ts   # 移動・探索
-│   ├── bot-blocks.ts     # ブロック操作
-│   ├── bot-crafting.ts   # クラフト・精錬
-│   ├── bot-items.ts      # アイテム管理
-│   ├── bot-storage.ts    # チェスト操作
-│   ├── bot-survival.ts   # 戦闘・生存
-│   ├── minecraft-utils.ts# ヘルパー関数
-│   └── types.ts          # 型定義
-├── tools/                # MCPツール実装
-│   ├── state.ts          # 統合状態取得（NEW）
-│   ├── high-level-actions.ts  # 高レベル操作（5個）
-│   ├── connection.ts     # 接続・切断（内部関数）
-│   ├── movement.ts       # 移動（内部関数）
-│   ├── environment.ts    # 環境認識（内部関数）
-│   ├── building.ts       # 建築（内部関数）
-│   ├── crafting.ts       # クラフト（内部関数）
-│   ├── combat.ts         # 戦闘（内部関数）
-│   ├── coordination.ts   # 掲示板
-│   └── learning.ts       # 学習・記憶
-├── agent/                # Claudeエージェント
-│   ├── claude-agent.ts   # Game Agent（ゲームプレイ）
-│   ├── dev-agent.ts      # Dev Agent（修正 + チューニング）
-│   ├── claude-client.ts  # Claude SDK クライアント
-│   └── mcp-ws-transport.ts
-└── types/
-    ├── tool-log.ts       # ツール実行ログ型
-    └── agent-config.ts   # エージェント設定型
+├── index.ts                # MCPサーバー（stdio）+ ルーティング
+├── mcp-proxy.ts            # エージェント用プロキシ
+├── viewer-server.ts        # Webビューア（port 3007）
+├── tool-filters.ts         # 3-tier フィルタリング
+├── tool-metadata.ts        # search_tools用タグ
+├── bot-manager/            # Mineflayerボット管理
+│   ├── index.ts            # 統合BotManager
+│   ├── bot-core.ts         # 接続・pathfinder設定
+│   ├── bot-movement.ts     # 移動・落下検知・flee
+│   ├── bot-blocks.ts       # ブロック操作
+│   ├── bot-crafting.ts     # クラフト・精錬
+│   ├── bot-items.ts        # アイテム管理・装備
+│   ├── bot-storage.ts      # チェスト操作
+│   ├── bot-survival.ts     # 戦闘・食事・リスポーン
+│   ├── minecraft-utils.ts  # ヘルパー
+│   └── types.ts            # 型定義
+└── tools/
+    ├── core-tools.ts       # Tier 1 ツール実装
+    ├── core-tools-mcp.ts   # MCP スキーマ定義
+    └── high-level-actions.ts # 高レベルアクション
 
-.claude/skills/           # スキル定義
-├── resource-gathering/   # 自動リソース収集
-├── building/             # 建築
-├── crafting-chain/       # 複数段階クラフト
-├── survival/             # サバイバル最適化
-├── exploration/          # エリア探索
-├── iron-mining/          # 鉄採掘
-├── diamond-mining/       # ダイヤ採掘
-├── bed-crafting/         # ベッド作成
-└── nether-gate/          # ネザーポータル
+.claude/
+├── agents/
+│   └── minecraft-bugfix-agent.md  # 自律プレイエージェント定義
+├── skills/                 # スキルプロトコル（.md）
+├── skills-compact/         # コンパクト版スキル
+└── hooks/                  # エージェント用フック
+
+bug-issues/                 # 死亡バグ記録
 ```
 
 ## 環境変数
 
 ```bash
-# Minecraft接続
-MC_HOST=localhost
-MC_PORT=25565
-BOT_USERNAME=Claude
-
-# MCP WebSocket
-MCP_WS_URL=ws://localhost:8765
-
-# Dev Agent
-MANAGE_GAME_AGENT=true  # Dev AgentがGame Agentを管理
-
-# Claude API
-ANTHROPIC_API_KEY=sk-...
-CLAUDE_MODEL=opus  # dev-agentのモデル（opus推奨）
+MC_HOST=localhost       # Minecraftサーバーホスト
+MC_PORT=25565           # Minecraftサーバーポート
+BOT_USERNAME=Claude1    # ボット名
+AGENT_TYPE=game         # エージェントタイプ（game/dev）
+VIEWER=1                # Webビューア有効化
+VIEWER_PORT=3007        # ビューアポート
 ```
 
-## デザイン原則
+## 安全機構
 
-### 1. スキルベース設計
-- 複雑な操作はスキルに集約
-- Game Agentは低レベル実装を知らない
-- 拡張性・保守性の向上
-
-### 2. エージェント分離
-- Game Agent: ゲームプレイに特化（30ツール）
-- Dev Agent: デバッグ・開発用（同じ30ツール、制限なし）
-- 役割に応じた最適なツールセット
-
-### 3. 階層化アーキテクチャ
-- MCPツール（30個） → スキル → 高レベルツール（5個） → 内部関数（80個） → Bot Manager（11モジュール）
-- 明確な責任分離
-
-### 4. 統合API
-- `minecraft_get_state` で全状態を一括取得
-- 効率的で簡潔なAPI設計
-
-### 5. 自己改善
-- ソースコード修正で技術的問題を解決
-- 設定チューニングで行動最適化
-- 完全自動化されたフィードバックループ
+- **maxDropDown=1**: パスファインダーの最大落下を1ブロックに制限
+- **allowFreeMotion=false**: 中間ノードスキップを禁止（崖落下防止）
+- **physicsTick落下検知**: 累積2ブロック以上の落下で即時停止
+- **HP安全チェック**: 低HPでの長距離移動をブロック
+- **ポータル回避**: ネザー/エンドポータルブロックを自動回避
+- **溶岩回避**: 溶岩ブロックをパスファインダーで回避
 
 ## ライセンス
 

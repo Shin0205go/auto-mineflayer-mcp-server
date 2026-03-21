@@ -165,10 +165,29 @@ export async function minecraft_gather_resources(
           continue; // Skip this block, try finding another reachable one
         }
 
-        // Move to the block
-        const moveResult = await botManager.moveTo(username, x, y, z);
+        // Move to the block (for crops like wheat, move to adjacent block since we can't stand on farmland)
+        const cropBlocks = ["wheat", "carrots", "potatoes", "beetroots", "sweet_berry_bush", "kelp", "kelp_plant"];
+        const isCrop = cropBlocks.includes(blockNameToMine);
+        let moveResult: string;
+        if (isCrop) {
+          // Move near the crop (1 block offset), not onto it
+          moveResult = await botManager.moveTo(username, x + 1, y, z);
+          if (!moveResult.includes("Reached") && !moveResult.includes("Moved")) {
+            // Try other sides
+            moveResult = await botManager.moveTo(username, x - 1, y, z);
+          }
+          if (!moveResult.includes("Reached") && !moveResult.includes("Moved")) {
+            moveResult = await botManager.moveTo(username, x, y, z + 1);
+          }
+          if (!moveResult.includes("Reached") && !moveResult.includes("Moved")) {
+            moveResult = await botManager.moveTo(username, x, y, z - 1);
+          }
+        } else {
+          moveResult = await botManager.moveTo(username, x, y, z);
+        }
         if (!moveResult.includes("Reached") && !moveResult.includes("Moved")) {
           console.error(`[GatherResources] Move failed: ${moveResult}`);
+          consecutiveFailures++;
           continue; // Try finding another block
         }
 

@@ -1,3 +1,58 @@
+## [2026-03-21] Bug: Claude1 slain by Zombie - Session 23
+
+- **Cause**: "Claude1 was slain by Zombie" — Bot was at HP 0.6 with hunger 8, multiple zombies nearby after flee was too slow. mc_flee triggered but death occurred before escape completed.
+- **Location**: Around (-118, 70, -59) old_growth_birch_forest at night.
+- **Coordinates**: Death around (-118, 70, -59). Respawned at (-6, 114, -11).
+- **Last Actions**: mc_combat(zombie, flee_at_hp=4) → fled at HP 3.1 → status showed 0.6 HP → mc_flee(30) → died during flee.
+- **Fix Applied**: None yet. Root cause: flee_at_hp=4 threshold too low; zombie combat at critically low HP. flee_at_hp should be higher (6+) when starting HP is already low. Also: item collection bug — zombies defeated but no rotten_flesh dropped.
+- **Status**: Recorded. Lesson: never engage zombies at night when HP < 7. flee_at_hp must be set relative to current HP, not absolute.
+
+---
+
+## [2026-03-21] Bug: Claude1 shot by Skeleton while pillaring - Session 22
+
+- **Cause**: "Claude1 was shot by Skeleton" — Bot was at HP 3.1 with hunger 0, tried to pillar up 15 blocks to reach base. Was shot by skeleton while exposed during pillar climb at night.
+- **Location**: Around (19, 72, -40) birch_forest, pillaring up.
+- **Coordinates**: Death around (19, 72-100, -40). Respawned at (21, 102, -19).
+- **Last Actions**: mc_flee (skeleton), mc_combat(sheep) - no sheep found, minecraft_pillar_up(15) → killed by skeleton.
+- **Fix Applied**: None. Root cause: attempted to pillar up at night while HP was critically low (3.1). Should have prioritized shelter/hiding instead of climbing.
+- **Status**: Recorded. Lesson: with HP < 5 at night, do NOT pillar up. Find indoor shelter or dig into ground.
+
+---
+
+## [2026-03-21] Bug: Claude1 doomed to fall by Skeleton - Session 21b
+
+- **Cause**: "Claude1 was doomed to fall by Skeleton" — Skeleton knockback caused fatal fall. Occurred during navigation at night while trying to return to base after spider death.
+- **Location**: Around (-3, 68, -10) birch_forest during mc_navigate to chest at (-1, 88, -2).
+- **Coordinates**: Was at (-3, 68, -10), respawned at (11, 108, 1).
+- **Last Actions**: mc_navigate(x=-1, y=88, z=-2) to return to chest. Skeleton knockback caused fall. This is the 2nd consecutive death from night mobs.
+- **Fix Applied**: None. Root cause: navigating at night in open terrain. Must NOT navigate at night. Must build emergency shelter when night falls.
+- **Status**: Recorded. Lesson: when night arrives, stop all navigation and build immediate shelter.
+
+---
+
+## [2026-03-21] Bug: Claude1 slain by Spider during navigation - Session 21
+
+- **Cause**: "Claude1 was slain by Spider" — Bot was navigating toward coordinates (-150 Z) at midnight when killed by a spider. Bot was navigating at night with multiple threats nearby (enderman, zombie, skeleton). Spider attack likely happened during movement through dark terrain.
+- **Location**: Navigation through dark terrain at night without checking threats first.
+- **Coordinates**: Death around (-6, 96, 1) birch_forest. Respawned at (-14, 82, -31).
+- **Last Actions**: mc_navigate(x=2, y=92, z=-150) — navigating at midnight with multiple threats (enderman 9 blocks, zombie 13 blocks, skeleton 3 blocks nearby after death).
+- **Fix Applied**: None yet — root cause is navigating at night in open terrain without threat awareness. Need to avoid long-distance navigation at night.
+- **Status**: Recorded. Immediate action: flee to shelter, wait for dawn.
+
+---
+
+## [2026-03-21] Bug: Claude1 slain by Zombie - Session 20
+
+- **Cause**: "Claude1 was slain by Zombie" — observed in chat. Bot was apparently attacked by a zombie and killed. This could indicate: (1) bot was caught outside at night without shelter, (2) mc_combat failed to handle a zombie encounter properly, or (3) pathfinder walked bot into a zombie spawn area.
+- **Location**: Unknown — death location not recorded by this agent. Zombie kills are melee-based.
+- **Coordinates**: Unknown at time of death. This agent was at (-1, 116, -35) when message appeared.
+- **Last Actions**: Claude1 was slain by Zombie per server chat message at midnight.
+- **Fix Applied**: Investigating — possible need for proactive zombie avoidance at night (threats detection + flee before combat).
+- **Status**: Investigating
+
+---
+
 ## [2026-03-21] Bug: Fall death near ravine - Session 19
 
 - **Cause**: "Claude1 hit the ground too hard" — fatal fall near a ravine. Bot walked off cliff edge or pathfinder allowed a drop into ravine. Previous fix set `maxDropDown=0` during mc_flee, but bot may have fallen during normal navigation near ravine terrain.
