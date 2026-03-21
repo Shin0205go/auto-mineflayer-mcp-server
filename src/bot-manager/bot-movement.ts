@@ -455,10 +455,17 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
       if (hpNow < 2 && distance > 30) {
         return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20). HP too low even for starvation escape. Use /give or seek shelter.`;
       }
+    } else if (!hasFoodInInventory) {
+      // No food + nighttime/hostile: deadlock prevention.
+      // Without food, HP cannot recover — blocking movement guarantees death.
+      // Allow movement at HP≥2 so bot can reach food sources.
+      console.error(`[Move] No food + night/hostile. Allowing movement at HP=${hpNow.toFixed(1)} to prevent deadlock.`);
+      if (hpNow < 2 && distance > 30) {
+        return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20). HP too low even for food search.`;
+      }
     } else {
-      // Nighttime or hostile nearby: block movement when HP is dangerously low
-      // Bug fix (bot1.md 2026-03-16): Raised threshold from 3 to 8 — skeleton + enderman combo at night
-      // with HP=4.5 caused death. 4 hearts (hp=8) provides survivability for 1-2 hits.
+      // Nighttime or hostile nearby WITH food available: block movement when HP is dangerously low
+      // Bot can eat to recover, so blocking is safe — prevents fall death under mob pressure.
       if (hpNow < 8 && distance > 30) {
         return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20) at night/hostile nearby. Risk of fall death under mob pressure. Eat food or heal first, then retry movement.`;
       }
