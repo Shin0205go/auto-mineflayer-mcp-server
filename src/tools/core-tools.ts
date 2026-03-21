@@ -538,8 +538,26 @@ export async function mc_farm(): Promise<string> {
               let placedCount = 0;
               let consecutivePlaceFails = 0;
               const MAX_PLACE_FAILS = 5;
-              for (let pdx = -3; pdx <= 3 && placedCount < seedCount && consecutivePlaceFails < MAX_PLACE_FAILS; pdx++) {
-                for (let pdz = -3; pdz <= 3 && placedCount < seedCount && consecutivePlaceFails < MAX_PLACE_FAILS; pdz++) {
+              let dirtPlaceAborted = false;
+              for (let pdx = -3; pdx <= 3 && placedCount < seedCount && consecutivePlaceFails < MAX_PLACE_FAILS && !dirtPlaceAborted; pdx++) {
+                for (let pdz = -3; pdz <= 3 && placedCount < seedCount && consecutivePlaceFails < MAX_PLACE_FAILS && !dirtPlaceAborted; pdz++) {
+                  // Hostile check during dirt placement: bot2 was shot by skeleton
+                  // from HP 20 to 1 during 19 consecutive placement attempts.
+                  // The till/plant loop (Step 3) has a danger check but this loop didn't.
+                  if (Date.now() - farmStartTime > FARM_TIMEOUT_MS) {
+                    logs.push(`[ABORTED] mc_farm timed out during dirt placement.`);
+                    dirtPlaceAborted = true;
+                    break;
+                  }
+                  const placeDanger = checkDangerNearby(bot, 20);
+                  if (placeDanger.dangerous) {
+                    const pd = placeDanger.nearestHostile
+                      ? `${placeDanger.nearestHostile.name} at ${placeDanger.nearestHostile.distance.toFixed(1)} blocks`
+                      : `${placeDanger.hostileCount} hostile(s)`;
+                    logs.push(`[ABORTED] Hostile detected during dirt placement: ${pd}. Stopping.`);
+                    dirtPlaceAborted = true;
+                    break;
+                  }
                   if (pdx === 0 && pdz === 0) continue; // skip water position
                   if (Math.abs(pdx) + Math.abs(pdz) > 4) continue; // stay within irrigation range
                   const px = waterPos.x + pdx, pz = waterPos.z + pdz;

@@ -9,6 +9,18 @@ export function isHostileMob(bot: Bot, entityName: string): boolean {
   if (!entityName) return false;
   const name = entityName.toLowerCase();
 
+  // Neutral mobs that the registry marks as "hostile" but are NOT aggressive unless provoked.
+  // zombified_piglin: neutral in both Overworld and Nether. Attacking one provokes the
+  // entire group (all within 40 blocks aggro for 20-40 seconds). Bot3 deaths #1,#3,#9,#16:
+  // survival_routine or auto-attack targeted a zombified_piglin, provoking the swarm.
+  // They must NEVER be auto-targeted by attack() or flagged by checkDangerNearby().
+  // If the agent explicitly requests mc_combat(target="zombified_piglin"), that still works
+  // because fight()/attack() do exact-name matching for explicit targets.
+  const neutralMobs = ["zombified_piglin"];
+  if (neutralMobs.includes(name)) {
+    return false;
+  }
+
   // Fallback list of known hostile mobs (for registry inconsistencies)
   const knownHostileMobs = [
     "zombie", "skeleton", "creeper", "spider", "cave_spider", "enderman",
