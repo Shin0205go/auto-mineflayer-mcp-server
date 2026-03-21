@@ -425,9 +425,17 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
   let attacks = 0;
   const maxAttacks = 20; // Safety limit (20 attacks should kill most mobs)
   let lastKnownTargetPos = target.position.clone();
+  const attackStartTime = Date.now();
+  const ATTACK_TIMEOUT_MS = 60000; // 60s max — prevents infinite pathfinder loops
 
   try {
     while (attacks < maxAttacks) {
+      // Global timeout check
+      if (Date.now() - attackStartTime > ATTACK_TIMEOUT_MS) {
+        console.error(`[Attack] Global timeout (${ATTACK_TIMEOUT_MS / 1000}s) reached after ${attacks} attacks. Aborting.`);
+        bot.pathfinder.setGoal(null);
+        return `Attack timed out after ${attacks} attacks. Target may be unreachable.`;
+      }
       // Check HP - flee if low (raised from 8 to 12 for better survival margin)
       if (bot.health <= 12) {
         console.error(`[Attack] HP low (${bot.health}), fleeing from ${target.name}!`);
@@ -686,8 +694,17 @@ export async function fight(
     }
   }
 
-  // Step 3: Combat loop
+  // Step 3: Combat loop (with global timeout to prevent infinite hang)
+  const fightStartTime = Date.now();
+  const FIGHT_TIMEOUT_MS = 60000; // 60s max per fight — prevents infinite pathfinder loops in caves
   while (attackCount < maxAttacks) {
+    // Global timeout check
+    if (Date.now() - fightStartTime > FIGHT_TIMEOUT_MS) {
+      console.error(`[Fight] Global timeout (${FIGHT_TIMEOUT_MS / 1000}s) reached after ${attackCount} attacks. Aborting.`);
+      bot.pathfinder.setGoal(null);
+      return `Fight timed out after ${attackCount} attacks (${FIGHT_TIMEOUT_MS / 1000}s). Target may be unreachable.` + getBriefStatus(bot);
+    }
+
     // Check health - flee if low
     const health = bot.health;
     if (health <= fleeHealthThreshold) {
