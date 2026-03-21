@@ -318,6 +318,22 @@ export async function mc_gather(
           clearInterval(hpCheckInterval);
           try { monBot.pathfinder?.stop(); } catch (_) {}
           resolve(`[ABORTED] mc_gather stopped: HP dropped to ${monHp.toFixed(1)} during gathering. Use mc_flee or mc_eat before retrying.`);
+          return;
+        }
+        // Night transition check: if night fell DURING gathering, check for hostiles.
+        // mc_gather can take up to 120s. Daytime at start doesn't mean daytime throughout.
+        // Bot1: mc_gather(short_grass) started during day, night fell, mobs spawned and attacked.
+        // Bot2: skeleton attacked during gather because night fell mid-operation.
+        const monTime = monBot.time?.timeOfDay ?? 0;
+        const monIsNight = monTime > 12541 || monTime < 100;
+        if (monIsNight) {
+          const monDanger = checkDangerNearby(monBot, 20);
+          if (monDanger.dangerous && monDanger.nearestHostile && monDanger.nearestHostile.distance <= 16) {
+            clearInterval(hpCheckInterval);
+            try { monBot.pathfinder?.stop(); } catch (_) {}
+            resolve(`[ABORTED] mc_gather stopped: night fell and ${monDanger.nearestHostile.name} detected ${monDanger.nearestHostile.distance.toFixed(1)} blocks away (HP=${monHp.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`);
+            return;
+          }
         }
       } catch (_) {
         clearInterval(hpCheckInterval);
@@ -1277,11 +1293,32 @@ export async function mc_navigate(
               const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
               return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10}, hunger=0 (starving). Current position: ${posStr}. Find food immediately (mc_combat cow/pig, mc_eat) before continuing.`;
             }
-            // Auto-eat between segments when HP is low and food is available.
+            // Mid-segment hostile threat scan: abort if hostile mobs spawned nearby at night.
+            // Bot1 Sessions 20-44: 15+ deaths from mobs spawning between segments during night nav.
+            // The initial hostile check passes (no mobs at start), but new mobs spawn during
+            // the 5-15 seconds each segment takes. Without this check, bot walks into new mobs.
+            if (segIsNight) {
+              const segDanger = checkDangerNearby(segBot, 16);
+              if (segDanger.dangerous && segDanger.nearestHostile) {
+                const nearDist = segDanger.nearestHostile.distance;
+                const nearName = segDanger.nearestHostile.name;
+                // Only abort if hostiles are close enough to be a real threat.
+                // Creepers within 12 blocks are especially lethal (1-shot explosion).
+                const isCreeperClose = nearName === "creeper" && nearDist <= 12;
+                const isHostileClose = nearDist <= 10;
+                if (isCreeperClose || (isHostileClose && segHp < 16)) {
+                  const curPos2 = botManager.getPosition(username);
+                  const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
+                  return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — ${nearName} detected ${nearDist.toFixed(1)} blocks away at night, HP=${Math.round(segHp*10)/10}. Current position: ${posStr}. Use mc_flee or mc_combat to handle threat before continuing.`;
+                }
+              }
+            }
+            // Auto-eat between segments when HP is not full and food is available.
             // Bot1 Sessions 28,30,35: HP dropped during multi-segment travel but food in
             // inventory was never consumed because each segment was < 30 blocks (moveTo
-            // auto-eat threshold). Eating here prevents cumulative HP decay across segments.
-            if (segHp < 14 && segHasFood) {
+            // auto-eat threshold). Eating proactively at HP<18 maintains HP buffer for mob hits.
+            // Previous threshold was HP<14, but mobs can deal 4-8 damage per hit — need buffer.
+            if (segHp < 18 && segHasFood) {
               const segFoodItem = segBot.inventory.items().find((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
               if (segFoodItem) {
                 try {
