@@ -1229,8 +1229,19 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     let fleeFromName: string;
 
     if (hostile) {
-      // Flee away from hostile
-      direction = bot.entity.position.minus(hostile.position).normalize();
+      // Flee away from hostile — HORIZONTAL ONLY.
+      // Bot2 bug: hostile at Y=100, bot at Y=80 → direction.y was negative → flee target
+      // pointed underground → pathfinder routed into cave at Y=56.
+      // Zeroing Y ensures flee stays on the same elevation, preventing cave/hole routing.
+      const raw = bot.entity.position.minus(hostile.position);
+      const horizontal = new (bot.entity.position as any).constructor(raw.x, 0, raw.z);
+      // If horizontal distance is zero (hostile directly above/below), pick random horizontal direction
+      if (horizontal.norm() < 0.1) {
+        const angle = Math.random() * 2 * Math.PI;
+        direction = new (bot.entity.position as any).constructor(Math.cos(angle), 0, Math.sin(angle));
+      } else {
+        direction = horizontal.normalize();
+      }
       fleeFromName = hostile.name || "hostile";
       console.error(`[Flee] Fleeing from ${fleeFromName} at (${hostile.position.x.toFixed(1)}, ${hostile.position.y.toFixed(1)}, ${hostile.position.z.toFixed(1)})`);
     } else {
@@ -1242,15 +1253,19 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       console.error(`[Flee] No hostile found, fleeing in random direction`);
     }
 
+    // Flee target at same Y level as bot — never target underground positions
     const fleeTarget = bot.entity.position.plus(direction.scaled(distance));
     const startPos = bot.entity.position.clone();
 
-    // SAFETY: Disable drop-downs during flee to prevent cliff falls that cause death.
+    // SAFETY: Disable drop-downs and penalize liquid during flee.
+    // maxDropDown=0 prevents cliff falls. liquidCost=10000 prevents water routing (drowning).
     // A bot that cannot flee horizontally due to terrain is safer staying put than
-    // falling off a cliff at low HP. Restore previous setting after flee completes.
+    // falling off a cliff or into water at low HP. Restore previous settings after flee.
     const prevMaxDropDown = bot.pathfinder.movements?.maxDropDown ?? 1;
+    const prevLiquidCost = (bot.pathfinder.movements as any)?.liquidCost ?? 100;
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.maxDropDown = 0;
+      (bot.pathfinder.movements as any).liquidCost = 10000;
     }
 
     const goal = new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3);
@@ -1306,9 +1321,10 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       }, 200);
     });
 
-    // Restore previous maxDropDown after flee completes
+    // Restore previous pathfinder settings after flee completes
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.maxDropDown = prevMaxDropDown;
+      (bot.pathfinder.movements as any).liquidCost = prevLiquidCost;
     }
 
     const distMoved = bot.entity.position.distanceTo(startPos);
@@ -1320,12 +1336,13 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[Flee] Error during flee: ${errMsg}`);
-    // Stop all movement controls and restore maxDropDown to prevent stuck state
+    // Stop all movement controls and restore pathfinder settings to prevent stuck state
     try {
       bot.clearControlStates();
       bot.pathfinder.setGoal(null);
       if (bot.pathfinder.movements) {
         bot.pathfinder.movements.maxDropDown = 2; // restore safe default (2-block max drop, physics fall detector catches >3)
+        (bot.pathfinder.movements as any).liquidCost = 10000; // keep water avoidance
       }
     } catch { /* bot may be disconnected */ }
     return `Flee interrupted: ${errMsg}`;

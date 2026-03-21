@@ -1316,18 +1316,30 @@ export async function mc_drop(
   const result = await dropItem(bot, item_name, count);
 
   // Move away after dropping to prevent auto re-pickup.
-  // Use simple forward walk (not pathfinder — pathfinder fails on hilly terrain).
+  // Use short walk with ground-check to avoid walking off cliffs or into water.
+  // Previous: 3s blind sprint in random direction caused cliff/water deaths.
   try {
-    // Look in a random horizontal direction and walk forward for 3 seconds
-    const yaw = Math.random() * Math.PI * 2;
-    bot.look(yaw, 0);
-    await new Promise(r => setTimeout(r, 100));
-    bot.setControlState("forward", true);
-    bot.setControlState("sprint", true);
-    await new Promise(r => setTimeout(r, 3000));
-    bot.setControlState("forward", false);
-    bot.setControlState("sprint", false);
-    await new Promise(r => setTimeout(r, 500));
+    const dropPos = bot.entity.position.clone();
+    // Try up to 4 random directions to find a safe one
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const yaw = Math.random() * Math.PI * 2;
+      const checkX = Math.floor(dropPos.x + Math.cos(yaw) * 3);
+      const checkZ = Math.floor(dropPos.z - Math.sin(yaw) * 3);
+      const checkY = Math.floor(dropPos.y);
+      const groundBlock = bot.blockAt(new (await import("vec3")).Vec3(checkX, checkY - 1, checkZ));
+      const feetBlock = bot.blockAt(new (await import("vec3")).Vec3(checkX, checkY, checkZ));
+      // Only walk if there's solid ground and no water/lava
+      if (groundBlock && groundBlock.name !== "air" && groundBlock.name !== "water" && groundBlock.name !== "lava" &&
+          feetBlock && (feetBlock.name === "air" || feetBlock.name === "cave_air")) {
+        bot.look(yaw, 0);
+        await new Promise(r => setTimeout(r, 100));
+        bot.setControlState("forward", true);
+        await new Promise(r => setTimeout(r, 1500));
+        bot.setControlState("forward", false);
+        await new Promise(r => setTimeout(r, 300));
+        break;
+      }
+    }
   } catch {
     console.error("[Drop] Could not move away after drop");
   }
