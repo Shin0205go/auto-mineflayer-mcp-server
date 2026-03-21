@@ -756,11 +756,9 @@ export async function getBiome(bot: Bot): Promise<string> {
     return grassyPatterns.some(p => name.includes(p));
   };
 
-  if (isSheepBiome(biomeName)) {
-    lines.push("★ This biome can spawn sheep!");
-  } else {
-    lines.push(`Tip: Sheep spawn in plains, meadow, forest biomes. Try exploring in one direction.`);
-  }
+  // NOTE: Removed "★ This biome can spawn sheep!" hint — it caused agents to waste
+  // turns searching for sheep in birch_forest where none exist (passive mobs only spawn
+  // during world generation in Java Edition and don't respawn naturally).
 
   return lines.join("\n");
 }
