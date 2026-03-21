@@ -923,11 +923,17 @@ export async function mc_navigate(
       }
       if (nearbyHostiles.length > 0) {
         const hp = Math.round(bot.health * 10) / 10;
+        const closestDist = nearbyHostiles.sort((a, b) => a.dist - b.dist)[0].dist;
         const threatList = nearbyHostiles
-          .sort((a, b) => a.dist - b.dist)
           .slice(0, 5)
           .map(h => `${h.name}(${h.dist}m)`)
           .join(", ");
+        // BLOCK navigation when HP is dangerously low at night with nearby hostiles.
+        // Bot1 Sessions 20-42: 15+ deaths from navigating at night with low HP near mobs.
+        // Navigating exposes the bot to mob attacks during pathfinder movement.
+        if (hp <= 10 && closestDist <= 16) {
+          return `[REFUSED] Too dangerous to navigate at night — HP=${hp}, ${nearbyHostiles.length} hostile(s) nearby: ${threatList}. Use mc_flee first, then mc_navigate. Or build shelter (dig 1x1x2 hole + place block overhead) and wait for dawn.`;
+        }
         nightWarning = `\n[NIGHT WARNING] HP=${hp}, ${nearbyHostiles.length} hostile(s) nearby: ${threatList}. Consider mc_flee or shelter before long navigation.`;
       }
     }
@@ -1087,7 +1093,7 @@ export async function mc_combat(
     if (isPassiveTarget) {
       const combatBot = botManager.getBot(username);
       if (combatBot) {
-        const hostileNames = ["zombie", "skeleton", "creeper", "spider", "enderman", "witch", "drowned", "husk", "stray", "phantom", "pillager", "vindicator"];
+        const hostileNames = ["zombie", "skeleton", "creeper", "spider", "enderman", "witch", "drowned", "husk", "stray", "phantom", "pillager", "vindicator", "zombified_piglin"];
         const nearbyHostiles: Array<{ name: string; dist: number }> = [];
         for (const entity of Object.values(combatBot.entities)) {
           if (!entity || !entity.position || entity === combatBot.entity) continue;
@@ -1099,11 +1105,16 @@ export async function mc_combat(
           }
         }
         if (nearbyHostiles.length > 0) {
+          const closestHostileDist = nearbyHostiles.sort((a, b) => a.dist - b.dist)[0].dist;
           const threatList = nearbyHostiles
-            .sort((a, b) => a.dist - b.dist)
             .slice(0, 5)
             .map(h => `${h.name}(${h.dist}m)`)
             .join(", ");
+          // BLOCK the fight if hostiles are within 16 blocks — bot will die during passive mob hunt
+          // Bot1 Session 16: zombie killed while fighting sheep. Bot3 deaths #1,#3,#9: same pattern.
+          if (closestHostileDist <= 16) {
+            return `[REFUSED] Cannot hunt ${target} — ${nearbyHostiles.length} hostile(s) within attack range: ${threatList}. Use mc_flee or mc_combat(target="${nearbyHostiles[0].name}") to clear threats first, or wait for daytime.`;
+          }
           hostileWarning = `\n[DANGER] ${nearbyHostiles.length} hostile(s) nearby while hunting ${target}: ${threatList}. Kill or flee hostiles FIRST.`;
         }
       }
