@@ -1082,8 +1082,10 @@ export async function mc_navigate(
 
   // Navigate to entity
   if (args.target_entity) {
-    const entityInfo = botManager.findEntities(username, undefined, args.max_distance ?? 64);
-    if (!entityInfo.includes(args.target_entity)) {
+    // Use filtered findEntities to check existence — passing entityType applies
+    // the same passive/hostile filtering as fight() (e.g., "pig" won't match "zombified_piglin").
+    const entityInfo = botManager.findEntities(username, args.target_entity, args.max_distance ?? 64);
+    if (entityInfo.includes("No ") || entityInfo.includes("not found")) {
       return `No ${args.target_entity} found within ${args.max_distance ?? 64} blocks`;
     }
 
