@@ -465,11 +465,8 @@ export function getActiveTier2Tools(): string[] {
  * (Tier 1 + active Tier 2)
  */
 export function getVisibleGameTools(): Set<string> {
-  const tools = new Set(TIER1_CORE_TOOLS);
-  for (const tier2Name of getActiveTier2Tools()) {
-    tools.add(tier2Name);
-  }
-  return tools;
+  // mc_execute only — no Tier 2/3 tools in tools/list
+  return new Set(TIER1_CORE_TOOLS);
 }
 
 /**
