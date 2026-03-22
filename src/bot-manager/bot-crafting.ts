@@ -3,6 +3,68 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 import type { ManagedBot } from "./types.js";
 import { isFuelItem } from "./minecraft-utils.js";
+import type { Bot } from "mineflayer";
+
+/**
+ * Apply safe pathfinder settings before setGoal() in crafting navigation.
+ * Without this, pathfinder uses whatever settings are active, which may allow
+ * cave routing (canDig=true), water routing (liquidCost=default), or cliff
+ * falls (maxDropDown too high).
+ * Bot1/Bot2/Bot3 [2026-03-22]: multiple deaths during craft/smelt when
+ * pathfinder routed underground to reach crafting_table or furnace.
+ */
+function applySafeCraftingPathfinder(bot: Bot): void {
+  if (!bot.pathfinder.movements) return;
+  bot.pathfinder.movements.canDig = false;
+  bot.pathfinder.movements.maxDropDown = 2;
+  (bot.pathfinder.movements as any).liquidCost = 10000;
+}
+
+/**
+ * Safely navigate to a nearby block (crafting_table, furnace, anvil, etc.)
+ * with safe pathfinder settings and Y-descent monitoring.
+ * Replaces raw bot.pathfinder.setGoal() calls that lacked cave-routing protection.
+ *
+ * Bot1/Bot2/Bot3 [2026-03-22]: raw setGoal in craftItem/smeltItem caused
+ * underground routing when moving to crafting tables/furnaces, leading to
+ * cave trapping and death.
+ */
+async function safeNavigateToBlock(bot: Bot, pos: Vec3, range: number = 3, timeoutMs: number = 10000): Promise<boolean> {
+  applySafeCraftingPathfinder(bot);
+  const startY = bot.entity.position.y;
+  const MAX_Y_DESCENT = 4;
+  const goal = new goals.GoalNear(pos.x, pos.y, pos.z, range);
+  bot.pathfinder.setGoal(goal);
+
+  return new Promise<boolean>((resolve) => {
+    const timeout = setTimeout(() => {
+      bot.pathfinder.setGoal(null);
+      clearInterval(check);
+      resolve(false);
+    }, timeoutMs);
+
+    const check = setInterval(() => {
+      // Y-descent monitoring: abort if bot descends too far (cave routing)
+      const yDescent = startY - bot.entity.position.y;
+      if (yDescent > MAX_Y_DESCENT) {
+        console.error(`[Craft/Navigate] CAVE DESCENT: dropped ${yDescent.toFixed(1)} blocks (Y=${startY.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Aborting.`);
+        clearInterval(check);
+        clearTimeout(timeout);
+        bot.pathfinder.setGoal(null);
+        try { bot.clearControlStates(); } catch { /* ignore */ }
+        resolve(false);
+        return;
+      }
+      const dist = bot.entity.position.distanceTo(pos);
+      if (dist < range + 1 || !bot.pathfinder.isMoving()) {
+        clearInterval(check);
+        clearTimeout(timeout);
+        bot.pathfinder.setGoal(null);
+        resolve(dist < range + 1);
+      }
+    }, 300);
+  });
+}
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -330,26 +392,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
     if (farTable) {
       console.error(`[Craft] Found crafting table at ${farTable.position}, moving...`);
-      const goal = new goals.GoalNear(farTable.position.x, farTable.position.y, farTable.position.z, 3);
-      bot.pathfinder.setGoal(goal);
-
-      // Wait for movement
-      await new Promise<void>((resolve) => {
-        const timeout = setTimeout(() => {
-          bot.pathfinder.setGoal(null);
-          resolve();
-        }, 10000);
-
-        const check = setInterval(() => {
-          const dist = bot.entity.position.distanceTo(farTable.position);
-          if (dist < 4 || !bot.pathfinder.isMoving()) {
-            clearInterval(check);
-            clearTimeout(timeout);
-            bot.pathfinder.setGoal(null);
-            resolve();
-          }
-        }, 300);
-      });
+      await safeNavigateToBlock(bot, farTable.position, 3, 10000);
 
       // Re-check nearby - use maxDistance 5 to account for pathfinding settling at goal distance 3
       // This prevents false negatives when bot stops at ~3.5 blocks from table
@@ -1158,17 +1201,8 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             const craftingTableId = mcData.blocksByName.crafting_table?.id;
             craftingTable = bot.findBlock({ matching: craftingTableId, maxDistance: 32 });
             if (craftingTable) {
-              // Move to crafting table
-              const goal = new goals.GoalNear(craftingTable.position.x, craftingTable.position.y, craftingTable.position.z, 3);
-              bot.pathfinder.setGoal(goal);
-              await new Promise<void>((resolve) => {
-                const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 10000);
-                const check = setInterval(() => {
-                  if (craftingTable && bot.entity.position.distanceTo(craftingTable.position) < 4 || !bot.pathfinder.isMoving()) {
-                    clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
-                  }
-                }, 300);
-              });
+              // Move to crafting table with safe pathfinder settings
+              await safeNavigateToBlock(bot, craftingTable.position, 3, 10000);
             }
           }
 
@@ -1581,17 +1615,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
             const distToTable = bot.entity.position.distanceTo(craftingTable.position);
             if (distToTable > 3.5) {
               console.error(`[Craft] Too far from crafting table (${distToTable.toFixed(1)} blocks), moving closer...`);
-              const goal = new goals.GoalNear(craftingTable.position.x, craftingTable.position.y, craftingTable.position.z, 2);
-              bot.pathfinder.setGoal(goal);
-              await new Promise<void>((resolve) => {
-                const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
-                const check = setInterval(() => {
-                  const d = bot.entity.position.distanceTo(craftingTable!.position);
-                  if (d < 3.5 || !bot.pathfinder.isMoving()) {
-                    clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
-                  }
-                }, 200);
-              });
+              await safeNavigateToBlock(bot, craftingTable.position, 2, 8000);
             }
             // Look at the crafting table to ensure line-of-sight for windowOpen
             await bot.lookAt(craftingTable.position.offset(0.5, 0.5, 0.5));
@@ -1832,26 +1856,7 @@ export async function smeltItem(managed: ManagedBot, itemName: string, count: nu
 
     if (farFurnace) {
       console.error(`[Smelt] Found furnace at ${farFurnace.position}, moving...`);
-      const goal = new goals.GoalNear(farFurnace.position.x, farFurnace.position.y, farFurnace.position.z, 3);
-      bot.pathfinder.setGoal(goal);
-
-      // Wait for movement
-      await new Promise<void>((resolve) => {
-        const timeout = setTimeout(() => {
-          bot.pathfinder.setGoal(null);
-          resolve();
-        }, 10000);
-
-        const check = setInterval(() => {
-          const dist = bot.entity.position.distanceTo(farFurnace.position);
-          if (dist < 4 || !bot.pathfinder.isMoving()) {
-            clearInterval(check);
-            clearTimeout(timeout);
-            bot.pathfinder.setGoal(null);
-            resolve();
-          }
-        }, 300);
-      });
+      await safeNavigateToBlock(bot, farFurnace.position, 3, 10000);
 
       // Re-check nearby — use wider radius since pathfinder may not get exactly within 4 blocks
       furnaceBlock = bot.findBlock({
@@ -2077,26 +2082,10 @@ export async function enchant(managed: ManagedBot, itemName: string, enchantment
     throw new Error("No enchanting table found within 32 blocks.");
   }
 
-  // Move closer if needed - simplified approach without moveTo dependency
+  // Move closer if needed - with safe pathfinder settings to prevent cave routing
   const dist = bot.entity.position.distanceTo(tableBlock.position);
   if (dist > 4) {
-    const goal = new goals.GoalNear(tableBlock.position.x, tableBlock.position.y, tableBlock.position.z, 3);
-    bot.pathfinder.setGoal(goal);
-    await new Promise<void>((resolve) => {
-      const timeout = setTimeout(() => {
-        bot.pathfinder.setGoal(null);
-        resolve();
-      }, 10000);
-      const check = setInterval(() => {
-        const currentDist = bot.entity.position.distanceTo(tableBlock.position);
-        if (currentDist < 4 || !bot.pathfinder.isMoving()) {
-          clearInterval(check);
-          clearTimeout(timeout);
-          bot.pathfinder.setGoal(null);
-          resolve();
-        }
-      }, 300);
-    });
+    await safeNavigateToBlock(bot, tableBlock.position, 3, 10000);
   }
 
   // Check for lapis lazuli
@@ -2160,26 +2149,10 @@ export async function useAnvil(managed: ManagedBot, targetItem: string, material
     throw new Error("No anvil found within 32 blocks.");
   }
 
-  // Move closer if needed - simplified approach
+  // Move closer if needed - with safe pathfinder settings to prevent cave routing
   const dist = bot.entity.position.distanceTo(anvilBlock.position);
   if (dist > 4) {
-    const goal = new goals.GoalNear(anvilBlock.position.x, anvilBlock.position.y, anvilBlock.position.z, 3);
-    bot.pathfinder.setGoal(goal);
-    await new Promise<void>((resolve) => {
-      const timeout = setTimeout(() => {
-        bot.pathfinder.setGoal(null);
-        resolve();
-      }, 10000);
-      const check = setInterval(() => {
-        const currentDist = bot.entity.position.distanceTo(anvilBlock.position);
-        if (currentDist < 4 || !bot.pathfinder.isMoving()) {
-          clearInterval(check);
-          clearTimeout(timeout);
-          bot.pathfinder.setGoal(null);
-          resolve();
-        }
-      }, 300);
-    });
+    await safeNavigateToBlock(bot, anvilBlock.position, 3, 10000);
   }
 
   // Find items
@@ -2241,26 +2214,10 @@ export async function brewPotion(
     throw new Error("No brewing stand found within 32 blocks.");
   }
 
-  // Move closer if needed
+  // Move closer if needed - with safe pathfinder settings to prevent cave routing
   const dist = bot.entity.position.distanceTo(brewingStand.position);
   if (dist > 4) {
-    const goal = new goals.GoalNear(brewingStand.position.x, brewingStand.position.y, brewingStand.position.z, 3);
-    bot.pathfinder.setGoal(goal);
-    await new Promise<void>((resolve) => {
-      const timeout = setTimeout(() => {
-        bot.pathfinder.setGoal(null);
-        resolve();
-      }, 10000);
-      const check = setInterval(() => {
-        const currentDist = bot.entity.position.distanceTo(brewingStand.position);
-        if (currentDist < 4 || !bot.pathfinder.isMoving()) {
-          clearInterval(check);
-          clearTimeout(timeout);
-          bot.pathfinder.setGoal(null);
-          resolve();
-        }
-      }, 300);
-    });
+    await safeNavigateToBlock(bot, brewingStand.position, 3, 10000);
   }
 
   // Check for blaze powder (fuel)
