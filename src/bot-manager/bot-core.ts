@@ -4,7 +4,7 @@ import { EventEmitter } from "events";
 import pkg from "mineflayer-pathfinder";
 const { pathfinder, Movements, goals } = pkg;
 import type { BotConfig, ManagedBot, GameEvent } from "./types.js";
-import { isHostileMob, isPassiveMob } from "./minecraft-utils.js";
+import { isHostileMob, isPassiveMob, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
 import { equipArmor } from "./bot-items.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
@@ -551,10 +551,8 @@ export class BotCore extends EventEmitter {
                 bot.setControlState("sprint", false);
                 bot.setControlState("forward", false);
               }, isInLava ? 3000 : 1500);
-              // Auto-eat while escaping fire/lava
-              const food = bot.inventory.items().find(i =>
-                ["bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "baked_potato", "cooked_mutton", "golden_apple"].includes(i.name)
-              );
+              // Auto-eat while escaping fire/lava — use EDIBLE_FOOD_NAMES for complete coverage.
+              const food = bot.inventory.items().find(i => EDIBLE_FOOD_NAMES.has(i.name));
               if (food && bot.food < 20) {
                 bot.equip(food, "hand").then(() => bot.consume()).catch(() => {});
               }
@@ -587,22 +585,71 @@ export class BotCore extends EventEmitter {
               if (isInPortal || isNearPortal) {
                 console.error(`[AutoFlee] Suppressed: bot is ${isInPortal ? "inside" : "near"} portal block, standing still for teleportation.`);
               } else {
-              const nearestHostile = Object.values(bot.entities)
+              // Find ALL nearby hostiles and compute weighted flee direction.
+              // Previous: only considered nearest hostile, causing bot to flee into other mobs.
+              // Fix: use inverse-square weighted direction from all hostiles (same as mc_flee).
+              const allHostiles = Object.values(bot.entities)
                 .filter(e => e !== bot.entity && e.name && isHostileMob(bot, e.name.toLowerCase()))
-                .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position))[0];
-              if (nearestHostile) {
-                const dir = bot.entity.position.minus(nearestHostile.position).normalize();
-                const fleeTarget = bot.entity.position.plus(dir.scaled(15));
-                // Fix Session 32: Keep Y coordinate to avoid falling off cliffs
+                .map(e => ({
+                  entity: e,
+                  dist: e.position.distanceTo(bot.entity.position),
+                  name: e.name || "hostile"
+                }))
+                .filter(h => h.dist <= 24)
+                .sort((a, b) => a.dist - b.dist);
+
+              if (allHostiles.length > 0) {
+                // Weighted flee direction away from ALL hostiles (inverse square distance).
+                let sumX = 0, sumZ = 0, totalWeight = 0;
+                for (const h of allHostiles) {
+                  const weight = 1 / Math.max(h.dist * h.dist, 1);
+                  const away = bot.entity.position.minus(h.entity.position);
+                  sumX += away.x * weight;
+                  sumZ += away.z * weight;
+                  totalWeight += weight;
+                }
+                const avgX = totalWeight > 0 ? sumX / totalWeight : 0;
+                const avgZ = totalWeight > 0 ? sumZ / totalWeight : 0;
+                let dirX = avgX, dirZ = avgZ;
+                const norm = Math.sqrt(dirX * dirX + dirZ * dirZ);
+                if (norm < 0.1) {
+                  const angle = Math.random() * 2 * Math.PI;
+                  dirX = Math.cos(angle);
+                  dirZ = Math.sin(angle);
+                } else {
+                  dirX /= norm;
+                  dirZ /= norm;
+                }
+
+                const fleeTarget = bot.entity.position.offset(dirX * 15, 0, dirZ * 15);
+                // Keep Y coordinate to avoid falling off cliffs
                 fleeTarget.y = bot.entity.position.y;
-                console.error(`[AutoFlee] HP=${bot.health.toFixed(1)}, fleeing from ${nearestHostile.name}`);
+                const fleeFromName = allHostiles.length === 1 ? allHostiles[0].name : `${allHostiles.length} hostiles`;
+                console.error(`[AutoFlee] HP=${bot.health.toFixed(1)}, fleeing from ${fleeFromName}`);
                 try {
+                  // SAFETY: Set safe pathfinder settings before auto-flee goal.
+                  // Without these, AutoFlee can route through caves (canDig), fall off cliffs
+                  // (maxDropDown), or route through water (liquidCost). Same fixes as mc_flee.
+                  // Bot1 Sessions 42-44, Bot2 [2026-03-22]: deaths from AutoFlee cave routing.
+                  if (bot.pathfinder.movements) {
+                    bot.pathfinder.movements.canDig = false;
+                    bot.pathfinder.movements.maxDropDown = 1;
+                    (bot.pathfinder.movements as any).liquidCost = 10000;
+                  }
                   bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
+                  // Restore pathfinder settings after 5 seconds (AutoFlee is short-lived)
+                  setTimeout(() => {
+                    try {
+                      if (bot.pathfinder.movements) {
+                        bot.pathfinder.movements.canDig = true;
+                        bot.pathfinder.movements.maxDropDown = 2;
+                      }
+                    } catch { /* bot may be disconnected */ }
+                  }, 5000);
                 } catch (_) { /* ignore pathfinder errors during auto-flee */ }
-                // Auto-eat while fleeing to recover HP
-                const food = bot.inventory.items().find(i =>
-                  ["bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "baked_potato", "cooked_mutton", "cooked_cod", "cooked_salmon", "golden_apple"].includes(i.name)
-                );
+                // Auto-eat while fleeing to recover HP — use EDIBLE_FOOD_NAMES for complete coverage.
+                // Previous hardcoded list missed rotten_flesh, raw meats, carrot, etc.
+                const food = bot.inventory.items().find(i => EDIBLE_FOOD_NAMES.has(i.name));
                 if (food && bot.food < 20) {
                   bot.equip(food, "hand").then(() => bot.consume()).catch(() => {});
                 }
@@ -800,13 +847,27 @@ export class BotCore extends EventEmitter {
             bot.setControlState("sprint", true);
             bot.setControlState("forward", true);
             try {
+              // SAFETY: Set safe pathfinder settings before CreeperFlee goal.
+              // Without these, CreeperFlee can route into caves or off cliffs.
+              // Same safety as mc_flee and AutoFlee.
+              if (bot.pathfinder.movements) {
+                bot.pathfinder.movements.canDig = false;
+                bot.pathfinder.movements.maxDropDown = 1;
+                (bot.pathfinder.movements as any).liquidCost = 10000;
+              }
               bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
             } catch (_) { /* ignore */ }
-            // Reset flee flag after 3 seconds
+            // Reset flee flag and restore pathfinder settings after 3 seconds
             setTimeout(() => {
               bot.setControlState("sprint", false);
               bot.setControlState("forward", false);
               creeperFleeActive = false;
+              try {
+                if (bot.pathfinder.movements) {
+                  bot.pathfinder.movements.canDig = true;
+                  bot.pathfinder.movements.maxDropDown = 2;
+                }
+              } catch { /* bot may be disconnected */ }
             }, 3000);
           }
         });
