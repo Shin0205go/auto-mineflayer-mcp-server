@@ -150,12 +150,40 @@ export async function mc_execute(
       // Bot1 [2026-03-22]: drowned during bot.wait() at y=86 with hunger=0.
       // wait() was a raw setTimeout with no safety monitoring — bot took damage
       // from water/mobs for the entire wait duration with no abort mechanism.
-      // Now: check HP every 2s during wait. If HP drops below 4 or bot is in water,
+      // Now: check HP every 1s during wait. If HP drops below 4, or bot is in water,
       // resolve early so the agent can react (flee, eat, move to safety).
+      //
+      // Bot2 [2026-03-23]: drowned from HP 15.8 during wait. Previous code only
+      // aborted on (inWater && hp < 10) with 2s checks. Drowning deals 2 HP/s,
+      // so HP 15.8→death in ~8s. With 2s interval + HP<10 threshold, the bot
+      // would only abort at ~HP 8 with only 4s left — often too late.
+      // Fix: (1) check every 1s instead of 2s, (2) abort on ANY water contact
+      // regardless of HP, (3) attempt emergency jump to escape water before resolving.
       const waitMs = Math.min(ms, MAX_WAIT_MS);
+      // Pre-wait: clear stale movement states that could drift the bot into danger.
+      // Bot2 [2026-03-23]: bot moved into water during wait() despite no movement
+      // instructions — lingering pathfinder goal or control states from a previous
+      // action (flee, navigate) continued executing during wait, pushing the bot
+      // into water. Clearing goal + controls ensures the bot stays put.
+      try {
+        const username = botManager.requireSingleBot();
+        const waitBot = botManager.getBot(username);
+        if (waitBot) {
+          try { waitBot.pathfinder.setGoal(null); } catch { /* ignore */ }
+          waitBot.clearControlStates();
+        }
+      } catch { /* ignore if no bot */ }
       return new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, waitMs);
-        const safetyInterval = setInterval(() => {
+        let resolved = false;
+        const doResolve = () => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timer);
+          clearInterval(safetyInterval);
+          resolve();
+        };
+        const timer = setTimeout(doResolve, waitMs);
+        const safetyInterval = setInterval(async () => {
           try {
             const username = botManager.requireSingleBot();
             const waitBot = botManager.getBot(username);
@@ -163,32 +191,42 @@ export async function mc_execute(
             const hp = waitBot.health ?? 20;
             // Abort wait if HP critically low — bot is under attack or drowning
             if (hp < 4) {
-              clearTimeout(timer);
-              clearInterval(safetyInterval);
               if (logs.length < MAX_LOG_LINES) {
                 logs.push(`[wait] ABORTED: HP dropped to ${hp.toFixed(1)} during wait`);
               }
-              resolve();
+              doResolve();
               return;
             }
-            // Abort wait if bot is in water (drowning risk)
+            // Abort wait if bot is in water — drowning risk at ANY HP level.
+            // Bot2 [2026-03-23]: previous threshold (HP<10) was too late; bot drowned
+            // from HP 15.8 because abort didn't trigger until HP<10, leaving only ~4s.
+            // Water contact always warrants immediate abort + emergency escape.
             const feetBlock = waitBot.blockAt(waitBot.entity.position);
             const headBlock = waitBot.blockAt(waitBot.entity.position.offset(0, 1, 0));
             const isWater = (n: string | undefined) => n === "water" || n === "flowing_water";
             const inWater = isWater(feetBlock?.name) || isWater(headBlock?.name);
-            if (inWater && hp < 10) {
-              clearTimeout(timer);
-              clearInterval(safetyInterval);
+            if (inWater) {
               if (logs.length < MAX_LOG_LINES) {
-                logs.push(`[wait] ABORTED: In water with HP=${hp.toFixed(1)} — drowning risk`);
+                logs.push(`[wait] ABORTED: In water with HP=${hp.toFixed(1)} — drowning risk. Attempting emergency jump.`);
               }
-              resolve();
+              // Emergency: jump repeatedly to surface and escape drowning.
+              // Without this, the bot stays submerged after wait resolves and the
+              // agent's next action may come too late. 3 quick jumps typically
+              // bring the bot to the surface or at least buy breathing time.
+              try {
+                for (let jumpAttempt = 0; jumpAttempt < 3; jumpAttempt++) {
+                  waitBot.setControlState("jump", true);
+                  await new Promise(r => setTimeout(r, 400));
+                  waitBot.setControlState("jump", false);
+                  await new Promise(r => setTimeout(r, 100));
+                }
+              } catch { /* ignore jump errors */ }
+              doResolve();
               return;
             }
           } catch { /* ignore errors during safety check */ }
-        }, 2000);
+        }, 1000);
         // Clean up interval when wait resolves normally
-        const origResolve = resolve;
         setTimeout(() => {
           clearInterval(safetyInterval);
         }, waitMs + 100);
