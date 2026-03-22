@@ -428,7 +428,12 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       bot.setControlState("sprint", true);
     }
     const goal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2);
-    const attackGoalHandle = safeSetGoal(bot, goal, {
+    // Use mutable handle so ranged retargets can replace it with new safeSetGoal monitors.
+    // Previously retargets called raw bot.pathfinder.setGoal(), which overrode the safeSetGoal
+    // monitor and destroyed Y-descent tracking. After the first retarget (500ms), the bot
+    // could descend into caves with no abort. Now each retarget creates a new monitored goal.
+    // Bot1/Bot2/Bot3 [2026-03-22]: multiple deaths from underground routing during combat approach.
+    let attackGoalHandle = safeSetGoal(bot, goal, {
       onAbort: (yDescent) => {
         console.error(`[Attack] CAVE DESCENT during approach: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
       }
@@ -489,12 +494,19 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
           return;
         }
 
-        // Ranged mobs: re-target every 500ms to track their retreat path
+        // Ranged mobs: re-target every 500ms to track their retreat path.
+        // Clean up old safeSetGoal monitor before creating a new one — raw setGoal
+        // would destroy Y-descent monitoring, allowing cave routing during retarget.
         if (isRangedMob && Date.now() - lastRetargetTime > 500) {
           lastRetargetTime = Date.now();
           try {
+            attackGoalHandle.cleanup();
             const retargetGoal = new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2);
-            bot.pathfinder.setGoal(retargetGoal);
+            attackGoalHandle = safeSetGoal(bot, retargetGoal, {
+              onAbort: (yDescent) => {
+                console.error(`[Attack] CAVE DESCENT during ranged retarget: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
+              }
+            });
           } catch { /* ignore */ }
         }
       }, 200);
@@ -563,15 +575,24 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
               if (distToDrops > 3) {
                 applySafePathfinderSettings(bot);
                 const collectGoal = new goals.GoalNear(bowLastPos.x, bowLastPos.y, bowLastPos.z, 2);
-                bot.pathfinder.setGoal(collectGoal);
+                const bowCollectHandle = safeSetGoal(bot, collectGoal, {
+                  onAbort: (yDescent) => {
+                    console.error(`[Attack] CAVE DESCENT during bow kill collection: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
+                  }
+                });
                 await new Promise<void>((resolve) => {
                   const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 5000);
                   const check = setInterval(() => {
+                    if (bowCollectHandle.aborted) {
+                      clearInterval(check); clearTimeout(timeout); resolve();
+                      return;
+                    }
                     if (bot.entity.position.distanceTo(bowLastPos) < 3 || !bot.pathfinder.isMoving()) {
                       clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
                     }
                   }, 200);
                 });
+                bowCollectHandle.cleanup();
               }
               await delay(800);
               await collectNearbyItems(managed);
@@ -690,15 +711,24 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
           console.error(`[Attack] Target died ${distToLastPos.toFixed(1)} blocks away, moving to last known pos to collect drops`);
           applySafePathfinderSettings(bot);
           const collectGoal = new goals.GoalNear(lastKnownTargetPos.x, lastKnownTargetPos.y, lastKnownTargetPos.z, 2);
-          bot.pathfinder.setGoal(collectGoal);
+          const collectHandle = safeSetGoal(bot, collectGoal, {
+            onAbort: (yDescent) => {
+              console.error(`[Attack] CAVE DESCENT during item collection: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
+            }
+          });
           await new Promise<void>((resolve) => {
             const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 5000);
             const check = setInterval(() => {
+              if (collectHandle.aborted) {
+                clearInterval(check); clearTimeout(timeout); resolve();
+                return;
+              }
               if (bot.entity.position.distanceTo(lastKnownTargetPos) < 3 || !bot.pathfinder.isMoving()) {
                 clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
               }
             }, 200);
           });
+          collectHandle.cleanup();
         }
         // Endermen teleport before dying — use wider search and longer wait
         // 800ms gives the server time to spawn drop item entities (was 500ms, too short)
@@ -729,8 +759,15 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
 
         console.error(`[Attack] Target ${target.name} moved to ${currentDist.toFixed(1)} blocks, chasing...`);
         applySafePathfinderSettings(bot);
-        const goal = new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2);
-        bot.pathfinder.setGoal(goal);
+        const chaseGoal = new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2);
+        // Use safeSetGoal for chase — raw setGoal bypassed Y-descent monitoring,
+        // allowing the bot to chase targets into caves. Bot1/Bot2/Bot3 [2026-03-22]:
+        // multiple deaths from underground routing during combat chase loops.
+        const chaseHandle = safeSetGoal(bot, chaseGoal, {
+          onAbort: (yDescent) => {
+            console.error(`[Attack] CAVE DESCENT during chase: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
+          }
+        });
 
         // Chase duration scales with distance, endermen get longer chase
         const chaseDuration = currentTarget.name === "enderman" ? 5000 : 2000;
@@ -743,6 +780,13 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
           }, chaseDuration);
 
           const check = setInterval(() => {
+            if (chaseHandle.aborted) {
+              chaseAbortReason = `Cave descent detected during chase`;
+              clearInterval(check);
+              clearTimeout(timeout);
+              resolve();
+              return;
+            }
             const checkDist = currentTarget.position.distanceTo(bot.entity.position);
             if (checkDist < 3.5 || !bot.pathfinder.isMoving()) {
               clearInterval(check);
@@ -783,6 +827,8 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
             }
           }, 100);
         });
+
+        chaseHandle.cleanup();
 
         if (chaseAbortReason) {
           const abortHp = (bot.health ?? 0).toFixed(1);
@@ -1161,10 +1207,22 @@ export async function fight(
         console.error(`[Fight] Target died ${distToLast.toFixed(1)} blocks away, moving to collect drops`);
         applySafePathfinderSettings(bot);
         const collectGoal = new goals.GoalNear(lastKnownFightPos.x, lastKnownFightPos.y, lastKnownFightPos.z, 2);
-        bot.pathfinder.setGoal(collectGoal);
+        // Use safeSetGoal to prevent cave descent during item collection navigation.
+        // Raw setGoal allowed the bot to descend into caves when collecting drops from
+        // mobs that died at lower elevations. Bot2/Bot3 [2026-03-22]: deaths from
+        // underground routing during post-kill item collection.
+        const collectHandle = safeSetGoal(bot, collectGoal, {
+          onAbort: (yDescent) => {
+            console.error(`[Fight] CAVE DESCENT during item collection: dropped ${yDescent.toFixed(1)} blocks. Aborting collection.`);
+          }
+        });
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 5000);
           const check = setInterval(() => {
+            if (collectHandle.aborted) {
+              clearInterval(check); clearTimeout(timeout); resolve();
+              return;
+            }
             if (bot.entity.position.distanceTo(lastKnownFightPos) < 3 || !bot.pathfinder.isMoving()) {
               clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
             }
@@ -1176,6 +1234,7 @@ export async function fight(
             }
           }, 200);
         });
+        collectHandle.cleanup();
       }
       // Endermen teleport before dying — use wider search and longer wait
       // 800ms gives the server time to spawn drop item entities (was 500ms, too short)
