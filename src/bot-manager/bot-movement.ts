@@ -114,6 +114,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
     let monitorTickCount = 0; // Increments each 500ms check interval
     let maxHeightReached = start.y;
     let underwaterTicks = 0; // Track consecutive checks with head underwater
+    const startHp = bot.health ?? 20; // Track HP at navigation start for rapid-drop detection
     // Declare checkInterval first to avoid TDZ issues when event handlers fire early
     let checkInterval: ReturnType<typeof setInterval> | null = null;
     let lastPos = start.clone();
@@ -470,6 +471,29 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
             });
             return;
           }
+        }
+      }
+
+      // SAFETY: Rapid HP drop detection — abort if HP dropped significantly during this navigation.
+      // Bot1 Sessions 20-44, Bot2, Bot3: many deaths where bot took damage from mobs during
+      // a single moveTo call. AutoFlee only triggers at HP<=10, but the hostile detection
+      // above requires HP to be BELOW threshold AND hostiles in scan radius — timing gaps
+      // mean mobs can hit the bot between scans. This catches any source of HP loss (mobs,
+      // fall damage, drowning, fire, etc.) by monitoring total HP drop since nav started.
+      // Threshold: 6+ HP lost = abort. This gives the agent a chance to react (eat, flee)
+      // before HP reaches critical levels. Combined with AutoFlee at HP<=10, this creates
+      // a two-tier safety net: abort navigation at HP-6 drop, emergency flee at HP<=10.
+      {
+        const currentHp = bot.health ?? 0;
+        const hpDrop = startHp - currentHp;
+        if (hpDrop >= 6 && currentHp < 14) {
+          console.error(`[MoveTo] RAPID HP DROP: HP dropped ${hpDrop.toFixed(1)} during navigation (${startHp.toFixed(1)} → ${currentHp.toFixed(1)}). Aborting to allow recovery.`);
+          finish({
+            success: false,
+            message: `Navigation aborted: HP dropped ${hpDrop.toFixed(0)} during travel (${Math.round(startHp)} → ${Math.round(currentHp*10)/10}). Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_eat to heal, mc_flee from threats, or build shelter.`,
+            stuckReason: "hp_drop"
+          });
+          return;
         }
       }
 
