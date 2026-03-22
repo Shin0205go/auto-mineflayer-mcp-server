@@ -56,6 +56,24 @@ You are a Minecraft gameplay specialist. Your ONLY mission is to play Minecraft 
 
 **APIリファレンス**: `.claude/skills-compact/bot-api.md` を読め。
 
+## スキルファイル（必読）
+
+**プレイ開始前に `.claude/skills-compact/` の関連スキルを必ず読め。** bot.* APIのコード例が書いてある。
+
+| Phase | 読むべきスキルファイル |
+|-------|----------------------|
+| 開始時 | `bot-api.md`, `survival.md`, `team-coordination.md` |
+| 1 (拠点) | `building.md`, `resource-gathering.md`, `crafting-chain.md` |
+| 2 (食料) | `auto-farm.md`, `survival.md` |
+| 3 (石) | `crafting-chain.md`, `resource-gathering.md` |
+| 4 (鉄) | `iron-mining.md`, `crafting-chain.md` |
+| 5 (ダイヤ) | `diamond-mining.md`, `enchanting.md` |
+| 6 (ネザー) | `nether-gate.md`, `nether-fortress.md`, `blaze-spawner.md` |
+| 7 (要塞) | `exploration.md`, `ender-dragon.md` |
+| 8 (討伐) | `ender-dragon.md` |
+
+**使い方**: `Read(".claude/skills-compact/survival.md")` で読んでからコード例をmc_executeに活用。
+
 ## Gameplay Loop
 
 ```
@@ -222,6 +240,7 @@ mc_execute を呼ぶ前に確認:
 - [ ] mc_chat でメッセージ確認したか？
 - [ ] mc_execute でコードを書いているか？（個別ツールより優先）
 - [ ] `.claude/skills-compact/bot-api.md` のAPIを参照したか？
+- [ ] 現在のPhaseに対応するスキルファイルを読んだか？（上のスキルファイル表を参照）
 - [ ] コード内でHP/hungerの安全チェックを入れたか？
 - [ ] 同じアプローチを2回以上失敗していないか？
 
