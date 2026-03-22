@@ -509,17 +509,20 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       // Bot1 Sessions 31-34,40b,44: 6+ deaths from pathfinder choosing water-level routes.
       (bot.pathfinder.movements as any).liquidCost = 10000;
 
-      // SAFETY: Disable canDig at night to prevent pathfinder from digging into caves.
+      // SAFETY: Disable canDig at night OR when HP is low to prevent cave routing.
       // Bot1 Sessions 42-44, Bot3 #17,#19: pathfinder with canDig=true digs through terrain,
-      // opening cave systems where underground mobs (skeletons, zombies, creepers) surround
-      // the bot. At night, hostile mobs fill caves densely. Disabling canDig forces the
-      // pathfinder to route around obstacles on the surface instead of through them.
-      // Daytime digging is safe because cave mobs are sparser.
+      // opening cave systems where underground mobs surround the bot.
+      // Night: hostile mobs fill caves densely. Disabling canDig forces surface routing.
+      // Low HP: Bot1/Bot2/Bot3 [2026-03-22] multiple deaths from canDig cave entry at low HP
+      // during daytime — any mob encounter at HP<10 is fatal. Disable canDig to keep bot
+      // on the surface where it can flee/eat instead of getting trapped underground.
       const navTimeOfDay = bot.time?.timeOfDay ?? 0;
       const navIsNight = navTimeOfDay > 12541 || navTimeOfDay < 100;
-      if (navIsNight) {
+      const navHp = bot.health ?? 20;
+      if (navIsNight || navHp < 10) {
         bot.pathfinder.movements.canDig = false;
-        console.error(`[MoveTo] Night mode: canDig disabled to prevent cave routing (time=${navTimeOfDay})`);
+        const reason = navIsNight ? `night (time=${navTimeOfDay})` : `low HP (${navHp.toFixed(1)})`;
+        console.error(`[MoveTo] canDig disabled to prevent cave routing: ${reason}`);
       } else {
         bot.pathfinder.movements.canDig = true;
       }
@@ -1477,9 +1480,11 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     const goal = new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3);
     bot.pathfinder.setGoal(goal);
 
-    // Scale timeout with requested distance. Base 10s + 0.2s per block beyond 20.
+    // Scale timeout with requested distance. Base 10s + 0.3s per block beyond 20.
     // Bot3 #26: 8s timeout was too short for 30-50 block flee on rough terrain.
-    const fleeTimeoutMs = Math.min(Math.max(10000, 10000 + (distance - 20) * 200), 15000);
+    // Cap raised from 15s to 20s: with maxDropDown=0, pathfinder is heavily constrained
+    // on rough terrain (old_growth_birch_forest hills). 15s wasn't enough for 30+ block flee.
+    const fleeTimeoutMs = Math.min(Math.max(10000, 10000 + (distance - 20) * 300), 20000);
 
     // Wait for movement with proper completion check
     await new Promise<void>((resolve) => {
