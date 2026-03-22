@@ -198,8 +198,15 @@ export async function mc_execute(
             const hp = waitBot.health ?? 20;
             // Initialize lastCheckHp on first check
             if (lastCheckHp < 0) lastCheckHp = hp;
-            // Abort wait if HP critically low — bot is under attack or drowning
-            if (hp < 4) {
+            // Abort wait if HP critically low — bot is under attack or drowning.
+            // Raised from 4 to 6: at HP 4, a single skeleton shot (5 damage) or zombie
+            // hit (3-6 damage) is instantly lethal. At HP 6, the bot has one extra hit
+            // of buffer to survive until the agent can call mc_flee after wait resolves.
+            // Bot2 [2026-03-22]: HP dropped 20→0.5 during wait loops — the HP<4 threshold
+            // let the bot stay in wait while taking multiple hits from nearby mobs.
+            // The hpDrop >= 2 delta check is the primary defense, but this absolute floor
+            // catches slow damage (starvation: 1 HP per tick) that doesn't trigger the delta.
+            if (hp < 6) {
               if (logs.length < MAX_LOG_LINES) {
                 logs.push(`[wait] ABORTED: HP dropped to ${hp.toFixed(1)} during wait`);
               }

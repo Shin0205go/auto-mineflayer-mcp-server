@@ -1608,15 +1608,21 @@ export async function mc_navigate(
     // flee from mobs much harder. Navigation drains hunger, so hunger=4-6 reaches 0 quickly.
     // Bot1 Sessions 28,35,44: died at HP 10-14 navigating with hunger=0-1, no food.
     //
-    // EXCEPTION: Allow short-distance navigation (<=30 blocks) to reach nearby chests,
-    // animals, or food sources. Without this exemption, starving bots are completely
-    // immobilized — they can't reach a chest 5 blocks away to get food.
+    // TWO-TIER check:
+    //   1) LONG DISTANCE (>30 blocks): Block at ANY HP when hunger<=6 and no food.
+    //      Bug: Bot2 [2026-03-23] had HP>14, hunger=4, no food, navigated 50+ blocks.
+    //      The old `hp <= 14` gate let high-HP bots through, but hunger WILL hit 0
+    //      during any long nav (sprinting depletes ~1 hunger/7s). After hunger=0,
+    //      HP drains 1/4s from starvation and cannot regenerate. Any mob hit is lethal.
+    //   2) SHORT DISTANCE (<=30 blocks): Block only when HP<=14 — allows emergency
+    //      chest/food access. Without this exemption, starving bots are completely
+    //      immobilized — they can't reach a chest 5 blocks away to get food.
     // Bot2 [2026-03-22]: "pathfinder emergency chest access" deadlock — hunger=0, HP=4,
     //   chest at 8 blocks, navigation REFUSED, died.
     // Bot3 Bug #13/#15: hunger=0, chest at 19.6m, navigation blocked, death loop.
     // moveTo already has its own safety (HP check, hostile scan, cave routing abort)
     // that will protect during short moves.
-    if (hunger <= 6 && !hasFood && hp <= 14) {
+    if (hunger <= 6 && !hasFood) {
       const navPos = bot.entity.position;
       let estimatedDistance = Infinity;
       if (args.x !== undefined && args.z !== undefined) {
@@ -1629,12 +1635,18 @@ export async function mc_navigate(
         estimatedDistance = 30; // treat as short-range to allow the attempt
       }
       if (estimatedDistance > 30) {
-        // Block long-distance navigation — walking 30+ blocks at low hunger with no food
-        // guarantees hunger hits 0, then starvation damage + mob hits = death.
-        // Bot2 [2026-03-23]: hunger=4, moveTo(80,69,-13) ~50+ blocks, killed by zombie.
+        // Block long-distance navigation at ANY HP — walking 30+ blocks at low hunger
+        // with no food guarantees hunger hits 0 during travel. HP cannot regenerate and
+        // starvation damage begins regardless of starting HP.
+        // Bot2 [2026-03-23]: HP>14, hunger=4, moveTo(80,69,-13) ~50+ blocks, killed by zombie.
+        // Old code required hp<=14, letting high-HP bots navigate to their death.
         return `[BLOCKED] Navigation refused: hunger=${hunger}, HP=${hp}, no food in inventory. Long-distance navigation (${Math.round(estimatedDistance)} blocks) at low hunger drains hunger to 0 during travel, then starvation damage begins. HP cannot regenerate. Use mc_combat(cow/pig/chicken) for food or navigate to a nearby chest (<30 blocks). Position: (${Math.round(navPos.x)}, ${Math.round(navPos.y)}, ${Math.round(navPos.z)}).`;
       }
-      nightWarning += `\n[STARVATION WARNING] Hunger=${hunger}, no food, HP=${hp}. Short-distance nav allowed but find food urgently.`;
+      // Short-distance: only block when HP is already low (<=14), allowing emergency
+      // food/chest access at higher HP.
+      if (hp <= 14) {
+        nightWarning += `\n[STARVATION WARNING] Hunger=${hunger}, no food, HP=${hp}. Short-distance nav allowed but find food urgently.`;
+      }
     }
 
     // Auto-equip armor before ALL navigation — not just at night.
