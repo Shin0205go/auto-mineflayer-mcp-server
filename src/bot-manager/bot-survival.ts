@@ -272,12 +272,19 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
     });
   } else {
     // Find nearest hostile (using dynamic registry check)
+    // Apply underground penalty (5 per block below bot Y-5) consistent with fight().
+    // Without this, attack() targets underground hostiles, causing cave routing and deaths.
+    // Bot1/Bot2/Bot3 [2026-03-22]: multiple deaths from targeting underground mobs.
+    const attackBotY = bot.entity.position.y;
     target = entities
       .filter(e => isHostileMob(bot, e.name?.toLowerCase() || ""))
-      .sort((a, b) =>
-        a.position.distanceTo(bot.entity.position) -
-        b.position.distanceTo(bot.entity.position)
-      )[0];
+      .sort((a, b) => {
+        const aDist = a.position.distanceTo(bot.entity.position);
+        const bDist = b.position.distanceTo(bot.entity.position);
+        const aDepth = Math.max(attackBotY - a.position.y - 5, 0);
+        const bDepth = Math.max(attackBotY - b.position.y - 5, 0);
+        return (aDist + aDepth * 5) - (bDist + bDepth * 5);
+      })[0];
   }
 
   if (!target) {
@@ -295,13 +302,25 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       console.error(`[Attack] Enderman at ${distance.toFixed(1)} blocks — approaching to 12 blocks first...`);
       applySafePathfinderSettings(bot);
       const approachGoal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 12);
-      bot.pathfinder.setGoal(approachGoal);
+      // Use safeSetGoal for Y-descent monitoring during approach.
+      // Previous raw setGoal() had no cave routing protection — bot could descend
+      // into caves while approaching enderman, same issue fixed in fight() enderman path.
+      const attackApproachHandle = safeSetGoal(bot, approachGoal, {
+        intervalMs: 200,
+        onAbort: (yDescent) => {
+          console.error(`[Attack] CAVE DESCENT during enderman approach: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
+        }
+      });
       await new Promise<void>((resolve) => {
-        const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
+        const timeout = setTimeout(() => { attackApproachHandle.cleanup(); bot.pathfinder.setGoal(null); resolve(); }, 8000);
         const check = setInterval(() => {
+          if (attackApproachHandle.aborted) {
+            clearInterval(check); clearTimeout(timeout); resolve();
+            return;
+          }
           const currentDist = target.position.distanceTo(bot.entity.position);
           if (currentDist <= 14 || !bot.pathfinder.isMoving()) {
-            clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+            clearInterval(check); clearTimeout(timeout); attackApproachHandle.cleanup(); bot.pathfinder.setGoal(null); resolve();
           }
         }, 200);
       });
@@ -953,7 +972,10 @@ export async function fight(
         const bDist = b.position.distanceTo(bot.entity.position);
         const aDepth = Math.max(combatBotY - a.position.y - 5, 0);
         const bDepth = Math.max(combatBotY - b.position.y - 5, 0);
-        return (aDist + aDepth * 3) - (bDist + bDepth * 3);
+        // Penalty 5 per block underground: matches findBlock and navigate entity scoring.
+        // Bot1/Bot2/Bot3 [2026-03-22]: combat targeted underground mobs because 3x penalty
+        // was weaker than findBlock's 5x, making combat route into caves more aggressively.
+        return (aDist + aDepth * 5) - (bDist + bDepth * 5);
       })[0];
     }
     // Apply depth penalty to unnamed hostile targeting — same rationale as the named-entity
@@ -968,7 +990,8 @@ export async function fight(
         const bDist = b.position.distanceTo(bot.entity.position);
         const aDepth = Math.max(unnamedBotY - a.position.y - 5, 0);
         const bDepth = Math.max(unnamedBotY - b.position.y - 5, 0);
-        return (aDist + aDepth * 3) - (bDist + bDepth * 3);
+        // Penalty 5 per block: consistent with findBlock/navigate entity scoring.
+        return (aDist + aDepth * 5) - (bDist + bDepth * 5);
       })[0] || null;
   };
 

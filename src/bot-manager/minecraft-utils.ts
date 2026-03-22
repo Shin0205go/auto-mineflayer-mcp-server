@@ -237,7 +237,9 @@ export function checkGroundBelow(bot: Bot, x: number, y: number, z: number, maxF
     if (block && block.name !== "air" && block.name !== "cave_air" && block.name !== "void_air") {
       // Bug fix (Session 186): lava is NOT safe ground — falling into lava is lethal.
       // Treat lava as lethal and return unsafe with lava flag.
-      if (block.name === "lava") {
+      // Bot3 Death #8: fell into flowing_lava during flee — previous check only caught
+      // source "lava", missing "flowing_lava" which is equally lethal.
+      if (isLavaBlock(block.name)) {
         return { safe: false, fallDistance: dy, hasLavaBelow: true };
       }
       // Fall distance of 3 or less = no damage
