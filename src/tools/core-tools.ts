@@ -237,8 +237,11 @@ export async function mc_gather(
     const gatherTime = gatherBot.time?.timeOfDay ?? 0;
     const gatherIsNight = gatherTime > 12541 || gatherTime < 100;
 
-    // Auto-equip armor at night — mobs can spawn and attack during long gather operations.
-    if (gatherIsNight) {
+    // Auto-equip armor before gathering — mobs can attack during long gather operations.
+    // Always equip at night. During daytime, equip if hostiles are nearby (pillagers, cave
+    // zombies). Bot2 [2026-03-22]: skeleton shot bot HP 20→1 during daytime gather, no armor.
+    const shouldEquipArmor = gatherIsNight || checkDangerNearby(gatherBot, 20).dangerous;
+    if (shouldEquipArmor) {
       try {
         await botManager.equipArmor(username);
       } catch {
@@ -338,18 +341,24 @@ export async function mc_gather(
           resolve(`[ABORTED] mc_gather stopped: HP dropped to ${monHp.toFixed(1)} during gathering. Use mc_flee or mc_eat before retrying.`);
           return;
         }
-        // Night transition check: if night fell DURING gathering, check for hostiles.
-        // mc_gather can take up to 120s. Daytime at start doesn't mean daytime throughout.
-        // Bot1: mc_gather(short_grass) started during day, night fell, mobs spawned and attacked.
-        // Bot2: skeleton attacked during gather because night fell mid-operation.
+        // Hostile check during gathering — both night AND daytime.
+        // mc_gather can take up to 120s. The bot is stationary/moving slowly, vulnerable.
+        // Night: check 20-block radius (mobs are everywhere).
+        // Daytime: check 12-block radius when HP<12 — pillagers, cave zombies, and
+        // remnant mobs attack during day. Bot2 [2026-03-22]: skeleton shot bot from
+        // HP 20→1 during daytime dirt placement. The initial night-only check missed this.
         const monTime = monBot.time?.timeOfDay ?? 0;
         const monIsNight = monTime > 12541 || monTime < 100;
-        if (monIsNight) {
-          const monDanger = checkDangerNearby(monBot, 20);
-          if (monDanger.dangerous && monDanger.nearestHostile && monDanger.nearestHostile.distance <= 16) {
+        const gatherScanRadius = monIsNight ? 20 : 12;
+        const shouldCheckHostiles = monIsNight || monHp < 12;
+        if (shouldCheckHostiles) {
+          const monDanger = checkDangerNearby(monBot, gatherScanRadius);
+          const distThreshold = monIsNight ? 16 : 10;
+          if (monDanger.dangerous && monDanger.nearestHostile && monDanger.nearestHostile.distance <= distThreshold) {
             clearInterval(hpCheckInterval);
             try { monBot.pathfinder?.stop(); } catch (_) {}
-            resolve(`[ABORTED] mc_gather stopped: night fell and ${monDanger.nearestHostile.name} detected ${monDanger.nearestHostile.distance.toFixed(1)} blocks away (HP=${monHp.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`);
+            const timeNote = monIsNight ? "night fell and " : "";
+            resolve(`[ABORTED] mc_gather stopped: ${timeNote}${monDanger.nearestHostile.name} detected ${monDanger.nearestHostile.distance.toFixed(1)} blocks away (HP=${monHp.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`);
             return;
           }
         }
@@ -1271,7 +1280,7 @@ export async function mc_navigate(
       // Bot2: pillager knockback caused fall during daytime movement.
       // The night check uses 16-block radius; daytime uses tighter 10-block radius
       // since most daytime hostiles are remnants from night or cave dwellers.
-      if (hp < 10) {
+      if (hp < 12) {
         const dayHostiles: Array<{ name: string; dist: number }> = [];
         for (const entity of Object.values(bot.entities)) {
           if (!entity || !entity.position || entity === bot.entity) continue;
@@ -1283,6 +1292,14 @@ export async function mc_navigate(
           }
         }
         if (dayHostiles.length > 0) {
+          // Auto-equip armor when daytime hostiles are detected nearby.
+          // Bot2 [2026-03-22]: pillager knockback fall death, no armor equipped during day.
+          // Bot1: killed by zombie during daytime at low HP, no armor.
+          try {
+            await botManager.equipArmor(username);
+          } catch {
+            // Continue without armor
+          }
           const dayThreatList = dayHostiles
             .sort((a, b) => a.dist - b.dist)
             .slice(0, 5)

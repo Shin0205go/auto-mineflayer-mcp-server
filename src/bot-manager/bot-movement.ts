@@ -386,26 +386,37 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         }
       }
 
-      // Check B: Night hostile detection with armor-aware threshold.
+      // Check B: Hostile detection with armor-aware threshold (night AND daytime).
       // Armor check: count equipped armor pieces. Full iron armor reduces skeleton damage from 5→2.
       // Unarmored bots need higher HP threshold to survive hits during flee.
-      if (navIsNight) {
+      {
         let armorCount = 0;
         for (const slotName of ["head", "torso", "legs", "feet"] as const) {
           const slot = bot.inventory.slots[bot.getEquipmentDestSlot(slotName)];
           if (slot && slot.name.includes("_")) armorCount++;
         }
-        // Unarmored (0-1 pieces): abort at HP<=14 — skeleton 2-shots, zombie 3-shots
-        // Partial armor (2-3 pieces): abort at HP<=12
-        // Full armor (4 pieces): abort at HP<=10 — original threshold
-        const nightHpThreshold = armorCount <= 1 ? 14 : armorCount <= 3 ? 12 : 10;
 
-        if (navHp <= nightHpThreshold) {
+        // Night: wider radius (16 blocks), higher HP threshold — mobs are dense and respawn.
+        // Daytime: tighter radius (10 blocks), lower HP threshold — only pillagers, cave
+        // zombies, and remnant mobs are dangerous. But they DO kill:
+        // Bot1/Bot2 [2026-03-22]: multiple daytime deaths from pillagers and zombies during
+        // active pathfinding. The pre-nav check in core-tools.ts only fires once at start,
+        // but mobs approach DURING the pathfinder movement. This 500ms check catches them.
+        const scanRadius = navIsNight ? 16 : 10;
+        // Night HP thresholds (high — mobs are everywhere):
+        //   Unarmored: 14, Partial: 12, Full: 10
+        // Daytime HP thresholds (lower — fewer mobs, but still lethal when close):
+        //   Unarmored: 10, Partial: 8, Full: 6
+        const hpThreshold = navIsNight
+          ? (armorCount <= 1 ? 14 : armorCount <= 3 ? 12 : 10)
+          : (armorCount <= 1 ? 10 : armorCount <= 3 ? 8 : 6);
+
+        if (navHp <= hpThreshold) {
           const nearHostiles: Array<{ name: string; dist: number }> = [];
           for (const entity of Object.values(bot.entities)) {
             if (!entity || !entity.position || entity === bot.entity) continue;
             const eDist = entity.position.distanceTo(currentPos);
-            if (eDist > 16) continue;
+            if (eDist > scanRadius) continue;
             const eName = entity.name?.toLowerCase() ?? "";
             if (isHostileMob(bot, eName)) {
               nearHostiles.push({ name: eName, dist: Math.round(eDist * 10) / 10 });
@@ -415,11 +426,12 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
             const closestThreat = nearHostiles.sort((a, b) => a.dist - b.dist)[0];
             const threatList = nearHostiles.slice(0, 3).map(h => `${h.name}(${h.dist}m)`).join(", ");
             const armorNote = armorCount === 0 ? " NO ARMOR — very vulnerable." : armorCount < 4 ? ` Partial armor (${armorCount}/4).` : "";
-            console.error(`[MoveTo] NIGHT DANGER: HP=${navHp.toFixed(1)}, armor=${armorCount}/4, ${nearHostiles.length} hostile(s) nearby: ${threatList}. Aborting navigation.`);
+            const timeNote = navIsNight ? "at night" : "during daytime";
+            console.error(`[MoveTo] HOSTILE DANGER (${timeNote}): HP=${navHp.toFixed(1)}, armor=${armorCount}/4, ${nearHostiles.length} hostile(s) nearby: ${threatList}. Aborting navigation.`);
             finish({
               success: false,
-              message: `Navigation aborted: HP=${Math.round(navHp*10)/10} at night with ${nearHostiles.length} hostile(s) nearby (${threatList}).${armorNote} Current position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee, build shelter, or wait for dawn.`,
-              stuckReason: "night_danger"
+              message: `Navigation aborted: HP=${Math.round(navHp*10)/10} ${timeNote} with ${nearHostiles.length} hostile(s) nearby (${threatList}).${armorNote} Current position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee, build shelter, or wait for dawn.`,
+              stuckReason: navIsNight ? "night_danger" : "daytime_danger"
             });
             return;
           }
