@@ -316,17 +316,21 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       }
       // Case 2: target is significantly below start — allow descent but catch cave routing.
       // Two sub-checks:
-      //   2a) Absolute max descent from start: never allow more than 8 blocks below start.
-      //       Bot1/Bot2 [2026-03-22]: target at Y=88, start at Y=97. Old 10-block-below-target
-      //       threshold allowed bot to reach Y=78 (19 blocks below start!) before triggering.
-      //       8 blocks below start catches cave entries early even when target is below.
+      //   2a) Dynamic max descent from start: allow descent proportional to the actual Y difference
+      //       to the target, plus a 5-block buffer for terrain meandering.
+      //       Previous flat 8-block limit was too restrictive: Bot1/Bot2/Bot3 [2026-03-22] could
+      //       not reach chests/infrastructure 10-15 blocks below (e.g., bot at Y=99, chest at Y=88).
+      //       The moveToBasic cave detection fired at 8 blocks down, aborting legitimate navigation.
+      //       New: max descent = (startY - targetY) + 5, capped at 20 for safety.
       //   2b) Overshoot: bot should not go more than 5 blocks below target Y.
       //       Reduced from 10 to 5: when target is far below start, the bot may legitimately
       //       descend but should converge toward target, not dive 10+ blocks past it.
       if (!targetIsAtOrAboveStart) {
-        // 2a: Absolute max descent from start
-        if (yDescentFromStart > 8) {
-          console.error(`[MoveTo] CAVE DESCENT DETECTED: Bot descended ${yDescentFromStart.toFixed(1)} blocks below start (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}, target Y=${y.toFixed(1)}). Aborting to prevent underground trapping.`);
+        // 2a: Dynamic max descent from start — proportional to target depth
+        const expectedDescent = start.y - y; // how far down the target is
+        const maxAllowedDescent = Math.min(expectedDescent + 5, 20); // buffer for terrain + hard cap
+        if (yDescentFromStart > maxAllowedDescent) {
+          console.error(`[MoveTo] CAVE DESCENT DETECTED: Bot descended ${yDescentFromStart.toFixed(1)} blocks below start (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}, target Y=${y.toFixed(1)}, max allowed=${maxAllowedDescent.toFixed(0)}). Aborting to prevent underground trapping.`);
           finish({
             success: false,
             message: `Navigation stopped: descended ${yDescentFromStart.toFixed(0)} blocks below start (Y=${start.y.toFixed(0)} → Y=${currentPos.y.toFixed(0)}, target Y=${y.toFixed(0)}). Pathfinder may be routing through caves. Try shorter segments or a different waypoint.`,

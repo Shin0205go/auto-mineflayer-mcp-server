@@ -1547,21 +1547,29 @@ export async function mc_navigate(
             // Bot1 Sessions 20-44: 15+ deaths from mobs spawning between segments during night nav.
             // The initial hostile check passes (no mobs at start), but new mobs spawn during
             // the 5-15 seconds each segment takes. Without this check, bot walks into new mobs.
-            // At night: scan 16 blocks. During day: scan 10 blocks when HP is low.
-            // Bot1/Bot2 [2026-03-22]: killed by pillagers/zombies during DAYTIME navigation.
-            // Pillagers are active in daytime; cave zombies may surface near openings.
-            const segScanRadius = segIsNight ? 16 : 10;
-            const shouldScanHostiles = segIsNight || segHp < 12;
-            if (shouldScanHostiles) {
+            // At night: scan 16 blocks. During day: scan 12 blocks.
+            // Bot1/Bot2 [2026-03-22]: killed by pillagers/zombies during DAYTIME navigation
+            // at HP >= 12 — the old condition (segIsNight || segHp < 12) skipped daytime scans
+            // entirely when HP was healthy, missing creepers and pillagers that attacked mid-nav.
+            // Creepers can one-shot at any HP without blast protection armor.
+            // Pillagers are active 24/7 and deal significant ranged damage.
+            // Now: ALWAYS scan between segments regardless of time/HP. Scan radius is wider
+            // at night (16) since more hostiles are active.
+            const segScanRadius = segIsNight ? 16 : 12;
+            {
               const segDanger = checkDangerNearby(segBot, segScanRadius);
               if (segDanger.dangerous && segDanger.nearestHostile) {
                 const nearDist = segDanger.nearestHostile.distance;
                 const nearName = segDanger.nearestHostile.name;
-                // Only abort if hostiles are close enough to be a real threat.
-                // Creepers within 12 blocks are especially lethal (1-shot explosion).
+                // Creepers within 12 blocks are especially lethal (1-shot explosion at any HP).
+                // Always abort for creepers — they are the #1 cause of death across all bots.
                 const isCreeperClose = nearName === "creeper" && nearDist <= 12;
-                const isHostileClose = nearDist <= 10;
-                if (isCreeperClose || (isHostileClose && segHp < 16)) {
+                // Other hostiles within 10 blocks when HP < 16 (need HP buffer for hits).
+                const isHostileClose = nearDist <= 10 && segHp < 16;
+                // At night, also abort for any hostile within 12 blocks regardless of HP.
+                // Night hostiles are denser and harder to escape — better to stop and assess.
+                const isNightHostileClose = segIsNight && nearDist <= 12;
+                if (isCreeperClose || isHostileClose || isNightHostileClose) {
                   const curPos2 = botManager.getPosition(username);
                   const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
                   const timeNote = segIsNight ? "at night" : "during daytime";
@@ -1623,18 +1631,22 @@ export async function mc_navigate(
         return segResult + nightWarning;
       }
     }
-    // SAFETY: For short-distance navigation, clamp target Y to prevent cave routing.
-    // When target Y is significantly below bot's current Y, pathfinder routes underground
+    // SAFETY: For short-distance navigation, clamp target Y to prevent deep cave routing.
+    // When target Y is extremely far below bot's current Y, pathfinder routes underground
     // through caves to reach the lower elevation. The segmented path (dist>50) already
     // keeps intermediate Y at bot level, but short-distance direct paths had no such
     // protection. Bot1 Sessions 42-44, Bot2/Bot3: pathfinder routed underground for
-    // short-distance navigation to lower-Y targets (e.g., chest at Y=62, bot at Y=96).
-    // Fix: if target Y is >5 blocks below bot, use bot's current Y instead. The pathfinder's
-    // cave detection in moveToBasic catches descent, but it allows 8 blocks of drop before
-    // aborting — by then the bot is already in a cave. Clamping Y prevents the attempt.
+    // short-distance navigation to very deep targets (e.g., chest at Y=62, bot at Y=96).
+    // Previous threshold (5 blocks) was too aggressive — prevented reaching chests and
+    // infrastructure 5-15 blocks below bot. Bot1 stuck at Y=66, chests at Y=89.
+    // Bot2: pathfinding deadlock because chests at Y=88 were clamped from bot at Y=99+.
+    // New threshold: 20 blocks. moveToBasic's dynamic cave detection (proportional to
+    // target depth + 5 block buffer) catches actual cave routing during navigation.
+    // This clamp only prevents pathfinder from targeting extremely deep positions (>20
+    // blocks below) which are almost certainly underground cave destinations.
     let safeNy = ny;
-    if (pos && ny < pos.y - 5) {
-      console.error(`[Navigate] Short-distance Y-clamp: target Y=${ny} is ${(pos.y - ny).toFixed(1)} blocks below bot Y=${pos.y.toFixed(1)}. Using bot Y to prevent cave routing.`);
+    if (pos && ny < pos.y - 20) {
+      console.error(`[Navigate] Short-distance Y-clamp: target Y=${ny} is ${(pos.y - ny).toFixed(1)} blocks below bot Y=${pos.y.toFixed(1)}. Clamping to bot Y to prevent deep cave routing.`);
       safeNy = Math.round(pos.y);
     }
     const directResult = await botManager.moveTo(username, nx, safeNy, nz);
