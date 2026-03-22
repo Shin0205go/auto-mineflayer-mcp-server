@@ -1712,13 +1712,14 @@ export async function mc_navigate(
             // BUG FIX: Previously only set nightWarning string but didn't block.
             // Bot2 [2026-03-23]: killed by zombie during daytime navigation at low HP.
             // Now actually blocks when hostiles are within 10 blocks and HP is critical.
-            // Without food, increase block radius to 16 — any damage is permanent, and
-            // mobs at 10-16 blocks close in during navigation (zombie walks at 2.3 blocks/s,
-            // so a mob at 16 blocks reaches melee in ~7s — well within typical nav duration).
-            // Bot2 [2026-03-23]: zombie at 22.8m was outside 10-block block radius, closed
-            // in during navigate and killed bot with no food to regenerate.
+            // Without food, increase block radius to 20 — any damage is permanent, and
+            // mobs at 16-22 blocks close in during navigation (zombie walks at 2.3 blocks/s,
+            // so a mob at 20 blocks reaches melee in ~8s — well within typical nav duration).
+            // Bot2 [2026-03-23]: zombie at 22.8m was outside 16-block block radius, closed
+            // in during navigate and killed bot with no food to regenerate. 16 blocks was
+            // insufficient; at 20 blocks the pre-check catches most approaching zombies.
             const closestDayDist = dayHostiles.sort((a, b) => a.dist - b.dist)[0].dist;
-            const dayBlockDist = hasFood ? 10 : 16;
+            const dayBlockDist = hasFood ? 10 : 20;
             if (closestDayDist <= dayBlockDist) {
               return `[BLOCKED] Navigation refused: HP=${hp} with ${dayHostiles.length} hostile(s) nearby (${dayThreatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}Use mc_flee or mc_combat to handle threats first. Position: (${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.y)}, ${Math.round(bot.entity.position.z)}).`;
             }

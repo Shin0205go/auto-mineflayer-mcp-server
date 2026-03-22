@@ -407,12 +407,36 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
           }
         }
         if (creeperNearby) {
-          console.error(`[MoveTo] CREEPER DANGER: Creeper at ${creeperDist.toFixed(1)} blocks during navigation. HP=${navHp.toFixed(1)}. Aborting for mc_flee.`);
+          console.error(`[MoveTo] CREEPER DANGER: Creeper at ${creeperDist.toFixed(1)} blocks during navigation. HP=${navHp.toFixed(1)}. Aborting + emergency sprint away.`);
+          // Find the creeper entity to sprint away from it
+          let creeperEntity: any = null;
+          for (const entity of Object.values(bot.entities)) {
+            if (!entity || !entity.position || entity === bot.entity) continue;
+            if ((entity.name?.toLowerCase() ?? "") === "creeper") {
+              const eDist = entity.position.distanceTo(currentPos);
+              if (eDist < 8) { creeperEntity = entity; break; }
+            }
+          }
           finish({
             success: false,
             message: `Navigation aborted: CREEPER at ${creeperDist.toFixed(1)} blocks! HP=${Math.round(navHp*10)/10}. Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee IMMEDIATELY — creeper explosion is lethal at close range.`,
             stuckReason: "creeper_danger"
           });
+          // Emergency sprint away from creeper after finish() clears states.
+          // Creeper fuse is 1.5s — every millisecond counts.
+          try {
+            if (creeperEntity) {
+              const cPos = creeperEntity.position;
+              const fleeYaw = Math.atan2(-(currentPos.x - cPos.x), currentPos.z - cPos.z);
+              bot.look(fleeYaw, 0, true);
+            }
+            bot.setControlState("sprint", true);
+            bot.setControlState("forward", true);
+            bot.setControlState("jump", true); // Jump over obstacles while fleeing
+            setTimeout(() => {
+              try { bot.clearControlStates(); } catch { /* ignore */ }
+            }, 2000);
+          } catch { /* ignore retreat errors */ }
           return;
         }
       }
@@ -467,12 +491,24 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
             if (RANGED_MOBS.includes(eName)) {
               const timeNote = navIsNight ? "at night" : "during daytime";
               const armorNote = armorCount === 0 ? "NO ARMOR" : `PARTIAL ARMOR (${armorCount}/4)`;
-              console.error(`[MoveTo] RANGED MOB DANGER (${timeNote}): ${eName} at ${eDist.toFixed(1)} blocks, armor=${armorCount}/4, HP=${navHp.toFixed(1)}. Aborting.`);
+              console.error(`[MoveTo] RANGED MOB DANGER (${timeNote}): ${eName} at ${eDist.toFixed(1)} blocks, armor=${armorCount}/4, HP=${navHp.toFixed(1)}. Aborting + emergency retreat.`);
               finish({
                 success: false,
                 message: `Navigation aborted: ${eName} detected ${eDist.toFixed(1)} blocks away ${timeNote}, HP=${Math.round(navHp*10)/10}. ${armorNote} — ranged mobs deal 4-9 damage per shot. Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`,
                 stuckReason: "ranged_mob_danger"
               });
+              // Emergency sprint away from ranged mob after abort.
+              // Bot1/Bot2: standing still after ranged abort = continued arrow damage.
+              try {
+                const mobPos = entity.position;
+                const fleeYaw = Math.atan2(-(currentPos.x - mobPos.x), currentPos.z - mobPos.z);
+                bot.look(fleeYaw, 0, true);
+                bot.setControlState("sprint", true);
+                bot.setControlState("forward", true);
+                setTimeout(() => {
+                  try { bot.clearControlStates(); } catch { /* ignore */ }
+                }, 1500);
+              } catch { /* ignore retreat errors */ }
               return;
             }
           }
@@ -493,14 +529,16 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         // Full iron armor (4/4) absorbs enough damage to survive multiple hits, so skip for those.
         if (armorCount <= 2) {
           // Night + unarmored: wider detection. Night + partial: moderate. Day: tight.
-          // Bot2 [2026-03-23]: zombie at 22.8m closed to 6 blocks during daytime navigation
-          // and killed bot before the abort triggered. Without food, any damage is permanent,
-          // so increase daytime melee abort to 10 blocks (gives ~4s reaction time at zombie
-          // walk speed of 2.3 blocks/s, enough for 8 safety checks at 500ms interval).
+          // Bot2 [2026-03-23]: zombie at 22.8m closed to melee during daytime navigation
+          // and killed bot before the abort triggered. Without food, any damage is permanent.
+          // Increase daytime no-food melee abort to 14 blocks (gives ~5.4s reaction time at
+          // zombie walk speed of 2.3 blocks/s, enough for 10+ safety checks at 500ms interval).
+          // 10 blocks was insufficient: abort fires, agent receives message, but zombie
+          // covers remaining 8.5 blocks in 3.7s before agent can call mc_flee.
           const navHasFood = bot.inventory.items().some((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
           const meleeAbortDist = navIsNight
             ? (armorCount <= 1 ? 12 : 8)
-            : (navHasFood ? 6 : 10);
+            : (navHasFood ? 6 : 14);
           for (const entity of Object.values(bot.entities)) {
             if (!entity || !entity.position || entity === bot.entity) continue;
             const eDist = entity.position.distanceTo(currentPos);
@@ -511,12 +549,29 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
             if (isHostileMob(bot, eName)) {
               const timeNote = navIsNight ? "at night" : "during daytime";
               const armorNote = armorCount === 0 ? "NO ARMOR" : `PARTIAL ARMOR (${armorCount}/4)`;
-              console.error(`[MoveTo] CLOSE MELEE DANGER (${timeNote}): ${eName} at ${eDist.toFixed(1)} blocks, armor=${armorCount}/4, HP=${navHp.toFixed(1)}. Aborting.`);
+              console.error(`[MoveTo] CLOSE MELEE DANGER (${timeNote}): ${eName} at ${eDist.toFixed(1)} blocks, armor=${armorCount}/4, HP=${navHp.toFixed(1)}. Aborting + emergency retreat.`);
+              // Emergency retreat: look away from the mob and sprint-walk for 1s.
+              // finish() clears control states, but we set them AFTER finish to persist.
+              // Bot2 [2026-03-23]: after abort, bot stood still for 2-4s waiting for agent
+              // to call mc_flee — zombie closed remaining distance and killed bot.
+              // Emergency retreat buys ~2 extra blocks of distance, giving the agent time.
               finish({
                 success: false,
                 message: `Navigation aborted: ${eName} within ${eDist.toFixed(1)} blocks ${timeNote}, HP=${Math.round(navHp*10)/10}. ${armorNote} — melee mob approaching. Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`,
                 stuckReason: "melee_mob_danger"
               });
+              // After finish (which clears states), set emergency retreat: face away from mob and sprint
+              try {
+                const mobPos = entity.position;
+                const fleeYaw = Math.atan2(-(currentPos.x - mobPos.x), currentPos.z - mobPos.z);
+                bot.look(fleeYaw, 0, true);
+                bot.setControlState("sprint", true);
+                bot.setControlState("forward", true);
+                // Auto-clear after 1.5s to prevent indefinite running
+                setTimeout(() => {
+                  try { bot.clearControlStates(); } catch { /* ignore */ }
+                }, 1500);
+              } catch { /* ignore retreat errors */ }
               return;
             }
           }
@@ -539,12 +594,29 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
             const threatList = nearHostiles.slice(0, 3).map(h => `${h.name}(${h.dist}m)`).join(", ");
             const armorNote = armorCount === 0 ? " NO ARMOR — very vulnerable." : armorCount < 4 ? ` Partial armor (${armorCount}/4).` : "";
             const timeNote = navIsNight ? "at night" : "during daytime";
-            console.error(`[MoveTo] HOSTILE DANGER (${timeNote}): HP=${navHp.toFixed(1)}, armor=${armorCount}/4, ${nearHostiles.length} hostile(s) nearby: ${threatList}. Aborting navigation.`);
+            console.error(`[MoveTo] HOSTILE DANGER (${timeNote}): HP=${navHp.toFixed(1)}, armor=${armorCount}/4, ${nearHostiles.length} hostile(s) nearby: ${threatList}. Aborting + emergency retreat.`);
             finish({
               success: false,
               message: `Navigation aborted: HP=${Math.round(navHp*10)/10} ${timeNote} with ${nearHostiles.length} hostile(s) nearby (${threatList}).${armorNote} Current position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee, build shelter, or wait for dawn.`,
               stuckReason: navIsNight ? "night_danger" : "daytime_danger"
             });
+            // Emergency retreat from closest threat after abort
+            try {
+              const closestEntity = Object.values(bot.entities).find((e: any) =>
+                e && e.position && e !== bot.entity &&
+                (e.name?.toLowerCase() ?? "") === closestThreat.name &&
+                e.position.distanceTo(currentPos) < scanRadius + 5
+              );
+              if (closestEntity && closestEntity.position) {
+                const fleeYaw = Math.atan2(-(currentPos.x - closestEntity.position.x), currentPos.z - closestEntity.position.z);
+                bot.look(fleeYaw, 0, true);
+              }
+              bot.setControlState("sprint", true);
+              bot.setControlState("forward", true);
+              setTimeout(() => {
+                try { bot.clearControlStates(); } catch { /* ignore */ }
+              }, 1500);
+            } catch { /* ignore retreat errors */ }
             return;
           }
         }
