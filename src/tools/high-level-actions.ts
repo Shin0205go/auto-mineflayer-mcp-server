@@ -373,6 +373,37 @@ export async function minecraft_build_structure(
 ): Promise<string> {
   console.error(`[BuildStructure] Type: ${type}, Size: ${size}`);
 
+  const bot = botManager.getBot(username);
+
+  // Pre-build HP check: building is a long, stationary operation.
+  // Bot1 [2026-03-22]: killed by skeleton during mc_build(shelter) at Y=38, HP=9.
+  // Building places blocks one by one — bot is vulnerable the entire time.
+  if (bot) {
+    const buildHp = bot.health ?? 20;
+    if (buildHp < 8) {
+      return `[REFUSED] HP too low to build (${buildHp.toFixed(1)}/20). Building is a long operation — you'll be stationary and vulnerable. Use mc_eat or mc_flee first.`;
+    }
+  }
+
+  // Pre-build hostile check: abort if hostiles are nearby.
+  // Bot1 [2026-03-22]: called mc_build(shelter) at night with skeleton nearby, died during construction.
+  // Building takes many seconds — any nearby hostile will attack the stationary bot.
+  if (bot) {
+    const buildDanger = checkDangerNearby(bot, 16);
+    if (buildDanger.dangerous && buildDanger.nearestHostile) {
+      const threat = `${buildDanger.nearestHostile.name} at ${buildDanger.nearestHostile.distance.toFixed(1)} blocks`;
+      return `[REFUSED] Cannot build — hostile detected nearby: ${threat}. Clear threats with mc_combat or mc_flee first, then build.`;
+    }
+  }
+
+  // Auto-equip armor before building — bot is stationary and vulnerable during construction.
+  // Bot1 [2026-03-22]: killed by skeleton during shelter construction with no armor.
+  try {
+    await botManager.equipArmor(username);
+  } catch {
+    // Continue without armor
+  }
+
   const position = botManager.getPosition(username);
   if (!position) {
     return "Failed to get bot position";
@@ -413,64 +444,124 @@ export async function minecraft_build_structure(
 
   const results: string[] = [];
   let blocksPlaced = 0;
+  const buildStartTime = Date.now();
+  const BUILD_TIMEOUT_MS = 120000; // 120s max build time
+  let buildAborted = false;
+
+  // Mid-build safety check: HP monitoring + hostile detection during construction.
+  // Bot1 [2026-03-22]: killed by skeleton during mc_build(shelter) at Y=38 — no HP/hostile
+  // checks during the block placement loop. Same class of bug as mc_farm dirt placement.
+  // Check every 4 blocks placed to balance safety vs build speed.
+  const checkBuildSafety = (): string | null => {
+    if (!bot) return null;
+    // Timeout check
+    if (Date.now() - buildStartTime > BUILD_TIMEOUT_MS) {
+      return `[ABORTED] mc_build timed out after ${BUILD_TIMEOUT_MS / 1000}s.`;
+    }
+    // HP check
+    const hp = bot.health ?? 20;
+    if (hp < 8) {
+      return `[ABORTED] HP critically low during build (${hp.toFixed(1)}/20). Stopping to survive. Use mc_eat or mc_flee.`;
+    }
+    // Hostile check — scan 16 blocks during build
+    const danger = checkDangerNearby(bot, 16);
+    if (danger.dangerous && danger.nearestHostile && danger.nearestHostile.distance <= 12) {
+      return `[ABORTED] Hostile detected during build: ${danger.nearestHostile.name} at ${danger.nearestHostile.distance.toFixed(1)} blocks (HP=${(bot.health ?? 20).toFixed(1)}). Use mc_flee or mc_combat first.`;
+    }
+    return null;
+  };
 
   try {
     if (type === "shelter") {
       // Build walls (4 sides)
-      for (let y = 0; y < dim.height; y++) {
+      for (let y = 0; y < dim.height && !buildAborted; y++) {
         // Front and back walls
-        for (let x = 0; x < dim.width; x++) {
+        for (let x = 0; x < dim.width && !buildAborted; x++) {
           await botManager.placeBlock(username, material.name, baseX + x, baseY + y, baseZ);
           await botManager.placeBlock(username, material.name, baseX + x, baseY + y, baseZ + dim.length - 1);
           blocksPlaced += 2;
+          if (blocksPlaced % 4 === 0) {
+            const safetyMsg = checkBuildSafety();
+            if (safetyMsg) { results.push(safetyMsg); buildAborted = true; break; }
+          }
         }
         // Side walls (skip corners to avoid duplication)
-        for (let z = 1; z < dim.length - 1; z++) {
+        for (let z = 1; z < dim.length - 1 && !buildAborted; z++) {
           await botManager.placeBlock(username, material.name, baseX, baseY + y, baseZ + z);
           await botManager.placeBlock(username, material.name, baseX + dim.width - 1, baseY + y, baseZ + z);
           blocksPlaced += 2;
+          if (blocksPlaced % 4 === 0) {
+            const safetyMsg = checkBuildSafety();
+            if (safetyMsg) { results.push(safetyMsg); buildAborted = true; break; }
+          }
         }
       }
 
       // Build roof
-      for (let x = 0; x < dim.width; x++) {
-        for (let z = 0; z < dim.length; z++) {
-          await botManager.placeBlock(username, material.name, baseX + x, baseY + dim.height, baseZ + z);
-          blocksPlaced++;
+      if (!buildAborted) {
+        for (let x = 0; x < dim.width && !buildAborted; x++) {
+          for (let z = 0; z < dim.length && !buildAborted; z++) {
+            await botManager.placeBlock(username, material.name, baseX + x, baseY + dim.height, baseZ + z);
+            blocksPlaced++;
+            if (blocksPlaced % 4 === 0) {
+              const safetyMsg = checkBuildSafety();
+              if (safetyMsg) { results.push(safetyMsg); buildAborted = true; break; }
+            }
+          }
         }
       }
 
-      results.push(`Built ${size} shelter (${dim.width}x${dim.length}x${dim.height})`);
+      if (!buildAborted) {
+        results.push(`Built ${size} shelter (${dim.width}x${dim.length}x${dim.height})`);
+      }
 
     } else if (type === "wall") {
       // Build a protective wall
       const wallLength = dim.width * 2;
-      for (let y = 0; y < dim.height; y++) {
-        for (let x = 0; x < wallLength; x++) {
+      for (let y = 0; y < dim.height && !buildAborted; y++) {
+        for (let x = 0; x < wallLength && !buildAborted; x++) {
           await botManager.placeBlock(username, material.name, baseX + x, baseY + y, baseZ);
           blocksPlaced++;
+          if (blocksPlaced % 4 === 0) {
+            const safetyMsg = checkBuildSafety();
+            if (safetyMsg) { results.push(safetyMsg); buildAborted = true; break; }
+          }
         }
       }
-      results.push(`Built ${size} wall (${wallLength}x${dim.height})`);
+      if (!buildAborted) {
+        results.push(`Built ${size} wall (${wallLength}x${dim.height})`);
+      }
 
     } else if (type === "platform") {
       // Build a flat platform
-      for (let x = 0; x < dim.width; x++) {
-        for (let z = 0; z < dim.length; z++) {
+      for (let x = 0; x < dim.width && !buildAborted; x++) {
+        for (let z = 0; z < dim.length && !buildAborted; z++) {
           await botManager.placeBlock(username, material.name, baseX + x, baseY, baseZ + z);
           blocksPlaced++;
+          if (blocksPlaced % 4 === 0) {
+            const safetyMsg = checkBuildSafety();
+            if (safetyMsg) { results.push(safetyMsg); buildAborted = true; break; }
+          }
         }
       }
-      results.push(`Built ${size} platform (${dim.width}x${dim.length})`);
+      if (!buildAborted) {
+        results.push(`Built ${size} platform (${dim.width}x${dim.length})`);
+      }
 
     } else if (type === "tower") {
       // Build a vertical tower
       const towerHeight = dim.height * 2;
-      for (let y = 0; y < towerHeight; y++) {
+      for (let y = 0; y < towerHeight && !buildAborted; y++) {
         await botManager.placeBlock(username, material.name, baseX, baseY + y, baseZ);
         blocksPlaced++;
+        if (blocksPlaced % 4 === 0) {
+          const safetyMsg = checkBuildSafety();
+          if (safetyMsg) { results.push(safetyMsg); buildAborted = true; break; }
+        }
       }
-      results.push(`Built ${size} tower (height ${towerHeight})`);
+      if (!buildAborted) {
+        results.push(`Built ${size} tower (height ${towerHeight})`);
+      }
     }
 
   } catch (err) {
