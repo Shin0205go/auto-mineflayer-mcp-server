@@ -772,6 +772,21 @@ export async function fight(
     }
   }
 
+  // SAFETY: HP re-check after approach phase before entering combat loop.
+  // During approach (especially enderman at up to 64 blocks), bot may take damage from
+  // other mobs, starvation, or fall damage. Without this check, the combat loop starts
+  // at dangerously low HP and the first combat hit is fatal.
+  // Bot3 Deaths #9,#16: HP dropped to 2.2-7.2 during approach, entered combat loop, died.
+  {
+    const postApproachHp = bot.health ?? 20;
+    if (postApproachHp <= fleeHealthThreshold) {
+      console.error(`[Fight] HP dropped to ${postApproachHp.toFixed(1)} during approach (flee threshold: ${fleeHealthThreshold}). Fleeing instead of fighting.`);
+      bot.pathfinder.setGoal(null);
+      await flee(managed, 20);
+      return `Fled before combat! HP dropped to ${postApproachHp.toFixed(1)} during approach to ${targetName}. Attacked 0 times.` + getBriefStatus(bot);
+    }
+  }
+
   // Step 3: Combat loop (with global timeout to prevent infinite hang)
   const fightStartTime = Date.now();
   const FIGHT_TIMEOUT_MS = 60000; // 60s max per fight — prevents infinite pathfinder loops in caves

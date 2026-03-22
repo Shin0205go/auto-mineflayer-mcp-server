@@ -1648,6 +1648,18 @@ export async function mc_navigate(
           } else {
             consecutiveFailures = 0;
           }
+          // SAFETY: Detect cave/underground routing within a segment.
+          // moveToBasic detects underground routing and returns descriptive messages,
+          // but the segment loop previously treated these as generic failures (2 needed
+          // to abort). Cave routing is immediately dangerous — one segment underground
+          // can trap the bot. Abort immediately on cave descent detection.
+          // Bot1 Sessions 42-44, Bot2/Bot3: multi-segment navigation where one segment
+          // routed underground, bot got trapped in cave system with mobs.
+          if (lastResult.includes("underground") || lastResult.includes("cave") || lastResult.includes("descended")) {
+            const curPos3 = botManager.getPosition(username);
+            const posStr3 = curPos3 ? `(${Math.round(curPos3.x)}, ${Math.round(curPos3.y)}, ${Math.round(curPos3.z)})` : "unknown";
+            return `[ABORTED] Navigation stopped after ${i}/${steps} segments — underground/cave routing detected. ${lastResult} Current position: ${posStr3}. Navigate in shorter hops or use mc_tunnel(direction="up") to return to surface.` + nightWarning;
+          }
         }
         const segResult = lastResult || await botManager.moveTo(username, nx, ny, nz);
         return segResult + nightWarning;
@@ -1706,7 +1718,7 @@ export async function mc_combat(
     const combatHp = combatBot.health ?? 20;
     const passiveFoodMobs = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "mule", "mooshroom", "llama", "goat", "salmon", "cod", "squid", "turtle"];
     const isPassiveFood = target ? passiveFoodMobs.some(p => target!.toLowerCase().includes(p)) : false;
-    if (!isPassiveFood && combatHp < 6) {
+    if (!isPassiveFood && combatHp < 8) {
       return `[REFUSED] HP too low for combat (${combatHp.toFixed(1)}/20). Hostile mobs can kill in 1-2 hits at this HP. Use mc_eat to heal first, or mc_flee to escape. If no food available, dig a 1x1x2 shelter hole and wait.`;
     }
   }
