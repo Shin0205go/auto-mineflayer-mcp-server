@@ -1256,10 +1256,13 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     }
 
     // 4. Jump and place - retry up to 3 times per level
+    // KEY FIX: Look straight down BEFORE jumping, not during the fall.
+    // The old approach: jump → wait for peak → lookAt (async, adds latency) → placeBlock
+    // By the time lookAt + placeBlock executed, the bot had already fallen past the placement point.
+    // New approach: lookAt down ONCE before jump → jump → place immediately at rise > 0.5 (no re-lookAt)
     let placed = false;
     for (let attempt = 0; attempt < 3 && !placed; attempt++) {
       // Re-center on the block before each attempt — stop movement but KEEP sneak.
-      // Bug #17: clearControlStates() released sneak, causing drift off pillar in caves.
       bot.setControlState("forward", false);
       bot.setControlState("back", false);
       bot.setControlState("left", false);
@@ -1274,7 +1277,9 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
         const retryX = Math.floor(bot.entity.position.x);
         const retryZ = Math.floor(bot.entity.position.z);
         const retryCandidates = [
+          new Vec3(pillarX, retryFeetY - 1, pillarZ),
           new Vec3(retryX, retryFeetY - 1, retryZ),
+          new Vec3(pillarX, retryFeetY, pillarZ),
           new Vec3(retryX, retryFeetY, retryZ),
         ];
         blockBelow = null;
@@ -1289,52 +1294,52 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
         await new Promise(r => setTimeout(r, 200));
       }
 
-      // Sneak is already on (set before loop) — just wait briefly for stability, then jump
-      await new Promise(r => setTimeout(r, 250));
+      // CRITICAL: Look straight down at the block we're standing on BEFORE jumping.
+      // This is the scaffolding technique: look at the block under your feet, jump, place.
+      // By looking down before the jump, we avoid the async lookAt latency during the fall.
+      const preJumpBlock = blockBelow!;
+      const lookTarget = preJumpBlock.position.offset(0.5, 1, 0.5);
+      await bot.lookAt(lookTarget, true);
+      // Set pitch to look straight down for maximum reliability
+      await bot.look(bot.entity.yaw, -Math.PI / 2, true);
+      await new Promise(r => setTimeout(r, 100)); // Brief settle after look
 
       // Save reference block position before jumping
-      const savedBlockPos = blockBelow!.position.clone();
+      const savedBlockPos = preJumpBlock.position.clone();
 
+      const jumpBaseY = bot.entity.position.y;
       bot.setControlState("jump", true);
 
-      // Wait for jump to reach peak height before placing
-      const jumpBaseY = bot.entity.position.y;
-      let prevY = jumpBaseY;
-      let peakReached = false;
+      // Wait until we've risen enough (>= 0.5 blocks). Don't wait for peak — place while
+      // still rising gives us more time before we fall past the placement point.
+      // The bot is already looking down, so no lookAt needed during the jump.
+      let jumpOk = false;
       await new Promise<void>((resolve) => {
         let elapsed = 0;
         const interval = setInterval(() => {
           elapsed += 10;
-          const curY = bot.entity.position.y;
-          const rising = curY - jumpBaseY;
-          // Place when we've risen enough AND started to fall (peak), or timeout.
-          // Lowered from 0.8 to 0.6: on laggy servers or with high tick variance,
-          // the measured rise can be lower than expected, causing missed placements.
-          if (rising > 0.6 && curY <= prevY) {
-            peakReached = true;
+          const rising = bot.entity.position.y - jumpBaseY;
+          // Place as soon as we've risen enough (while still going up or at peak)
+          if (rising >= 0.5) {
+            jumpOk = true;
             clearInterval(interval);
             resolve();
-          } else if (elapsed >= 800) {
+          } else if (elapsed >= 600) {
             clearInterval(interval);
             resolve();
           }
-          prevY = curY;
         }, 10);
       });
 
       bot.setControlState("jump", false);
 
-      // Only try to place if we reached a reasonable jump height
-      if (peakReached || bot.entity.position.y - jumpBaseY > 0.3) {
+      // Place immediately — no lookAt here, we already looked down before the jump
+      if (jumpOk) {
         try {
           // Re-fetch the block at saved position for a fresh reference.
-          // Fallback: if savedBlockPos returns air/null (stale reference after placement),
-          // search directly below the bot's CURRENT position during the jump.
-          // Bot1 bug: "Placement failed" after 1 block — freshBlock was null because
-          // savedBlockPos pointed to the OLD block below, not the newly placed one.
           let freshBlock = bot.blockAt(savedBlockPos);
           if (!freshBlock || freshBlock.name === "air" || freshBlock.name === "cave_air") {
-            // Fallback: check block directly below current feet position
+            // Fallback: search below current position
             const curJumpPos = bot.entity.position;
             const belowCandidates = [
               new Vec3(pillarX, Math.floor(curJumpPos.y) - 1, pillarZ),
@@ -1353,14 +1358,6 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
           }
           if (!freshBlock) freshBlock = blockBelow;
 
-          // Look at the top face of the reference block before placing.
-          // Bot1 bug: "Placement failed" even with correct reference block — the bot
-          // was still moving (falling from jump peak) and looking in a random direction.
-          // placeBlock requires the bot to face the target block. Explicit lookAt ensures
-          // correct orientation even during mid-air placement.
-          const topFace = freshBlock!.position.offset(0.5, 1, 0.5);
-          await bot.lookAt(topFace, true);
-
           // Place on top of block below (this puts block at feet level, lifting us up)
           await bot.placeBlock(freshBlock!, new Vec3(0, 1, 0));
           blocksPlaced++;
@@ -1368,7 +1365,6 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
           console.error(`[Pillar] Placed ${blocksPlaced}/${targetHeight} at Y=${currentY}`);
         } catch (e) {
           console.error(`[Pillar] Place failed (attempt ${attempt + 1}): ${e}`);
-          // Wait longer before retry to let bot settle
           await new Promise(r => setTimeout(r, 300));
         }
       } else {
