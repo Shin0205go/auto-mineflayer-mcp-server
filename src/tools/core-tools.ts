@@ -739,11 +739,18 @@ export async function mc_farm(): Promise<string> {
         maxDistance: 64,
         count: 20,
       });
-      // Score candidates: prefer water at or above bot Y, penalize underground water
+      // Score candidates: prefer water at or above bot Y, penalize underground water.
+      // HARD REJECT water more than 15 blocks below bot Y — navigating to deep water
+      // causes underground routing regardless of score-based penalty.
+      // Bot1/Bot2/Bot3 [2026-03-22]: mc_farm selected underground cave water because
+      // score-based penalty still allowed deeply underground candidates when no surface
+      // water existed. Bot navigated underground, got trapped by mobs, and died.
       let farWater: { position: { x: number; y: number; z: number } } | null = null;
       if (waterCandidates.length > 0) {
         let bestScore = Infinity;
         for (const wp of waterCandidates) {
+          // Absolute rejection: never navigate to water >15 blocks below bot
+          if (botFarmY - wp.y > 15) continue;
           const dist = bot.entity.position.distanceTo(wp);
           const depthBelow = Math.max(botFarmY - wp.y - 3, 0); // 3-block tolerance
           const score = dist + depthBelow * 5; // Same 5x penalty as findBlock
@@ -998,6 +1005,8 @@ export async function mc_farm(): Promise<string> {
           if (veryFarCandidates.length > 0) {
             let bestVScore = Infinity;
             for (const vwp of veryFarCandidates) {
+              // Absolute rejection: never navigate to water >15 blocks below bot (same as 64-block search)
+              if (botFarmY - vwp.y > 15) continue;
               const vDist = bot.entity.position.distanceTo(vwp);
               const vDepthBelow = Math.max(botFarmY - vwp.y - 3, 0);
               const vScore = vDist + vDepthBelow * 5;
@@ -1938,23 +1947,42 @@ export async function mc_combat(
     }
   }
 
-  // Pre-combat auto-sleep for passive food hunts at night: if bot has a bed, sleep first.
+  // Pre-combat auto-sleep at night: if bot has a bed, sleep first.
   // mc_navigate and mc_gather both auto-sleep; mc_combat did not, causing deadlocks:
   // Bot needs food -> mc_combat(cow) REFUSED at night -> no food -> starvation -> death.
   // If bot has a bed, sleeping skips night and allows safe passive mob hunting.
   // Bot1/Bot2 [2026-03-22]: starvation deadlock at night while holding a bed.
-  if (combatBot && target) {
-    const passiveFoodMobsSleep = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "mule", "mooshroom", "llama", "goat", "salmon", "cod", "squid", "turtle"];
-    const isPassiveSleep = passiveFoodMobsSleep.some(p => target!.toLowerCase().includes(p));
-    if (isPassiveSleep) {
-      const preCombatTime = combatBot.time?.timeOfDay ?? 0;
-      const preCombatIsNight = preCombatTime > 12541 || preCombatTime < 100;
-      if (preCombatIsNight) {
+  // Extended to ALL targets (not just passive): sleeping skips the entire night,
+  // avoiding nighttime mob density that causes combat to escalate into multi-mob fights.
+  // Bot1/Bot2/Bot3: multiple deaths during nighttime hostile combat because additional
+  // mobs spawned during the fight. Sleeping first eliminates the night mob density entirely.
+  if (combatBot) {
+    const preCombatTime = combatBot.time?.timeOfDay ?? 0;
+    const preCombatIsNight = preCombatTime > 12541 || preCombatTime < 100;
+    if (preCombatIsNight) {
+      try {
+        const sleepResult = await botManager.sleep(username);
+        console.error(`[Combat] Pre-combat auto-sleep succeeded: ${sleepResult}`);
+      } catch (sleepErr) {
+        console.error(`[Combat] Pre-combat auto-sleep skipped: ${sleepErr instanceof Error ? sleepErr.message : String(sleepErr)}`);
+      }
+    }
+
+    // Phantom insomnia auto-sleep: Phantoms spawn after 72000 ticks without sleeping.
+    // mc_navigate and mc_gather both have this check, but mc_combat did not.
+    // Bot1 [2026-03-22]: killed by Phantom during daytime — 3+ nights without sleep.
+    // Combat can take 30-60s during which Phantoms dive-attack from above.
+    if (!preCombatIsNight) {
+      const combatWorldAge = combatBot.time?.age ?? 0;
+      const combatLastSleep = lastSleepTick.get(username) ?? 0;
+      const combatTicksSinceLastSleep = combatWorldAge - combatLastSleep;
+      if (combatTicksSinceLastSleep > 60000 && combatWorldAge > 0) {
+        console.error(`[Combat] Phantom insomnia high (${combatTicksSinceLastSleep} ticks). Attempting pre-combat sleep to reset timer.`);
         try {
           const sleepResult = await botManager.sleep(username);
-          console.error(`[Combat] Pre-combat auto-sleep succeeded: ${sleepResult}`);
+          console.error(`[Combat] Phantom insomnia auto-sleep succeeded: ${sleepResult}`);
         } catch (sleepErr) {
-          console.error(`[Combat] Pre-combat auto-sleep skipped: ${sleepErr instanceof Error ? sleepErr.message : String(sleepErr)}`);
+          console.error(`[Combat] Phantom insomnia auto-sleep skipped: ${sleepErr instanceof Error ? sleepErr.message : String(sleepErr)}`);
         }
       }
     }
