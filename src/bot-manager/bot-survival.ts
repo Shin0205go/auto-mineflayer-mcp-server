@@ -5,6 +5,7 @@ const { goals } = pkg;
 import type { ManagedBot } from "./types.js";
 import { isHostileMob, isNeutralMob, isFoodItem, isBedBlock, isNearCliffEdge } from "./minecraft-utils.js";
 import { collectNearbyItems, equipArmor } from "./bot-items.js";
+import { safeSetGoal } from "./pathfinder-safety.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -420,8 +421,6 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
     const RANGED_APPROACH_MOBS = ["skeleton", "stray", "pillager", "drowned", "witch"];
     const isRangedMob = RANGED_APPROACH_MOBS.includes((target.name || "").toLowerCase());
     const approachStartHp = bot.health ?? 20;
-    const approachStartY = bot.entity.position.y;
-
     console.error(`[Attack] Target ${target.name} is ${distance.toFixed(1)} blocks away, moving closer...${isRangedMob ? " (ranged mob — sprint approach)" : ""}`);
     applySafePathfinderSettings(bot);
     if (isRangedMob) {
@@ -429,7 +428,11 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       bot.setControlState("sprint", true);
     }
     const goal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2);
-    bot.pathfinder.setGoal(goal);
+    const attackGoalHandle = safeSetGoal(bot, goal, {
+      onAbort: (yDescent) => {
+        console.error(`[Attack] CAVE DESCENT during approach: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
+      }
+    });
 
     // Scale timeout based on distance (1s per 4 blocks, min 5s, max 20s)
     // Ranged mobs get shorter timeout (10s max) — if we can't close in 10s, abort
@@ -470,20 +473,10 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
           return;
         }
 
-        // SAFETY: Y-descent detection during attack approach — abort if falling into cave.
-        // attack() uses applySafePathfinderSettings (maxDropDown=2, canDig=false) but
-        // didn't monitor Y-descent like moveToBasic and fight() do. Bot can still fall
-        // into caves via terrain holes that maxDropDown=2 allows incrementally.
-        // Bot1/Bot2 [2026-03-22]: fell underground during attack approach, trapped in cave.
-        // Bot2: descended to Y=53 during combat, completely stuck.
-        // Threshold: 4 blocks — allows natural 1-3 block terrain drops but catches cave entries.
-        const attackApproachYDescent = approachStartY - bot.entity.position.y;
-        if (attackApproachYDescent > 4) {
-          console.error(`[Attack] CAVE DESCENT during approach: dropped ${attackApproachYDescent.toFixed(1)} blocks (Y=${approachStartY.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Aborting.`);
-          approachAbortReason = `Cave descent detected: dropped ${attackApproachYDescent.toFixed(0)} blocks during approach`;
+        if (attackGoalHandle.aborted) {
+          approachAbortReason = `Cave descent detected during approach`;
           clearInterval(check);
           clearTimeout(timeout);
-          bot.pathfinder.setGoal(null);
           resolve();
           return;
         }
@@ -507,6 +500,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       }, 200);
     });
 
+    attackGoalHandle.cleanup();
     // Clean up sprint state after approach
     if (isRangedMob) {
       bot.setControlState("sprint", false);
@@ -964,22 +958,25 @@ export async function fight(
     if (fightDistance > 16) {
       console.error(`[Fight] Enderman at ${fightDistance.toFixed(1)} blocks — approaching to 12 blocks first...`);
       applySafePathfinderSettings(bot);
-      const endermanApproachStartY = bot.entity.position.y;
-      const approachGoal = new goals.GoalNear(target!.position.x, target!.position.y, target!.position.z, 12);
-      bot.pathfinder.setGoal(approachGoal);
+      const enderGoalHandle = safeSetGoal(bot,
+        new goals.GoalNear(target!.position.x, target!.position.y, target!.position.z, 12),
+        {
+          intervalMs: 200,
+          onAbort: (yDescent) => {
+            console.error(`[Fight] CAVE DESCENT during enderman approach: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
+          }
+        }
+      );
       await new Promise<void>((resolve) => {
-        const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
+        const timeout = setTimeout(() => { enderGoalHandle.cleanup(); bot.pathfinder.setGoal(null); resolve(); }, 8000);
         const check = setInterval(() => {
-          const currentDist = target!.position.distanceTo(bot.entity.position);
-          // SAFETY: Y-descent check during enderman approach
-          const enderApproachDescent = endermanApproachStartY - bot.entity.position.y;
-          if (enderApproachDescent > 4) {
-            console.error(`[Fight] CAVE DESCENT during enderman approach: dropped ${enderApproachDescent.toFixed(1)} blocks. Aborting.`);
-            clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+          if (enderGoalHandle.aborted) {
+            clearInterval(check); clearTimeout(timeout); resolve();
             return;
           }
+          const currentDist = target!.position.distanceTo(bot.entity.position);
           if (currentDist <= 14 || !bot.pathfinder.isMoving()) {
-            clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+            clearInterval(check); clearTimeout(timeout); enderGoalHandle.cleanup(); bot.pathfinder.setGoal(null); resolve();
           }
         }, 200);
       });
@@ -1259,42 +1256,32 @@ export async function fight(
         bot.pathfinder.movements.allowSprinting = true;
         bot.setControlState("sprint", true);
       }
-      bot.pathfinder.setGoal(new goals.GoalNear(
-        target.position.x, target.position.y, target.position.z, isBlaze ? 4 : 2
-      ));
-      // Wait up to 1.5s for approach, with HP monitoring every 200ms.
-      // Previous: 500ms fixed delay with no HP check — too short for sprint to close
-      // distance, and ranged mobs dealt 8-10 damage during approach with no abort.
-      // Bot1 [2026-03-22]: skeleton approach drained HP from 14 to 3 over multiple
-      // 500ms approach iterations, each too short to close the gap.
-      // New: 1.5s gives sprint time to close 5-7 blocks, and HP check every 200ms
-      // catches damage early. Break immediately if within attack range.
+      const fightApproachHandle = safeSetGoal(bot,
+        new goals.GoalNear(target.position.x, target.position.y, target.position.z, isBlaze ? 4 : 2),
+        {
+          intervalMs: 200,
+          onAbort: (yDescent) => {
+            console.error(`[Fight] CAVE DESCENT during approach: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
+          }
+        }
+      );
       {
         const approachHpStart = bot.health ?? 20;
-        const approachStartY = bot.entity.position.y;
         for (let tick = 0; tick < 8; tick++) { // 8 * 200ms = 1.6s max
           await delay(200);
+          if (fightApproachHandle.aborted) break;
           const curTarget = Object.values(bot.entities).find(e => e.id === targetId);
-          if (!curTarget) break; // Target died
+          if (!curTarget) break;
           const curDist = curTarget.position.distanceTo(bot.entity.position);
-          if (curDist <= attackRange) break; // Close enough to attack
+          if (curDist <= attackRange) break;
           const approachHpNow = bot.health ?? 20;
           if (approachHpNow < approachHpStart - 6 || approachHpNow <= fleeHealthThreshold) {
             console.error(`[Fight] HP dropped during ranged approach (${approachHpStart.toFixed(1)} → ${approachHpNow.toFixed(1)}). Breaking approach.`);
             break;
           }
-          // SAFETY: Y-descent check during combat approach — abort if falling into cave.
-          // fight() uses applySafePathfinderSettings (maxDropDown=2) but doesn't monitor
-          // Y-descent like moveToBasic and flee do. Bot can fall into caves during approach.
-          // Bot1 [2026-03-22]: fell underground during skeleton approach, trapped in cave.
-          // Bot2 [2026-03-22]: descended to Y=53 during combat, completely stuck.
-          const approachYDescent = approachStartY - bot.entity.position.y;
-          if (approachYDescent > 4) {
-            console.error(`[Fight] CAVE DESCENT during approach: dropped ${approachYDescent.toFixed(1)} blocks (Y=${approachStartY.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Aborting approach.`);
-            break;
-          }
         }
       }
+      fightApproachHandle.cleanup();
       // Clean up sprint state after approach completes
       if (isRangedTarget && !isBlaze) {
         bot.setControlState("sprint", false);

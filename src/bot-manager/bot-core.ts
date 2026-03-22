@@ -6,6 +6,7 @@ const { pathfinder, Movements, goals } = pkg;
 import type { BotConfig, ManagedBot, GameEvent } from "./types.js";
 import { isHostileMob, isPassiveMob, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
 import { equipArmor } from "./bot-items.js";
+import { safeSetGoal } from "./pathfinder-safety.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -656,8 +657,7 @@ export class BotCore extends EventEmitter {
             const dist = creeper.position.distanceTo(bot.entity.position);
             const dir = bot.entity.position.minus(creeper.position).normalize();
             const fleeTarget = bot.entity.position.plus(dir.scaled(12));
-            const creeperFleeStartY = bot.entity.position.y;
-            fleeTarget.y = creeperFleeStartY;
+            fleeTarget.y = bot.entity.position.y;
             console.error(`[CreeperFlee] Creeper detected ${dist.toFixed(1)} blocks away! Fleeing preemptively.`);
             creeperFleeActive = true;
             // Sprint-flee immediately using control states (faster than pathfinder)
@@ -665,38 +665,24 @@ export class BotCore extends EventEmitter {
             bot.look(lookAngle, 0, true);
             bot.setControlState("sprint", true);
             bot.setControlState("forward", true);
+            let creeperGoalHandle: ReturnType<typeof safeSetGoal> | null = null;
             try {
-              // SAFETY: Set safe pathfinder settings before CreeperFlee goal.
-              // Without these, CreeperFlee can route into caves or off cliffs.
-              // Same safety as mc_flee and AutoFlee.
               if (bot.pathfinder.movements) {
                 bot.pathfinder.movements.canDig = false;
                 bot.pathfinder.movements.maxDropDown = 1;
                 (bot.pathfinder.movements as any).liquidCost = 10000;
               }
-              bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
-            } catch (_) { /* ignore */ }
-            // SAFETY: Y-descent monitoring during CreeperFlee (same as AutoFlee).
-            // CreeperFlee uses setGoal() directly with no Y monitoring.
-            // Even with canDig=false + maxDropDown=1, bot can gradually descend through
-            // cave entrances. Abort if Y drops >4 blocks to prevent underground trapping.
-            const creeperFleeYMonitor = setInterval(() => {
-              try {
-                const yDescent = creeperFleeStartY - bot.entity.position.y;
-                if (yDescent > 4) {
-                  console.error(`[CreeperFlee] CAVE DESCENT ABORT: Y dropped ${yDescent.toFixed(1)} blocks (Y=${creeperFleeStartY.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Stopping to prevent underground trapping.`);
-                  clearInterval(creeperFleeYMonitor);
-                  try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+              creeperGoalHandle = safeSetGoal(bot,
+                new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3),
+                {
+                  onAbort: (yDescent) => {
+                    console.error(`[CreeperFlee] CAVE DESCENT ABORT: Y dropped ${yDescent.toFixed(1)} blocks. Stopping.`);
+                  }
                 }
-              } catch { clearInterval(creeperFleeYMonitor); }
-            }, 300);
-            // Reset flee flag and restore maxDropDown after 3 seconds.
-            // NOTE: Do NOT restore canDig=true here — same race condition as AutoFlee.
-            // If mc_navigate starts within 3 seconds, moveToBasic sets canDig=false for
-            // night safety, but this setTimeout would override it back to true, allowing
-            // the pathfinder to dig into caves. Let the next moveTo call decide canDig.
+              );
+            } catch (_) { /* ignore */ }
             setTimeout(() => {
-              clearInterval(creeperFleeYMonitor);
+              if (creeperGoalHandle) creeperGoalHandle.cleanup();
               bot.setControlState("sprint", false);
               bot.setControlState("forward", false);
               creeperFleeActive = false;

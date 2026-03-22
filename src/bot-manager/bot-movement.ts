@@ -5,6 +5,7 @@ const { GoalBlock } = goals;
 import type { ManagedBot } from "./types.js";
 import { isHostileMob, isFoodItem, checkGroundBelow, isNearCliffEdge, KNOCKBACK_MOBS, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
 import { equipArmor } from "./bot-items.js";
+import { safeSetGoal } from "./pathfinder-safety.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -1781,8 +1782,15 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       bot.pathfinder.movements.canDig = false;
     }
 
-    const goal = new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3);
-    bot.pathfinder.setGoal(goal);
+    const fleeGoalHandle = safeSetGoal(bot,
+      new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3),
+      {
+        onAbort: (yDescent) => {
+          console.error(`[Flee] CAVE DESCENT ABORT: Bot dropped ${yDescent.toFixed(1)} blocks during flee (Y=${startPos.y.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Stopping.`);
+          try { bot.setControlState("sprint", false); bot.setControlState("sneak", false); } catch { /* ignore */ }
+        }
+      }
+    );
 
     // Explicitly enable sprint control state — pathfinder's allowSprinting only affects
     // path planning, but doesn't guarantee the bot actually sprints. Setting the control
@@ -1813,27 +1821,9 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
           const distMoved = bot.entity.position.distanceTo(startPos);
           const elapsed = Date.now() - fleeStartTime;
 
-          // SAFETY: Real-time Y-descent detection during flee.
-          // Flee uses setGoal() directly, bypassing moveToBasic's underground routing
-          // and fall detection. Without this check, the bot can descend into caves/holes
-          // during flee with no abort mechanism until post-flee warning (too late).
-          // Bot2 [2026-03-22]: fled from Y=80 to Y=56 (24 blocks down) into cave.
-          // Threshold: 4 blocks below start Y — allows natural 1-3 block terrain drops
-          // but catches cave entries before bot gets trapped deep underground.
-          const yDescent = startPos.y - bot.entity.position.y;
-          if (yDescent > 4) {
-            console.error(`[Flee] CAVE DESCENT ABORT: Bot dropped ${yDescent.toFixed(1)} blocks during flee (Y=${startPos.y.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Stopping to prevent underground trapping.`);
+          if (fleeGoalHandle.aborted) {
             clearInterval(check);
             clearTimeout(timeout);
-            try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
-            // Clean up sprint/sneak state — same as normal exit path.
-            // Without this, sprint persists into subsequent actions (eating, crafting),
-            // draining hunger and preventing reliable food consumption.
-            // Bot1/Bot2 [2026-03-22]: hunger drained rapidly after flee cave-abort.
-            try {
-              bot.setControlState("sprint", false);
-              bot.setControlState("sneak", false);
-            } catch { /* bot may be disconnected */ }
             resolve();
             return;
           }
@@ -1897,6 +1887,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     // based on current time-of-day and HP (see moveToBasic L541-557).
     // Bot1/Bot2/Bot3 [2026-03-22]: multiple deaths from cave routing after mc_flee
     // because canDig was restored to true, defeating the night cave-routing protection.
+    fleeGoalHandle.cleanup();
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.allowSprinting = prevAllowSprinting;
       // Restore maxDropDown to safe default (2), NOT the previous value.
@@ -2017,31 +2008,25 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
             bot.pathfinder.movements.allowSprinting = true;
           }
           bot.setControlState("sprint", true);
-          const retryStartY = bot.entity.position.y;
-          bot.pathfinder.setGoal(retryGoal);
+          const retryGoalHandle = safeSetGoal(bot, retryGoal, {
+            onAbort: (yDescent) => {
+              console.error(`[Flee] Perpendicular retry CAVE DESCENT: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
+              try { bot.setControlState("sprint", false); } catch { /* ignore */ }
+            }
+          });
           await new Promise<void>((resolve) => {
-            const retryTimeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
+            const retryTimeout = setTimeout(() => { retryGoalHandle.cleanup(); bot.pathfinder.setGoal(null); resolve(); }, 8000);
             const retryStartMs = Date.now();
             const retryCheck = setInterval(() => {
-              // SAFETY: Y-descent abort for perpendicular retry — same as main flee.
-              // Without this, perpendicular retry can route into caves/holes with no abort.
-              const retryYDescent = retryStartY - bot.entity.position.y;
-              if (retryYDescent > 4) {
-                console.error(`[Flee] Perpendicular retry CAVE DESCENT: dropped ${retryYDescent.toFixed(1)} blocks. Aborting.`);
+              if (retryGoalHandle.aborted) {
                 clearInterval(retryCheck); clearTimeout(retryTimeout);
-                try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
-                try { bot.setControlState("sprint", false); } catch { /* ignore */ }
                 resolve();
                 return;
               }
-              // Wait at least 1.5s before checking isMoving() — pathfinder may take 500-1000ms
-              // to compute a path and start moving. Without this delay, the check fires at 300ms
-              // when isMoving()=false (path not computed yet), immediately aborting the retry.
-              // Bot2 [2026-03-22]: perpendicular retry exited instantly, no actual movement.
               const retryElapsed = Date.now() - retryStartMs;
               if (retryElapsed > 1500 && !bot.pathfinder.isMoving()) {
                 clearInterval(retryCheck); clearTimeout(retryTimeout);
-                bot.pathfinder.setGoal(null); resolve();
+                retryGoalHandle.cleanup(); bot.pathfinder.setGoal(null); resolve();
               }
             }, 300);
           });
