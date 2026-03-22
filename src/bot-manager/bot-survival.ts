@@ -903,7 +903,12 @@ export async function fight(
 
   // Step 3: Combat loop (with global timeout to prevent infinite hang)
   const fightStartTime = Date.now();
-  const FIGHT_TIMEOUT_MS = 60000; // 60s max per fight — prevents infinite pathfinder loops in caves
+  // Ranged mobs get shorter timeout (30s): they deal continuous damage while unreachable.
+  // Bot1 [2026-03-22]: skeleton at 10.8m unreachable, bot took 60s of arrow damage before timeout.
+  // Melee mobs keep 60s — they don't deal damage unless adjacent.
+  const RANGED_NAMES = ["skeleton", "stray", "pillager", "drowned", "witch", "blaze"];
+  const isRangedFight = RANGED_NAMES.includes((target.name || "").toLowerCase());
+  const FIGHT_TIMEOUT_MS = isRangedFight ? 30000 : 60000;
   let approachStallCount = 0; // Track consecutive approach iterations without closing distance
   let lastApproachDist = Infinity; // Distance to target on last approach iteration
   while (attackCount < maxAttacks) {
@@ -1069,7 +1074,13 @@ export async function fight(
       const RANGED_COMBAT_MOBS = ["skeleton", "stray", "pillager", "drowned", "witch", "blaze"];
       const isRangedTarget = RANGED_COMBAT_MOBS.includes(targetName.toLowerCase());
       const stallThreshold = isRangedTarget ? 3 : 6;
-      if (distance < lastApproachDist - 0.5) {
+      // Tighter progress threshold for ranged mobs: 0.3 blocks (was 0.5 for all).
+      // Bot1 [2026-03-22]: skeleton at 10.8m caused oscillating distance (10.8→10.5→10.7)
+      // that counted as "progress" under the 0.5 threshold, preventing stall detection.
+      // The pathfinder would oscillate back and forth near obstacles without ever reaching
+      // the skeleton, while taking arrow damage the entire time.
+      const progressThreshold = isRangedTarget ? 0.3 : 0.5;
+      if (distance < lastApproachDist - progressThreshold) {
         // Making progress — reset stall counter
         approachStallCount = 0;
         lastApproachDist = distance;

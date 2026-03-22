@@ -90,6 +90,19 @@ export function getPosition(managed: ManagedBot): { x: number; y: number; z: num
 async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number): Promise<{ success: boolean; message: string; stuckReason?: string }> {
   const bot = managed.bot;
   const targetPos = new Vec3(x, y, z);
+
+  // PRE-CLEANUP: Clear stale pathfinder state before starting new navigation.
+  // Bot1 [2026-03-22]: moveTo completely stuck at (28.7, 69.2, 16.9) after flee().
+  // flee() sets a GoalNear, and if the flee promise resolves while pathfinder is still
+  // processing, the old goal/listeners persist. The new setGoal() in this function then
+  // conflicts, causing the pathfinder to oscillate or freeze. Explicitly nullifying the
+  // goal and clearing movement controls ensures a clean slate for each navigation.
+  try { bot.pathfinder.setGoal(null); } catch (_) { /* ignore if no pathfinder */ }
+  bot.setControlState("forward", false);
+  bot.setControlState("back", false);
+  bot.setControlState("sprint", false);
+  bot.setControlState("jump", false);
+
   const start = bot.entity.position;
   const distance = start.distanceTo(targetPos);
   const yDelta = y - start.y;
@@ -1929,8 +1942,50 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       // Warn the caller so they can try a different escape strategy (dig shelter, pillar up).
       let fleeFailWarning = "";
       if (newDist < initialHostileDist && initialHostileDist < Infinity) {
-        console.error(`[Flee] WARNING: Flee moved bot CLOSER to hostile! Distance: ${initialHostileDist.toFixed(1)} → ${newDist.toFixed(1)}. Terrain may be forcing unsafe routing.`);
-        fleeFailWarning = ` [WARNING] Flee moved CLOSER to hostile (${initialHostileDist.toFixed(0)}→${newDist.toFixed(0)} blocks). Terrain is blocking escape routes. Try: dig 1x1x2 shelter hole, minecraft_pillar_up, or mc_navigate to specific safe coordinates instead.`;
+        // Automatic perpendicular retry: when flee moved TOWARD the hostile, try fleeing
+        // perpendicular to the hostile direction. This happens when terrain (cliffs, water,
+        // walls) blocks the direct-away direction and pathfinder routes around the obstacle
+        // toward the hostile. A perpendicular direction often has clear terrain.
+        // Bot2 [2026-03-22]: flee(30) x3 caused distance to decrease 9.6→10.5→7.6m,
+        // leading to death. A single perpendicular retry would have escaped sideways.
+        console.error(`[Flee] WARNING: Flee moved CLOSER (${initialHostileDist.toFixed(1)} → ${newDist.toFixed(1)}). Attempting perpendicular retry...`);
+        try {
+          const retryAway = bot.entity.position.minus(hostile.position);
+          const perpAngle = Math.atan2(retryAway.z, retryAway.x) + Math.PI / 2;
+          const perpTarget = bot.entity.position.plus(
+            new Vec3(Math.cos(perpAngle) * distance, 0, Math.sin(perpAngle) * distance)
+          );
+          const retryGoal = new goals.GoalNear(perpTarget.x, perpTarget.y, perpTarget.z, 3);
+          if (bot.pathfinder.movements) {
+            bot.pathfinder.movements.maxDropDown = 1;
+            bot.pathfinder.movements.canDig = false;
+            (bot.pathfinder.movements as any).liquidCost = 10000;
+            bot.pathfinder.movements.allowSprinting = true;
+          }
+          bot.setControlState("sprint", true);
+          bot.pathfinder.setGoal(retryGoal);
+          await new Promise<void>((resolve) => {
+            const retryTimeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
+            const retryCheck = setInterval(() => {
+              if (!bot.pathfinder.isMoving()) {
+                clearInterval(retryCheck); clearTimeout(retryTimeout);
+                bot.pathfinder.setGoal(null); resolve();
+              }
+            }, 300);
+          });
+          bot.setControlState("sprint", false);
+          const retryDist = bot.entity.position.distanceTo(hostile.position);
+          const retryMoved = bot.entity.position.distanceTo(startPos);
+          console.error(`[Flee] Perpendicular retry result: hostile distance ${newDist.toFixed(1)} → ${retryDist.toFixed(1)}, total moved ${retryMoved.toFixed(1)}`);
+          if (retryDist > newDist + 2) {
+            // Retry succeeded — update return values
+            return `Fled from ${fleeFromName}! Now ${retryDist.toFixed(1)} blocks away (was ${initialHostileDist.toFixed(1)}). Moved ${retryMoved.toFixed(1)} blocks (perpendicular retry). HP: ${(bot.health ?? 0).toFixed(1)}/20` + caveWarning;
+          }
+        } catch (retryErr) {
+          console.error(`[Flee] Perpendicular retry failed: ${retryErr}`);
+          bot.setControlState("sprint", false);
+        }
+        fleeFailWarning = ` [WARNING] Flee moved CLOSER to hostile (${initialHostileDist.toFixed(0)}→${newDist.toFixed(0)} blocks). Perpendicular retry attempted. Terrain is blocking escape routes. Try: dig 1x1x2 shelter hole, minecraft_pillar_up, or mc_navigate to specific safe coordinates instead.`;
       } else if (distMoved < distance * 0.3) {
         // Also warn when flee barely moved (less than 30% of requested distance)
         console.error(`[Flee] WARNING: Only fled ${distMoved.toFixed(1)} blocks (requested ${distance}). Terrain may be very constrained.`);
