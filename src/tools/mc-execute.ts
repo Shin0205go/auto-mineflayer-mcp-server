@@ -104,7 +104,7 @@ export async function mc_execute(
       return await mc_eat(food);
     },
     combat: async (target?: string, fleeAtHp?: number) => {
-      return await mc_combat(target, fleeAtHp || 8);
+      return await mc_combat(target, fleeAtHp || 10);
     },
     equipArmor: async () => {
       const username = botManager.requireSingleBot();

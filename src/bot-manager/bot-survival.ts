@@ -1111,7 +1111,39 @@ export async function fight(
     // Re-find target (it might have moved or died)
     target = Object.values(bot.entities).find(e => e.id === targetId) || null;
     if (!target) {
-      // Auto-collect dropped items after kill
+      // Auto-collect dropped items after kill — with safety checks.
+      // Bot2/Bot3 [2026-03-22]: died during post-kill item collection because other
+      // hostiles were nearby and HP was low from the fight. Skip collection when unsafe.
+      const postKillHp = bot.health ?? 20;
+      let skipCollection = false;
+      let skipReason = "";
+
+      // Safety: Skip item collection if HP is critically low (below flee threshold).
+      // Moving to the death location takes up to 5s — enough time for nearby mobs to kill.
+      if (postKillHp <= fleeHealthThreshold) {
+        skipCollection = true;
+        skipReason = `HP too low (${postKillHp.toFixed(1)}) for safe item collection`;
+      }
+
+      // Safety: Skip if multiple hostiles are within 10 blocks — collecting items
+      // while surrounded leads to death. Single hostile is acceptable (just killed one).
+      if (!skipCollection) {
+        const postKillHostiles = Object.values(bot.entities)
+          .filter(e => e && e !== bot.entity && e.position &&
+            isHostileMob(bot, e.name?.toLowerCase() || "") &&
+            e.position.distanceTo(bot.entity.position) < 10)
+          .length;
+        if (postKillHostiles >= 2 && postKillHp < 14) {
+          skipCollection = true;
+          skipReason = `${postKillHostiles} hostiles within 10 blocks at HP ${postKillHp.toFixed(1)}`;
+        }
+      }
+
+      if (skipCollection) {
+        console.error(`[Fight] Skipping post-kill item collection: ${skipReason}`);
+        return `${targetName} defeated! Attacked ${attackCount} times. Items: SKIPPED (${skipReason}). Use mc_flee to escape, then return for items.` + getBriefStatus(bot);
+      }
+
       // Move to last known position first (endermen teleport, drops spawn where they died)
       const distToLast = bot.entity.position.distanceTo(lastKnownFightPos);
       if (distToLast > 3) {
@@ -1123,6 +1155,12 @@ export async function fight(
           const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 5000);
           const check = setInterval(() => {
             if (bot.entity.position.distanceTo(lastKnownFightPos) < 3 || !bot.pathfinder.isMoving()) {
+              clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+            }
+            // HP safety during collection movement — abort if taking damage
+            const collectMoveHp = bot.health ?? 20;
+            if (collectMoveHp <= fleeHealthThreshold) {
+              console.error(`[Fight] HP dropped to ${collectMoveHp.toFixed(1)} during item collection movement. Aborting.`);
               clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
             }
           }, 200);

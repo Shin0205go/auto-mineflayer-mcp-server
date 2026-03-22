@@ -476,7 +476,7 @@ export class BotManager extends BotCore {
     return await attackBasic(managed, entityName);
   }
 
-  async fight(username: string, entityName?: string, fleeHealthThreshold: number = 8): Promise<string> {
+  async fight(username: string, entityName?: string, fleeHealthThreshold: number = 10): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
 
