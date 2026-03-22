@@ -1314,8 +1314,33 @@ export async function mc_navigate(
       // Previous threshold (hunger=0 && hp < 15) was too lenient — hunger=1 depletes to 0
       // within the first navigation segment, and mobs + starvation killed at HP 14.
       // Block all non-emergency navigation when near-starving without food.
-      if (hp < 15) {
-        return `[REFUSED] Cannot navigate while starving — HP=${hp}, hunger=${hunger}, no food in inventory. HP will only decrease. Find food first: mc_combat(target="cow"), mc_combat(target="pig"), or mc_eat. Short-range movement only (mc_flee, dig shelter).`;
+      //
+      // EXCEPTION: Allow short-distance navigation (<=30 blocks) to reach nearby chests,
+      // animals, or food sources. Without this exemption, starving bots at HP<15 are
+      // completely immobilized — they can't reach a chest 5 blocks away to get food,
+      // creating an unbreakable deadlock.
+      // Bot2 [2026-03-22]: "pathfinder emergency chest access" deadlock — hunger=0, HP=4,
+      //   chest at 8 blocks, navigation REFUSED, died.
+      // Bot3 Bug #13/#15: hunger=0, chest at 19.6m, navigation blocked, death loop.
+      // moveTo already has its own safety (HP check, hostile scan, cave routing abort)
+      // that will protect during short moves.
+      const navPos = bot.entity.position;
+      let estimatedDistance = Infinity;
+      if (args.x !== undefined && args.z !== undefined) {
+        const ty = args.y ?? navPos.y;
+        estimatedDistance = Math.sqrt((args.x - navPos.x) ** 2 + (ty - navPos.y) ** 2 + (args.z - navPos.z) ** 2);
+      } else if (args.target_block || args.target_entity) {
+        // For block/entity targets, we don't know distance yet — allow it and let
+        // moveTo's internal safety checks handle danger. The alternative (blocking)
+        // creates guaranteed death from starvation.
+        estimatedDistance = 30; // treat as short-range to allow the attempt
+      }
+      const isShortDistance = estimatedDistance <= 30;
+      if (hp < 15 && !isShortDistance) {
+        return `[REFUSED] Cannot navigate while starving — HP=${hp}, hunger=${hunger}, no food in inventory. HP will only decrease. Find food first: mc_combat(target="cow"), mc_combat(target="pig"), or mc_eat. Short-range movement only (mc_flee, dig shelter, or mc_navigate to nearby chest/food).`;
+      }
+      if (hp < 15 && isShortDistance) {
+        nightWarning += `\n[STARVATION WARNING] Hunger=${hunger}, no food, HP=${hp}. Short-range navigation allowed but find food IMMEDIATELY after reaching destination.`;
       }
       // Even at HP >= 15, warn strongly — starvation drains HP and mob hits are cumulative.
       nightWarning += `\n[STARVATION WARNING] Hunger=${hunger}, no food. HP will only decline. Find food urgently.`;

@@ -683,9 +683,30 @@ export class BotCore extends EventEmitter {
                   setTimeout(() => {
                     clearInterval(autoFleeYMonitor);
                     try {
+                      // Clear sprint control state after AutoFlee completes.
+                      // AutoFlee sets sprint=true at line ~658 but never cleared it.
+                      // Sprint persists into subsequent actions (eating, crafting, gathering),
+                      // draining hunger ~2x faster and causing starvation spirals.
+                      // Bot1/Bot2 [2026-03-22]: hunger dropped rapidly after AutoFlee,
+                      // creating starvation deadlock (hunger 0 → can't navigate → can't eat → death).
+                      bot.setControlState("sprint", false);
                       if (bot.pathfinder.movements) {
                         bot.pathfinder.movements.maxDropDown = 2;
                         // canDig is intentionally NOT restored — next moveTo handles it
+                      }
+                      // Post-AutoFlee auto-eat: recover HP after fleeing.
+                      // mc_flee has robust post-flee eating (line ~1836) but AutoFlee lacked it.
+                      // Bot1/Bot2/Bot3: fled with low HP, immediately encountered next mob and died
+                      // because no eating happened between AutoFlee and next action.
+                      const postFleeHp = bot.health ?? 20;
+                      if (postFleeHp < 14) {
+                        const postFood = bot.inventory.items().find((i: any) => EDIBLE_FOOD_NAMES.has(i.name));
+                        if (postFood) {
+                          bot.equip(postFood, "hand")
+                            .then(() => bot.consume())
+                            .then(() => console.error(`[AutoFlee] Post-flee ate ${postFood.name} (HP: ${postFleeHp.toFixed(1)} → ${bot.health?.toFixed(1)})`))
+                            .catch(() => {});
+                        }
                       }
                     } catch { /* bot may be disconnected */ }
                   }, 5000);
