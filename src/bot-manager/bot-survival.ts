@@ -1166,7 +1166,12 @@ export async function fight(
     // Bot1 Session 16: killed by zombie while fighting sheep.
     // Bot3 Deaths #1, #3, #5: killed by hostile mobs during passive mob hunts.
     // When the bot moves toward a passive target, it may enter hostile mob range.
-    // Abort and flee if any hostile is within 8 blocks during passive mob combat.
+    // Abort and flee if any hostile is within 12 blocks during passive mob combat.
+    // Radius widened from 8 to 12: zombies walk 2.3 blocks/s, so a zombie at 8 blocks
+    // reaches melee in 3.5s — only 7 loop iterations before impact. At 12 blocks, the
+    // bot has 5.2s (10+ iterations) to detect and flee.
+    // Bot2 [2026-03-23]: zombie at 10m closed in during cow combat, killed bot because
+    // the 8-block threshold didn't trigger until the zombie was already hitting.
     if (entityName) {
       const passiveFoodMobs = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "mule", "mooshroom", "llama", "goat", "salmon", "cod", "squid", "turtle"];
       const isPassiveHunt = passiveFoodMobs.some(p => entityName.toLowerCase().includes(p));
@@ -1175,7 +1180,7 @@ export async function fight(
           if (!e || e === bot.entity || !e.position) return false;
           const eName = e.name?.toLowerCase() ?? "";
           if (!isHostileMob(bot, eName)) return false;
-          return e.position.distanceTo(bot.entity.position) < 8;
+          return e.position.distanceTo(bot.entity.position) < 12;
         });
         if (nearbyHostile) {
           const hostileName = nearbyHostile.name ?? "hostile";

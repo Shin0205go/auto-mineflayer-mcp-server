@@ -2238,7 +2238,13 @@ export async function mc_combat(
     if (isPassiveTarget) {
       const combatBot = botManager.getBot(username);
       if (combatBot) {
-        // Log nearby hostiles as warning but don't block
+        // Scan for nearby hostiles — BLOCK combat when hostile is close enough to attack
+        // during the approach to the passive target. The fight() loop has an 8-block abort,
+        // but the approach phase (pathfinding to the cow/pig/sheep) exposes the bot to mobs
+        // that are 8-20 blocks away, which close in during the 10-30s approach.
+        // Bot1 Session 16: died to zombie while fighting sheep.
+        // Bot3 Deaths #1,#3,#5: killed by hostile mobs during passive mob hunts.
+        // Bot2 [2026-03-23]: killed by zombie during navigate to cow.
         const nearbyHostiles: Array<{ name: string; dist: number }> = [];
         for (const entity of Object.values(combatBot.entities)) {
           if (!entity || !entity.position || entity === combatBot.entity) continue;
@@ -2250,11 +2256,45 @@ export async function mc_combat(
           }
         }
         if (nearbyHostiles.length > 0) {
-          const threatList = nearbyHostiles.sort((a, b) => a.dist - b.dist)
+          nearbyHostiles.sort((a, b) => a.dist - b.dist);
+          const closestHostileDist = nearbyHostiles[0].dist;
+          const threatList = nearbyHostiles
             .slice(0, 5)
             .map(h => `${h.name}(${h.dist}m)`)
             .join(", ");
-          hostileWarning = `\n[WARNING] ${nearbyHostiles.length} hostile(s) nearby while hunting ${target}: ${threatList}.`;
+
+          // BLOCK when hostile is close enough to be dangerous during passive hunt.
+          // Armor-aware thresholds: unarmored bots take full damage from mobs.
+          // Night: wider block radius (12 blocks) — mobs are dense, more spawn during approach.
+          // Day: tighter (8 blocks) — fewer mobs, but still lethal when close.
+          // Without food: widen by 4 blocks — any damage is permanent.
+          const combatTime = combatBot.time?.timeOfDay ?? 0;
+          const combatIsNight = combatTime > 12541 || combatTime < 100;
+          const combatHasFood = combatBot.inventory.items().some((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
+          let combatArmorCount = 0;
+          for (const slot of [5, 6, 7, 8]) {
+            const item = combatBot.inventory.slots[slot];
+            if (item) combatArmorCount++;
+          }
+          // Block thresholds: distance at which to refuse combat with passive targets
+          // Night + no armor: 16 blocks (zombie walks 2.3 blocks/s, reaches melee in ~7s)
+          // Night + armor: 12 blocks
+          // Day + no armor + no food: 14 blocks (permanent damage)
+          // Day + no armor + food: 10 blocks
+          // Day + armor: 8 blocks
+          let blockDist: number;
+          if (combatIsNight) {
+            blockDist = combatArmorCount <= 1 ? 16 : 12;
+          } else {
+            blockDist = combatArmorCount <= 1 ? (combatHasFood ? 10 : 14) : 8;
+          }
+
+          if (closestHostileDist <= blockDist) {
+            const timeNote = combatIsNight ? "at night" : "";
+            const armorNote = combatArmorCount <= 1 ? " NO ARMOR —" : "";
+            return `[BLOCKED] Cannot hunt ${target}: ${nearbyHostiles.length} hostile(s) nearby (${threatList}).${armorNote} ${timeNote} Hostile within ${closestHostileDist}m — approaching passive mob exposes you to attack during the 10-30s approach. Use mc_flee or mc_combat() (no target = attack nearest hostile) to clear threats first.`;
+          }
+          hostileWarning = `\n[WARNING] ${nearbyHostiles.length} hostile(s) nearby while hunting ${target}: ${threatList}. Be cautious.`;
         }
       }
     }
