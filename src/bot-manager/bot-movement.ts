@@ -1446,22 +1446,32 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     // falling off a cliff or into water at low HP. Restore previous settings after flee.
     const prevMaxDropDown = bot.pathfinder.movements?.maxDropDown ?? 1;
     const prevLiquidCost = (bot.pathfinder.movements as any)?.liquidCost ?? 100;
+    const prevAllowSprinting = bot.pathfinder.movements?.allowSprinting ?? true;
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.maxDropDown = 0;
       (bot.pathfinder.movements as any).liquidCost = 10000;
+      // Enable sprinting during flee — this is an emergency escape, speed is critical.
+      // Bot3 #26: fled only 7.2 blocks in 8s without sprint. Sprinting doubles speed.
+      bot.pathfinder.movements.allowSprinting = true;
     }
 
     const goal = new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3);
     bot.pathfinder.setGoal(goal);
+
+    // Scale timeout with requested distance. Base 10s + 0.2s per block beyond 20.
+    // Bot3 #26: 8s timeout was too short for 30-50 block flee on rough terrain.
+    const fleeTimeoutMs = Math.min(Math.max(10000, 10000 + (distance - 20) * 200), 15000);
 
     // Wait for movement with proper completion check
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(() => {
         try { bot.pathfinder.setGoal(null); } catch { /* bot may have disconnected */ }
         resolve();
-      }, 8000);
+      }, fleeTimeoutMs);
 
       const fleeStartTime = Date.now();
+      let retryCount = 0; // Track how many direction retries we've done
+      const maxRetries = 3; // Try up to 3 alternate directions (90°, 180°, 270°)
       const check = setInterval(() => {
         try {
           const distMoved = bot.entity.position.distanceTo(startPos);
@@ -1480,13 +1490,18 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
           // Pathfinder may briefly report isMoving()=false during path recalculation,
           // especially with maxDropDown=0 on rough terrain. Give it time to find a path.
           if (elapsed > 2000 && !bot.pathfinder.isMoving()) {
-            // Pathfinder gave up — try a new flee direction (perpendicular)
-            if (elapsed < 5000 && distMoved < distance * 0.3) {
-              // Rotate flee direction 90 degrees and retry
+            // Pathfinder gave up — try alternate flee directions.
+            // Bot3 #26: single perpendicular retry was insufficient when surrounded.
+            // Try 90°, 180°, 270° rotations from original direction.
+            if (retryCount < maxRetries && elapsed < fleeTimeoutMs - 2000) {
+              retryCount++;
               const curPos = bot.entity.position;
-              const angle = Math.atan2(fleeTarget.z - curPos.z, fleeTarget.x - curPos.x) + Math.PI / 2;
-              const retryTarget = curPos.offset(Math.cos(angle) * distance, 0, Math.sin(angle) * distance);
+              // Rotate by 90° * retryCount from the ORIGINAL flee direction
+              const baseAngle = Math.atan2(fleeTarget.z - startPos.z, fleeTarget.x - startPos.x);
+              const rotAngle = baseAngle + (Math.PI / 2) * retryCount;
+              const retryTarget = curPos.offset(Math.cos(rotAngle) * distance, 0, Math.sin(rotAngle) * distance);
               const retryGoal = new goals.GoalNear(retryTarget.x, retryTarget.y, retryTarget.z, 3);
+              console.error(`[Flee] Retry #${retryCount}: rotating ${90 * retryCount}° from original direction (moved ${distMoved.toFixed(1)} blocks so far)`);
               try { bot.pathfinder.setGoal(retryGoal); } catch { /* ignore */ }
             } else {
               clearInterval(check);
@@ -1506,6 +1521,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
 
     // Restore previous pathfinder settings after flee completes
     if (bot.pathfinder.movements) {
+      bot.pathfinder.movements.allowSprinting = prevAllowSprinting;
       bot.pathfinder.movements.maxDropDown = prevMaxDropDown;
       (bot.pathfinder.movements as any).liquidCost = prevLiquidCost;
     }
@@ -1555,6 +1571,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       if (bot.pathfinder.movements) {
         bot.pathfinder.movements.maxDropDown = 2; // restore safe default (2-block max drop, physics fall detector catches >3)
         (bot.pathfinder.movements as any).liquidCost = 10000; // keep water avoidance
+        bot.pathfinder.movements.allowSprinting = true; // restore default
       }
     } catch { /* bot may be disconnected */ }
     return `Flee interrupted: ${errMsg}`;
