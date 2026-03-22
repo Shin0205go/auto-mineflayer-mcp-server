@@ -2,6 +2,134 @@
 
 このファイルはBot2専用です。発見したバグやイシューをここに記録してください。
 
+---
+
+### [2026-03-22] white_bed craft が bone クラフト失敗で止まるバグ (Phase 2中)
+
+- **Cause**: `mc_craft(item="white_bed")` の依存解決ロジックが white_wool x3 + planks の代わりに bone をクラフトしようとして失敗する。white_bed に bone は不要なはずで、依存グラフ解決のバグと推測。
+- **Location**: `src/tools/core-tools.ts` (mc_craft autoGather dependency resolution)
+- **Coordinates**: x=6, y=82, z=7 (crafting_table付近)
+- **Last Actions**: mc_craft("white_bed", autoGather=false) → "Failed to craft bone: No recipe found for bone"、mc_craft("white_bed", autoGather=true) でも同様
+- **Fix Applied**: コード修正禁止のため記録のみ。白いベッドのクラフト不可のため夜間は土ブロックシェルターで対処
+- **Status**: 調査中
+
+---
+
+### [2026-03-22] 繰り返し死亡サイクル (Phase 2中) - 最新
+
+- **Cause**: 夜間に食料ゼロ・装備ゼロ・インベントリほぼ空の状態でmobに何度も死亡。keepInventoryオンだが毎死亡でインベントリがリセットされている（別エージェントのセッションと混在か）。リスポーン位置がY=100以上の高所になっており、落下死のリスクが高い
+- **Location**: birch_forest, y=108付近
+- **Coordinates**: x=-3.5, y=108.7, z=-5.7
+- **Last Actions**: mc_flee連続 → navigate Path blocked繰り返し → 死亡サイクル
+- **Root Pattern**: (1)夜間高所リスポーン (2)食料・装備ゼロ (3)mob包囲 (4)flee不能 (5)死亡 → ループ
+- **Fix Applied**: コード修正禁止のため記録のみ。朝時間帯に慎重に降下し食料確保に集中
+- **Status**: 調査中
+
+---
+
+### [2026-03-22] Creeper爆死 (Phase 2中)
+
+- **Cause**: 夜間にCreeperに接近されて爆発で死亡。"Claude2 was blown up by Creeper"
+- **Location**: 不明（夜間移動中）
+- **Coordinates**: 死亡時不明。リスポーン位置 x=2, y=68, z=3 (birch_forest)
+- **Last Actions**: mc_navigate(chest探索) → minecraft_pillar_up(部分失敗) → 夜間にCreeper接触
+- **Fix Applied**: コード修正禁止のため記録のみ。夜間移動はシェルター内待機に切り替え
+- **Status**: 調査中（夜間mob回避なしでのnavigateが死因）
+
+---
+
+### [2026-03-22] HP3夜間多数mob包囲 — mc_flee無効 (Phase 2中)
+
+- **症状**: HP3、hunger8、食料なし。夜間に7体のmobに囲まれ(pillager/skeleton/creeper/drowned)、mc_fleeが逃げきれない。
+- **原因**: mc_fleeが単一の敵から逃げる実装のため、複数方向からの包囲に対応できない。逃げた後も周囲16ブロック以内に別のmobが残る。
+- **Coordinates**: x=-2.1, y=82, z=6.7 (birch_forest)
+- **Last Actions**: mc_flee x3回 → 依然包囲 → HP 6→4→3と減少
+- **Fix Applied**: コード修正禁止のため記録のみ。土ブロックシェルターで夜明けを待つ戦略に切り替え
+- **Status**: 調査中（多数mob包囲時の逃げ切り手段なし）
+
+---
+
+### [2026-03-22] 移動不能・スタベーション危機 (Phase 2中)
+
+- **症状**: HP 3.5、hunger 0（スタベーション）、食料なし。mc_navigate が全方向でPath blocked。mc_gather birch_log が120sタイムアウト。周辺に動物なし。
+- **原因**: old_growth_birch_forest バイオームで地形が複雑でpathfindingが詰まっている可能性。チェスト座標がY=88と異常に高い（以前の落下死と関連か）
+- **Location**: x=-14, y=67, z=12 (old_growth_birch_forest)
+- **Coordinates**: x=-14.3, y=67.5, z=12.7
+- **Last Actions**: mc_flee → mc_navigate(複数方向) → mc_gather(120sタイムアウト) → mc_combat(cow/pig/chicken いずれも不在)
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中（pathfinding deadlock + 動物不在バイオームの組み合わせ）
+
+---
+
+### [2026-03-22] 夜間HPクリティカル — navigateによる落下ダメージ疑い
+
+- **症状**: mc_navigate呼び出し後にHP 3.5まで低下。食料なし状態で夜間多数の敵に囲まれた
+- **原因**: mc_navigateが高所から転落する経路を選択した可能性。位置がy=97→y=68に変化（29ブロック落下相当）
+- **Coordinates**: x=-4.4, y=68, z=14.6
+- **Last Actions**: mc_navigate(chest探索) → y=97からy=68へ移動中にダメージ
+- **Fix Applied**: コード修正禁止のため記録のみ。シェルターに籠もり朝まで待機
+- **Status**: 調査中（navigate経路選択の落下チェック不足の可能性）
+
+---
+
+### [2026-03-22] エンダーマン死亡 (Phase 2中) - セッション最新
+
+- **症状**: サーバーメッセージ "Claude2 was slain by Enderman" で死亡
+- **原因**: 夜間にエンダーマンに接触または目を合わせて攻撃された。夜間の mob 回避失敗
+- **Location**: 不明（Claude1のチャットログのみ）
+- **Coordinates**: 不明
+- **Last Actions**: Phase 2食料収集タスク中、夜間移動中
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中
+
+---
+
+### [2026-03-22] スケルトン矢ノックバック転落死 (Phase 2中)
+
+- **症状**: サーバーメッセージ "Claude2 was doomed to fall by Skeleton" で死亡（転落死）
+- **原因**: スケルトンの矢でノックバックされ高所から転落した可能性。高所移動中の安全チェックなし
+- **Location**: 不明（Claude1のチャットログのみ）
+- **Coordinates**: 不明
+- **Last Actions**: Phase 2食料収集タスク中（直前にラバ死亡からリスポーン後）
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中
+
+---
+
+### [2026-03-22] ラバ死亡 (Phase 2中)
+
+- **症状**: サーバーメッセージ "Claude2 tried to swim in lava" で死亡
+- **原因**: ラバ接触を回避できなかった。mc_navigateまたは移動中にラバに入った
+- **Location**: 不明（Claude1のチャットログのみ）
+- **Coordinates**: 不明
+- **Last Actions**: Phase 2食料収集タスク中
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中
+
+---
+
+### [2026-03-22] スケルトンに射殺 (Phase 2中)
+
+- **症状**: Claude2がゲームメッセージ "Claude2 was shot by Skeleton" で死亡
+- **原因**: 夜間または洞窟内でスケルトンに対して逃走・防衛できなかった可能性
+- **Location**: 不明（Claude1の観測によるチャットログのみ）
+- **Coordinates**: 不明
+- **Last Actions**: Phase 2食料収集タスク中
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中
+
+---
+
+### [2026-03-22] ピリジャー転落死 (Phase 2中) - セッション最新
+
+- **症状**: サーバーメッセージ "Claude2 was doomed to fall by Pillager" で死亡（転落死）
+- **原因**: ピリジャーの攻撃でノックバックされ高所から転落。夜間の高所移動中に敵対mob回避失敗
+- **Location**: 不明（Claude3のチャットログ観測のみ）
+- **Coordinates**: 不明
+- **Last Actions**: Phase 2食料収集タスク中
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中
+
 ## 報告形式
 
 ### [日付] バグタイトル
@@ -9,6 +137,54 @@
 - **原因**: 推定される原因
 - **修正**: どう修正したか（または修正予定）
 - **ファイル**: 関連するファイルパス
+
+---
+
+### [2026-03-22] 高所転落死 - Phase 2中
+
+- **症状**: サーバーメッセージ "Claude2 fell from a high place" で死亡
+- **原因**: 高所移動中（おそらく木の上や崖）に転落。夜間mob逃走中または移動中の落下
+- **Location**: 不明
+- **Coordinates**: 不明
+- **Last Actions**: Phase 2食料収集タスク中（Claude1の観測によるチャットログのみ）
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中
+
+---
+
+### [2026-03-22] 夜間大量mob包囲死亡 (Phase 2中) - セッション2
+
+- **症状**: 夜間にcreeper x6, skeleton x3, zombie x2, pillager x2, drowned x1, endermanに包囲。HP3.3でリスポーン死亡。
+- **原因**: mc_fleeが複数方向からのmob包囲を突破できず。mc_farmで水辺地形に移動後、夜間mob大量スポーンに対応不可。
+- **Location**: `src/tools/core-tools.ts` mc_flee実装
+- **Coordinates**: x:-1, y:72, z:-4 (birch_forest)
+- **Last Actions**: mc_farm実行→夜間になりmob大量スポーン→mc_flee x3回→逃げ切れずHP3.3死亡
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中
+
+---
+
+### [2026-03-22] mc_farm HP激減バグ - スケルトンに狩られHP1
+
+- **症状**: mc_farm実行中にHP20→1まで低下。dirt placement全失敗後にスケルトンに攻撃され続けた
+- **原因**: mc_farmが水辺の地形（急斜面・空中）に土を設置しようとして全て失敗し、その間ずっとスケルトンの射程内で無防備になった。敵が近くにいる状態でのfarm実行に安全チェックがない
+- **Location**: `src/tools/core-tools.ts` mc_farm実装
+- **Coordinates**: x:6, y:88, z:8付近 (birch_forest)
+- **Last Actions**: mc_farm → 水を発見→水辺に移動 → dirt placement失敗x19 → スケルトンに射撃されHP1 → mc_flee
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中
+
+---
+
+### [2026-03-22] 地下洞窟閉じ込め・HP4緊急事態
+
+- **症状**: mc_fleeを実行した結果、地表Y=80付近から地下Y=56まで落下。地下洞窟に閉じ込められ脱出不可能。食料ゼロ、HP=4、モブ9体囲まれ。
+- **原因**: mc_flee が地下洞窟の穴に向かって逃げ、そのまま深い洞窟に落下した。逃走先の安全チェック（崖や穴を回避する処理）が不十分。
+- **Location**: `src/tools/core-tools.ts` mc_flee実装
+- **Coordinates**: x:5, y:56, z:5 (birch_forest)
+- **Last Actions**: 夜間クリーパー2体接近 → mc_flee実行 → Y=80→56に落下 → 地下洞窟で孤立
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中
 
 ---
 

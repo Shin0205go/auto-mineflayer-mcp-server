@@ -1,3 +1,179 @@
+## [2026-03-22] Bug: minecraft_pillar_up 繰り返し失敗
+
+- **Cause**: minecraft_pillar_up が cobblestone/birch_planks 装備時に "Placement failed" で1ブロックしか上がれない。cobblestoneをmc_equipで手に持ってから試みても同様の失敗。
+- **Location**: (-14, 66, 34) old_growth_birch_forest
+- **Coordinates**: (-14, 66, 34)
+- **Last Actions**: mc_equip(cobblestone) → minecraft_pillar_up(height=15) → "Pillared up 1.0 blocks, Placement failed"
+- **Fix Applied**: None - recording only per user instruction.
+- **Status**: Investigating. Bot stuck at Y=66, cannot reach chests at Y=89-90.
+
+---
+
+## [2026-03-22] Bug: Claude1 瀕死 - 飢餓+夜間ゾンビダメージ (Phase 2セッション)
+
+- **Cause**: Phase 2食料確保中、草壊し(short_grass)でmc_gatherが120秒タイムアウト。その間に夜になりゾンビに攻撃されHP 6→4→3まで低下。hunger 0で飢餓ダメージも受け始め、HP 3で瀕死。食料がインベントリに全くなく回復不可能。
+- **Location**: (-12, 63, 33) old_growth_birch_forest
+- **Coordinates**: (-12, 63, 33)
+- **Last Actions**: mc_gather(short_grass) timeout → mc_flee(zombie) → HP 4 → hunger 0 → HP 3瀕死
+- **Fix Applied**: None - recording only per user instruction.
+- **Status**: 瀕死状態。食料確保が急務。
+
+---
+
+## [2026-03-22] Bug: mc_gather タイムアウト (birch_log / coal_ore)
+
+- **Cause**: mc_gather が "coal_ore" と "birch_log" で連続して120秒タイムアウト。nearby_resources には両方 "nearby" と表示されているが採掘できない。
+- **Location**: (6, 99, 70) old_growth_birch_forest
+- **Coordinates**: (6, 99, 70)
+- **Last Actions**: mc_navigate(coal_ore) → timeout, mc_navigate(birch_log) → timeout
+- **Fix Applied**: None - recording only per user instruction.
+- **Status**: Investigating. Suspected: block is shown nearby but path is blocked (y-level mismatch or terrain obstacle).
+
+---
+
+## [2026-03-22] Bug: Claude1 killed by Creeper during Phase 2 food gathering
+
+- **Cause**: mc_farm caused bot to roam into dangerous terrain at night. HP dropped to 3 due to mob damage during farming. mc_flee executed but Creeper explosion killed bot at HP 3. Multiple hostile mobs (creeper x4, skeleton, zombie x3, enderman, pillager x2, drowned x2) surrounded the area.
+- **Location**: (4, 67, -3) birch_forest
+- **Coordinates**: (4, 67, -3)
+- **Last Actions**: mc_farm (seed planting near water) → mc_flee from creeper → death
+- **Fix Applied**: None - recording only per user instruction.
+- **Status**: Recorded. Death caused by nighttime roaming during mc_farm with no armor. Needs respawn.
+
+---
+
+## [2026-03-22] Bug: Claude1 HP 4 - mc_farm失敗でファームランド変換できず食料確保不能
+
+- **Cause**: mc_farm実行時に水源近くのdirtをtillしてもfarmlandに変換されない（"NOT farmland — skipping"）。農場が機能せず食料が得られないままHP 4まで低下。
+- **Location**: (-3, 89, -2) birch_forest
+- **Coordinates**: (-3, 89, -2)
+- **Last Actions**: mc_farm → till失敗(farmland変換されない) → HP 4 → 食料ゼロ → 回復不可
+- **Fix Applied**: None - recording only per user instruction.
+- **Status**: 緊急。食料ゼロ、HP 4。動物狩りで食料確保必須。
+
+---
+
+## [2026-03-22] Bug: Claude1 shot by Skeleton during midnight
+
+- **Cause**: Claude1 was killed by a Skeleton during midnight. No armor equipped, nighttime mob encounter while navigating.
+- **Location**: Unknown (observed via chat: "Claude1 was shot by Skeleton")
+- **Coordinates**: Unknown
+- **Last Actions**: Navigating during midnight, no armor
+- **Fix Applied**: None - recording only per user instruction.
+- **Status**: Recorded. Claude1 died to Skeleton at midnight. Claude2 also at HP 7.5 before fleeing.
+
+---
+
+## [2026-03-22] Bug: Claude1 HP 1 with no food - imminent death risk
+
+- **Cause**: Session started with HP 4 and zero food. No animals found within 200 blocks. HP dropped to 1 due to mob attacks during night. No recovery path available (hunger 7, no food items, no animals).
+- **Location**: (1, 51, 10) birch_forest
+- **Coordinates**: (1, 51, 10)
+- **Last Actions**: mc_flee x1, mc_navigate to furnace (failed), mc_navigate to find cow/chicken/pig (all failed within 200 blocks)
+- **Fix Applied**: None - recording only per user instruction.
+- **Status**: Investigating. Bot at HP 1, food=0, hunger=7. Attempting to survive by staying still and finding alternative food source.
+
+---
+
+## [2026-03-22] Bug: Claude1 Death - HP 1.2 mob attrition, no food, no escape path
+
+- **Cause**: HP dropped from 5.3 to 1.2 through continuous mob damage (14+ mobs surrounding: creepers x5, skeletons x3, pillager x2, drowned x1, enderman x1, zombie x2). No food in inventory. mc_flee failed to escape (only moved 8-12 blocks each attempt). mc_navigate blocked in all directions due to terrain. Safety check blocked all movement at HP <2. Bot died from mob damage.
+- **Location**: (2, 75, -2) birch_forest
+- **Coordinates**: (2, 75, -2)
+- **Last Actions**: mc_flee x3 (insufficient distance) → mc_navigate(100,75,100) blocked → mc_navigate(-100,64,100) safety check blocked → death
+- **Fix Applied**: None - recording only per user instruction.
+- **Status**: Recorded. Respawned at (-10, 109, 9) with near-empty inventory (2 dirt only, all tools lost). Root cause: persistent extreme mob density at spawn area with no food supply.
+
+---
+
+## [2026-03-22] Bug: Claude1 slain by Zombie while navigating to pig
+
+- **Cause**: mc_navigate sent bot toward pig at Y=101 in hilly terrain. While navigating through elevated/obstructed terrain, Zombie attacked and killed bot. Iron boots lost (armor not restored by keepInventory? Or dropped on death).
+- **Location**: ~(6, 105, 1) birch_forest
+- **Coordinates**: (6, 105, 1)
+- **Last Actions**: mc_navigate to pig coordinates (-51, 101, 93), path blocked, Zombie appeared during navigation.
+- **Fix Applied**: None - recording only per user instruction.
+- **Status**: Recorded. keepInventory=true but iron_boots missing after respawn. Proceeding with Phase 2.
+
+---
+
+## [2026-03-22] Bug: Claude1 near-death from starvation/creeper - Phase 2 start
+
+- **Cause**: Bot started session with HP 0.1 and no food. hunger dropped to 2. Creeper approached at 15 blocks while at HP 0.1. mc_flee triggered. Suspected respawn occurred (HP/hunger jumped to 20/20 after flee).
+- **Location**: ~(7, 92, 8) birch_forest
+- **Coordinates**: (7, 92, 8)
+- **Last Actions**: mc_flee x2 from creeper. After second flee, HP/hunger restored to 20/20 - likely respawn triggered.
+- **Fix Applied**: None - recording only per user instruction.
+- **Status**: Recorded. keepInventory=true. Now at full HP/hunger, proceeding with Phase 2.
+
+---
+
+## [2026-03-22] Bug: Claude1 shot by Skeleton - Phase 2 attempt
+
+- **Cause**: Bot navigated underground while searching for crafting table. Y dropped from 98 to 85. Skeleton found bot underground, shot and killed while HP was already low (8/20). mc_navigate pathfinder chose underground cave route.
+- **Location**: ~(7, 85, 8) birch_forest
+- **Coordinates**: (7, 85, 8)
+- **Last Actions**: Crafted bone_meal, navigated to crafting table, fell into cave system. Skeleton attacked at night with HP already at 8 from travel damage.
+- **Fix Applied**: None yet. Root cause: mc_navigate sometimes routes through caves. Need to stay above Y=90 at night.
+- **Status**: Recorded. keepInventory=true, respawned with all items.
+
+---
+
+## [2026-03-22] Bug: Claude1 drowned - Session 44
+
+- **Cause**: mc_navigate fell bot into underground water while pathfinding to coordinates (100, 96, 0). Bot ended up at Y=72 underwater with 0 hunger, surrounded by mobs. Drowned.
+- **Location**: ~(15, 72, 3) birch_forest
+- **Coordinates**: (15, 72, 3)
+- **Last Actions**: Trying to navigate to surface/find animals for food. mc_navigate sent bot underground through cave system instead of staying on surface. Hunger reached 0 with no food available.
+- **Fix Applied**: None - navigation pathfinding issue sends bot underground via caves
+- **Status**: Recorded. Respawned with full HP/hunger. keepInventory=true.
+
+---
+
+## [2026-03-22] Bug: Claude1 doomed to fall by Phantom - Session 43
+
+- **Cause**: Claude1 was killed by a Phantom. Phantoms spawn when a player hasn't slept for 3+ nights. Bot does not sleep regularly, accumulating "insomnia" counter.
+- **Location**: Unknown (observed via server message)
+- **Coordinates**: Unknown
+- **Last Actions**: Operating at night (midnight, tick ~20233). Phantom attacks from above, hard to flee.
+- **Fix Applied**: None yet. Root cause: no sleep → Phantom spawns. Need to sleep every night or avoid being outside at night.
+- **Status**: Recorded. keepInventory=true so items preserved.
+
+---
+
+## [2026-03-22] Bug: Claude1 slain by Skeleton - Session 42
+
+- **Cause**: HP dropped to 0.8 at night (tick ~17633). Had no food. Skeleton attacked from south. Flee didn't create enough distance. Pillar attempt failed initially (no solid ground check), then succeeded at different location but too late - bot had already died/respawned at Y:121.
+- **Location**: ~(22, 42, -3) birch_forest
+- **Coordinates**: (22, 42, -3)
+- **Last Actions**: Tried to craft white_bed, craft chain failed trying to make bone. Navigated to crafting table, multiple hostile mobs (skeleton x2, creeper, enderman, zombie) cornered bot. Fleeing didn't help, pillar-up failed first attempt.
+- **Fix Applied**: None yet. Root cause: night survival with 0 hunger + 0 food + multiple mobs. Need to stay indoors at night.
+- **Status**: Recorded. Respawned with full HP/hunger. keepInventory=true.
+
+---
+
+## [2026-03-22] Bug: Claude1 死亡 - 洞窟内飢餓+モブ包囲
+
+- **Cause**: mc_navigateが繰り返し地下洞窟ルートを選択。Y=70-74の洞窟内でHP9腹0の状態で多数のモブ（クリーパー2体・ゾンビ・ピリジャー・スケルトン）に包囲。pillar_upも洞窟天井で失敗。脱出不可能で死亡と推定（ステータスがHP14.3腹20に突然変化→リスポーン）。
+- **Location**: (-5~-22, 70-74, -14~-22) birch_forest 洞窟内
+- **Coordinates**: (-22.4, 73.9, -22.3) 最後の確認位置
+- **Last Actions**: 洞窟内でpillar_up失敗 → mc_flee → mc_navigate失敗を繰り返し → 死亡リスポーン
+- **Fix Applied**: None - recording only per user instruction.
+- **Status**: Recorded. keepInventory=true。リスポーン後HP14.3腹20でY=92地上に出現。
+
+---
+
+## [2026-03-22] Bug: Claude1 HP9腹0 多数モブ包囲 - Phase 2 Session (current)
+
+- **Cause**: mc_navigateが地下洞窟を通るルートでボットがY=73まで降下。クリーパー・ピリジャー・スケルトン2体に包囲。HP9、腹0で飢餓ダメージ進行中。食料なし、動物なし。チェストへのパスが全てブロックされ食料補充不可。
+- **Location**: (-6.4, 73, 1.5) birch_forest
+- **Coordinates**: (-6.4, 73, 1.5)
+- **Last Actions**: mc_navigate → 地下洞窟経由で降下 → 多数のモブに包囲 → mc_flee → チェスト到達不可
+- **Fix Applied**: None - recording only per user instruction.
+- **Status**: 危険状態。地表へ上がる必要あり。mc_navigateが繰り返し地下洞窟ルートを選択する根本バグあり。
+
+---
+
 ## [2026-03-21] Bug: Claude1 slain by Zombie - Session 41
 
 - **Cause**: HP dropped to 8 at night (midnight) with no food. Was navigating rugged old_growth_birch_forest terrain trying to reach base chest. Zombie killed bot before reaching safety.
