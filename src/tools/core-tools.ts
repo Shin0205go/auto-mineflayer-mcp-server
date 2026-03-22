@@ -2323,8 +2323,9 @@ export async function mc_combat(
             const timeNote = combatIsNight ? "at night" : "";
             const armorNote = combatArmorCount <= 1 ? " NO ARMOR —" : "";
             hostileWarning = `\n[WARNING] Cannot safely hunt ${target}: ${nearbyHostiles.length} hostile(s) nearby (${threatList}).${armorNote} ${timeNote} Hostile within ${closestHostileDist}m.\n[推奨アクション]\n1. bot.combat() — 最も近い敵を先に倒す（引数なし=最近接敵）\n2. bot.flee(20) — 敵から離れてから狩りを再開\n3. bot.equipArmor() — 防具を装備してから狩り`;
+          } else {
+            hostileWarning = `\n[WARNING] ${nearbyHostiles.length} hostile(s) nearby while hunting ${target}: ${threatList}. Be cautious.`;
           }
-          hostileWarning = `\n[WARNING] ${nearbyHostiles.length} hostile(s) nearby while hunting ${target}: ${threatList}. Be cautious.`;
         }
       }
     }
