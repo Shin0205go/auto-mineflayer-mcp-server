@@ -898,14 +898,20 @@ export async function minecraft_survival_routine(
     const bot = botManager.getBot(username);
     const currentHP = bot?.health ?? 20;
     if (bot) {
-      const danger = checkDangerNearby(bot, 8);
+      // Scan 20 blocks — matches mc_gather/mc_farm radius. Skeletons shoot from ~20 blocks,
+      // so 8-block radius missed threats that killed bot during food gathering.
+      // Bot3 #16: spider at 5.1m detected, but mobs at 8-13m were missed with old radius=8.
+      // Bot2: skeleton attacked from 12+ blocks during survival_routine food combat.
+      const danger = checkDangerNearby(bot, 20);
       if (danger.dangerous) {
         console.error(`[SurvivalRoutine] Danger before food gathering: ${danger.hostileCount} hostile(s), nearest: ${danger.nearestHostile?.name} at ${danger.nearestHostile?.distance.toFixed(1)}m, HP: ${currentHP}`);
-        // Bug fix (bot3.md #16, bot2.md Session 85): When HP < 5, ALWAYS flee.
-        // Fighting at critical HP (< 5/20) is suicidal — even food animals can be dangerous.
-        const shouldFlee = danger.recommendation === "flee" || currentHP < 5;
+        // Bug fix (bot3.md #16, bot2.md Session 85): When HP < 8, ALWAYS flee.
+        // A single skeleton hit deals 4-5 damage unarmored. At HP < 8, one hit can be fatal
+        // during the time it takes to engage and kill the hostile.
+        // Previous threshold (HP < 5) was too low — bot3 died at HP 2.2 during combat.
+        const shouldFlee = danger.recommendation === "flee" || currentHP < 8;
         if (shouldFlee) {
-          if (currentHP < 5) {
+          if (currentHP < 8) {
             console.error(`[SurvivalRoutine] HP CRITICAL (${currentHP}/20) — forcing flee instead of fight`);
           }
           try {
@@ -936,14 +942,16 @@ export async function minecraft_survival_routine(
 
     if (availableAnimal) {
       try {
-        // Bug fix (bot3.md #16): At critical HP (< 5/20), skip food combat entirely.
-        // Fighting at near-death HP is fatal before food can help.
-        if (currentHP < 5) {
+        // Bug fix (bot3.md #16): At critical HP (< 8/20), skip food combat entirely.
+        // A single mob hit (skeleton 4-5 dmg, zombie 3-4 dmg) at HP < 8 is often fatal
+        // before the flee threshold triggers. Previous threshold (HP < 5) was too low.
+        if (currentHP < 8) {
           console.error(`[SurvivalRoutine] HP CRITICAL (${currentHP}/20) — skipping food combat to avoid death. Try respawning.`);
           results.push(`HP critical (${currentHP}/20): Skipped food combat. Use minecraft_respawn to recover HP first.`);
         } else {
-          // Flee threshold: 4 HP (avoid death, can always respawn to recover)
-          const fightResult = await botManager.fight(username, availableAnimal, 4);
+          // Flee threshold: 8 HP — provides margin for 1-2 mob hits during hunt.
+          // Previous value (4) was too low: bot3 died at HP 2.2 because flee triggered too late.
+          const fightResult = await botManager.fight(username, availableAnimal, 8);
           results.push(`Food: ${fightResult}`);
 
           // Collect drops
@@ -960,7 +968,7 @@ export async function minecraft_survival_routine(
       if (nearbyEntities.includes("zombie")) {
         console.error("[SurvivalRoutine] Found zombie - hunting for rotten_flesh (emergency food)");
         try {
-          const fightResult = await botManager.fight(username, "zombie", 6); // flee at 6 HP
+          const fightResult = await botManager.fight(username, "zombie", 8); // flee at 8 HP — zombie hits deal 3-4 dmg
           results.push(`Emergency zombie hunt: ${fightResult}`);
           await botManager.collectNearbyItems(username);
 
