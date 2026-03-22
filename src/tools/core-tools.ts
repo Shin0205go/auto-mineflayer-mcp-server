@@ -265,6 +265,25 @@ export async function mc_gather(
 ): Promise<string> {
   const username = botManager.requireSingleBot();
 
+  // Auto-expand maxDistance for underground-only blocks (ores).
+  // Bot1 [2026-03-22]: bot.gather("iron_ore", 10) returned 0 in 47ms because
+  // iron_ore only spawns at Y≤72, and bot at Y=95 can't find ore within 32 blocks
+  // (vertical distance alone is 23+ blocks). The 3D distance easily exceeds 32.
+  // Expand search radius for all ore types so gather can find blocks below the bot.
+  // This doesn't guarantee reachability (moveToBasic may still abort for cave routing),
+  // but at least gives the bot a chance to find ores near surface caves/ravines.
+  const UNDERGROUND_BLOCKS = new Set([
+    "iron_ore", "deepslate_iron_ore", "gold_ore", "deepslate_gold_ore",
+    "copper_ore", "deepslate_copper_ore", "coal_ore", "deepslate_coal_ore",
+    "diamond_ore", "deepslate_diamond_ore", "emerald_ore", "deepslate_emerald_ore",
+    "lapis_ore", "deepslate_lapis_ore", "redstone_ore", "deepslate_redstone_ore",
+    "nether_gold_ore", "nether_quartz_ore", "ancient_debris",
+  ]);
+  if (UNDERGROUND_BLOCKS.has(block) && maxDistance <= 32) {
+    maxDistance = 64;
+    console.error(`[Gather] Expanded maxDistance to 64 for underground block "${block}"`);
+  }
+
   // Early exit for smelted/crafted items that cannot be gathered from the world.
   // Bot1 [2026-03-22]: bot.gather("iron_ore", 10) returned 0 in 47ms; bot.gather("iron_ingot")
   // tried to find "iron_ingot" blocks (which don't exist in the world) and exited instantly.

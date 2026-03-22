@@ -89,8 +89,8 @@ export async function mc_execute(
     },
 
     // Resources
-    gather: async (block: string, count?: number) => {
-      return await mc_gather(block, count || 1);
+    gather: async (block: string, count?: number, maxDistance?: number) => {
+      return await mc_gather(block, count || 1, maxDistance);
     },
     craft: async (item: string, count?: number, autoGather?: boolean) => {
       return await mc_craft(item, count || 1, autoGather || false);
@@ -224,13 +224,23 @@ export async function mc_execute(
             // Bot2 [2026-03-23]: previous threshold (HP<10) was too late; bot drowned
             // from HP 15.8 because abort didn't trigger until HP<10, leaving only ~4s.
             // Water contact always warrants immediate abort + emergency escape.
+            // Check three Y levels: below feet (-0.5 for sinking), feet, and head (+1).
+            // Bot2 [2026-03-23]: bot sank into water from an elevated position during wait.
+            // Checking only feet and head missed partial submersion where the bot is standing
+            // on a water surface block and slowly sinking. The below-feet check catches
+            // "standing in shallow water" before the bot fully submerges.
             const feetBlock = waitBot.blockAt(waitBot.entity.position);
             const headBlock = waitBot.blockAt(waitBot.entity.position.offset(0, 1, 0));
+            const belowBlock = waitBot.blockAt(waitBot.entity.position.offset(0, -0.5, 0));
             const isWater = (n: string | undefined) => n === "water" || n === "flowing_water";
-            const inWater = isWater(feetBlock?.name) || isWater(headBlock?.name);
-            if (inWater) {
+            const inWater = isWater(feetBlock?.name) || isWater(headBlock?.name) || isWater(belowBlock?.name);
+            // Also check oxygenLevel — Mineflayer exposes bot.oxygenLevel (max 300, decreases underwater).
+            // If oxygenLevel < 250, bot is submerged even if block checks miss due to floating point.
+            const oxygenLow = ((waitBot as any).oxygenLevel ?? 300) < 250;
+            if (inWater || oxygenLow) {
               if (logs.length < MAX_LOG_LINES) {
-                logs.push(`[wait] ABORTED: In water with HP=${hp.toFixed(1)} — drowning risk. Attempting emergency jump.`);
+                const reason = oxygenLow && !inWater ? "oxygen depleting" : "in water";
+                logs.push(`[wait] ABORTED: ${reason} with HP=${hp.toFixed(1)} — drowning risk. Attempting emergency jump.`);
               }
               // Emergency: jump + move forward toward land to escape drowning.
               // Bot2 [2026-03-23]: previous 3x jump-in-place didn't exit the water
