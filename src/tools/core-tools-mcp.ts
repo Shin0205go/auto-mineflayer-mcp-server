@@ -23,6 +23,7 @@ import {
   mc_smelt,
   mc_tunnel,
 } from "./core-tools.js";
+import { mc_execute } from "./mc-execute.js";
 import { registry } from "../tool-handler-registry.js";
 import { botManager } from "../bot-manager/index.js";
 
@@ -236,6 +237,18 @@ export const coreTools = {
       required: ["action"],
     },
   },
+
+  mc_execute: {
+    description: "Execute JavaScript code against the bot API. Write code using the `bot` object to perform multiple operations in one call with conditional logic and loops. Available methods: bot.status(), bot.inventory(), bot.moveTo(x,y,z), bot.navigate(target), bot.flee(distance?), bot.pillarUp(height?), bot.gather(block, count?), bot.craft(item, count?, autoGather?), bot.smelt(item, count?), bot.eat(food?), bot.combat(target?, fleeAtHp?), bot.equipArmor(), bot.place(blockType, x,y,z), bot.build(preset, size?), bot.farm(), bot.store(action, itemName?, count?, chestX?, chestY?, chestZ?, keepItems?), bot.drop(itemName, count?), bot.chat(message), bot.getMessages(), bot.log(message), bot.wait(ms). All methods are async. The last expression is returned.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        code: { type: "string", description: "JavaScript code to execute. Use `bot` API object. All methods are async (use await). Last expression value is returned." },
+        timeout: { type: "number", default: 30000, description: "Max execution time in ms (default 30000, max 120000)" },
+      },
+      required: ["code"],
+    },
+  },
 };
 
 /**
@@ -291,6 +304,8 @@ export async function handleCoreTool(
         return await fn(args.item_name as string, (args.count as number) || 1);
       case "mc_tunnel":
         return await fn(args.direction as string, (args.length as number) || 10);
+      case "mc_execute":
+        return await fn(args.code as string, (args.timeout as number) || 30000);
     }
   }
 
@@ -311,6 +326,7 @@ export async function handleCoreTool(
     case "minecraft_pillar_up": return await minecraft_pillar_up((args.height as number) || 1);
     case "mc_smelt": return await mc_smelt(args.item_name as string, (args.count as number) || 1);
     case "mc_tunnel": return await mc_tunnel(args.direction as string, (args.length as number) || 10);
+    case "mc_execute": return await mc_execute(args.code as string, (args.timeout as number) || 30000);
     case "mc_place_block": {
       const username = botManager.requireSingleBot();
       const result = await botManager.placeBlock(username, args.block_type as string, args.x as number, args.y as number, args.z as number);

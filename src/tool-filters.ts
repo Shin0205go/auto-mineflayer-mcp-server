@@ -40,6 +40,8 @@ export const TIER1_CORE_TOOLS = new Set([
   "mc_flee",
   // Pillar up (always visible — essential for cave escape)
   "minecraft_pillar_up",
+  // Code execution (multiple bot operations in one call)
+  "mc_execute",
   // Hot-reload after code changes
   "mc_reload",
   // Tool search is always visible for Tier 3 discovery

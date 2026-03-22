@@ -64,6 +64,11 @@ export const TOOL_METADATA: Record<string, ToolMetadata> = {
     category: "connection",
     priority: 10,
   },
+  mc_execute: {
+    tags: ["code", "execute", "script", "javascript", "multi", "batch", "conditional", "loop", "program"],
+    category: "actions",
+    priority: 10,
+  },
   mc_farm: {
     tags: ["farming", "food", "wheat", "seeds", "bread", "till", "bone_meal", "hunger"],
     category: "survival",
