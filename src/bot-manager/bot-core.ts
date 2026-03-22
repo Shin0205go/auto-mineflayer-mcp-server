@@ -628,6 +628,20 @@ export class BotCore extends EventEmitter {
                 fleeTarget.y = autoFleeStartY;
                 const fleeFromName = allHostiles.length === 1 ? allHostiles[0].name : `${allHostiles.length} hostiles`;
                 console.error(`[AutoFlee] HP=${bot.health.toFixed(1)}, fleeing from ${fleeFromName}`);
+                // PRE-FLEE AUTO-EAT: Eat before fleeing if hunger <= 6 to enable sprinting.
+                // Minecraft prevents sprinting at hunger <= 6. Without sprint, flee distance
+                // is halved (walk speed ~4.3 vs sprint ~5.6 blocks/s), often insufficient to escape.
+                // Bot1/Bot2: 10+ deaths where flee only moved 6-12 blocks instead of 20-30.
+                // NOTE: entityHurt handler is sync, so use .then() chains instead of await.
+                if (bot.food <= 6) {
+                  const preFleeFood = bot.inventory.items().find(i => EDIBLE_FOOD_NAMES.has(i.name));
+                  if (preFleeFood) {
+                    bot.equip(preFleeFood, "hand")
+                      .then(() => bot.consume())
+                      .then(() => console.error(`[AutoFlee] Pre-flee ate ${preFleeFood.name} (hunger: ${bot.food}) to enable sprinting`))
+                      .catch(() => { /* ignore — flee even if eat fails */ });
+                  }
+                }
                 try {
                   // SAFETY: Set safe pathfinder settings before auto-flee goal.
                   // Without these, AutoFlee can route through caves (canDig), fall off cliffs
@@ -639,6 +653,10 @@ export class BotCore extends EventEmitter {
                     (bot.pathfinder.movements as any).liquidCost = 10000;
                   }
                   bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
+                  // Enable sprint control state for actual sprinting (not just pathfinder planning).
+                  if ((bot.food ?? 20) > 6) {
+                    bot.setControlState("sprint", true);
+                  }
                   // SAFETY: Y-descent monitoring during AutoFlee.
                   // mc_flee has a real-time Y-descent abort (4 blocks), but AutoFlee uses
                   // setGoal() directly with no monitoring. Bot2 [2026-03-22]: AutoFlee/mc_flee

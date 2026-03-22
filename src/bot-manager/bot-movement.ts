@@ -1503,6 +1503,33 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
   const bot = managed.bot;
 
   try {
+    // PRE-FLEE AUTO-EAT: Eat food before fleeing if hunger <= 6.
+    // In Minecraft, the player CANNOT sprint when hunger <= 6 (food bar icons).
+    // mc_flee enables allowSprinting=true on the pathfinder, but this only tells
+    // the pathfinder to plan sprint-speed paths — the game engine still blocks
+    // sprinting at low hunger. Without food, flee achieves 50-60% of expected distance.
+    // Bot1: 6+ deaths where mc_flee moved only 6-12 blocks instead of 20-30.
+    // Bot2: 5+ deaths where mc_flee couldn't escape mob surround due to slow speed.
+    // Eating before flee restores hunger above 6, enabling actual sprinting.
+    const preFleeHunger = bot.food ?? 20;
+    if (preFleeHunger <= 6) {
+      const foodItem = bot.inventory.items().find((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
+      if (foodItem) {
+        try {
+          await bot.equip(foodItem, "hand");
+          await bot.consume();
+          console.error(`[Flee] Pre-flee auto-ate ${foodItem.name} (hunger: ${preFleeHunger} → ${bot.food ?? "?"}) to enable sprinting`);
+        } catch (_) { /* ignore eat errors — flee is still better slow than not at all */ }
+      }
+    }
+
+    // PRE-FLEE ARMOR EQUIP: Equip any available armor before fleeing.
+    // Bot1/Bot2/Bot3: many deaths during flee where mobs dealt full damage to unarmored bot.
+    // Even iron boots reduce skeleton arrow damage from 5 to ~3. Quick equip takes <200ms.
+    try {
+      await equipArmor(bot);
+    } catch (_) { /* continue without armor */ }
+
     // Find ALL nearby hostiles (using dynamic registry check), sorted by distance.
     // Bot2 bug: flee only considered nearest hostile, running into other mobs when surrounded.
     // Now we compute a weighted flee direction away from ALL hostiles within 24 blocks.
@@ -1631,6 +1658,14 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
 
     const goal = new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3);
     bot.pathfinder.setGoal(goal);
+
+    // Explicitly enable sprint control state — pathfinder's allowSprinting only affects
+    // path planning, but doesn't guarantee the bot actually sprints. Setting the control
+    // state ensures the bot sprints as soon as the pathfinder starts moving.
+    // Only effective when hunger > 6 (Minecraft physics requirement).
+    if ((bot.food ?? 20) > 6) {
+      bot.setControlState("sprint", true);
+    }
 
     // Scale timeout with requested distance. Base 10s + 0.4s per block beyond 20.
     // Bot3 #26: 8s timeout was too short for 30-50 block flee on rough terrain.
