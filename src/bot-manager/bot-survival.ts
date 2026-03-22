@@ -121,12 +121,6 @@ export async function sleep(managed: ManagedBot): Promise<string> {
   const minecraftData = await import("minecraft-data");
   const mcData = minecraftData.default(bot.version);
 
-  // Check if it's night time
-  const time = bot.time.timeOfDay;
-  if (time < 12541 || time > 23458) {
-    return "Cannot sleep - it's not night time yet. Wait until dusk.";
-  }
-
   // Find a bed nearby (dynamically get all bed block IDs from registry)
   const bedBlockIds = Object.values(mcData.blocksByName)
     .filter(b => isBedBlock(b.name))
@@ -227,18 +221,6 @@ export async function sleep(managed: ManagedBot): Promise<string> {
  */
 export async function attack(managed: ManagedBot, entityName?: string): Promise<string> {
   const bot = managed.bot;
-
-  // Auto-eat before combat if HP is not full and food is available
-  if (bot.health < 16 && bot.food < 20) {
-    const foodItem = bot.inventory.items().find(i => isFoodItem(bot, i.name));
-    if (foodItem) {
-      try {
-        await bot.equip(foodItem, "hand");
-        await bot.consume();
-        console.error(`[Attack] Auto-ate ${foodItem.name} before combat (HP: ${bot.health}, hunger: ${bot.food})`);
-      } catch (_) { /* ignore eat errors */ }
-    }
-  }
 
   // Auto-equip best armor and weapon before attacking
   try { await equipArmor(bot); } catch (_) { /* ignore armor equip errors */ }

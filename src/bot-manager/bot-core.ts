@@ -411,126 +411,31 @@ export class BotCore extends EventEmitter {
           }
         });
 
-        // Health changed
-        let lastEatTime = 0;
-        bot.on("health", async () => {
+        // Health changed — event notification only (agent decides when to eat)
+        bot.on("health", () => {
           const currentFood = bot.food ?? 20;
           const currentHealth = bot.health ?? 20;
 
-          // Early-exit for stable state: if both hunger and health are sufficient, skip event
+          // Early-exit for stable state
           if (currentFood >= 18 && currentHealth >= 18) {
             return;
           }
 
-          // Fast-path: immediate food consumption if hunger < 18 with cooldown
-          const now = Date.now();
-          if (currentFood < 18 && now - lastEatTime > 10000) {
-            lastEatTime = now;
-            const inventory = bot.inventory.items();
-
-            // Check for cooked food first
-            const cookedFood = inventory.find(item =>
-              item.name === 'cooked_beef' || item.name === 'cooked_porkchop' ||
-              item.name === 'cooked_chicken' || item.name === 'cooked_mutton' ||
-              item.name === 'cooked_salmon' || item.name === 'cooked_cod' ||
-              item.name === 'bread' || item.name === 'baked_potato' ||
-              item.name === 'golden_carrot' || item.name === 'golden_apple'
-            );
-
-            if (cookedFood) {
-              try {
-                await bot.equip(cookedFood, 'hand');
-                await bot.consume();
-                addEvent("health_changed", `Auto-ate ${cookedFood.name}. Health: ${currentHealth.toFixed(1)}/20, Food: ${bot.food}/20`, {
-                  health: currentHealth,
-                  food: bot.food,
-                  consumed: cookedFood.name,
-                  resolved: true
-                });
-                return;
-              } catch (err) {
-                // Fall through to raw food or normal event
-              }
-            }
-
-            // Check for raw food + fuel (smelt immediately if available)
-            const rawFood = inventory.find(item =>
-              item.name === 'beef' || item.name === 'porkchop' ||
-              item.name === 'chicken' || item.name === 'mutton' ||
-              item.name === 'salmon' || item.name === 'cod' || item.name === 'potato'
-            );
-            const fuel = inventory.find(item =>
-              item.name === 'coal' || item.name === 'charcoal' ||
-              item.name === 'planks' || item.name.includes('log')
-            );
-
-            if (rawFood && fuel) {
-              addEvent("health_changed", `LOW FOOD (${currentFood}/20)! Raw food+fuel available. Smelt ${rawFood.name} immediately!`, {
-                health: currentHealth,
-                food: currentFood,
-                rawFood: rawFood.name,
-                fuel: fuel.name,
-                urgent: true
-              });
-              return;
-            }
-          }
-
-          // Normal event if no immediate action taken
           addEvent("health_changed", `Health: ${currentHealth.toFixed(1)}/20, Food: ${currentFood}/20`, {
             health: currentHealth,
             food: currentFood,
           });
         });
 
-        // Oxygen level check (drowning detection + auto swim up)
+        // Oxygen level check — event notification only (agent decides how to respond)
         let lastOxygenLevel = 20;
-        let autoSwimActive = false;
-        let autoSwimInterval: ReturnType<typeof setInterval> | null = null;
         bot.on("breath", () => {
-          // Clamp oxygen to valid 0-20 range (server sometimes sends values > 300 after respawn)
           const oxygenRaw = bot.oxygenLevel ?? 20;
           const oxygen = Math.min(20, Math.max(0, oxygenRaw));
-          // Only emit if oxygen is critically low AND decreasing (avoid false positives)
           if (oxygen < 5 && oxygen < lastOxygenLevel) {
             addEvent("drowning", `LOW OXYGEN: ${oxygen}/20! Swim up immediately!`, {
               oxygenLevel: oxygen,
             });
-          }
-          // Auto swim up when oxygen is getting low (trigger at 18 for extra safety)
-          // Removed feet check — trigger on oxygen alone to catch all water situations
-          if (oxygen < 18 && !autoSwimActive) {
-            autoSwimActive = true;
-            console.error(`[AutoSwim] Low oxygen (${oxygen}/20), swimming up!`);
-            lastOxygenLevel = oxygen;
-            bot.pathfinder.setGoal(null); // Cancel current pathfinding
-            // Look straight up so forward movement swims upward
-            bot.look(bot.entity.yaw, -Math.PI / 2, true);
-            bot.setControlState("jump", true);
-            bot.setControlState("sprint", true);
-            bot.setControlState("forward", true);
-            // Keep checking every 500ms — stop when oxygen recovers or max 30s
-            let swimTicks = 0;
-            autoSwimInterval = setInterval(() => {
-              swimTicks++;
-              // Clamp to valid range (server sometimes sends >300 after respawn)
-              const currentOxygen = Math.min(20, Math.max(0, bot.oxygenLevel ?? 20));
-              // Stop if oxygen recovered OR max time reached (30s)
-              // Removed stillInWater check to keep swimming until oxygen is restored
-              if (currentOxygen > 19 || swimTicks >= 60) { // 60 * 500ms = 30s max
-                bot.setControlState("jump", false);
-                bot.setControlState("sprint", false);
-                bot.setControlState("forward", false);
-                autoSwimActive = false;
-                if (autoSwimInterval) clearInterval(autoSwimInterval);
-                autoSwimInterval = null;
-                const reason = currentOxygen > 19 ? "oxygen recovered" : "timeout";
-                console.error(`[AutoSwim] Stopped swimming (${reason}) after ${swimTicks * 0.5}s, oxygen: ${currentOxygen}/20`);
-              } else {
-                // Keep looking up while swimming
-                bot.look(bot.entity.yaw, -Math.PI / 2, true);
-              }
-            }, 500);
           }
           lastOxygenLevel = oxygen;
         });
@@ -562,167 +467,12 @@ export class BotCore extends EventEmitter {
                 bot.equip(food, "hand").then(() => bot.consume()).catch(() => {});
               }
             }
-            // Auto-flee when HP drops to 10 or below after taking damage
+            // Low HP — notify agent (agent decides whether to flee/eat/fight)
             else if (bot.health <= 10) {
-              // Bug fix (Session 186): Do NOT flee when inside a portal block.
-              // AutoFlee during portal entry overrides the portal goal and breaks teleportation.
-              const botBlockFeet = bot.blockAt(bot.entity.position.floored());
-              const botBlockHead = bot.blockAt(bot.entity.position.floored().offset(0, 1, 0));
-              const isInPortal = (botBlockFeet?.name === "nether_portal" || botBlockFeet?.name === "end_portal" ||
-                                  botBlockHead?.name === "nether_portal" || botBlockHead?.name === "end_portal");
-              // Bug fix (Session 186b): Also suppress flee when a portal is within 6 blocks.
-              // The bot may be approaching the portal and AutoFlee fires just before entry.
-              // Using 6 blocks to catch GoalBlock navigation to portal (bot may be 4-5 blocks away).
-              let isNearPortal = false;
-              if (!isInPortal) {
-                const botPos = bot.entity.position;
-                for (let dx = -6; dx <= 6 && !isNearPortal; dx++) {
-                  for (let dy = -3; dy <= 3 && !isNearPortal; dy++) {
-                    for (let dz = -6; dz <= 6 && !isNearPortal; dz++) {
-                      const nearBlock = bot.blockAt(botPos.floored().offset(dx, dy, dz));
-                      if (nearBlock?.name === "nether_portal" || nearBlock?.name === "end_portal") {
-                        isNearPortal = true;
-                      }
-                    }
-                  }
-                }
-              }
-              if (isInPortal || isNearPortal) {
-                console.error(`[AutoFlee] Suppressed: bot is ${isInPortal ? "inside" : "near"} portal block, standing still for teleportation.`);
-              } else {
-              // Find ALL nearby hostiles and compute weighted flee direction.
-              // Previous: only considered nearest hostile, causing bot to flee into other mobs.
-              // Fix: use inverse-square weighted direction from all hostiles (same as mc_flee).
-              const allHostiles = Object.values(bot.entities)
-                .filter(e => e !== bot.entity && e.name && isHostileMob(bot, e.name.toLowerCase()))
-                .map(e => ({
-                  entity: e,
-                  dist: e.position.distanceTo(bot.entity.position),
-                  name: e.name || "hostile"
-                }))
-                .filter(h => h.dist <= 24)
-                .sort((a, b) => a.dist - b.dist);
-
-              if (allHostiles.length > 0) {
-                // Weighted flee direction away from ALL hostiles (inverse square distance).
-                let sumX = 0, sumZ = 0, totalWeight = 0;
-                for (const h of allHostiles) {
-                  const weight = 1 / Math.max(h.dist * h.dist, 1);
-                  const away = bot.entity.position.minus(h.entity.position);
-                  sumX += away.x * weight;
-                  sumZ += away.z * weight;
-                  totalWeight += weight;
-                }
-                const avgX = totalWeight > 0 ? sumX / totalWeight : 0;
-                const avgZ = totalWeight > 0 ? sumZ / totalWeight : 0;
-                let dirX = avgX, dirZ = avgZ;
-                const norm = Math.sqrt(dirX * dirX + dirZ * dirZ);
-                if (norm < 0.1) {
-                  const angle = Math.random() * 2 * Math.PI;
-                  dirX = Math.cos(angle);
-                  dirZ = Math.sin(angle);
-                } else {
-                  dirX /= norm;
-                  dirZ /= norm;
-                }
-
-                const fleeTarget = bot.entity.position.offset(dirX * 15, 0, dirZ * 15);
-                // Keep Y coordinate to avoid falling off cliffs
-                const autoFleeStartY = bot.entity.position.y;
-                fleeTarget.y = autoFleeStartY;
-                const fleeFromName = allHostiles.length === 1 ? allHostiles[0].name : `${allHostiles.length} hostiles`;
-                console.error(`[AutoFlee] HP=${bot.health.toFixed(1)}, fleeing from ${fleeFromName}`);
-                // PRE-FLEE AUTO-EAT: Eat before fleeing if hunger <= 6 to enable sprinting.
-                // Minecraft prevents sprinting at hunger <= 6. Without sprint, flee distance
-                // is halved (walk speed ~4.3 vs sprint ~5.6 blocks/s), often insufficient to escape.
-                // Bot1/Bot2: 10+ deaths where flee only moved 6-12 blocks instead of 20-30.
-                // NOTE: entityHurt handler is sync, so use .then() chains instead of await.
-                if (bot.food <= 6) {
-                  const preFleeFood = bot.inventory.items().find(i => EDIBLE_FOOD_NAMES.has(i.name));
-                  if (preFleeFood) {
-                    bot.equip(preFleeFood, "hand")
-                      .then(() => bot.consume())
-                      .then(() => console.error(`[AutoFlee] Pre-flee ate ${preFleeFood.name} (hunger: ${bot.food}) to enable sprinting`))
-                      .catch(() => { /* ignore — flee even if eat fails */ });
-                  }
-                }
-                try {
-                  // SAFETY: Set safe pathfinder settings before auto-flee goal.
-                  // Without these, AutoFlee can route through caves (canDig), fall off cliffs
-                  // (maxDropDown), or route through water (liquidCost). Same fixes as mc_flee.
-                  // Bot1 Sessions 42-44, Bot2 [2026-03-22]: deaths from AutoFlee cave routing.
-                  if (bot.pathfinder.movements) {
-                    bot.pathfinder.movements.canDig = false;
-                    bot.pathfinder.movements.maxDropDown = 1;
-                    (bot.pathfinder.movements as any).liquidCost = 10000;
-                  }
-                  bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
-                  // Enable sprint control state for actual sprinting (not just pathfinder planning).
-                  if ((bot.food ?? 20) > 6) {
-                    bot.setControlState("sprint", true);
-                  }
-                  // SAFETY: Y-descent monitoring during AutoFlee.
-                  // mc_flee has a real-time Y-descent abort (4 blocks), but AutoFlee uses
-                  // setGoal() directly with no monitoring. Bot2 [2026-03-22]: AutoFlee/mc_flee
-                  // dropped bot from Y=80 to Y=56 into a cave. With canDig=false and maxDropDown=1,
-                  // the pathfinder can still descend gradually through cave entrances via 1-block steps.
-                  // This interval checks every 300ms and stops the pathfinder if Y drops >4 blocks.
-                  const autoFleeYMonitor = setInterval(() => {
-                    try {
-                      const yDescent = autoFleeStartY - bot.entity.position.y;
-                      if (yDescent > 4) {
-                        console.error(`[AutoFlee] CAVE DESCENT ABORT: Y dropped ${yDescent.toFixed(1)} blocks (Y=${autoFleeStartY.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Stopping to prevent underground trapping.`);
-                        clearInterval(autoFleeYMonitor);
-                        try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
-                      }
-                    } catch { clearInterval(autoFleeYMonitor); }
-                  }, 300);
-                  // Restore maxDropDown after 5 seconds (AutoFlee is short-lived).
-                  // NOTE: Do NOT restore canDig=true here. The next moveTo call will set
-                  // canDig appropriately based on time-of-day and HP. Unconditionally restoring
-                  // canDig=true caused a race condition: if mc_navigate/mc_flee started within
-                  // 5 seconds, moveToBasic set canDig=false (night safety), then this setTimeout
-                  // overwrote it back to true, defeating cave-routing protection.
-                  // Bot1/Bot2/Bot3 [2026-03-22]: multiple deaths from cave routing after AutoFlee.
-                  setTimeout(() => {
-                    clearInterval(autoFleeYMonitor);
-                    try {
-                      // Clear sprint control state after AutoFlee completes.
-                      // AutoFlee sets sprint=true at line ~658 but never cleared it.
-                      // Sprint persists into subsequent actions (eating, crafting, gathering),
-                      // draining hunger ~2x faster and causing starvation spirals.
-                      // Bot1/Bot2 [2026-03-22]: hunger dropped rapidly after AutoFlee,
-                      // creating starvation deadlock (hunger 0 → can't navigate → can't eat → death).
-                      bot.setControlState("sprint", false);
-                      if (bot.pathfinder.movements) {
-                        bot.pathfinder.movements.maxDropDown = 2;
-                        // canDig is intentionally NOT restored — next moveTo handles it
-                      }
-                      // Post-AutoFlee auto-eat: recover HP after fleeing.
-                      // mc_flee has robust post-flee eating (line ~1836) but AutoFlee lacked it.
-                      // Bot1/Bot2/Bot3: fled with low HP, immediately encountered next mob and died
-                      // because no eating happened between AutoFlee and next action.
-                      const postFleeHp = bot.health ?? 20;
-                      if (postFleeHp < 14) {
-                        const postFood = bot.inventory.items().find((i: any) => EDIBLE_FOOD_NAMES.has(i.name));
-                        if (postFood) {
-                          bot.equip(postFood, "hand")
-                            .then(() => bot.consume())
-                            .then(() => console.error(`[AutoFlee] Post-flee ate ${postFood.name} (HP: ${postFleeHp.toFixed(1)} → ${bot.health?.toFixed(1)})`))
-                            .catch(() => {});
-                        }
-                      }
-                    } catch { /* bot may be disconnected */ }
-                  }, 5000);
-                } catch (_) { /* ignore pathfinder errors during auto-flee */ }
-                // Auto-eat while fleeing to recover HP — use EDIBLE_FOOD_NAMES for complete coverage.
-                // Previous hardcoded list missed rotten_flesh, raw meats, carrot, etc.
-                const food = bot.inventory.items().find(i => EDIBLE_FOOD_NAMES.has(i.name));
-                if (food && bot.food < 20) {
-                  bot.equip(food, "hand").then(() => bot.consume()).catch(() => {});
-                }
-              }
-              } // end else (!isInPortal)
+              addEvent("low_hp", `LOW HP: ${bot.health.toFixed(1)}/20! Consider fleeing or eating.`, {
+                health: bot.health,
+                food: bot.food,
+              });
             }
           } else if (entity.position.distanceTo(bot.entity.position) < 10) {
             addEvent("entity_hurt", `${entity.name || "Entity"} took damage nearby`, {
