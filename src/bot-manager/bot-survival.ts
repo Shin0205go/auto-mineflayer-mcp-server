@@ -419,31 +419,91 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
 
   // Move closer if needed
   if (distance > 3) {
-    console.error(`[Attack] Target ${target.name} is ${distance.toFixed(1)} blocks away, moving closer...`);
+    // Ranged mob approach strategy: skeletons, pillagers, strays maintain 10-15 block distance
+    // and back away as bot approaches. Standard GoalNear(2) causes infinite chase until timeout.
+    // Bot1 [2026-03-22]: mc_combat("skeleton") always times out because skeleton retreats.
+    // Fix: sprint toward ranged mobs and re-target every 500ms to track their retreat path.
+    // Also abort approach if HP drops significantly (taking damage during approach with no check).
+    const RANGED_APPROACH_MOBS = ["skeleton", "stray", "pillager", "drowned", "witch"];
+    const isRangedMob = RANGED_APPROACH_MOBS.includes((target.name || "").toLowerCase());
+    const approachStartHp = bot.health ?? 20;
+
+    console.error(`[Attack] Target ${target.name} is ${distance.toFixed(1)} blocks away, moving closer...${isRangedMob ? " (ranged mob — sprint approach)" : ""}`);
     applySafePathfinderSettings(bot);
+    if (isRangedMob) {
+      bot.pathfinder.movements.allowSprinting = true;
+      bot.setControlState("sprint", true);
+    }
     const goal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2);
     bot.pathfinder.setGoal(goal);
 
     // Scale timeout based on distance (1s per 4 blocks, min 5s, max 20s)
-    const approachTimeout = Math.min(20000, Math.max(5000, Math.ceil(distance / 4) * 1000));
+    // Ranged mobs get shorter timeout (10s max) — if we can't close in 10s, abort
+    const approachTimeout = isRangedMob
+      ? Math.min(10000, Math.max(5000, Math.ceil(distance / 4) * 1000))
+      : Math.min(20000, Math.max(5000, Math.ceil(distance / 4) * 1000));
     // Wait for movement with proper tracking
+    let approachAbortReason = "";
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(() => {
         bot.pathfinder.setGoal(null);
         resolve();
       }, approachTimeout);
 
+      let lastRetargetTime = Date.now();
       const check = setInterval(() => {
         // Re-check target position (it may have moved)
-        const currentDist = target.position.distanceTo(bot.entity.position);
+        const currentTarget = Object.values(bot.entities).find(e => e.id === target.id);
+        if (!currentTarget) {
+          clearInterval(check);
+          clearTimeout(timeout);
+          bot.pathfinder.setGoal(null);
+          resolve();
+          return;
+        }
+        const currentDist = currentTarget.position.distanceTo(bot.entity.position);
+
+        // HP monitoring during approach: abort if taking significant damage.
+        // Bot1/Bot2: took 10+ damage during approach with no abort, died before reaching target.
+        const approachHp = bot.health ?? 20;
+        if (approachHp < approachStartHp - 6 || approachHp < 8) {
+          console.error(`[Attack] HP dropped during approach (${approachStartHp.toFixed(1)} → ${approachHp.toFixed(1)}). Aborting.`);
+          approachAbortReason = `HP dropped from ${approachStartHp.toFixed(1)} to ${approachHp.toFixed(1)} during approach`;
+          clearInterval(check);
+          clearTimeout(timeout);
+          bot.pathfinder.setGoal(null);
+          resolve();
+          return;
+        }
+
         if (currentDist < 3.5 || !bot.pathfinder.isMoving()) {
           clearInterval(check);
           clearTimeout(timeout);
           bot.pathfinder.setGoal(null);
           resolve();
+          return;
+        }
+
+        // Ranged mobs: re-target every 500ms to track their retreat path
+        if (isRangedMob && Date.now() - lastRetargetTime > 500) {
+          lastRetargetTime = Date.now();
+          try {
+            const retargetGoal = new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2);
+            bot.pathfinder.setGoal(retargetGoal);
+          } catch { /* ignore */ }
         }
       }, 200);
     });
+
+    // Clean up sprint state after approach
+    if (isRangedMob) {
+      bot.setControlState("sprint", false);
+    }
+
+    if (approachAbortReason) {
+      const abortHp = (bot.health ?? 0).toFixed(1);
+      return `[ABORTED] Attack approach stopped — ${approachAbortReason}. HP=${abortHp}/20. Use mc_eat to heal or mc_flee to escape.`;
+    }
 
     distance = target.position.distanceTo(bot.entity.position);
   }
@@ -962,10 +1022,21 @@ export async function fight(
         }
       }
       applySafePathfinderSettings(bot);
+      // Sprint toward ranged mobs to close distance faster — they back away and deal
+      // continuous damage during approach. Bot1 [2026-03-22]: skeleton approach stall
+      // at 10-15 blocks because bot walked while skeleton retreated at similar speed.
+      if (isRangedTarget && !isBlaze) {
+        bot.pathfinder.movements.allowSprinting = true;
+        bot.setControlState("sprint", true);
+      }
       bot.pathfinder.setGoal(new goals.GoalNear(
         target.position.x, target.position.y, target.position.z, isBlaze ? 4 : 2
       ));
       await delay(500);
+      // Clean up sprint state
+      if (isRangedTarget && !isBlaze) {
+        bot.setControlState("sprint", false);
+      }
       continue;
     }
     // Reset approach stall when within attack range
