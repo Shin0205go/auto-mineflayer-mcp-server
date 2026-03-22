@@ -2168,9 +2168,15 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
               )
             : Math.random() * 2 * Math.PI;
           await bot.look(escapeAngle, 0, true);
-          // Sprint + jump forward for 2 seconds
+          // Walk/sprint + jump forward for 2 seconds.
+          // Bot2 [2026-03-23]: raw fallback enabled sprint at hunger=0, but Minecraft
+          // requires hunger > 6 to sprint. At low hunger, the sprint control state is
+          // ignored by the game engine, so only forward+jump actually moves the bot.
+          // Enabling sprint at low hunger wastes the 2s window on a no-op sprint attempt.
           bot.setControlState("forward", true);
-          bot.setControlState("sprint", true);
+          if ((bot.food ?? 20) > 6) {
+            bot.setControlState("sprint", true);
+          }
           bot.setControlState("jump", true);
           await new Promise(r => setTimeout(r, 2000));
           bot.clearControlStates();

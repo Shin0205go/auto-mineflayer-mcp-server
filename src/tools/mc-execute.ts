@@ -232,17 +232,58 @@ export async function mc_execute(
               if (logs.length < MAX_LOG_LINES) {
                 logs.push(`[wait] ABORTED: In water with HP=${hp.toFixed(1)} — drowning risk. Attempting emergency jump.`);
               }
-              // Emergency: jump repeatedly to surface and escape drowning.
-              // Without this, the bot stays submerged after wait resolves and the
-              // agent's next action may come too late. 3 quick jumps typically
-              // bring the bot to the surface or at least buy breathing time.
+              // Emergency: jump + move forward toward land to escape drowning.
+              // Bot2 [2026-03-23]: previous 3x jump-in-place didn't exit the water
+              // body — bot rose to surface briefly then sank back each time, still
+              // taking drowning damage. HP 15.8→3.8→death between wait() calls.
+              // Fix: scan 4 cardinal directions for nearest non-water block, look
+              // toward it, then jump+forward to actually swim out of the water.
               try {
-                for (let jumpAttempt = 0; jumpAttempt < 3; jumpAttempt++) {
-                  waitBot.setControlState("jump", true);
-                  await new Promise(r => setTimeout(r, 400));
-                  waitBot.setControlState("jump", false);
-                  await new Promise(r => setTimeout(r, 100));
+                const { Vec3 } = await import("vec3");
+                const wPos = waitBot.entity.position;
+                const wx = Math.floor(wPos.x);
+                const wy = Math.floor(wPos.y);
+                const wz = Math.floor(wPos.z);
+                // Find nearest non-water direction to swim toward
+                let bestAngle = 0;
+                let bestDist = Infinity;
+                const isWaterName = (n: string | undefined) => n === "water" || n === "flowing_water" || n === "air" || n === "cave_air";
+                for (let scanDist = 1; scanDist <= 6; scanDist++) {
+                  for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]]) {
+                    const cx = wx + dx * scanDist;
+                    const cz = wz + dz * scanDist;
+                    // Check if there's solid ground at or near water level
+                    for (let dy = -1; dy <= 2; dy++) {
+                      const block = waitBot.blockAt(new Vec3(cx, wy + dy, cz));
+                      if (block && !isWaterName(block.name) && block.boundingBox === "block") {
+                        const dist = Math.sqrt(dx * dx * scanDist * scanDist + dz * dz * scanDist * scanDist);
+                        if (dist < bestDist) {
+                          bestDist = dist;
+                          // Mineflayer yaw: atan2(-dx, dz) faces direction (dx, dz)
+                          bestAngle = Math.atan2(-(dx * scanDist), dz * scanDist);
+                        }
+                      }
+                    }
+                  }
+                  if (bestDist < Infinity) break;
                 }
+                // Look toward land (or random if no land found)
+                await waitBot.look(bestAngle, 0, true);
+                // Jump + forward to swim out
+                for (let jumpAttempt = 0; jumpAttempt < 5; jumpAttempt++) {
+                  waitBot.setControlState("forward", true);
+                  waitBot.setControlState("jump", true);
+                  await new Promise(r => setTimeout(r, 350));
+                  waitBot.setControlState("jump", false);
+                  await new Promise(r => setTimeout(r, 50));
+                  // Check if we exited water
+                  const checkFeet = waitBot.blockAt(waitBot.entity.position);
+                  const checkHead = waitBot.blockAt(waitBot.entity.position.offset(0, 1, 0));
+                  if (!isWater(checkFeet?.name) && !isWater(checkHead?.name)) {
+                    break;
+                  }
+                }
+                waitBot.clearControlStates();
               } catch { /* ignore jump errors */ }
               doResolve();
               return;
