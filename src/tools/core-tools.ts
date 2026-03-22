@@ -16,11 +16,15 @@ import { lastSleepTick } from "../bot-manager/bot-survival.js";
 
 // High-level actions accessed via registry for hot-reload support
 function getHighLevel() {
-  return registry.highLevel as {
+  const hl = registry.highLevel as {
     minecraft_gather_resources: Function;
     minecraft_build_structure: Function;
     minecraft_craft_chain: Function;
-  };
+  } | undefined;
+  if (!hl) {
+    throw new Error("registry.highLevel is undefined — high-level-actions.ts was not loaded. Ensure 'import \"./tools/high-level-actions.js\"' exists in index.ts. Try mc_reload to reinitialize.");
+  }
+  return hl;
 }
 
 // ─── mc_status ───────────────────────────────────────────────────────────────

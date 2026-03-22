@@ -1194,20 +1194,37 @@ export async function fight(
       // Auto-collect dropped items after kill — with safety checks.
       // Bot2/Bot3 [2026-03-22]: died during post-kill item collection because other
       // hostiles were nearby and HP was low from the fight. Skip collection when unsafe.
+      //
+      // EXCEPTION: For food animal kills (cow, pig, chicken, sheep, etc.) when the bot
+      // has NO food in inventory, NEVER skip collection. The entire purpose of the kill
+      // was to obtain food — skipping makes the food inaccessible and creates a death
+      // spiral (low HP → kill cow for food → skip collection → no food → can't heal → die).
+      // Bot2 [2026-03-22,23]: combat("cow") succeeded but food not collected because
+      // HP was below flee threshold. Bot starved to death with cow drops on the ground.
+      // For food hunts, use a shorter collection timeout (2s) and skip pathfinder movement
+      // to minimize danger exposure.
       const postKillHp = bot.health ?? 20;
       let skipCollection = false;
       let skipReason = "";
 
+      // Determine if this was a food animal kill where drops are critical for survival
+      const FOOD_ANIMALS = ["cow", "pig", "chicken", "sheep", "rabbit", "mooshroom", "goat", "salmon", "cod"];
+      const isFoodAnimalKill = entityName && FOOD_ANIMALS.some(a => entityName.toLowerCase().includes(a));
+      const hasFood = bot.inventory.items().some(i => isFoodItem(bot, i.name));
+      const needsFoodDesperately = isFoodAnimalKill && !hasFood;
+
       // Safety: Skip item collection if HP is critically low (below flee threshold).
       // Moving to the death location takes up to 5s — enough time for nearby mobs to kill.
-      if (postKillHp <= fleeHealthThreshold) {
+      // EXCEPTION: food animal kills with no food — the drop IS the survival path.
+      if (postKillHp <= fleeHealthThreshold && !needsFoodDesperately) {
         skipCollection = true;
         skipReason = `HP too low (${postKillHp.toFixed(1)}) for safe item collection`;
       }
 
       // Safety: Skip if multiple hostiles are within 10 blocks — collecting items
       // while surrounded leads to death. Single hostile is acceptable (just killed one).
-      if (!skipCollection) {
+      // EXCEPTION: food animal kills with no food — risk collection even when surrounded.
+      if (!skipCollection && !needsFoodDesperately) {
         const postKillHostiles = Object.values(bot.entities)
           .filter(e => e && e !== bot.entity && e.position &&
             isHostileMob(bot, e.name?.toLowerCase() || "") &&
@@ -1224,10 +1241,17 @@ export async function fight(
         return `${targetName} defeated! Attacked ${attackCount} times. Items: SKIPPED (${skipReason}). Use mc_flee to escape, then return for items.` + getBriefStatus(bot);
       }
 
+      if (needsFoodDesperately) {
+        console.error(`[Fight] FOOD CRITICAL: ${targetName} killed, no food in inventory. Forcing item collection despite HP=${postKillHp.toFixed(1)}.`);
+      }
+
       // Move to last known position first (endermen teleport, drops spawn where they died)
       const distToLast = bot.entity.position.distanceTo(lastKnownFightPos);
+      // For food-critical pickups at low HP, use shorter timeout (2s) to minimize danger exposure.
+      // Normal collection gets 5s to reach distant drops.
+      const collectMoveTimeout = needsFoodDesperately && postKillHp < 10 ? 2000 : 5000;
       if (distToLast > 3) {
-        console.error(`[Fight] Target died ${distToLast.toFixed(1)} blocks away, moving to collect drops`);
+        console.error(`[Fight] Target died ${distToLast.toFixed(1)} blocks away, moving to collect drops (timeout: ${collectMoveTimeout}ms)`);
         applySafePathfinderSettings(bot);
         const collectGoal = new goals.GoalNear(lastKnownFightPos.x, lastKnownFightPos.y, lastKnownFightPos.z, 2);
         // Use safeSetGoal to prevent cave descent during item collection navigation.
@@ -1240,7 +1264,7 @@ export async function fight(
           }
         });
         await new Promise<void>((resolve) => {
-          const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 5000);
+          const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, collectMoveTimeout);
           const check = setInterval(() => {
             if (collectHandle.aborted) {
               clearInterval(check); clearTimeout(timeout); resolve();
@@ -1249,9 +1273,12 @@ export async function fight(
             if (bot.entity.position.distanceTo(lastKnownFightPos) < 3 || !bot.pathfinder.isMoving()) {
               clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
             }
-            // HP safety during collection movement — abort if taking damage
+            // HP safety during collection movement — abort if taking damage.
+            // For food-critical pickups, allow lower HP threshold (2) since the food
+            // drop is the only way to recover HP. Without it, the bot dies anyway.
             const collectMoveHp = bot.health ?? 20;
-            if (collectMoveHp <= fleeHealthThreshold) {
+            const collectHpThreshold = needsFoodDesperately ? 2 : fleeHealthThreshold;
+            if (collectMoveHp <= collectHpThreshold) {
               console.error(`[Fight] HP dropped to ${collectMoveHp.toFixed(1)} during item collection movement. Aborting.`);
               clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
             }
