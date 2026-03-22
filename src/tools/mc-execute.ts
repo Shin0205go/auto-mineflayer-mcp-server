@@ -322,9 +322,30 @@ export async function mc_execute(
                 if (exitedWater) {
                   waitBot.clearControlStates();
                 } else {
-                  // Keep jump active to stay near surface, stop forward to prevent
-                  // swimming into deeper water if no land was found.
-                  waitBot.setControlState("forward", false);
+                  // Swim escape failed — bot is still in water.
+                  // Bot2 [2026-03-23]: 8 swim cycles didn't exit large water body in birch_forest.
+                  // HP dropped 15.8→3.8→death between wait() calls because the agent couldn't
+                  // react fast enough after wait() resolved. Simply keeping jump=true and hoping
+                  // the agent calls flee() is insufficient — drowning deals 2 HP/s.
+                  // Fix: use mc_flee() internally to pathfind out of the water body before
+                  // resolving wait(). mc_flee uses the pathfinder with liquidCost=10000, which
+                  // will find the shortest path to land. This takes ~2-5s but prevents death.
+                  waitBot.clearControlStates();
+                  if (logs.length < MAX_LOG_LINES) {
+                    logs.push(`[wait] Swim escape failed — auto-fleeing to land via pathfinder.`);
+                  }
+                  try {
+                    await mc_flee(10);
+                  } catch (fleeErr) {
+                    if (logs.length < MAX_LOG_LINES) {
+                      logs.push(`[wait] Auto-flee from water failed: ${fleeErr}`);
+                    }
+                    // Last resort: keep jumping to stay near surface
+                    try {
+                      waitBot.setControlState("jump", true);
+                      waitBot.setControlState("forward", false);
+                    } catch { /* ignore */ }
+                  }
                 }
               } catch { /* ignore jump errors */ }
               doResolve();

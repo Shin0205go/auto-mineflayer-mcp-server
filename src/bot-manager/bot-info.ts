@@ -458,6 +458,35 @@ export function findBlock(bot: Bot, blockName: string, maxDistance: number = 10)
     return `No ${blockName} found within ${maxDistance} blocks`;
   }
 
+  // Hard-reject blocks deep underground for non-ore surface blocks.
+  // Bot1 Sessions 31-44, Bot2/Bot3: mc_navigate("birch_log"/"crafting_table") targeted
+  // underground instances in caves. Pathfinder routed through cave systems, bot got trapped/died.
+  // Ores are expected underground and have expanded maxDistance (core-tools.ts).
+  // But surface blocks (logs, crafting_table, furnace, etc.) found >15 blocks below bot
+  // are almost always in caves/ravines — navigating to them is lethal.
+  // Only filter when surface alternatives exist (don't remove all results).
+  const botY = pos.y;
+  const ORE_NAMES = new Set([
+    "coal_ore", "deepslate_coal_ore", "iron_ore", "deepslate_iron_ore",
+    "gold_ore", "deepslate_gold_ore", "copper_ore", "deepslate_copper_ore",
+    "diamond_ore", "deepslate_diamond_ore", "emerald_ore", "deepslate_emerald_ore",
+    "lapis_ore", "deepslate_lapis_ore", "redstone_ore", "deepslate_redstone_ore",
+    "nether_gold_ore", "nether_quartz_ore", "ancient_debris",
+  ]);
+  const isOreSearch = ORE_NAMES.has(searchName);
+  if (!isOreSearch) {
+    const DEEP_UNDERGROUND_THRESHOLD = 15;
+    const surfaceBlocks = found.filter(b => (botY - b.y) <= DEEP_UNDERGROUND_THRESHOLD);
+    if (surfaceBlocks.length > 0) {
+      const removedCount = found.length - surfaceBlocks.length;
+      if (removedCount > 0) {
+        console.error(`[findBlock] Removed ${removedCount} deep underground "${blockName}" (>${DEEP_UNDERGROUND_THRESHOLD} below bot Y=${botY.toFixed(0)}). ${surfaceBlocks.length} surface candidates remain.`);
+      }
+      found.length = 0;
+      found.push(...surfaceBlocks);
+    }
+  }
+
   // Sort with surface preference: blocks at or above bot's Y level are preferred over
   // underground blocks to prevent mc_navigate from routing into caves.
   // Bot1 [2026-03-22]: mc_navigate to coal_ore/crafting_table targeted underground blocks,
@@ -469,7 +498,6 @@ export function findBlock(bot: Bot, blockName: string, maxDistance: number = 10)
   // underground blocks because 2x penalty was too weak — coal_ore at distance 5
   // but 15 blocks underground scored 35, while surface coal at distance 30 scored 30.
   // With 5x: underground coal scores 5 + 15*5 = 80, surface coal at 30 scores 30.
-  const botY = pos.y;
   found.sort((a, b) => {
     const aDepth = Math.max(botY - a.y - 5, 0); // 0 if at/above bot Y-5
     const bDepth = Math.max(botY - b.y - 5, 0);
