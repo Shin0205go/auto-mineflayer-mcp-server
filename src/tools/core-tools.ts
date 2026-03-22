@@ -1575,7 +1575,7 @@ export async function mc_navigate(
             // Pillagers are active 24/7 and deal significant ranged damage.
             // Now: ALWAYS scan between segments regardless of time/HP. Scan radius is wider
             // at night (16) since more hostiles are active.
-            const segScanRadius = segIsNight ? 16 : 12;
+            const segScanRadius = segIsNight ? 16 : 16;
             {
               const segDanger = checkDangerNearby(segBot, segScanRadius);
               if (segDanger.dangerous && segDanger.nearestHostile) {
@@ -1589,7 +1589,19 @@ export async function mc_navigate(
                 // At night, also abort for any hostile within 12 blocks regardless of HP.
                 // Night hostiles are denser and harder to escape — better to stop and assess.
                 const isNightHostileClose = segIsNight && nearDist <= 12;
-                if (isCreeperClose || isHostileClose || isNightHostileClose) {
+                // Ranged mobs (skeleton, stray, pillager, drowned) within 16 blocks when unarmored.
+                // Bot1 Sessions 22,35, Bot2 [2026-03-22]: killed by skeleton during daytime
+                // at HP >= 16 because old scan (12 blocks) missed skeletons at 14-16 blocks.
+                // Skeletons shoot from ~16+ blocks. With no armor, each hit deals 4-5 damage.
+                // Check armor: count equipped armor pieces.
+                let segArmorCount = 0;
+                for (const slotName of ["head", "torso", "legs", "feet"] as const) {
+                  const slot = segBot.inventory.slots[segBot.getEquipmentDestSlot(slotName)];
+                  if (slot && slot.name.includes("_")) segArmorCount++;
+                }
+                const RANGED_MOBS = ["skeleton", "stray", "pillager", "drowned"];
+                const isRangedMobClose = segArmorCount <= 1 && RANGED_MOBS.includes(nearName) && nearDist <= 16;
+                if (isCreeperClose || isHostileClose || isNightHostileClose || isRangedMobClose) {
                   const curPos2 = botManager.getPosition(username);
                   const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
                   const timeNote = segIsNight ? "at night" : "during daytime";

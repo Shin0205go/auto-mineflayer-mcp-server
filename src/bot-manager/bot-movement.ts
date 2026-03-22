@@ -418,6 +418,34 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
           ? (armorCount <= 1 ? 14 : armorCount <= 3 ? 12 : 10)
           : (armorCount <= 1 ? 10 : armorCount <= 3 ? 8 : 6);
 
+        // Check B1: Ranged mob proximity — skeletons/pillagers shoot from 16+ blocks.
+        // This check fires regardless of HP because ranged mobs deal damage before
+        // the bot can react — even full HP drains fast with no armor.
+        // Bot1 Sessions 22,35, Bot2 [2026-03-22]: killed by skeleton during daytime
+        // at HP >= 12 because scan radius (10) was shorter than skeleton attack range (16+).
+        // Bot1/Bot2 [2026-03-22]: killed by pillagers during daytime navigation.
+        // Ranged mobs are uniquely dangerous: they attack while the bot is walking,
+        // dealing repeated damage before the next safety check fires (500ms interval).
+        const RANGED_MOBS = ["skeleton", "stray", "pillager", "drowned"];
+        if (armorCount <= 1) {
+          for (const entity of Object.values(bot.entities)) {
+            if (!entity || !entity.position || entity === bot.entity) continue;
+            const eDist = entity.position.distanceTo(currentPos);
+            if (eDist > 16) continue;
+            const eName = entity.name?.toLowerCase() ?? "";
+            if (RANGED_MOBS.includes(eName)) {
+              const timeNote = navIsNight ? "at night" : "during daytime";
+              console.error(`[MoveTo] RANGED MOB DANGER (${timeNote}): ${eName} at ${eDist.toFixed(1)} blocks, armor=${armorCount}/4, HP=${navHp.toFixed(1)}. Aborting.`);
+              finish({
+                success: false,
+                message: `Navigation aborted: ${eName} detected ${eDist.toFixed(1)} blocks away ${timeNote}, HP=${Math.round(navHp*10)/10}. NO ARMOR — ranged mobs deal 4-5 damage per shot. Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`,
+                stuckReason: "ranged_mob_danger"
+              });
+              return;
+            }
+          }
+        }
+
         if (navHp <= hpThreshold) {
           const nearHostiles: Array<{ name: string; dist: number }> = [];
           for (const entity of Object.values(bot.entities)) {
