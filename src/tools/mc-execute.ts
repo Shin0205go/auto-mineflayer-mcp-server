@@ -211,9 +211,9 @@ export async function mc_execute(
             // Only trigger after first check (lastCheckHp > 0) to avoid false positive
             // on initial interval when lastCheckHp was just initialized.
             const hpDrop = lastCheckHp - hp;
-            if (hpDrop >= 3 && lastCheckHp > 0) {
+            if (hpDrop >= 2 && lastCheckHp > 0) {
               if (logs.length < MAX_LOG_LINES) {
-                logs.push(`[wait] ABORTED: Taking damage (HP ${lastCheckHp.toFixed(1)}→${hp.toFixed(1)}, -${hpDrop.toFixed(1)} in 1s) — under attack`);
+                logs.push(`[wait] ABORTED: Taking damage (HP ${lastCheckHp.toFixed(1)}→${hp.toFixed(1)}, -${hpDrop.toFixed(1)} in 0.5s) — under attack`);
               }
               lastCheckHp = hp;
               doResolve();
@@ -248,7 +248,7 @@ export async function mc_execute(
               return;
             }
           } catch { /* ignore errors during safety check */ }
-        }, 1000);
+        }, 500);
         // Clean up interval when wait resolves normally
         setTimeout(() => {
           clearInterval(safetyInterval);

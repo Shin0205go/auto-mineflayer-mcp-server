@@ -1566,7 +1566,31 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
           await new Promise(r => setTimeout(r, 300));
         }
       } else {
-        console.error(`[Pillar] Jump too low (${(bot.entity.position.y - jumpBaseY).toFixed(2)}), retrying...`);
+        // Jump didn't reach 0.5 blocks. Common causes:
+        // 1. Block at Y+1 (head level) prevents jump start — already dug above, but block
+        //    may have regenerated (e.g., flowing water) or the dig failed silently.
+        // 2. Bot is not on solid ground (floating/sliding) — sneak drift.
+        // 3. Server lag causing position updates to be delayed.
+        const jumpRise = bot.entity.position.y - jumpBaseY;
+        const headBlockCheck = bot.blockAt(new Vec3(pillarX, currentY + 1, pillarZ));
+        const headName = headBlockCheck?.name ?? "null";
+        console.error(`[Pillar] Jump too low (rise=${jumpRise.toFixed(2)}, head_block=${headName}), attempt ${attempt + 1}/3`);
+        // If head is blocked (not air/cave_air), try digging it again before next attempt.
+        // The earlier dig loop (line 1378) may have failed silently or the block regenerated.
+        if (headBlockCheck && headBlockCheck.name !== "air" && headBlockCheck.name !== "cave_air"
+            && headBlockCheck.name !== "void_air" && !isWaterBlock(headBlockCheck.name)) {
+          console.error(`[Pillar] Head blocked by ${headName} at Y=${currentY + 1} — re-digging before retry`);
+          try {
+            const pick = bot.inventory.items().find(i => i.name.includes("pickaxe"));
+            if (pick) await bot.equip(pick, "hand");
+            await bot.dig(headBlockCheck);
+            // Re-equip scaffold for the next placement attempt
+            const scaffoldReEquip = bot.inventory.items().find(i => isScaffoldBlock(i.name));
+            if (scaffoldReEquip) await bot.equip(scaffoldReEquip, "hand");
+          } catch (redigErr) {
+            console.error(`[Pillar] Re-dig failed: ${redigErr}`);
+          }
+        }
         await new Promise(r => setTimeout(r, 300));
       }
 
@@ -2115,6 +2139,42 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     // The agent thought flee succeeded and continued waiting, when it should have tried
     // an alternative (pillarUp, dig shelter, navigate to specific coordinates).
     if (distMoved < distance * 0.3) {
+      // EMERGENCY FALLBACK: When pathfinder completely fails to move, try raw control-state
+      // movement as a last resort. This bypasses the pathfinder entirely — the bot simply
+      // walks forward (away from the nearest threat) with jump for 2 seconds.
+      // Bot2 [2026-03-23]: flee(32) at (-32.3, 98, 13.7) — pathfinder returned 0 distance.
+      // pillarUp also failed. moveTo also failed. All pathfinder-based escape was blocked.
+      // Raw movement ignores pathfinder's inability to find a valid node graph and forces
+      // physical displacement, which may break the bot out of an isolated-node deadlock.
+      if (distMoved < 1) {
+        console.error(`[Flee] Pathfinder COMPLETELY stuck. Attempting raw control-state emergency escape...`);
+        try {
+          bot.pathfinder.setGoal(null);
+          bot.clearControlStates();
+          // Look away from nearest threat (or random direction if no threat)
+          const escapeAngle = allHostiles.length > 0
+            ? Math.atan2(
+                bot.entity.position.z - allHostiles[0].entity.position.z,
+                bot.entity.position.x - allHostiles[0].entity.position.x
+              )
+            : Math.random() * 2 * Math.PI;
+          await bot.look(escapeAngle, 0, true);
+          // Sprint + jump forward for 2 seconds
+          bot.setControlState("forward", true);
+          bot.setControlState("sprint", true);
+          bot.setControlState("jump", true);
+          await new Promise(r => setTimeout(r, 2000));
+          bot.clearControlStates();
+          const rawMoveDist = bot.entity.position.distanceTo(startPos);
+          console.error(`[Flee] Raw escape moved ${rawMoveDist.toFixed(1)} blocks`);
+          if (rawMoveDist > 1) {
+            return `Fled ${rawMoveDist.toFixed(1)} blocks from ${fleeFromName} (emergency raw movement — pathfinder was stuck). HP: ${(bot.health ?? 0).toFixed(1)}/20` + caveWarning;
+          }
+        } catch (rawErr) {
+          console.error(`[Flee] Raw escape failed: ${rawErr}`);
+          bot.clearControlStates();
+        }
+      }
       const zeroWarn = distMoved < 1
         ? ` [WARNING] Flee FAILED — did not move. Pathfinder could not find any route. Try: dig 1x1x2 shelter hole, bot.pillarUp(), or bot.moveTo(specific coordinates).`
         : ` [WARNING] Only fled ${distMoved.toFixed(0)}/${distance} blocks. Terrain is very constrained. Try: dig shelter, bot.pillarUp(), or bot.moveTo(specific coordinates).`;
