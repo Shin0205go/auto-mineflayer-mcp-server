@@ -465,13 +465,17 @@ export function findBlock(bot: Bot, blockName: string, maxDistance: number = 10)
   // Bot1 Session 44: navigated to block at Y=72, fell into cave, drowned.
   // Scoring: surface blocks (within 5 Y of bot or higher) sort by distance.
   // Underground blocks get a distance penalty proportional to depth below bot.
+  // Penalty increased from 2x to 5x (2026-03-22): Bot1/Bot2/Bot3 still selected
+  // underground blocks because 2x penalty was too weak — coal_ore at distance 5
+  // but 15 blocks underground scored 35, while surface coal at distance 30 scored 30.
+  // With 5x: underground coal scores 5 + 15*5 = 80, surface coal at 30 scores 30.
   const botY = pos.y;
   found.sort((a, b) => {
     const aDepth = Math.max(botY - a.y - 5, 0); // 0 if at/above bot Y-5
     const bDepth = Math.max(botY - b.y - 5, 0);
-    // Add 2 blocks of distance penalty per block of depth underground
-    const aScore = a.distance + aDepth * 2;
-    const bScore = b.distance + bDepth * 2;
+    // Add 5 blocks of distance penalty per block of depth underground
+    const aScore = a.distance + aDepth * 5;
+    const bScore = b.distance + bDepth * 5;
     return aScore - bScore;
   });
 

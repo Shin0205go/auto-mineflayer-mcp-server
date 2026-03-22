@@ -1290,8 +1290,13 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
       }
     }
 
-    // 1. Dig blocks above if needed (Y+2 and Y+3 for jump clearance)
-    for (const yOffset of [2, 3]) {
+    // 1. Dig blocks above if needed (Y+1, Y+2, Y+3 for head/jump clearance)
+    // Bot1/Bot3 [2026-03-22]: pillarUp repeatedly failed with "Placement failed" after
+    // only 1 block because it only checked Y+2 and Y+3, missing a block at Y+1 (head level).
+    // In tight caves, a block at Y+1 prevents the jump from starting entirely — the bot
+    // rises only 0.1-0.2 blocks (below the 0.5 threshold), causing placement to fail.
+    // Now also dig Y+1 to ensure head clearance before jump.
+    for (const yOffset of [1, 2, 3]) {
       const blockAbove = bot.blockAt(new Vec3(curX, currentY + yOffset, curZ));
       if (blockAbove && blockAbove.name !== "air" && blockAbove.name !== "water" && blockAbove.name !== "cave_air") {
         console.error(`[Pillar] Digging ${blockAbove.name} above at Y=${currentY + yOffset}`);

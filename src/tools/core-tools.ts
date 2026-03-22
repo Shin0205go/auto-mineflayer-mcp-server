@@ -1525,10 +1525,12 @@ export async function mc_navigate(
       // Bot1 Sessions 31-34,44, Bot2, Bot3 #3: mc_navigate to passive mobs (cow, pig)
       // picked the closest entity by distance, which was often underground in a cave.
       // Navigating to underground entities causes cave routing and repeated deaths.
-      // Penalty: +3 distance per block below bot's Y level (beyond 5-block tolerance).
-      // Surface/above entities get no penalty. Same approach as findBlock surface preference.
+      // Penalty: +5 distance per block below bot's Y level (beyond 5-block tolerance).
+      // Increased from 3 to 5 (2026-03-22): Bot1/Bot2/Bot3 still targeted underground
+      // entities because 3x penalty was insufficient. Matches findBlock 5x penalty.
+      // Surface/above entities get no penalty.
       const depthBelowBot = Math.max(botY - entity.position.y - 5, 0);
-      const score = dist + depthBelowBot * 3;
+      const score = dist + depthBelowBot * 5;
       if (score < bestScore) {
         bestScore = score;
         closestDist = dist;
