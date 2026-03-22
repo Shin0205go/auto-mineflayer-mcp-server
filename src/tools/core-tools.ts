@@ -1917,7 +1917,10 @@ export async function mc_navigate(
                 // Always abort for creepers — they are the #1 cause of death across all bots.
                 const isCreeperClose = nearName === "creeper" && nearDist <= 12;
                 // Other hostiles within 10 blocks when HP < 16 (need HP buffer for hits).
-                const isHostileClose = nearDist <= 10 && segHp < 16;
+                // Use <= instead of < to catch exact boundary: a skeleton hit from HP 20 deals 4 damage
+                // → HP=16 exactly, which failed the old `< 16` check. This is the same off-by-one
+                // as the moveToBasic rapid HP drop fix — HP at exactly the threshold must trigger abort.
+                const isHostileClose = nearDist <= 10 && segHp <= 16;
                 // At night, also abort for any hostile within 12 blocks regardless of HP.
                 // Night hostiles are denser and harder to escape — better to stop and assess.
                 const isNightHostileClose = segIsNight && nearDist <= 12;

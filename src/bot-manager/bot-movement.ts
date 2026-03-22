@@ -597,7 +597,11 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         const hasFood = bot.inventory.items().some((item: any) => isFoodItem(bot, item.name));
         const dropThreshold = hasFood ? 6 : 4;
         const hpFloor = hasFood ? 14 : 16;
-        if (hpDrop >= dropThreshold && currentHp < hpFloor) {
+        // Use <= instead of < to catch exact boundary: skeleton hit from HP 20 deals 4 damage
+        // → HP=16 exactly, which failed the old `< 16` check for the no-food case (hpFloor=16).
+        // Bot1/Bot2 [2026-03-22]: multiple deaths where first hit brought HP to exactly the
+        // threshold but abort didn't trigger, allowing a second hit to land.
+        if (hpDrop >= dropThreshold && currentHp <= hpFloor) {
           const foodNote = hasFood ? "" : " No food — HP cannot regenerate.";
           console.error(`[MoveTo] RAPID HP DROP: HP dropped ${hpDrop.toFixed(1)} during navigation (${startHp.toFixed(1)} → ${currentHp.toFixed(1)}).${foodNote} Aborting to allow recovery.`);
           finish({
