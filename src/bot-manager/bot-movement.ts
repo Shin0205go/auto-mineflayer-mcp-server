@@ -3,7 +3,7 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 const { GoalBlock } = goals;
 import type { ManagedBot } from "./types.js";
-import { isHostileMob, checkGroundBelow, isNearCliffEdge, KNOCKBACK_MOBS, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
+import { isHostileMob, isFoodItem, checkGroundBelow, isNearCliffEdge, KNOCKBACK_MOBS, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
 import { equipArmor } from "./bot-items.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
@@ -520,17 +520,25 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       // above requires HP to be BELOW threshold AND hostiles in scan radius — timing gaps
       // mean mobs can hit the bot between scans. This catches any source of HP loss (mobs,
       // fall damage, drowning, fire, etc.) by monitoring total HP drop since nav started.
-      // Threshold: 6+ HP lost = abort. This gives the agent a chance to react (eat, flee)
-      // before HP reaches critical levels. Combined with AutoFlee at HP<=10, this creates
-      // a two-tier safety net: abort navigation at HP-6 drop, emergency flee at HP<=10.
+      // Two-tier threshold:
+      //   - With food: 6+ HP lost AND currentHp < 14 (original)
+      //   - Without food: 4+ HP lost AND currentHp < 16 (tighter)
+      // Bot1/Bot2/Bot3 [2026-03-22]: multiple deaths where HP dropped 4-5 during navigation
+      // with no food. The 6-HP threshold was too late — without food, HP never recovers,
+      // so every point of damage is permanent. A 4-HP drop without food is equivalent to
+      // a 6-HP drop with food (since food allows regen back to full).
       {
         const currentHp = bot.health ?? 0;
         const hpDrop = startHp - currentHp;
-        if (hpDrop >= 6 && currentHp < 14) {
-          console.error(`[MoveTo] RAPID HP DROP: HP dropped ${hpDrop.toFixed(1)} during navigation (${startHp.toFixed(1)} → ${currentHp.toFixed(1)}). Aborting to allow recovery.`);
+        const hasFood = bot.inventory.items().some((item: any) => isFoodItem(bot, item.name));
+        const dropThreshold = hasFood ? 6 : 4;
+        const hpFloor = hasFood ? 14 : 16;
+        if (hpDrop >= dropThreshold && currentHp < hpFloor) {
+          const foodNote = hasFood ? "" : " No food — HP cannot regenerate.";
+          console.error(`[MoveTo] RAPID HP DROP: HP dropped ${hpDrop.toFixed(1)} during navigation (${startHp.toFixed(1)} → ${currentHp.toFixed(1)}).${foodNote} Aborting to allow recovery.`);
           finish({
             success: false,
-            message: `Navigation aborted: HP dropped ${hpDrop.toFixed(0)} during travel (${Math.round(startHp)} → ${Math.round(currentHp*10)/10}). Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_eat to heal, mc_flee from threats, or build shelter.`,
+            message: `Navigation aborted: HP dropped ${hpDrop.toFixed(0)} during travel (${Math.round(startHp)} → ${Math.round(currentHp*10)/10}).${foodNote} Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_eat to heal, mc_flee from threats, or build shelter.`,
             stuckReason: "hp_drop"
           });
           return;

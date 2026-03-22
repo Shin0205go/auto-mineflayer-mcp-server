@@ -625,6 +625,8 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
 
         // Chase duration scales with distance, endermen get longer chase
         const chaseDuration = currentTarget.name === "enderman" ? 5000 : 2000;
+        const chaseStartHp = bot.health ?? 20;
+        let chaseAbortReason = "";
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {
             bot.pathfinder.setGoal(null);
@@ -638,9 +640,45 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
               clearTimeout(timeout);
               bot.pathfinder.setGoal(null);
               resolve();
+              return;
+            }
+            // HP monitoring during chase: abort if taking significant damage.
+            // Bot1/Bot2/Bot3 [2026-03-22]: multiple deaths during 2-5s chase loops
+            // with NO HP check — skeletons/creepers dealt lethal damage undetected.
+            // The approach loop (line ~480) has this check but the chase loop did not.
+            const chaseHp = bot.health ?? 20;
+            if (chaseHp < chaseStartHp - 4 || chaseHp < 10) {
+              console.error(`[Attack] HP dropped during chase (${chaseStartHp.toFixed(1)} → ${chaseHp.toFixed(1)}). Aborting chase.`);
+              chaseAbortReason = `HP dropped from ${chaseStartHp.toFixed(1)} to ${chaseHp.toFixed(1)} during chase`;
+              clearInterval(check);
+              clearTimeout(timeout);
+              bot.pathfinder.setGoal(null);
+              resolve();
+              return;
+            }
+            // Creeper proximity during chase — creepers approach silently and explode.
+            // Bot1 Sessions 24,27: creeper exploded during combat movement.
+            if (target.name !== "creeper") {
+              for (const e of Object.values(bot.entities)) {
+                if (!e || e === bot.entity || !e.position) continue;
+                if (e.name?.toLowerCase() === "creeper" && e.position.distanceTo(bot.entity.position) < 10) {
+                  console.error(`[Attack] Creeper detected during chase! Aborting.`);
+                  chaseAbortReason = `Creeper at ${e.position.distanceTo(bot.entity.position).toFixed(1)}m during chase`;
+                  clearInterval(check);
+                  clearTimeout(timeout);
+                  bot.pathfinder.setGoal(null);
+                  resolve();
+                  return;
+                }
+              }
             }
           }, 100);
         });
+
+        if (chaseAbortReason) {
+          const abortHp = (bot.health ?? 0).toFixed(1);
+          return `[ABORTED] Chase stopped — ${chaseAbortReason}. HP=${abortHp}/20. Use mc_eat to heal or mc_flee to escape.`;
+        }
 
         // Continue to attack after chasing
         continue;
