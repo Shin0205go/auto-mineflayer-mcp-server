@@ -27,10 +27,10 @@ import {
 } from "./core-tools.js";
 import { botManager } from "../bot-manager/index.js";
 
-const MAX_TIMEOUT = 120_000;
-const DEFAULT_TIMEOUT = 30_000;
-const MAX_WAIT_MS = 5_000;
-const MAX_LOG_LINES = 100;
+const MAX_TIMEOUT = 600_000;  // 10 minutes max for gameplay loops
+const DEFAULT_TIMEOUT = 120_000;  // 2 minutes default
+const MAX_WAIT_MS = 30_000;  // 30s per wait call (for crop growth etc)
+const MAX_LOG_LINES = 200;
 
 /**
  * Execute JavaScript code against the bot API in a sandboxed context.

@@ -244,7 +244,7 @@ export const coreTools = {
       type: "object" as const,
       properties: {
         code: { type: "string", description: "JavaScript code to execute. Use `bot` API object. All methods are async (use await). Last expression value is returned." },
-        timeout: { type: "number", default: 30000, description: "Max execution time in ms (default 30000, max 120000)" },
+        timeout: { type: "number", default: 120000, description: "Max execution time in ms (default 120000, max 600000). Use longer timeouts for gameplay loops." },
       },
       required: ["code"],
     },
@@ -305,7 +305,7 @@ export async function handleCoreTool(
       case "mc_tunnel":
         return await fn(args.direction as string, (args.length as number) || 10);
       case "mc_execute":
-        return await fn(args.code as string, (args.timeout as number) || 30000);
+        return await fn(args.code as string, (args.timeout as number) || 120000);
     }
   }
 
@@ -326,7 +326,7 @@ export async function handleCoreTool(
     case "minecraft_pillar_up": return await minecraft_pillar_up((args.height as number) || 1);
     case "mc_smelt": return await mc_smelt(args.item_name as string, (args.count as number) || 1);
     case "mc_tunnel": return await mc_tunnel(args.direction as string, (args.length as number) || 10);
-    case "mc_execute": return await mc_execute(args.code as string, (args.timeout as number) || 30000);
+    case "mc_execute": return await mc_execute(args.code as string, (args.timeout as number) || 120000);
     case "mc_place_block": {
       const username = botManager.requireSingleBot();
       const result = await botManager.placeBlock(username, args.block_type as string, args.x as number, args.y as number, args.z as number);
