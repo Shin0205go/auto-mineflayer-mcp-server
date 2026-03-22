@@ -703,6 +703,16 @@ export async function mc_farm(): Promise<string> {
                     dirtPlaceAborted = true;
                     break;
                   }
+                  // HP check during dirt placement: bot2 was shot by skeleton from HP 20→1
+                  // during 19 consecutive placement attempts. The hostile check above catches
+                  // visible mobs, but misses damage from mobs behind terrain or starvation.
+                  // This matches the HP<10 abort in the tilling loop (Step 3) and bone meal loop (Step 4).
+                  const placeHp = bot.health ?? 20;
+                  if (placeHp < 10) {
+                    logs.push(`[ABORTED] HP critically low during dirt placement (${placeHp.toFixed(1)}/20). Stopping farm to survive.`);
+                    dirtPlaceAborted = true;
+                    break;
+                  }
                   if (pdx === 0 && pdz === 0) continue; // skip water position
                   if (Math.max(Math.abs(pdx), Math.abs(pdz)) > 4) continue; // Chebyshev distance <= 4 from water (irrigation range)
                   const px = waterPos.x + pdx, pz = waterPos.z + pdz;
