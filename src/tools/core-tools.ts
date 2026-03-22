@@ -266,6 +266,17 @@ export async function mc_gather(
           : `${danger.hostileCount} hostile(s)`;
         return `[REFUSED] Too dangerous to gather at night — ${threatDesc} nearby, HP=${gatherHpStart}. Gathering is a long operation (up to 120s) and bot is stationary/vulnerable. Use mc_flee or mc_combat to clear threats first, or wait for daytime.`;
       }
+    } else {
+      // Daytime hostile pre-check: mc_gather takes up to 120s and the bot is stationary.
+      // Bot2 [2026-03-22]: skeleton shot bot from HP 20→1 during DAYTIME gather with no
+      // pre-start hostile check. The mid-gather monitor only activates at HP<12 (line 366),
+      // so the first 8+ damage from skeleton arrows goes unchecked.
+      // Scan 20 blocks (skeleton shooting range) and refuse if hostiles are within 12 blocks.
+      const dayDanger = checkDangerNearby(gatherBot, 20);
+      if (dayDanger.dangerous && dayDanger.nearestHostile && dayDanger.nearestHostile.distance <= 12) {
+        const threatDesc = `${dayDanger.nearestHostile.name} at ${dayDanger.nearestHostile.distance.toFixed(1)} blocks`;
+        return `[REFUSED] Too dangerous to gather — ${threatDesc} nearby, HP=${gatherHpStart}. Gathering is stationary (up to 120s). Use mc_flee or mc_combat to clear threats first.`;
+      }
     }
   }
 

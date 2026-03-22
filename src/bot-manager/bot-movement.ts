@@ -1612,12 +1612,19 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       }, 200);
     });
 
-    // Restore previous pathfinder settings after flee completes
+    // Restore previous pathfinder settings after flee completes.
+    // NOTE: Do NOT restore canDig here — same race condition as AutoFlee/CreeperFlee.
+    // If mc_navigate starts immediately after flee, moveToBasic sets canDig=false
+    // (night/low-HP safety), but restoring prevCanDig=true here would override that,
+    // allowing pathfinder to dig into caves. Let the next moveTo call decide canDig
+    // based on current time-of-day and HP (see moveToBasic L541-557).
+    // Bot1/Bot2/Bot3 [2026-03-22]: multiple deaths from cave routing after mc_flee
+    // because canDig was restored to true, defeating the night cave-routing protection.
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.allowSprinting = prevAllowSprinting;
       bot.pathfinder.movements.maxDropDown = prevMaxDropDown;
       (bot.pathfinder.movements as any).liquidCost = prevLiquidCost;
-      bot.pathfinder.movements.canDig = prevCanDig;
+      // canDig is intentionally NOT restored — next moveTo handles it
     }
 
     // Post-flee safety: detect if bot fell into a cave or hole during flee.
