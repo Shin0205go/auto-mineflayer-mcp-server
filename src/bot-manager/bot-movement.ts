@@ -1307,8 +1307,10 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
           elapsed += 10;
           const curY = bot.entity.position.y;
           const rising = curY - jumpBaseY;
-          // Place when we've risen enough AND started to fall (peak), or timeout
-          if (rising > 0.8 && curY <= prevY) {
+          // Place when we've risen enough AND started to fall (peak), or timeout.
+          // Lowered from 0.8 to 0.6: on laggy servers or with high tick variance,
+          // the measured rise can be lower than expected, causing missed placements.
+          if (rising > 0.6 && curY <= prevY) {
             peakReached = true;
             clearInterval(interval);
             resolve();
@@ -1323,7 +1325,7 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
       bot.setControlState("jump", false);
 
       // Only try to place if we reached a reasonable jump height
-      if (peakReached || bot.entity.position.y - jumpBaseY > 0.5) {
+      if (peakReached || bot.entity.position.y - jumpBaseY > 0.3) {
         try {
           // Re-fetch the block at saved position for a fresh reference.
           // Fallback: if savedBlockPos returns air/null (stale reference after placement),
@@ -1350,6 +1352,14 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
             }
           }
           if (!freshBlock) freshBlock = blockBelow;
+
+          // Look at the top face of the reference block before placing.
+          // Bot1 bug: "Placement failed" even with correct reference block — the bot
+          // was still moving (falling from jump peak) and looking in a random direction.
+          // placeBlock requires the bot to face the target block. Explicit lookAt ensures
+          // correct orientation even during mid-air placement.
+          const topFace = freshBlock!.position.offset(0.5, 1, 0.5);
+          await bot.lookAt(topFace, true);
 
           // Place on top of block below (this puts block at feet level, lifting us up)
           await bot.placeBlock(freshBlock!, new Vec3(0, 1, 0));
@@ -1479,15 +1489,17 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     const fleeTarget = bot.entity.position.plus(direction.scaled(distance));
     const startPos = bot.entity.position.clone();
 
-    // SAFETY: Disable drop-downs and penalize liquid during flee.
-    // maxDropDown=0 prevents cliff falls. liquidCost=10000 prevents water routing (drowning).
-    // A bot that cannot flee horizontally due to terrain is safer staying put than
-    // falling off a cliff or into water at low HP. Restore previous settings after flee.
+    // SAFETY: Limit drop-downs and penalize liquid during flee.
+    // maxDropDown=1 allows safe 1-block drops (no fall damage) while preventing cliff falls.
+    // Previous maxDropDown=0 was TOO restrictive: on hilly terrain (old_growth_birch_forest),
+    // the pathfinder couldn't navigate at all because nearly every path involves a 1-block drop.
+    // Bot3 #26: fled only 7.2 blocks because maxDropDown=0 blocked all downhill movement.
+    // liquidCost=10000 prevents water routing (drowning).
     const prevMaxDropDown = bot.pathfinder.movements?.maxDropDown ?? 1;
     const prevLiquidCost = (bot.pathfinder.movements as any)?.liquidCost ?? 100;
     const prevAllowSprinting = bot.pathfinder.movements?.allowSprinting ?? true;
     if (bot.pathfinder.movements) {
-      bot.pathfinder.movements.maxDropDown = 0;
+      bot.pathfinder.movements.maxDropDown = 1;
       (bot.pathfinder.movements as any).liquidCost = 10000;
       // Enable sprinting during flee — this is an emergency escape, speed is critical.
       // Bot3 #26: fled only 7.2 blocks in 8s without sprint. Sprinting doubles speed.
@@ -1497,11 +1509,11 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     const goal = new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3);
     bot.pathfinder.setGoal(goal);
 
-    // Scale timeout with requested distance. Base 10s + 0.3s per block beyond 20.
+    // Scale timeout with requested distance. Base 10s + 0.4s per block beyond 20.
     // Bot3 #26: 8s timeout was too short for 30-50 block flee on rough terrain.
-    // Cap raised from 15s to 20s: with maxDropDown=0, pathfinder is heavily constrained
-    // on rough terrain (old_growth_birch_forest hills). 15s wasn't enough for 30+ block flee.
-    const fleeTimeoutMs = Math.min(Math.max(10000, 10000 + (distance - 20) * 300), 20000);
+    // Cap raised to 30s: even with maxDropDown=1 (improved from 0), pathfinder still
+    // takes longer on hilly terrain with direction retries. 20s was insufficient.
+    const fleeTimeoutMs = Math.min(Math.max(10000, 10000 + (distance - 20) * 400), 30000);
 
     // Wait for movement with proper completion check
     await new Promise<void>((resolve) => {
@@ -1518,8 +1530,10 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
           const distMoved = bot.entity.position.distanceTo(startPos);
           const elapsed = Date.now() - fleeStartTime;
 
-          // Success: moved enough distance
-          if (distMoved >= distance * 0.7) {
+          // Success: moved enough distance. Lowered from 0.7 to 0.5 — on constrained
+          // terrain, achieving 50% of target distance is often sufficient to escape.
+          // Waiting for 70% caused unnecessary timeout when 60% was already safe.
+          if (distMoved >= distance * 0.5) {
             clearInterval(check);
             clearTimeout(timeout);
             try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
