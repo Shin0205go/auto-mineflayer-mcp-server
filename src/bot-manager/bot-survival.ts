@@ -774,12 +774,20 @@ export async function fight(
         return (aDist + aDepth * 3) - (bDist + bDepth * 3);
       })[0];
     }
+    // Apply depth penalty to unnamed hostile targeting — same rationale as the named-entity
+    // path above. Without this, the bot targets underground hostiles (caves, ravines),
+    // navigates underground, and gets trapped/killed.
+    // Bot1 Sessions 31-44, Bot2, Bot3: deaths from targeting underground hostiles.
+    const unnamedBotY = bot.entity.position.y;
     return entities
       .filter(e => isHostileMob(bot, e.name?.toLowerCase() || ""))
-      .sort((a, b) =>
-        a.position.distanceTo(bot.entity.position) -
-        b.position.distanceTo(bot.entity.position)
-      )[0] || null;
+      .sort((a, b) => {
+        const aDist = a.position.distanceTo(bot.entity.position);
+        const bDist = b.position.distanceTo(bot.entity.position);
+        const aDepth = Math.max(unnamedBotY - a.position.y - 5, 0);
+        const bDepth = Math.max(unnamedBotY - b.position.y - 5, 0);
+        return (aDist + aDepth * 3) - (bDist + bDepth * 3);
+      })[0] || null;
   };
 
   let target = findTarget();

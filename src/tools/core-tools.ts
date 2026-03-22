@@ -288,6 +288,26 @@ export async function mc_gather(
       }
     }
 
+    // Phantom insomnia auto-sleep: Phantoms spawn after 72000 ticks without sleeping and
+    // attack even during DAYTIME. mc_gather takes up to 120s stationary — Phantom attacks
+    // during gather are nearly impossible to dodge (they dive from above).
+    // Bot1 [2026-03-22]: killed by Phantom during daytime farming after 3+ nights without sleep.
+    // The night auto-sleep above only fires at night; this fires at ANY time when insomnia is critical.
+    if (!gatherIsNight) {
+      const worldAge = gatherBot.time?.age ?? 0;
+      const lastSleep = lastSleepTick.get(username) ?? 0;
+      const ticksSinceLastSleep = worldAge - lastSleep;
+      if (ticksSinceLastSleep > 60000 && worldAge > 0) {
+        console.error(`[Gather] Phantom insomnia high (${ticksSinceLastSleep} ticks). Attempting pre-gather sleep to reset timer.`);
+        try {
+          const sleepResult = await botManager.sleep(username);
+          console.error(`[Gather] Phantom insomnia auto-sleep succeeded: ${sleepResult}`);
+        } catch (sleepErr) {
+          console.error(`[Gather] Phantom insomnia auto-sleep skipped: ${sleepErr instanceof Error ? sleepErr.message : String(sleepErr)}`);
+        }
+      }
+    }
+
     // Auto-equip armor before ALL gathering — not just at night or when danger detected.
     // mc_gather is a long operation (up to 120s) where the bot is stationary/vulnerable.
     // Surprise attacks from pillagers, cave zombies, and skeletons happen during daytime too.
@@ -615,6 +635,25 @@ export async function mc_farm(): Promise<string> {
       farmIsNight = farmTimeOfDay > 12541 || farmTimeOfDay < 100;
     } catch (sleepErr) {
       console.error(`[Farm] Pre-farm auto-sleep skipped: ${sleepErr instanceof Error ? sleepErr.message : String(sleepErr)}`);
+    }
+  }
+
+  // Phantom insomnia auto-sleep for daytime farming: same as mc_gather.
+  // Phantoms attack even during daytime after 72000 ticks without sleep.
+  // mc_farm is 60-120s stationary — Phantom dive attacks are lethal.
+  // Bot1 [2026-03-22]: killed by Phantom during daytime farming.
+  if (!farmIsNight) {
+    const farmWorldAge = bot.time?.age ?? 0;
+    const farmLastSleep = lastSleepTick.get(username) ?? 0;
+    const farmTicksSinceLastSleep = farmWorldAge - farmLastSleep;
+    if (farmTicksSinceLastSleep > 60000 && farmWorldAge > 0) {
+      console.error(`[Farm] Phantom insomnia high (${farmTicksSinceLastSleep} ticks). Attempting pre-farm sleep.`);
+      try {
+        const sleepResult = await botManager.sleep(username);
+        console.error(`[Farm] Phantom insomnia auto-sleep succeeded: ${sleepResult}`);
+      } catch (sleepErr) {
+        console.error(`[Farm] Phantom insomnia auto-sleep skipped: ${sleepErr instanceof Error ? sleepErr.message : String(sleepErr)}`);
+      }
     }
   }
 

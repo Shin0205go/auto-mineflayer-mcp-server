@@ -542,7 +542,15 @@ export function findEntities(bot: Bot, entityType?: string, maxDistance: number 
       position: e.position,
       distance: pos.distanceTo(e.position),
     }))
-    .sort((a, b) => a.distance - b.distance);
+    // Sort with surface preference: penalize underground entities to prevent navigation
+    // into caves when searching for animals/mobs. Same pattern as findBlock's depth penalty.
+    // Bot1 Sessions 31-34,44: mc_navigate to cow/pig picked underground entity, pathfinder
+    // routed through cave, bot got trapped/killed. Bot3 #3: fight("cow") targeted underground cow.
+    .sort((a, b) => {
+      const aDepth = Math.max(pos.y - a.position.y - 5, 0);
+      const bDepth = Math.max(pos.y - b.position.y - 5, 0);
+      return (a.distance + aDepth * 5) - (b.distance + bDepth * 5);
+    });
 
   if (entities.length === 0) {
     if (entityType) {
