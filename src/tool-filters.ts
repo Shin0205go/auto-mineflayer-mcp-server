@@ -15,36 +15,21 @@ export type AgentType = "game" | "dev";
 
 /**
  * Tier 1: Always-visible core tools
+ *
+ * mc_execute is the PRIMARY tool — agents write JavaScript code against
+ * the bot.* API to perform all gameplay operations. Individual mc_* tools
+ * are moved to Tier 3 (searchable but hidden from tools/list).
  */
 export const TIER1_CORE_TOOLS = new Set([
-  "mc_status",
-  "mc_gather",
-  "mc_craft",
-  "mc_build",
-  "mc_navigate",
-  "mc_combat",
-  "mc_drop",
-  "mc_eat",
-  "mc_store",
-  "mc_chat",
-  "mc_connect",
-  // Block placement and item-on-block interaction (always needed)
-  "mc_place_block",
-  "minecraft_till_soil",
-  "minecraft_use_item_on_block",
-  // Farming (till + plant + bone_meal + harvest + craft bread)
-  "mc_farm",
-  // Smelting (raw_iron, raw_gold, etc.)
-  "mc_smelt",
-  // Flee from danger (always visible — Tier 2 caching prevents dynamic visibility)
-  "mc_flee",
-  // Pillar up (always visible — essential for cave escape)
-  "minecraft_pillar_up",
-  // Code execution (multiple bot operations in one call)
+  // Code execution — the main gameplay tool
   "mc_execute",
+  // Connection management
+  "mc_connect",
+  // Chat — needed for team coordination
+  "mc_chat",
   // Hot-reload after code changes
   "mc_reload",
-  // Tool search is always visible for Tier 3 discovery
+  // Tool search for discovering legacy tools if needed
   "search_tools",
 ]);
 
@@ -494,10 +479,14 @@ export function getVisibleGameTools(): Set<string> {
  * Tier 3 tools are the old minecraft_* tools, discoverable via search but not in tools/list
  */
 export const ALL_TOOL_NAMES_FOR_SEARCH = new Set([
-  // Tier 1 (includes mc_farm, mc_place_block, minecraft_till_soil, minecraft_use_item_on_block)
+  // Tier 1 (mc_execute, mc_connect, mc_chat)
   ...TIER1_CORE_TOOLS,
   // Tier 2 (all, regardless of condition)
   ...TIER2_TOOLS.map(t => t.name),
+  // Former Tier 1 core tools (now hidden, but still callable and searchable)
+  "mc_status", "mc_gather", "mc_craft", "mc_build", "mc_navigate",
+  "mc_combat", "mc_drop", "mc_eat", "mc_store", "mc_place_block",
+  "mc_farm", "mc_smelt", "mc_flee", "mc_tunnel",
   // Tier 3: Legacy low-level tools (searchable but hidden)
   // Connection
   "minecraft_connect", "minecraft_disconnect", "minecraft_get_chat_messages",
