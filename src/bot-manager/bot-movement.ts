@@ -1494,12 +1494,19 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     const prevMaxDropDown = bot.pathfinder.movements?.maxDropDown ?? 1;
     const prevLiquidCost = (bot.pathfinder.movements as any)?.liquidCost ?? 100;
     const prevAllowSprinting = bot.pathfinder.movements?.allowSprinting ?? true;
+    const prevCanDig = bot.pathfinder.movements?.canDig ?? true;
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.maxDropDown = 1;
       (bot.pathfinder.movements as any).liquidCost = 10000;
       // Enable sprinting during flee — this is an emergency escape, speed is critical.
       // Bot3 #26: fled only 7.2 blocks in 8s without sprint. Sprinting doubles speed.
       bot.pathfinder.movements.allowSprinting = true;
+      // SAFETY: Disable canDig during flee — fleeing should NEVER dig into terrain.
+      // Bot2 [2026-03-22]: mc_flee with canDig=true dug through surface, bot fell from
+      // Y=80 to Y=56 into a cave system and was trapped underground with 9 mobs.
+      // Flee uses setGoal() directly (bypasses moveToBasic safety checks), so canDig
+      // cave prevention from moveToBasic doesn't apply. Must disable explicitly here.
+      bot.pathfinder.movements.canDig = false;
     }
 
     const goal = new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3);
@@ -1525,6 +1532,23 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
         try {
           const distMoved = bot.entity.position.distanceTo(startPos);
           const elapsed = Date.now() - fleeStartTime;
+
+          // SAFETY: Real-time Y-descent detection during flee.
+          // Flee uses setGoal() directly, bypassing moveToBasic's underground routing
+          // and fall detection. Without this check, the bot can descend into caves/holes
+          // during flee with no abort mechanism until post-flee warning (too late).
+          // Bot2 [2026-03-22]: fled from Y=80 to Y=56 (24 blocks down) into cave.
+          // Threshold: 4 blocks below start Y — allows natural 1-3 block terrain drops
+          // but catches cave entries before bot gets trapped deep underground.
+          const yDescent = startPos.y - bot.entity.position.y;
+          if (yDescent > 4) {
+            console.error(`[Flee] CAVE DESCENT ABORT: Bot dropped ${yDescent.toFixed(1)} blocks during flee (Y=${startPos.y.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Stopping to prevent underground trapping.`);
+            clearInterval(check);
+            clearTimeout(timeout);
+            try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+            resolve();
+            return;
+          }
 
           // Success: moved enough distance. Lowered from 0.7 to 0.5 — on constrained
           // terrain, achieving 50% of target distance is often sufficient to escape.
@@ -1575,6 +1599,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       bot.pathfinder.movements.allowSprinting = prevAllowSprinting;
       bot.pathfinder.movements.maxDropDown = prevMaxDropDown;
       (bot.pathfinder.movements as any).liquidCost = prevLiquidCost;
+      bot.pathfinder.movements.canDig = prevCanDig;
     }
 
     // Post-flee safety: detect if bot fell into a cave or hole during flee.
@@ -1623,6 +1648,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
         bot.pathfinder.movements.maxDropDown = 2; // restore safe default (2-block max drop, physics fall detector catches >3)
         (bot.pathfinder.movements as any).liquidCost = 10000; // keep water avoidance
         bot.pathfinder.movements.allowSprinting = true; // restore default
+        bot.pathfinder.movements.canDig = true; // restore default
       }
     } catch { /* bot may be disconnected */ }
     return `Flee interrupted: ${errMsg}`;
