@@ -1461,7 +1461,19 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
           // falls past the placement point, causing the server to reject the placement.
           // We already looked straight down before jumping (line 1316), so skip the
           // redundant lookAt inside placeBlock to place immediately while still airborne.
-          await (bot as any)._placeBlockWithOptions(freshBlock!, new Vec3(0, 1, 0), { forceLook: 'ignore', swingArm: 'right' });
+          //
+          // FALLBACK: _placeBlockWithOptions is a private/internal mineflayer API that
+          // may not exist on all versions. If it fails or doesn't exist, fall back to
+          // the public placeBlock() API (slower but always works).
+          // Bot1 [2026-03-22]: "Placement failed" repeatedly — _placeBlockWithOptions
+          // may have thrown silently, and the catch didn't try an alternative approach.
+          try {
+            await (bot as any)._placeBlockWithOptions(freshBlock!, new Vec3(0, 1, 0), { forceLook: 'ignore', swingArm: 'right' });
+          } catch (placeErr) {
+            // Fallback to public API — has lookAt latency but works reliably
+            console.error(`[Pillar] _placeBlockWithOptions failed: ${placeErr}, trying placeBlock fallback...`);
+            await bot.placeBlock(freshBlock!, new Vec3(0, 1, 0));
+          }
           blocksPlaced++;
           placed = true;
           console.error(`[Pillar] Placed ${blocksPlaced}/${targetHeight} at Y=${currentY}`);

@@ -567,7 +567,14 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       allRecipes = [manualRecipe as any];
     }
 
-    if (itemName === "bread" || itemName === "bone_meal" || itemName === "shield" || itemName === "white_bed") {
+    // All colored beds have a dye-variant recipe (e.g., white_dye + black_bed → white_bed)
+    // that recipesAll may prioritize over the wool+planks recipe. Force manual recipe for
+    // all 16 bed colors. Bot1/Bot2 [2026-03-22]: craft("white_bed") selected dye-based
+    // recipe requiring bone_meal→bone (a mob drop, not craftable), causing craft chain failure.
+    const BED_COLORS = ["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"];
+    const isBed = BED_COLORS.some(color => itemName === `${color}_bed`);
+
+    if (itemName === "bread" || itemName === "bone_meal" || itemName === "shield" || isBed) {
       console.error(`[Craft] Using manual recipe for ${itemName} (bypassing potentially broken recipesAll)...`);
 
       if (itemName === "bread") {
@@ -637,22 +644,26 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
         allRecipes = [manualRecipe as any];
       }
 
-      if (itemName === "white_bed") {
-        // White bed: 3 white_wool (top row) + 3 planks (bottom row)
-        // Bot2 bug [2026-03-22]: recipesAll returned a dye-based variant requiring bone_meal→bone,
-        // causing craft_chain to fail trying to craft "bone" (a mob drop, not craftable).
-        // The correct recipe uses wool directly (sheep drop white wool by default).
-        const woolItem = mcData.itemsByName["white_wool"];
-        if (!woolItem) throw new Error("Cannot find white_wool item data");
-        const woolInv = inventoryItems.filter(i => i.name === "white_wool").reduce((s, i) => s + i.count, 0);
-        if (woolInv < 3) throw new Error(`Cannot craft white_bed: Need 3 white_wool, have ${woolInv}. Kill sheep for wool or use shears.`);
+      // All colored beds: 3 colored_wool (top row) + 3 planks (bottom row)
+      // Bot1/Bot2 bug [2026-03-22]: recipesAll returned a dye-based variant (e.g.,
+      // white_dye + black_bed → white_bed) requiring bone_meal→bone (a mob drop, not
+      // craftable), causing craft_chain to fail. The correct recipe uses wool directly.
+      // Generalized from white_bed only to all 16 bed colors.
+      const bedColorMatch = itemName.match(/^(\w+)_bed$/);
+      if (bedColorMatch) {
+        const bedColor = bedColorMatch[1]; // e.g., "white", "red", "light_blue"
+        const woolName = `${bedColor}_wool`;
+        const woolItem = mcData.itemsByName[woolName];
+        if (!woolItem) throw new Error(`Cannot find ${woolName} item data`);
+        const woolInv = inventoryItems.filter(i => i.name === woolName).reduce((s, i) => s + i.count, 0);
+        if (woolInv < 3) throw new Error(`Cannot craft ${itemName}: Need 3 ${woolName}, have ${woolInv}. Kill sheep for wool or use shears.`);
         // Find any planks
         const plankItem = inventoryItems.find(i => i.name.endsWith("_planks"));
-        if (!plankItem) throw new Error("Cannot craft white_bed: Need 3 planks. Craft planks from logs first.");
+        if (!plankItem) throw new Error(`Cannot craft ${itemName}: Need 3 planks. Craft planks from logs first.`);
         const plankMcData = mcData.itemsByName[plankItem.name];
         if (!plankMcData) throw new Error(`Cannot find item data for ${plankItem.name}`);
         const plankInv = inventoryItems.filter(i => i.name === plankItem.name).reduce((s, i) => s + i.count, 0);
-        if (plankInv < 3) throw new Error(`Cannot craft white_bed: Need 3 planks, have ${plankInv}`);
+        if (plankInv < 3) throw new Error(`Cannot craft ${itemName}: Need 3 planks, have ${plankInv}`);
 
         const W = woolItem.id;
         const P = plankMcData.id;
@@ -667,7 +678,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           ],
           requiresTable: true
         };
-        console.error(`[Craft] Manual recipe created for white_bed using white_wool + ${plankItem.name}`);
+        console.error(`[Craft] Manual recipe created for ${itemName} using ${woolName} + ${plankItem.name}`);
         allRecipes = [manualRecipe as any];
       }
     }

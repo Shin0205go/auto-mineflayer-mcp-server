@@ -1798,6 +1798,40 @@ export async function mc_combat(
     }
   }
 
+  // Pre-combat passive-target-at-night hostile check: refuse hunting passive mobs
+  // when hostile mobs are nearby at night. Bot1 Session 16: mc_combat(target="sheep")
+  // at night while zombie was nearby — combat movement brought bot toward sheep, exposing
+  // it to zombie attack. Bot1 Session 27: mc_combat(zombie) with creeper at 11.8 blocks.
+  // When targeting passive food mobs, the bot approaches the passive mob (not fleeing),
+  // which can put it in range of hostile mobs that spawn at night.
+  if (combatBot && target) {
+    const passiveFoodMobs = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "mule", "mooshroom", "llama", "goat", "salmon", "cod", "squid", "turtle"];
+    const isPassiveFoodTarget = passiveFoodMobs.some(p => target!.toLowerCase().includes(p));
+    if (isPassiveFoodTarget) {
+      const combatTimeOfDay = combatBot.time?.timeOfDay ?? 0;
+      const combatIsNight = combatTimeOfDay > 12541 || combatTimeOfDay < 100;
+      if (combatIsNight) {
+        const nightHostiles: Array<{ name: string; dist: number }> = [];
+        for (const entity of Object.values(combatBot.entities)) {
+          if (!entity || !entity.position || entity === combatBot.entity) continue;
+          const eName = entity.name?.toLowerCase() ?? "";
+          if (isHostileMob(combatBot, eName)) {
+            const dist = entity.position.distanceTo(combatBot.entity.position);
+            if (dist <= 20) {
+              nightHostiles.push({ name: eName, dist: Math.round(dist * 10) / 10 });
+            }
+          }
+        }
+        if (nightHostiles.length > 0) {
+          nightHostiles.sort((a, b) => a.dist - b.dist);
+          const threatList = nightHostiles.slice(0, 5).map(h => `${h.name}(${h.dist}m)`).join(", ");
+          const combatHpNow = Math.round((combatBot.health ?? 20) * 10) / 10;
+          return `[REFUSED] Too dangerous to hunt ${target} at night — ${nightHostiles.length} hostile(s) nearby: ${threatList}. HP=${combatHpNow}. Combat movement toward ${target} will expose you to hostile attacks. Use mc_flee first, wait for dawn, or hunt during daytime.`;
+        }
+      }
+    }
+  }
+
   // Pre-combat creeper proximity check: refuse ALL combat when a creeper is within 8 blocks.
   // Bot1 Sessions 24,27: called mc_combat(zombie) while creeper at 5-11 blocks. Combat movement
   // brought bot near creeper, which exploded (up to 49 damage unarmored, lethal at any HP).
