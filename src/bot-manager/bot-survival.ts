@@ -787,6 +787,8 @@ export async function fight(
   // Step 3: Combat loop (with global timeout to prevent infinite hang)
   const fightStartTime = Date.now();
   const FIGHT_TIMEOUT_MS = 60000; // 60s max per fight — prevents infinite pathfinder loops in caves
+  let approachStallCount = 0; // Track consecutive approach iterations without closing distance
+  let lastApproachDist = Infinity; // Distance to target on last approach iteration
   while (attackCount < maxAttacks) {
     // Global timeout check
     if (Date.now() - fightStartTime > FIGHT_TIMEOUT_MS) {
@@ -802,6 +804,32 @@ export async function fight(
       bot.pathfinder.setGoal(null);
       await flee(managed, 20);
       return `Fled! Health was ${health}. Attacked ${attackCount} times.` + getBriefStatus(bot);
+    }
+
+    // Mid-combat auto-eat: if HP dropped below 14 and food is available, eat between attacks.
+    // Bot1 [2026-03-22]: mc_combat("skeleton") timed out at 60s — skeleton dealt continuous
+    // damage from 15+ blocks during the approach loop. Pre-combat eat happens once, but a
+    // prolonged fight (30-60s) with ranged mobs drains HP faster than the flee threshold triggers.
+    // Eating mid-combat costs ~1.5s but restores 6-8 HP, often the difference between survival and death.
+    if (health < 14 && attackCount > 0) {
+      const midCombatFood = bot.inventory.items().find((item: any) => isFoodItem(bot, item.name));
+      if (midCombatFood) {
+        try {
+          bot.pathfinder.setGoal(null); // Stop moving while eating
+          await bot.equip(midCombatFood, "hand");
+          await bot.consume();
+          console.error(`[Fight] Mid-combat auto-ate ${midCombatFood.name} (HP: ${health.toFixed(1)} → ${bot.health?.toFixed(1)})`);
+          // Re-equip weapon after eating
+          const weaponPriorityMid = [
+            "netherite_sword", "diamond_sword", "iron_sword", "stone_sword", "wooden_sword",
+            "netherite_axe", "diamond_axe", "iron_axe", "stone_axe", "wooden_axe",
+          ];
+          for (const wn of weaponPriorityMid) {
+            const w = bot.inventory.items().find(i => i.name === wn);
+            if (w) { await bot.equip(w, "hand"); break; }
+          }
+        } catch (_) { /* ignore eat errors — continue fighting */ }
+      }
     }
 
     // Creeper proximity check: flee if any creeper is within 12 blocks during combat.
@@ -906,6 +934,23 @@ export async function fight(
 
     // Move closer if needed
     if (distance > attackRange) {
+      // Approach stall detection: if distance to target hasn't decreased in 6 consecutive
+      // approach iterations (3s), the target is likely unreachable (across gap, cliff, water).
+      // Bot1 [2026-03-22]: mc_combat("skeleton") timed out at 60s because pathfinder couldn't
+      // reach skeleton across a gap. Bot took arrow damage for 60s while approaching failed.
+      // Abort early instead of waiting for the full 60s timeout.
+      if (distance < lastApproachDist - 0.5) {
+        // Making progress — reset stall counter
+        approachStallCount = 0;
+        lastApproachDist = distance;
+      } else {
+        approachStallCount++;
+        if (approachStallCount >= 6) {
+          console.error(`[Fight] Approach stalled: distance to ${targetName} hasn't decreased in ${approachStallCount} iterations (${distance.toFixed(1)} blocks). Target may be unreachable.`);
+          bot.pathfinder.setGoal(null);
+          return `[ABORTED] Cannot reach ${targetName} (${distance.toFixed(1)} blocks away). Approach stalled after ${attackCount} attacks — target may be across a gap or obstacle. Try mc_flee to escape ranged damage, then approach from a different direction.` + getBriefStatus(bot);
+        }
+      }
       applySafePathfinderSettings(bot);
       bot.pathfinder.setGoal(new goals.GoalNear(
         target.position.x, target.position.y, target.position.z, isBlaze ? 4 : 2
@@ -913,6 +958,9 @@ export async function fight(
       await delay(500);
       continue;
     }
+    // Reset approach stall when within attack range
+    approachStallCount = 0;
+    lastApproachDist = distance;
 
     // Attack!
     try {

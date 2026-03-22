@@ -1765,6 +1765,14 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
             clearInterval(check);
             clearTimeout(timeout);
             try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+            // Clean up sprint/sneak state — same as normal exit path.
+            // Without this, sprint persists into subsequent actions (eating, crafting),
+            // draining hunger and preventing reliable food consumption.
+            // Bot1/Bot2 [2026-03-22]: hunger drained rapidly after flee cave-abort.
+            try {
+              bot.setControlState("sprint", false);
+              bot.setControlState("sneak", false);
+            } catch { /* bot may be disconnected */ }
             resolve();
             return;
           }
