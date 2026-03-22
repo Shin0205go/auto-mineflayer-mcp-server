@@ -264,8 +264,11 @@ export class BotCore extends EventEmitter {
         (movements as any).liquidCost = 10000;
 
         // Avoid lava completely (liquidCost alone doesn't distinguish water vs lava)
+        // Bot2: "tried to swim in lava" — must avoid both static and flowing lava.
         const lavaBlock = bot.registry.blocksByName["lava"];
         if (lavaBlock) movements.blocksToAvoid.add(lavaBlock.id);
+        const flowingLavaBlock = bot.registry.blocksByName["flowing_lava"];
+        if (flowingLavaBlock) movements.blocksToAvoid.add(flowingLavaBlock.id);
 
         // Avoid fire and soul_fire blocks (common in Nether fortresses)
         const fireBlock = bot.registry.blocksByName["fire"];

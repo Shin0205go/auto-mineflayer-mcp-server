@@ -225,9 +225,12 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       }
 
       // SAFETY: Detect lava contact — stop immediately if in lava
+      // Bot2: "tried to swim in lava" — flowing_lava was not detected, only "lava" was checked.
       const blockAtFeet = bot.blockAt(currentPos.floor());
       const blockAtHead = bot.blockAt(currentPos.offset(0, 1, 0).floor());
-      if (blockAtFeet?.name === "lava" || blockAtHead?.name === "lava") {
+      const blockBelow = bot.blockAt(currentPos.offset(0, -1, 0).floor());
+      const isLava = (name?: string) => name === "lava" || name === "flowing_lava";
+      if (isLava(blockAtFeet?.name) || isLava(blockAtHead?.name) || isLava(blockBelow?.name)) {
         bot.pathfinder.stop();
         console.error(`[MoveTo] LAVA DETECTED at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Emergency stop!`);
         finish({

@@ -847,31 +847,50 @@ export async function mc_farm(): Promise<string> {
       logs.push(`Move to farm block failed: ${e}`);
     }
 
-    // Till the block
-    try {
-      const tillResult = await botManager.tillSoil(username, fc.x, fc.y, fc.z);
-      logs.push(`Till (${fc.x},${fc.y},${fc.z}): ${tillResult}`);
-    } catch (e) {
-      logs.push(`Till failed at (${fc.x},${fc.y},${fc.z}): ${e}`);
+    // Till the block — retry from different positions if first attempt fails.
+    // Bot1, Bot3 Bug #20: tilling consistently fails from (fc.x+1, fc.y+1, fc.z).
+    // Root cause: activateBlock face detection may pick wrong face depending on bot position.
+    // Fix: try multiple approach positions to ensure top-face interaction.
+    const tillPositions = [
+      { x: fc.x + 1, y: fc.y + 1, z: fc.z },      // east
+      { x: fc.x - 1, y: fc.y + 1, z: fc.z },      // west
+      { x: fc.x, y: fc.y + 1, z: fc.z + 1 },      // south
+      { x: fc.x, y: fc.y + 1, z: fc.z - 1 },      // north
+    ];
+    let farmlandConfirmed = false;
+    for (let tillAttempt = 0; tillAttempt < tillPositions.length && !farmlandConfirmed; tillAttempt++) {
+      const tp = tillPositions[tillAttempt];
+      // Move to this approach position
+      if (tillAttempt > 0) {
+        try {
+          await botManager.moveTo(username, tp.x, tp.y, tp.z);
+          logs.push(`Retry till from (${tp.x},${tp.y},${tp.z})`);
+        } catch (_) { continue; }
+      }
+      // Till the block
+      try {
+        const tillResult = await botManager.tillSoil(username, fc.x, fc.y, fc.z);
+        logs.push(`Till (${fc.x},${fc.y},${fc.z}): ${tillResult}`);
+      } catch (e) {
+        logs.push(`Till failed at (${fc.x},${fc.y},${fc.z}): ${e}`);
+        continue;
+      }
+      // Poll for farmland state — up to 1.5 second (server may take several ticks)
+      {
+        const { Vec3: Vec3Cls } = await import("vec3");
+        for (let poll = 0; poll < 10; poll++) {
+          await new Promise(r => setTimeout(r, 150));
+          const b = bot.blockAt(new Vec3Cls(fc.x, fc.y, fc.z));
+          if (b && b.name === "farmland") { farmlandConfirmed = true; break; }
+        }
+      }
+    }
+    if (!farmlandConfirmed) {
+      logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): NOT farmland after ${tillPositions.length} positions — skipping`);
       bot.setControlState("sneak", false);
       continue;
     }
-    // Poll for farmland state — up to 1 second (server may take several ticks)
-    {
-      const { Vec3: Vec3Cls } = await import("vec3");
-      let farmlandConfirmed = false;
-      for (let poll = 0; poll < 10; poll++) {
-        await new Promise(r => setTimeout(r, 150));
-        const b = bot.blockAt(new Vec3Cls(fc.x, fc.y, fc.z));
-        if (b && b.name === "farmland") { farmlandConfirmed = true; break; }
-      }
-      if (!farmlandConfirmed) {
-        logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): NOT farmland — skipping this location`);
-        bot.setControlState("sneak", false);
-        continue;
-      }
-      logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): farmland confirmed`);
-    }
+    logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): farmland confirmed`);
 
     // Navigate NEXT TO the farmland (not on top — walking on farmland tramples it!)
     try {

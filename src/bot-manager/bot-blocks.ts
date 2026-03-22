@@ -1930,7 +1930,13 @@ export async function useItemOnBlock(
       }
 
       if (!tilled) {
-        console.error(`[useItemOnBlock] Hoe tilling FAILED: block is still "${bot.blockAt(pos)?.name}" at (${x},${y},${z}). Held="${bot.heldItem?.name}", botPos=(${bot.entity.position.x.toFixed(1)},${bot.entity.position.y.toFixed(1)},${bot.entity.position.z.toFixed(1)})`);
+        const currentBlock = bot.blockAt(pos);
+        console.error(`[useItemOnBlock] Hoe tilling FAILED: block is still "${currentBlock?.name}" at (${x},${y},${z}). Held="${bot.heldItem?.name}", botPos=(${bot.entity.position.x.toFixed(1)},${bot.entity.position.y.toFixed(1)},${bot.entity.position.z.toFixed(1)})`);
+        // Return explicit failure message so callers know tilling failed
+        // Bot1, Bot3 Bug #20: "Used stone_hoe on dirt" was returned even on failure,
+        // masking the problem. Now callers can detect "TILLING FAILED" in the response.
+        const heldName = bot.heldItem?.name ?? "nothing";
+        return `TILLING FAILED: ${itemName} on ${currentBlock?.name ?? "unknown"} at (${x},${y},${z}). Block did NOT become farmland after 3 attempts. Now holding ${heldName}. Try from a different position or clear blocks above.`;
       }
     } else if (itemName.includes("_seeds") || itemName === "seeds") {
       // Seeds: plant on farmland using placeBlock (top face)
