@@ -1019,7 +1019,12 @@ export async function fight(
   const isRangedFight = RANGED_NAMES.includes((target.name || "").toLowerCase());
   const FIGHT_TIMEOUT_MS = isRangedFight ? 30000 : 60000;
   let approachStallCount = 0; // Track consecutive approach iterations without closing distance
-  let lastApproachDist = Infinity; // Distance to target on last approach iteration
+  // Initialize from actual distance, not Infinity. Starting at Infinity means the first
+  // approach iteration always counts as "progress" (real distance < Infinity), wasting one
+  // stall detection cycle. For ranged mobs with a 3-iteration threshold, this means the
+  // stall abort fires at 4 iterations instead of 3 — an extra ~0.5s of arrow damage.
+  // Bot1 [2026-03-22]: skeleton at 10.8m caused 60s timeout; faster stall detection helps.
+  let lastApproachDist = target.position.distanceTo(bot.entity.position);
   while (attackCount < maxAttacks) {
     // Global timeout check
     if (Date.now() - fightStartTime > FIGHT_TIMEOUT_MS) {

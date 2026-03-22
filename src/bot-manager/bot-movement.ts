@@ -478,6 +478,37 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
           }
         }
 
+        // Check B2: Close-range melee mob detection — abort at ANY HP when unarmored/partial.
+        // Bot2 [2026-03-23]: zombie at 22.8m approached during navigation, killed bot at HP>14.
+        // The HP-gated check below (B3) only fires at HP<=14 (unarmored at night), so a zombie
+        // can walk up to the bot and land 2-3 hits (3-6 damage each) before the HP threshold
+        // triggers. By that point, HP may be too low to flee successfully.
+        // This check fires regardless of HP when a melee hostile is within 6 blocks — close
+        // enough that the next hit is imminent (melee range is ~3 blocks + approach time).
+        // Full iron armor (4/4) absorbs enough damage to survive multiple hits, so skip for those.
+        if (armorCount <= 2) {
+          for (const entity of Object.values(bot.entities)) {
+            if (!entity || !entity.position || entity === bot.entity) continue;
+            const eDist = entity.position.distanceTo(currentPos);
+            if (eDist > 6) continue;
+            const eName = entity.name?.toLowerCase() ?? "";
+            // Skip ranged mobs — already handled by check B1 above at 16-block radius.
+            if (RANGED_MOBS.includes(eName)) continue;
+            if (isHostileMob(bot, eName)) {
+              const timeNote = navIsNight ? "at night" : "during daytime";
+              const armorNote = armorCount === 0 ? "NO ARMOR" : `PARTIAL ARMOR (${armorCount}/4)`;
+              console.error(`[MoveTo] CLOSE MELEE DANGER (${timeNote}): ${eName} at ${eDist.toFixed(1)} blocks, armor=${armorCount}/4, HP=${navHp.toFixed(1)}. Aborting.`);
+              finish({
+                success: false,
+                message: `Navigation aborted: ${eName} within ${eDist.toFixed(1)} blocks ${timeNote}, HP=${Math.round(navHp*10)/10}. ${armorNote} — melee mob about to attack. Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`,
+                stuckReason: "melee_mob_danger"
+              });
+              return;
+            }
+          }
+        }
+
+        // Check B3: HP-gated hostile detection — broader scan, fires when HP is already low.
         if (navHp <= hpThreshold) {
           const nearHostiles: Array<{ name: string; dist: number }> = [];
           for (const entity of Object.values(bot.entities)) {
