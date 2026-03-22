@@ -357,9 +357,15 @@ export async function digBlock(
     bot.pathfinder.movements.infiniteLiquidDropdownDistance = false; // SAFETY: don't drop into water from height
 
     // First try: Get close with pathfinder
-    // Temporarily enable digging to reach difficult blocks
+    // SAFETY: Keep canDig=false during approach — only use bot.dig() on the target block.
+    // Previously canDig=true was set to "reach difficult blocks", but the pathfinder
+    // would dig through surface terrain during the 25s approach loop, creating cave
+    // openings and routing the bot underground.
+    // Bot1/Bot2/Bot3 [2026-03-22]: mc_gather approach with canDig=true dug into caves,
+    // bot got trapped underground with mobs. The pathfinder only needs to walk to the
+    // block; canDig is unnecessary for approach — bot.dig() handles the actual mining.
     const originalCanDig = bot.pathfinder.movements.canDig;
-    bot.pathfinder.movements.canDig = true;
+    // Keep canDig as-is (should already be false from moveToBasic/applySafePathfinderSettings)
 
     // For large Y differences, try to build/pillar up first
     if (yDiff > 2) {
