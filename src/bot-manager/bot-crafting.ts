@@ -683,6 +683,89 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       }
     }
 
+    // Manual recipe for torch: coal/charcoal + stick → 4 torches
+    // torch is in simpleRecipes (isSimpleRecipe=true) so craftingTable is null,
+    // but simpleWoodenRecipes only handles stick/crafting_table.
+    // If recipesAll returns 0 recipes, torch has no fallback and craft fails.
+    // Also handles coal/charcoal substitution which recipesAll doesn't.
+    if (itemName === "torch") {
+      console.error(`[Craft] Using manual recipe for torch...`);
+      const stickItem = mcData.itemsByName["stick"];
+      if (!stickItem) throw new Error("Cannot find stick item data");
+      const stickInv = inventoryItems.filter(i => i.name === "stick").reduce((s, i) => s + i.count, 0);
+      if (stickInv < 1) throw new Error(`Cannot craft torch: Need 1 stick, have ${stickInv}`);
+      // Check coal first, then charcoal
+      let fuelName = "coal";
+      let fuelInv = inventoryItems.filter(i => i.name === "coal").reduce((s, i) => s + i.count, 0);
+      if (fuelInv < 1) {
+        fuelName = "charcoal";
+        fuelInv = inventoryItems.filter(i => i.name === "charcoal").reduce((s, i) => s + i.count, 0);
+      }
+      if (fuelInv < 1) throw new Error(`Cannot craft torch: Need 1 coal or charcoal, have none`);
+      const fuelItem = mcData.itemsByName[fuelName];
+      if (!fuelItem) throw new Error(`Cannot find ${fuelName} item data`);
+      const manualRecipe = {
+        result: { id: item.id, count: 4 },
+        inShape: [[fuelItem.id], [stickItem.id]],
+        ingredients: [fuelItem.id, stickItem.id],
+        delta: [
+          { id: item.id, count: 4 },
+          { id: fuelItem.id, count: -1 },
+          { id: stickItem.id, count: -1 },
+        ],
+        requiresTable: false,
+      };
+      allRecipes = [manualRecipe as any];
+    }
+
+    // Manual recipe for chest: 8 planks in a ring → 1 chest
+    // Bot1 [2026-03-22]: bot.craft('chest', 2) failed when recipesAll returned 0 or
+    // returned a recipe for a plank type the bot didn't have. Manual recipe ensures
+    // any plank type works and bypasses broken recipesAll.
+    if (itemName === "chest") {
+      console.error(`[Craft] Using manual recipe for chest...`);
+      const plankItem = inventoryItems.find(i => i.name.endsWith("_planks"));
+      if (!plankItem) throw new Error(`Cannot craft chest: Need 8 planks. Craft planks from logs first. Inventory: ${inventory}`);
+      const plankMcData = mcData.itemsByName[plankItem.name];
+      if (!plankMcData) throw new Error(`Cannot find item data for ${plankItem.name}`);
+      const plankInv = inventoryItems.filter(i => i.name === plankItem.name).reduce((s, i) => s + i.count, 0);
+      if (plankInv < 8) throw new Error(`Cannot craft chest: Need 8 ${plankItem.name}, have ${plankInv}`);
+      const P = plankMcData.id;
+      const manualRecipe = {
+        result: { id: item.id, count: 1 },
+        inShape: [[P, P, P], [P, 0, P], [P, P, P]],
+        ingredients: [P, P, P, P, P, P, P, P],
+        delta: [
+          { id: item.id, count: 1 },
+          { id: plankMcData.id, count: -8 },
+        ],
+        requiresTable: true,
+      };
+      allRecipes = [manualRecipe as any];
+    }
+
+    // Manual recipe for bucket: 3 iron_ingots in V shape → 1 bucket
+    // Needed for water collection (farming, nether portal). recipesAll may fail.
+    if (itemName === "bucket") {
+      console.error(`[Craft] Using manual recipe for bucket...`);
+      const ironItem = mcData.itemsByName["iron_ingot"];
+      if (!ironItem) throw new Error("Cannot find iron_ingot item data");
+      const ironInv = inventoryItems.filter(i => i.name === "iron_ingot").reduce((s, i) => s + i.count, 0);
+      if (ironInv < 3) throw new Error(`Cannot craft bucket: Need 3 iron_ingot, have ${ironInv}`);
+      const I = ironItem.id;
+      const manualRecipe = {
+        result: { id: item.id, count: 1 },
+        inShape: [[I, 0, I], [0, I, 0]],
+        ingredients: [I, I, I],
+        delta: [
+          { id: item.id, count: 1 },
+          { id: ironItem.id, count: -3 },
+        ],
+        requiresTable: true,
+      };
+      allRecipes = [manualRecipe as any];
+    }
+
     // Manual recipe for tools - always prefer manual over broken recipesAll (Mineflayer version bug)
     // Pattern: material + stick in standard tool shapes
     if (allRecipes.length === 0) {

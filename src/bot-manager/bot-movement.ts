@@ -2571,7 +2571,7 @@ export async function digTunnel(
       ];
       for (const pos of checkPositions) {
         const checkBlock = bot.blockAt(new Vec3(pos.x, pos.y, pos.z));
-        if (checkBlock?.name === "lava") {
+        if (checkBlock && isLavaBlock(checkBlock.name)) {
           lavaAhead = true;
           console.error(`[Tunnel] ⚠️ LAVA detected at (${pos.x}, ${pos.y}, ${pos.z})! Stopping.`);
           break;
