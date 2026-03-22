@@ -237,11 +237,17 @@ export async function mc_execute(
             const isWater = (n: string | undefined) => n === "water" || n === "flowing_water";
             const inWater = isWater(feetBlock?.name) || isWater(headBlock?.name) || isWater(belowBlock?.name);
             // Also check oxygenLevel — Mineflayer exposes bot.oxygenLevel (max 300, decreases underwater).
-            // If oxygenLevel < 250, bot is submerged even if block checks miss due to floating point.
-            const oxygenLow = ((waitBot as any).oxygenLevel ?? 300) < 250;
+            // ONLY check oxygenLevel when already in water (block check positive).
+            // Bot2 [2026-03-23]: oxygenLevel returned 0 on land (Mineflayer version-dependent),
+            // causing "[wait] ABORTED: oxygen depleting" on every check even at y=69 on solid
+            // ground. This made bot.wait() completely non-functional — bots couldn't wait for
+            // dawn, causing them to wander at night and die. The water block check (inWater) is
+            // the reliable signal; oxygenLevel is only useful as a secondary confirmation when
+            // already in water (catches edge cases where block check misses due to floating point).
+            const oxygenLow = inWater && ((waitBot as any).oxygenLevel ?? 300) < 250;
             if (inWater || oxygenLow) {
               if (logs.length < MAX_LOG_LINES) {
-                const reason = oxygenLow && !inWater ? "oxygen depleting" : "in water";
+                const reason = oxygenLow ? "oxygen depleting underwater" : "in water";
                 logs.push(`[wait] ABORTED: ${reason} with HP=${hp.toFixed(1)} — drowning risk. Attempting emergency jump.`);
               }
               // Emergency: jump + move forward toward land to escape drowning.
