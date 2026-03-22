@@ -183,12 +183,19 @@ export async function mc_execute(
           resolve();
         };
         const timer = setTimeout(doResolve, waitMs);
+        // Track HP between checks to detect rapid HP loss from mob attacks.
+        // Bot2 [2026-03-22]: HP dropped 20→0.5 during wait loops from mob damage.
+        // The old check only aborted at HP<4 — by then the bot was already nearly dead.
+        // Tracking HP delta detects ongoing attacks early (3+ HP drop in 1s = mob hit).
+        let lastCheckHp = -1;
         const safetyInterval = setInterval(async () => {
           try {
             const username = botManager.requireSingleBot();
             const waitBot = botManager.getBot(username);
             if (!waitBot) return;
             const hp = waitBot.health ?? 20;
+            // Initialize lastCheckHp on first check
+            if (lastCheckHp < 0) lastCheckHp = hp;
             // Abort wait if HP critically low — bot is under attack or drowning
             if (hp < 4) {
               if (logs.length < MAX_LOG_LINES) {
@@ -197,6 +204,22 @@ export async function mc_execute(
               doResolve();
               return;
             }
+            // Abort wait if HP dropped significantly since last check (mob attack).
+            // Bot2 [2026-03-22]: HP dropped 20→0.5 during repeated wait() calls.
+            // Each mob hit deals 2-8 damage. A 3+ HP drop in 1s means active combat.
+            // Aborting early lets the agent flee/eat before HP reaches lethal levels.
+            // Only trigger after first check (lastCheckHp > 0) to avoid false positive
+            // on initial interval when lastCheckHp was just initialized.
+            const hpDrop = lastCheckHp - hp;
+            if (hpDrop >= 3 && lastCheckHp > 0) {
+              if (logs.length < MAX_LOG_LINES) {
+                logs.push(`[wait] ABORTED: Taking damage (HP ${lastCheckHp.toFixed(1)}→${hp.toFixed(1)}, -${hpDrop.toFixed(1)} in 1s) — under attack`);
+              }
+              lastCheckHp = hp;
+              doResolve();
+              return;
+            }
+            lastCheckHp = hp;
             // Abort wait if bot is in water — drowning risk at ANY HP level.
             // Bot2 [2026-03-23]: previous threshold (HP<10) was too late; bot drowned
             // from HP 15.8 because abort didn't trigger until HP<10, leaving only ~4s.

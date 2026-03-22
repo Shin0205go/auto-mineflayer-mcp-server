@@ -2110,6 +2110,16 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       }
       return `Fled from ${fleeFromName}! Now ${newDist.toFixed(1)} blocks away (was ${initialHostileDist.toFixed(1)}). Moved ${distMoved.toFixed(1)} blocks. HP: ${(bot.health ?? 0).toFixed(1)}/20` + fleeFailWarning + caveWarning;
     }
+    // Warn when flee barely moved or didn't move at all — even without a known hostile.
+    // Bot2 [2026-03-23]: flee(32) returned with 0 distance moved and no explanation.
+    // The agent thought flee succeeded and continued waiting, when it should have tried
+    // an alternative (pillarUp, dig shelter, navigate to specific coordinates).
+    if (distMoved < distance * 0.3) {
+      const zeroWarn = distMoved < 1
+        ? ` [WARNING] Flee FAILED — did not move. Pathfinder could not find any route. Try: dig 1x1x2 shelter hole, bot.pillarUp(), or bot.moveTo(specific coordinates).`
+        : ` [WARNING] Only fled ${distMoved.toFixed(0)}/${distance} blocks. Terrain is very constrained. Try: dig shelter, bot.pillarUp(), or bot.moveTo(specific coordinates).`;
+      return `Fled ${distMoved.toFixed(1)} blocks from ${fleeFromName}! HP: ${(bot.health ?? 0).toFixed(1)}/20` + zeroWarn + caveWarning;
+    }
     return `Fled ${distMoved.toFixed(1)} blocks from ${fleeFromName}! HP: ${(bot.health ?? 0).toFixed(1)}/20` + caveWarning;
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
