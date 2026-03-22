@@ -311,12 +311,29 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         });
         return;
       }
-      // Case 2: target is significantly below start — allow descent but abort if bot overshoots
-      // target Y by more than 10 blocks. This catches cave routing when navigating downhill.
-      // E.g., target at Y=51 from Y=96: bot should descend toward Y=51, not to Y=30 via cave.
+      // Case 2: target is significantly below start — allow descent but catch cave routing.
+      // Two sub-checks:
+      //   2a) Absolute max descent from start: never allow more than 8 blocks below start.
+      //       Bot1/Bot2 [2026-03-22]: target at Y=88, start at Y=97. Old 10-block-below-target
+      //       threshold allowed bot to reach Y=78 (19 blocks below start!) before triggering.
+      //       8 blocks below start catches cave entries early even when target is below.
+      //   2b) Overshoot: bot should not go more than 5 blocks below target Y.
+      //       Reduced from 10 to 5: when target is far below start, the bot may legitimately
+      //       descend but should converge toward target, not dive 10+ blocks past it.
       if (!targetIsAtOrAboveStart) {
+        // 2a: Absolute max descent from start
+        if (yDescentFromStart > 8) {
+          console.error(`[MoveTo] CAVE DESCENT DETECTED: Bot descended ${yDescentFromStart.toFixed(1)} blocks below start (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}, target Y=${y.toFixed(1)}). Aborting to prevent underground trapping.`);
+          finish({
+            success: false,
+            message: `Navigation stopped: descended ${yDescentFromStart.toFixed(0)} blocks below start (Y=${start.y.toFixed(0)} → Y=${currentPos.y.toFixed(0)}, target Y=${y.toFixed(0)}). Pathfinder may be routing through caves. Try shorter segments or a different waypoint.`,
+            stuckReason: "underground_routing"
+          });
+          return;
+        }
+        // 2b: Overshoot below target
         const yBelowTarget = y - currentPos.y; // positive if bot is below target
-        if (yBelowTarget > 10) {
+        if (yBelowTarget > 5) {
           console.error(`[MoveTo] CAVE OVERSHOOT DETECTED: Bot at Y=${currentPos.y.toFixed(1)} is ${yBelowTarget.toFixed(1)} blocks below target Y=${y.toFixed(1)} (started at Y=${start.y.toFixed(1)}). Pathfinder overshot into cave. Aborting.`);
           finish({
             success: false,

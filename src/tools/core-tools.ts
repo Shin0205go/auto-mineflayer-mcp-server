@@ -824,6 +824,7 @@ export async function mc_farm(): Promise<string> {
 
   // Step 3: Till then immediately plant each block (till+plant per block, with wait)
   const plantedCoords: Array<{ x: number; y: number; z: number }> = [];
+  let consecutiveTillFails = 0;
   for (const fc of farmCoords) {
     // Timeout check: abort if farming has taken too long
     if (Date.now() - farmStartTime > FARM_TIMEOUT_MS) {
@@ -902,8 +903,16 @@ export async function mc_farm(): Promise<string> {
     if (!farmlandConfirmed) {
       logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): NOT farmland after ${tillPositions.length} positions — skipping`);
       bot.setControlState("sneak", false);
+      consecutiveTillFails++;
+      // Bot2 [2026-03-22]: 19 consecutive dirt placement failures while skeleton attacked.
+      // Abort early when tilling consistently fails — staying stationary is lethal.
+      if (consecutiveTillFails >= 5) {
+        logs.push(`[ABORTED] ${consecutiveTillFails} consecutive tilling failures — terrain unsuitable for farming. Move to a flatter area near water.`);
+        break;
+      }
       continue;
     }
+    consecutiveTillFails = 0; // Reset on success
     logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): farmland confirmed`);
 
     // Navigate NEXT TO the farmland (not on top — walking on farmland tramples it!)
