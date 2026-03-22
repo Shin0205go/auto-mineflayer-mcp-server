@@ -458,8 +458,22 @@ export function findBlock(bot: Bot, blockName: string, maxDistance: number = 10)
     return `No ${blockName} found within ${maxDistance} blocks`;
   }
 
-  // Sort by distance
-  found.sort((a, b) => a.distance - b.distance);
+  // Sort with surface preference: blocks at or above bot's Y level are preferred over
+  // underground blocks to prevent mc_navigate from routing into caves.
+  // Bot1 [2026-03-22]: mc_navigate to coal_ore/crafting_table targeted underground blocks,
+  // pathfinder routed through cave systems, bot got stuck/died.
+  // Bot1 Session 44: navigated to block at Y=72, fell into cave, drowned.
+  // Scoring: surface blocks (within 5 Y of bot or higher) sort by distance.
+  // Underground blocks get a distance penalty proportional to depth below bot.
+  const botY = pos.y;
+  found.sort((a, b) => {
+    const aDepth = Math.max(botY - a.y - 5, 0); // 0 if at/above bot Y-5
+    const bDepth = Math.max(botY - b.y - 5, 0);
+    // Add 2 blocks of distance penalty per block of depth underground
+    const aScore = a.distance + aDepth * 2;
+    const bScore = b.distance + bDepth * 2;
+    return aScore - bScore;
+  });
 
   // Return up to 10 nearest
   const nearest = found.slice(0, 10);

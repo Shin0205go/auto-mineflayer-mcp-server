@@ -1374,34 +1374,56 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
   const bot = managed.bot;
 
   try {
-    // Find nearest hostile (using dynamic registry check)
-    const hostile = Object.values(bot.entities)
+    // Find ALL nearby hostiles (using dynamic registry check), sorted by distance.
+    // Bot2 bug: flee only considered nearest hostile, running into other mobs when surrounded.
+    // Now we compute a weighted flee direction away from ALL hostiles within 24 blocks.
+    const allHostiles = Object.values(bot.entities)
       .filter(e => isHostileMob(bot, e.name?.toLowerCase() || ""))
-      .sort((a, b) =>
-        a.position.distanceTo(bot.entity.position) -
-        b.position.distanceTo(bot.entity.position)
-      )[0];
+      .map(e => ({
+        entity: e,
+        dist: e.position.distanceTo(bot.entity.position),
+        name: e.name || "hostile"
+      }))
+      .filter(h => h.dist <= 24)
+      .sort((a, b) => a.dist - b.dist);
+
+    const hostile = allHostiles[0]?.entity;
 
     // Calculate flee direction
     let direction: { x: number; y: number; z: number; scaled: (n: number) => any };
     let fleeFromName: string;
 
-    if (hostile) {
-      // Flee away from hostile — HORIZONTAL ONLY.
+    if (allHostiles.length > 0) {
+      // Flee away from ALL hostiles — weighted by inverse distance (closer = stronger repulsion).
+      // Bot2 [2026-03-22]: 7 mobs surrounded bot, flee from nearest ran into others.
+      // Using weighted centroid ensures flee direction avoids the densest cluster of hostiles.
+      let sumX = 0, sumZ = 0, totalWeight = 0;
+      for (const h of allHostiles) {
+        // Weight: closer mobs have much more influence (inverse square distance)
+        const weight = 1 / Math.max(h.dist * h.dist, 1);
+        const away = bot.entity.position.minus(h.entity.position);
+        sumX += away.x * weight;
+        sumZ += away.z * weight;
+        totalWeight += weight;
+      }
+      // Normalize to get average flee direction — HORIZONTAL ONLY.
       // Bot2 bug: hostile at Y=100, bot at Y=80 → direction.y was negative → flee target
       // pointed underground → pathfinder routed into cave at Y=56.
       // Zeroing Y ensures flee stays on the same elevation, preventing cave/hole routing.
-      const raw = bot.entity.position.minus(hostile.position);
-      const horizontal = new (bot.entity.position as any).constructor(raw.x, 0, raw.z);
-      // If horizontal distance is zero (hostile directly above/below), pick random horizontal direction
+      const avgX = totalWeight > 0 ? sumX / totalWeight : 0;
+      const avgZ = totalWeight > 0 ? sumZ / totalWeight : 0;
+      const horizontal = new (bot.entity.position as any).constructor(avgX, 0, avgZ);
+      // If horizontal distance is zero (all hostiles directly above/below), pick random horizontal direction
       if (horizontal.norm() < 0.1) {
         const angle = Math.random() * 2 * Math.PI;
         direction = new (bot.entity.position as any).constructor(Math.cos(angle), 0, Math.sin(angle));
       } else {
         direction = horizontal.normalize();
       }
-      fleeFromName = hostile.name || "hostile";
-      console.error(`[Flee] Fleeing from ${fleeFromName} at (${hostile.position.x.toFixed(1)}, ${hostile.position.y.toFixed(1)}, ${hostile.position.z.toFixed(1)})`);
+      fleeFromName = allHostiles.length === 1
+        ? allHostiles[0].name
+        : `${allHostiles.length} hostiles (${allHostiles.slice(0, 3).map(h => h.name).join(", ")})`;
+      console.error(`[Flee] Fleeing from ${fleeFromName} — weighted direction from ${allHostiles.length} hostile(s)`);
     } else {
       // No hostile found - flee in a random direction
       const angle = Math.random() * 2 * Math.PI;
