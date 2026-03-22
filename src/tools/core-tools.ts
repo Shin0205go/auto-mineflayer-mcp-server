@@ -246,14 +246,23 @@ export async function mc_gather(
       }
     }
 
+    // Refuse gathering at critically low HP regardless of time — mc_gather is a long
+    // operation (up to 120s) where the bot is stationary and vulnerable. Starting at low HP
+    // means any single mob hit or starvation tick is lethal. The runtime HP monitor aborts
+    // at HP<8, but by then the bot has wasted time and is in a worse position.
+    // Bot1 [2026-03-22]: started mc_gather(short_grass) at low HP, timed out 120s, mobs killed bot.
+    const gatherHpStart = Math.round((gatherBot.health ?? 20) * 10) / 10;
+    if (gatherHpStart < 8) {
+      return `[REFUSED] HP too low to gather (${gatherHpStart}/20). Gathering takes up to 120s and leaves bot stationary/vulnerable. Heal first: mc_eat, or mc_combat(target="cow") for food.`;
+    }
+
     if (gatherIsNight) {
       const danger = checkDangerNearby(gatherBot, 20);
       if (danger.dangerous) {
-        const gatherHp = Math.round((gatherBot.health ?? 20) * 10) / 10;
         const threatDesc = danger.nearestHostile
           ? `${danger.nearestHostile.name} at ${danger.nearestHostile.distance.toFixed(1)} blocks`
           : `${danger.hostileCount} hostile(s)`;
-        return `[REFUSED] Too dangerous to gather at night — ${threatDesc} nearby, HP=${gatherHp}. Gathering is a long operation (up to 120s) and bot is stationary/vulnerable. Use mc_flee or mc_combat to clear threats first, or wait for daytime.`;
+        return `[REFUSED] Too dangerous to gather at night — ${threatDesc} nearby, HP=${gatherHpStart}. Gathering is a long operation (up to 120s) and bot is stationary/vulnerable. Use mc_flee or mc_combat to clear threats first, or wait for daytime.`;
       }
     }
   }
@@ -843,6 +852,17 @@ export async function mc_farm(): Promise<string> {
       break;
     }
 
+    // Mid-farm HP check: abort if HP dropped during tilling (from starvation, unseen mobs,
+    // fall damage, etc.). The hostile check above only catches visible mobs within 20 blocks,
+    // but Bot2 [2026-03-22] had HP drop from 20→1 during dirt placement from a skeleton
+    // that wasn't detected (possibly behind terrain). The bone_meal and harvest phases
+    // already have HP<10 checks, but the tilling/planting loop did NOT — fixed here.
+    const midFarmHp = bot.health ?? 20;
+    if (midFarmHp < 10) {
+      logs.push(`[ABORTED] HP critically low during tilling (${midFarmHp.toFixed(1)}/20). Stopping farm to survive.`);
+      break;
+    }
+
     // Enable sneaking BEFORE moving near the block — prevents farmland trampling
     // if the pathfinder routes over tilled soil during approach or planting.
     // Bot3 Bug #20, Bot2 Bug: farmland reverts to dirt because bot walks on it
@@ -1243,6 +1263,34 @@ export async function mc_navigate(
         }
         nightWarning = `\n[NIGHT WARNING] HP=${hp}, ${nearbyHostiles.length} hostile(s) nearby: ${threatList}. Consider mc_flee or shelter before long navigation.`;
       }
+    } else {
+      // DAYTIME close-range hostile check: pillagers, cave zombies, and other hostiles
+      // can attack during daytime. Only block navigation when a hostile is VERY close
+      // (within 10 blocks) AND HP is low — daytime is generally safer but not risk-free.
+      // Bot1 [2026-03-22]: killed by zombie during daytime navigation at low HP.
+      // Bot2: pillager knockback caused fall during daytime movement.
+      // The night check uses 16-block radius; daytime uses tighter 10-block radius
+      // since most daytime hostiles are remnants from night or cave dwellers.
+      if (hp < 10) {
+        const dayHostiles: Array<{ name: string; dist: number }> = [];
+        for (const entity of Object.values(bot.entities)) {
+          if (!entity || !entity.position || entity === bot.entity) continue;
+          const dist = entity.position.distanceTo(bot.entity.position);
+          if (dist > 10) continue;
+          const name = entity.name?.toLowerCase() ?? "";
+          if (isHostileMob(bot, name)) {
+            dayHostiles.push({ name, dist: Math.round(dist * 10) / 10 });
+          }
+        }
+        if (dayHostiles.length > 0) {
+          const dayThreatList = dayHostiles
+            .sort((a, b) => a.dist - b.dist)
+            .slice(0, 5)
+            .map(h => `${h.name}(${h.dist}m)`)
+            .join(", ");
+          nightWarning += `\n[DANGER WARNING] HP=${hp}, ${dayHostiles.length} hostile(s) within 10 blocks: ${dayThreatList}. Use mc_flee or mc_combat before navigating.`;
+        }
+      }
     }
   }
 
@@ -1401,12 +1449,17 @@ export async function mc_navigate(
               const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
               return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10}, hunger=${Math.round(segHunger)} (starving). Current position: ${posStr}. Find food immediately (mc_combat cow/pig, mc_eat) before continuing.`;
             }
-            // Mid-segment hostile threat scan: abort if hostile mobs spawned nearby at night.
+            // Mid-segment hostile threat scan: abort if hostile mobs are nearby.
             // Bot1 Sessions 20-44: 15+ deaths from mobs spawning between segments during night nav.
             // The initial hostile check passes (no mobs at start), but new mobs spawn during
             // the 5-15 seconds each segment takes. Without this check, bot walks into new mobs.
-            if (segIsNight) {
-              const segDanger = checkDangerNearby(segBot, 16);
+            // At night: scan 16 blocks. During day: scan 10 blocks when HP is low.
+            // Bot1/Bot2 [2026-03-22]: killed by pillagers/zombies during DAYTIME navigation.
+            // Pillagers are active in daytime; cave zombies may surface near openings.
+            const segScanRadius = segIsNight ? 16 : 10;
+            const shouldScanHostiles = segIsNight || segHp < 12;
+            if (shouldScanHostiles) {
+              const segDanger = checkDangerNearby(segBot, segScanRadius);
               if (segDanger.dangerous && segDanger.nearestHostile) {
                 const nearDist = segDanger.nearestHostile.distance;
                 const nearName = segDanger.nearestHostile.name;
@@ -1417,7 +1470,8 @@ export async function mc_navigate(
                 if (isCreeperClose || (isHostileClose && segHp < 16)) {
                   const curPos2 = botManager.getPosition(username);
                   const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
-                  return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — ${nearName} detected ${nearDist.toFixed(1)} blocks away at night, HP=${Math.round(segHp*10)/10}. Current position: ${posStr}. Use mc_flee or mc_combat to handle threat before continuing.`;
+                  const timeNote = segIsNight ? "at night" : "during daytime";
+                  return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — ${nearName} detected ${nearDist.toFixed(1)} blocks away ${timeNote}, HP=${Math.round(segHp*10)/10}. Current position: ${posStr}. Use mc_flee or mc_combat to handle threat before continuing.`;
                 }
               }
             }
