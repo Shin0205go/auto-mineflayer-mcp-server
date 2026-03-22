@@ -3,7 +3,7 @@ import { Vec3 } from "vec3";
 import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 import type { ManagedBot } from "./types.js";
-import { isHostileMob, isFoodItem, isBedBlock, isNearCliffEdge } from "./minecraft-utils.js";
+import { isHostileMob, isNeutralMob, isFoodItem, isBedBlock, isNearCliffEdge } from "./minecraft-utils.js";
 import { collectNearbyItems, equipArmor } from "./bot-items.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
@@ -244,10 +244,16 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       // Exact match always OK
       if (name === targetLower || displayName === targetLower) return true;
 
-      // Substring match: exclude hostile mobs when targeting passive ones
+      // Substring match: exclude hostile mobs when targeting passive ones,
+      // AND exclude neutral mobs (zombified_piglin) from all substring matches.
+      // Bot3 Deaths #1,#9,#16: fight("zombie") substring-matched "zombified_piglin",
+      // provoking the entire group. Neutral mobs require exact-name match only.
       const substringMatch = name.includes(targetLower) || displayName.includes(targetLower);
       if (substringMatch && !targetIsHostile && isHostileMob(bot, name)) {
         return false; // e.g. "pig" should not match "zombified_piglin"
+      }
+      if (substringMatch && isNeutralMob(name)) {
+        return false; // e.g. "zombie" should not match "zombified_piglin"
       }
       return substringMatch;
     });
@@ -640,11 +646,18 @@ export async function fight(
         if (exactMatch) return true;
 
         // For substring matching: if target is a passive mob name, do NOT match
-        // hostile mobs that happen to contain the target string (e.g. "pig" in "zombified_piglin")
+        // hostile mobs that happen to contain the target string (e.g. "pig" in "zombified_piglin").
+        // Also reject neutral mobs (zombified_piglin) from ALL substring matches —
+        // "zombie" must not match "zombified_piglin" (provoking the swarm is lethal).
+        // Bot3 Deaths #1,#9,#16: fight("zombie") substring-matched zombified_piglin.
         const substringMatch = eName.includes(targetLower) || eDisplayName.includes(targetLower);
         if (substringMatch) {
           if (!targetIsHostile && isHostileMob(bot, eName)) {
             // Requested passive "pig" should not match hostile "zombified_piglin"
+            return false;
+          }
+          if (isNeutralMob(eName)) {
+            // Neutral mobs require exact name match — never auto-target via substring
             return false;
           }
           return true;

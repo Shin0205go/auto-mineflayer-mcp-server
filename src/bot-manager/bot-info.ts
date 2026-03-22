@@ -1,7 +1,7 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
 import type { ManagedBot, ChatMessage, GameEvent } from "./types.js";
-import { isHostileMob, isPassiveMob, isFoodItem, isScaffoldBlock } from "./minecraft-utils.js";
+import { isHostileMob, isNeutralMob, isPassiveMob, isFoodItem, isScaffoldBlock } from "./minecraft-utils.js";
 
 /**
  * Get chat messages from a managed bot
@@ -515,6 +515,9 @@ export function findEntities(bot: Bot, entityType?: string, maxDistance: number 
           const targetIsHostile = isHostileMob(bot, searchType);
           if (!targetIsHostile && isHostileMob(bot, name)) {
             return false; // passive target should not match hostile entity
+          }
+          if (isNeutralMob(name)) {
+            return false; // neutral mobs (zombified_piglin) require exact match only
           }
           return true;
         }

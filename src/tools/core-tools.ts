@@ -9,7 +9,7 @@
  */
 
 import { botManager } from "../bot-manager/index.js";
-import { checkDangerNearby, isHostileMob, EDIBLE_FOOD_NAMES } from "../bot-manager/minecraft-utils.js";
+import { checkDangerNearby, isHostileMob, isNeutralMob, EDIBLE_FOOD_NAMES } from "../bot-manager/minecraft-utils.js";
 import { setAgentType } from "../agent-state.js";
 import { registry } from "../tool-handler-registry.js";
 
@@ -1428,10 +1428,13 @@ export async function mc_navigate(
       // Exact match is always OK
       const exactMatch = eName === targetLower || eDisplayName === targetLower || eUsername === targetLower;
       if (!exactMatch) {
-        // Substring match — but reject if target is passive and match is hostile
+        // Substring match — but reject if target is passive and match is hostile,
+        // and always reject neutral mobs (zombified_piglin) from substring matches.
+        // Bot3 Deaths #1,#9,#16: "zombie" substring-matched "zombified_piglin".
         const substringMatch = eName.includes(targetLower) || eDisplayName.includes(targetLower);
         if (!substringMatch) continue;
         if (!targetIsHostile && isHostileMob(bot, eName)) continue;
+        if (isNeutralMob(eName)) continue;
       }
 
       const dist = entity.position.distanceTo(bot.entity.position);
