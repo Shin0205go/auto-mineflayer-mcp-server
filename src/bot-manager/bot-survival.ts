@@ -945,12 +945,20 @@ export async function fight(
     if (fightDistance > 16) {
       console.error(`[Fight] Enderman at ${fightDistance.toFixed(1)} blocks — approaching to 12 blocks first...`);
       applySafePathfinderSettings(bot);
+      const endermanApproachStartY = bot.entity.position.y;
       const approachGoal = new goals.GoalNear(target!.position.x, target!.position.y, target!.position.z, 12);
       bot.pathfinder.setGoal(approachGoal);
       await new Promise<void>((resolve) => {
         const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
         const check = setInterval(() => {
           const currentDist = target!.position.distanceTo(bot.entity.position);
+          // SAFETY: Y-descent check during enderman approach
+          const enderApproachDescent = endermanApproachStartY - bot.entity.position.y;
+          if (enderApproachDescent > 4) {
+            console.error(`[Fight] CAVE DESCENT during enderman approach: dropped ${enderApproachDescent.toFixed(1)} blocks. Aborting.`);
+            clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+            return;
+          }
           if (currentDist <= 14 || !bot.pathfinder.isMoving()) {
             clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
           }
@@ -1244,6 +1252,7 @@ export async function fight(
       // catches damage early. Break immediately if within attack range.
       {
         const approachHpStart = bot.health ?? 20;
+        const approachStartY = bot.entity.position.y;
         for (let tick = 0; tick < 8; tick++) { // 8 * 200ms = 1.6s max
           await delay(200);
           const curTarget = Object.values(bot.entities).find(e => e.id === targetId);
@@ -1253,6 +1262,16 @@ export async function fight(
           const approachHpNow = bot.health ?? 20;
           if (approachHpNow < approachHpStart - 6 || approachHpNow <= fleeHealthThreshold) {
             console.error(`[Fight] HP dropped during ranged approach (${approachHpStart.toFixed(1)} → ${approachHpNow.toFixed(1)}). Breaking approach.`);
+            break;
+          }
+          // SAFETY: Y-descent check during combat approach — abort if falling into cave.
+          // fight() uses applySafePathfinderSettings (maxDropDown=2) but doesn't monitor
+          // Y-descent like moveToBasic and flee do. Bot can fall into caves during approach.
+          // Bot1 [2026-03-22]: fell underground during skeleton approach, trapped in cave.
+          // Bot2 [2026-03-22]: descended to Y=53 during combat, completely stuck.
+          const approachYDescent = approachStartY - bot.entity.position.y;
+          if (approachYDescent > 4) {
+            console.error(`[Fight] CAVE DESCENT during approach: dropped ${approachYDescent.toFixed(1)} blocks (Y=${approachStartY.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Aborting approach.`);
             break;
           }
         }

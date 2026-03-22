@@ -1695,10 +1695,12 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       // Try 8 directions: 0°, 45°, 90°, 135°, 180°, 225°, 270°, 315° from original
       for (let rotation = 0; rotation < 8; rotation++) {
         const angle = Math.atan2(direction.z, direction.x) + (Math.PI / 4) * rotation;
-        // Check TWO points along the flee path: 3 blocks and 5 blocks ahead.
-        // Checking only 3 blocks missed cliffs/holes at 4-5 blocks out.
+        // Check FOUR points along the flee path: 1, 2, 3, and 5 blocks ahead.
+        // Previous check only scanned [3, 5], missing holes/cliffs at 1-2 blocks.
+        // Bot1/Bot2 [2026-03-22]: bot fell into holes directly in front (1-2 blocks)
+        // that the safety scan missed because it started checking at 3 blocks out.
         let directionSafe = true;
-        for (const checkDist of [3, 5]) {
+        for (const checkDist of [1, 2, 3, 5]) {
           const checkX = bx + Math.round(Math.cos(angle) * checkDist);
           const checkZ = bz + Math.round(Math.sin(angle) * checkDist);
           // Check for ground within 3 blocks below — also reject lava.
@@ -1959,7 +1961,51 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
         console.error(`[Flee] WARNING: Flee moved CLOSER (${initialHostileDist.toFixed(1)} → ${newDist.toFixed(1)}). Attempting perpendicular retry...`);
         try {
           const retryAway = bot.entity.position.minus(hostile.position);
-          const perpAngle = Math.atan2(retryAway.z, retryAway.x) + Math.PI / 2;
+          let perpAngle = Math.atan2(retryAway.z, retryAway.x) + Math.PI / 2;
+
+          // SAFETY: Ground check for perpendicular retry direction.
+          // Previous code skipped safety checks for the retry — main flee scans 8 directions
+          // for cliffs/holes/lava but the perpendicular retry set a goal blindly.
+          // Bot2 [2026-03-22]: perpendicular retry sent bot into cave hole (Y=80→56).
+          // Check both perpendicular directions (+90° and -90°) for ground safety.
+          {
+            const retryBotPos = bot.entity.position;
+            const retryBx = Math.floor(retryBotPos.x);
+            const retryBy = Math.floor(retryBotPos.y);
+            const retryBz = Math.floor(retryBotPos.z);
+            let retryDirSafe = false;
+            for (const angleOffset of [0, Math.PI]) { // Try +90° first, then -90°
+              const testAngle = perpAngle + angleOffset;
+              let safe = true;
+              for (const checkDist of [1, 2, 3, 5]) {
+                const checkX = retryBx + Math.round(Math.cos(testAngle) * checkDist);
+                const checkZ = retryBz + Math.round(Math.sin(testAngle) * checkDist);
+                let hasSafeGround = false;
+                for (let dy = 0; dy <= 3; dy++) {
+                  const block = bot.blockAt(new Vec3(checkX, retryBy - dy, checkZ));
+                  if (!block) continue;
+                  if (block.name === "lava") { hasSafeGround = false; break; }
+                  if (block.name !== "air" && block.name !== "cave_air" && block.name !== "void_air") {
+                    hasSafeGround = true; break;
+                  }
+                }
+                if (!hasSafeGround) { safe = false; break; }
+              }
+              if (safe) {
+                if (angleOffset > 0) {
+                  perpAngle = testAngle;
+                  console.error(`[Flee] Perpendicular retry: first direction unsafe, using opposite perpendicular.`);
+                }
+                retryDirSafe = true;
+                break;
+              }
+            }
+            if (!retryDirSafe) {
+              console.error(`[Flee] Perpendicular retry: BOTH perpendicular directions unsafe (cliff/hole/lava). Reducing distance to 5 blocks.`);
+              distance = Math.min(distance, 5);
+            }
+          }
+
           const perpTarget = bot.entity.position.plus(
             new Vec3(Math.cos(perpAngle) * distance, 0, Math.sin(perpAngle) * distance)
           );
@@ -1971,11 +2017,23 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
             bot.pathfinder.movements.allowSprinting = true;
           }
           bot.setControlState("sprint", true);
+          const retryStartY = bot.entity.position.y;
           bot.pathfinder.setGoal(retryGoal);
           await new Promise<void>((resolve) => {
             const retryTimeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
             const retryStartMs = Date.now();
             const retryCheck = setInterval(() => {
+              // SAFETY: Y-descent abort for perpendicular retry — same as main flee.
+              // Without this, perpendicular retry can route into caves/holes with no abort.
+              const retryYDescent = retryStartY - bot.entity.position.y;
+              if (retryYDescent > 4) {
+                console.error(`[Flee] Perpendicular retry CAVE DESCENT: dropped ${retryYDescent.toFixed(1)} blocks. Aborting.`);
+                clearInterval(retryCheck); clearTimeout(retryTimeout);
+                try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+                try { bot.setControlState("sprint", false); } catch { /* ignore */ }
+                resolve();
+                return;
+              }
               // Wait at least 1.5s before checking isMoving() — pathfinder may take 500-1000ms
               // to compute a path and start moving. Without this delay, the check fires at 300ms
               // when isMoving()=false (path not computed yet), immediately aborting the retry.
