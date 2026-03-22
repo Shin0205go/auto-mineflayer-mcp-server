@@ -26,13 +26,10 @@ function delay(ms: number): Promise<void> {
  */
 function applySafePathfinderSettings(bot: Bot): void {
   if (!bot.pathfinder.movements) return;
-  const timeOfDay = bot.time?.timeOfDay ?? 0;
-  const isNight = timeOfDay > 12541 || timeOfDay < 100;
-  const hp = bot.health ?? 20;
-  // Disable canDig at night or low HP to prevent cave routing (same logic as moveToBasic)
-  if (isNight || hp < 10) {
-    bot.pathfinder.movements.canDig = false;
-  }
+  // ALWAYS disable canDig — pathfinder digging creates cave openings and underground routing.
+  // Previously gated on night/low-HP, but daytime cave routing still killed bots at HP>=10.
+  // Bot1/Bot2/Bot3 [2026-03-22]: multiple daytime deaths from canDig cave entry.
+  bot.pathfinder.movements.canDig = false;
   bot.pathfinder.movements.maxDropDown = 2;
   (bot.pathfinder.movements as any).liquidCost = 10000;
   bot.pathfinder.movements.allowFreeMotion = false;

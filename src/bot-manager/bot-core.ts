@@ -223,8 +223,12 @@ export class BotCore extends EventEmitter {
         bot.loadPlugin(pathfinder);
         const movements = new Movements(bot);
 
-        // Enable digging for obstacle removal
-        movements.canDig = true;
+        // SAFETY: Disable digging — pathfinder digging through terrain creates cave openings
+        // and underground routing that has caused 30+ deaths across Bot1/Bot2/Bot3.
+        // Previously canDig=true, but moveToBasic had to override it to false at night/low-HP.
+        // Even the daytime override to true caused deaths: pathfinder digs surface blocks,
+        // opens caves, bot falls in, gets surrounded by mobs. Use mc_tunnel for intentional digging.
+        movements.canDig = false;
 
         // Enable 1x1 tower building for vertical movement
         movements.allow1by1towers = true;
@@ -278,7 +282,7 @@ export class BotCore extends EventEmitter {
         if (soulFireBlock) movements.blocksToAvoid.add(soulFireBlock.id);
 
         bot.pathfinder.setMovements(movements);
-        console.error(`[BotManager] Pathfinder configured: canDig=true, allow1by1towers=true, scaffoldingBlocks=${movements.scafoldingBlocks.length} types`);
+        console.error(`[BotManager] Pathfinder configured: canDig=false, allow1by1towers=true, scaffoldingBlocks=${movements.scafoldingBlocks.length} types`);
 
         // PATCH: Fix mineflayer's block_place sequence bug (hardcoded 0 in both
         // generic_place.js and inventory.js activateBlock).

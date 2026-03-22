@@ -629,23 +629,16 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       // Bot1 Sessions 31-34,40b,44: 6+ deaths from pathfinder choosing water-level routes.
       (bot.pathfinder.movements as any).liquidCost = 10000;
 
-      // SAFETY: Disable canDig at night OR when HP is low to prevent cave routing.
+      // SAFETY: ALWAYS disable canDig to prevent cave routing.
       // Bot1 Sessions 42-44, Bot3 #17,#19: pathfinder with canDig=true digs through terrain,
       // opening cave systems where underground mobs surround the bot.
-      // Night: hostile mobs fill caves densely. Disabling canDig forces surface routing.
-      // Low HP: Bot1/Bot2/Bot3 [2026-03-22] multiple deaths from canDig cave entry at low HP
-      // during daytime — any mob encounter at HP<10 is fatal. Disable canDig to keep bot
-      // on the surface where it can flee/eat instead of getting trapped underground.
-      const navTimeOfDay = bot.time?.timeOfDay ?? 0;
-      const navIsNight = navTimeOfDay > 12541 || navTimeOfDay < 100;
-      const navHp = bot.health ?? 20;
-      if (navIsNight || navHp < 10) {
-        bot.pathfinder.movements.canDig = false;
-        const reason = navIsNight ? `night (time=${navTimeOfDay})` : `low HP (${navHp.toFixed(1)})`;
-        console.error(`[MoveTo] canDig disabled to prevent cave routing: ${reason}`);
-      } else {
-        bot.pathfinder.movements.canDig = true;
-      }
+      // Previously only disabled at night or HP<10, but Bot1/Bot2/Bot3 [2026-03-22] still
+      // died from daytime cave routing at HP>=10: pathfinder digs through surface blocks,
+      // bot falls into cave, gets surrounded by mobs, and dies.
+      // canDig provides no meaningful benefit for surface navigation — the bot has mc_tunnel
+      // for intentional digging. Pathfinder digging through terrain is ALWAYS dangerous
+      // because it creates unpredictable cave openings and Y-descent that bypass safety checks.
+      bot.pathfinder.movements.canDig = false;
       // Enable scaffolding with available blocks (dirt, cobblestone, netherrack)
       const scaffoldBlocks: number[] = [];
       const mcData = (bot as any).registry || require("minecraft-data")(bot.version);

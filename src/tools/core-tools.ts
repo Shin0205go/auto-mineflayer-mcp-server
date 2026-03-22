@@ -248,6 +248,19 @@ export async function mc_gather(
     const gatherTime = gatherBot.time?.timeOfDay ?? 0;
     const gatherIsNight = gatherTime > 12541 || gatherTime < 100;
 
+    // Pre-gather auto-sleep: if nighttime with bed nearby, sleep first.
+    // mc_gather takes up to 120s and bot is stationary — nighttime gathering is extremely
+    // dangerous. Sleeping skips the night, making the gather operation much safer.
+    // Bot1/Bot2 [2026-03-22]: multiple deaths during nighttime gather from mob attacks.
+    if (gatherIsNight) {
+      try {
+        const sleepResult = await botManager.sleep(username);
+        console.error(`[Gather] Pre-gather auto-sleep succeeded: ${sleepResult}`);
+      } catch (sleepErr) {
+        console.error(`[Gather] Pre-gather auto-sleep skipped: ${sleepErr instanceof Error ? sleepErr.message : String(sleepErr)}`);
+      }
+    }
+
     // Auto-equip armor before ALL gathering — not just at night or when danger detected.
     // mc_gather is a long operation (up to 120s) where the bot is stationary/vulnerable.
     // Surprise attacks from pillagers, cave zombies, and skeletons happen during daytime too.
@@ -1422,6 +1435,26 @@ export async function mc_navigate(
     }
   }
 
+  // Pre-navigation auto-sleep: if it's nighttime and a bed is nearby, sleep first.
+  // Bot1 [2026-03-22]: killed by Phantom (insomnia from 3+ nights without sleep).
+  // Bot1 [2026-03-22]: 15+ deaths from night navigation through mob-dense terrain.
+  // Sleeping skips the entire night, preventing mob encounters and Phantom spawns.
+  // Only attempt if not in a combat/flee emergency (caller should use mc_flee for that).
+  if (bot) {
+    const sleepTimeOfDay = bot.time?.timeOfDay ?? 0;
+    const isSleepableNight = sleepTimeOfDay >= 12541 && sleepTimeOfDay <= 23458;
+    if (isSleepableNight) {
+      try {
+        const sleepResult = await botManager.sleep(username);
+        console.error(`[Navigate] Pre-nav auto-sleep succeeded: ${sleepResult}`);
+        // After sleeping, night is over — continue with navigation normally
+      } catch (sleepErr) {
+        // Sleep failed (no bed nearby, bed occupied, etc.) — continue with navigation
+        console.error(`[Navigate] Pre-nav auto-sleep skipped: ${sleepErr instanceof Error ? sleepErr.message : String(sleepErr)}`);
+      }
+    }
+  }
+
   // Pre-navigation proactive eat: consume food before starting ANY navigation if HP < 18
   // OR hunger < 14. HP-only check missed starvation spirals: Bot1 Session 28 started at
   // HP=14/hunger=1, hunger hit 0 mid-travel, HP couldn't regenerate, died to mobs.
@@ -1603,9 +1636,9 @@ export async function mc_navigate(
             // entirely when HP was healthy, missing creepers and pillagers that attacked mid-nav.
             // Creepers can one-shot at any HP without blast protection armor.
             // Pillagers are active 24/7 and deal significant ranged damage.
-            // Now: ALWAYS scan between segments regardless of time/HP. Scan radius is wider
-            // at night (16) since more hostiles are active.
-            const segScanRadius = segIsNight ? 16 : 16;
+            // Now: ALWAYS scan between segments regardless of time/HP. Scan radius 16 for both
+            // day and night — pillagers and skeletons shoot from 16+ blocks at any time.
+            const segScanRadius = 16;
             {
               const segDanger = checkDangerNearby(segBot, segScanRadius);
               if (segDanger.dangerous && segDanger.nearestHostile) {
