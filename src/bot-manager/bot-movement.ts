@@ -147,6 +147,16 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       bot.removeListener("goal_updated", onGoalUpdated);
       for (const cb of cleanupCallbacks) cb();
       try { bot.pathfinder.setGoal(null); } catch (_) {}
+      // CRITICAL: Clear all movement control states on EVERY finish (success or failure).
+      // Bot1/Bot2/Bot3 [2026-03-22]: multiple deaths where safety checks (creeper, hostile,
+      // HP drop, underground routing, cliff-knockback, high-route) called finish() to abort
+      // navigation, but the bot kept moving forward because pathfinder control states
+      // (forward, sprint, jump) were not cleared. setGoal(null) stops pathfinder planning
+      // but does NOT immediately clear the movement controls set during the current tick.
+      // The bot continues moving for 1-2 ticks after abort — enough to walk into a creeper
+      // explosion radius, off a cliff edge, or deeper into a cave.
+      // Previously only underwater (line 271) and fall (line 629) aborts cleared controls.
+      try { bot.clearControlStates(); } catch (_) {}
       resolve(result);
     };
 
@@ -268,14 +278,14 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         if (underwaterTicks >= 4) {
           console.error(`[MoveTo] DROWNING RISK: Head underwater for ${underwaterTicks} checks at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Aborting navigation.`);
           bot.pathfinder.stop();
-          bot.clearControlStates();
-          // Try to swim up
-          bot.setControlState("jump", true);
           finish({
             success: false,
             message: `Navigation stopped: underwater at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Drowning risk. Swim up (jump) and navigate on the surface.`,
             stuckReason: "underwater"
           });
+          // Try to swim up AFTER finish() — finish() clears all control states,
+          // so setting jump=true must come after to persist.
+          try { bot.setControlState("jump", true); } catch (_) {}
           return;
         }
       } else {
@@ -1976,7 +1986,10 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
                 for (let dy = 0; dy <= 3; dy++) {
                   const block = bot.blockAt(new Vec3(checkX, retryBy - dy, checkZ));
                   if (!block) continue;
-                  if (block.name === "lava") { hasSafeGround = false; break; }
+                  // Check both source and flowing lava — flowing_lava was missed by
+                  // commit 500965e which fixed this in the main flee direction check
+                  // but not the perpendicular retry path. Bot3 Death #8: lava during flee.
+                  if (isLavaBlock(block.name)) { hasSafeGround = false; break; }
                   if (block.name !== "air" && block.name !== "cave_air" && block.name !== "void_air") {
                     hasSafeGround = true; break;
                   }
