@@ -531,14 +531,18 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
           // Night + unarmored: wider detection. Night + partial: moderate. Day: tight.
           // Bot2 [2026-03-23]: zombie at 22.8m closed to melee during daytime navigation
           // and killed bot before the abort triggered. Without food, any damage is permanent.
-          // Increase daytime no-food melee abort to 14 blocks (gives ~5.4s reaction time at
-          // zombie walk speed of 2.3 blocks/s, enough for 10+ safety checks at 500ms interval).
-          // 10 blocks was insufficient: abort fires, agent receives message, but zombie
-          // covers remaining 8.5 blocks in 3.7s before agent can call mc_flee.
+          // Daytime no-food: 20 blocks — must match the pre-nav check in core-tools.ts
+          // (dayBlockDist = hasFood ? 10 : 20) to close the gap where mobs pass the pre-nav
+          // check at 21-24 blocks, then close in during navigation and still pass the mid-nav
+          // check at 14 blocks. A zombie at 20 blocks reaches melee in ~8.7s at 2.3 blocks/s,
+          // giving 17+ safety checks at 500ms interval — enough to detect and abort.
+          // Night no-armor: 16 blocks (was 12) — night mob density is high and multiple mobs
+          // converge from different directions. Bot1 Sessions 20-44: 15+ deaths at night from
+          // mobs closing in during navigation. 12 blocks gave only 5.2s before impact.
           const navHasFood = bot.inventory.items().some((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
           const meleeAbortDist = navIsNight
-            ? (armorCount <= 1 ? 12 : 8)
-            : (navHasFood ? 6 : 14);
+            ? (armorCount <= 1 ? 16 : 10)
+            : (navHasFood ? 6 : 20);
           for (const entity of Object.values(bot.entities)) {
             if (!entity || !entity.position || entity === bot.entity) continue;
             const eDist = entity.position.distanceTo(currentPos);
