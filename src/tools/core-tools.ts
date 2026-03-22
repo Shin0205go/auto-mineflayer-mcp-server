@@ -1635,12 +1635,9 @@ export async function mc_navigate(
         estimatedDistance = 30; // treat as short-range to allow the attempt
       }
       if (estimatedDistance > 30) {
-        // Block long-distance navigation at ANY HP — walking 30+ blocks at low hunger
-        // with no food guarantees hunger hits 0 during travel. HP cannot regenerate and
-        // starvation damage begins regardless of starting HP.
+        // Warn about long-distance navigation at low hunger with no food.
         // Bot2 [2026-03-23]: HP>14, hunger=4, moveTo(80,69,-13) ~50+ blocks, killed by zombie.
-        // Old code required hp<=14, letting high-HP bots navigate to their death.
-        return `[BLOCKED] Navigation refused: hunger=${hunger}, HP=${hp}, no food in inventory. Long-distance navigation (${Math.round(estimatedDistance)} blocks) at low hunger drains hunger to 0 during travel, then starvation damage begins. HP cannot regenerate. Use mc_combat(cow/pig/chicken) for food or navigate to a nearby chest (<30 blocks). Position: (${Math.round(navPos.x)}, ${Math.round(navPos.y)}, ${Math.round(navPos.z)}).`;
+        nightWarning += `\n[WARNING] hunger=${hunger}, HP=${hp}, no food. Long-distance nav (${Math.round(estimatedDistance)} blocks) risks starvation mid-travel.\n[推奨アクション]\n1. bot.combat("cow") or bot.combat("pig") — 近くの動物を狩って食料確保\n2. bot.eat() — 食料があればHP回復\n3. bot.navigate({target_block:"chest"}) — 近くのチェストから食料取得（<30ブロック）\n4. bot.farm() — 農場で食料収穫`;
       }
       // Short-distance: only block when HP is already low (<=14), allowing emergency
       // food/chest access at higher HP.
@@ -1693,7 +1690,7 @@ export async function mc_navigate(
         // Now actually blocks: return early when HP is below threshold at night with hostiles.
         const nightHpBlock = hasFood ? 10 : 14;
         if (hp <= nightHpBlock && closestDist <= 16) {
-          return `[BLOCKED] Navigation refused: HP=${hp} at night with ${nearbyHostiles.length} hostile(s) nearby (${threatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}Use mc_flee to escape, build a shelter (bot.place dirt around you), or wait for dawn. Position: (${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.y)}, ${Math.round(bot.entity.position.z)}).`;
+          nightWarning += `\n[WARNING] HP=${hp} at night with ${nearbyHostiles.length} hostile(s) nearby (${threatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}\n[推奨アクション]\n1. bot.flee(20) — 敵から逃走\n2. bot.place("dirt", x, y, z) — 周囲にブロックを置いてシェルター建設\n3. bot.eat() — 食料があればHP回復${!hasFood ? "\n4. bot.combat(\"cow\") — 食料動物を狩って食料確保" : ""}\n5. bot.wait(30000) — 夜明けまで安全な場所で待機`;
         }
         nightWarning = `\n[NIGHT WARNING] HP=${hp}, ${nearbyHostiles.length} hostile(s) nearby: ${threatList}. Consider mc_flee or shelter before long navigation.`;
       }
@@ -1748,7 +1745,7 @@ export async function mc_navigate(
             // pass the scan but not the block check.
             const dayBlockDist = hasFood ? 10 : 24;
             if (closestDayDist <= dayBlockDist) {
-              return `[BLOCKED] Navigation refused: HP=${hp} with ${dayHostiles.length} hostile(s) nearby (${dayThreatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}Use mc_flee or mc_combat to handle threats first. Position: (${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.y)}, ${Math.round(bot.entity.position.z)}).`;
+              nightWarning += `\n[WARNING] HP=${hp} with ${dayHostiles.length} hostile(s) nearby (${dayThreatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}\n[推奨アクション]\n1. bot.flee(20) — 敵から逃走\n2. bot.combat() — 最も近い敵を倒す（引数なし=最近接敵）\n3. bot.eat() — 食料があればHP回復${!hasFood ? "\n4. bot.combat(\"cow\") — 食料動物を狩って食料確保" : ""}`;
             }
             nightWarning += `\n[DANGER WARNING] HP=${hp}, ${dayHostiles.length} hostile(s) within 16 blocks: ${dayThreatList}. Use mc_flee or mc_combat before navigating.`;
           }
@@ -2149,7 +2146,8 @@ export async function mc_combat(
     // HP < 5 is used instead of < 8 to avoid creating a deadlock where the bot can't hunt
     // food animals at moderate HP. At HP 5-7, the bot can survive 1-2 hits and flee.
     if (combatHp < 5) {
-      return `[REFUSED] Combat refused: HP critically low (${combatHp.toFixed(1)}/20). One mob hit (3-5 damage) is lethal at this HP. Use mc_flee to escape, eat food to heal, or build a shelter. If no food available and no escape, use bot.wait() for passive HP regeneration (requires hunger >= 18).`;
+      const combatHasFood = combatBot.inventory.items().some((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
+      return `[WARNING] HP critically low (${combatHp.toFixed(1)}/20). One mob hit (3-5 damage) is lethal.\n[推奨アクション]\n1. bot.flee(20) — 敵から逃走（最優先）\n2. bot.eat() — 食料があればHP回復${!combatHasFood ? "\n3. bot.combat(\"cow\") — 食料動物を狩って食料確保（HP5以上推奨）" : ""}\n4. bot.place(\"dirt\", x, y, z) — シェルター建設\n5. bot.wait(30000) — hunger>=18なら自然回復を待つ`;
     }
     if (combatHp < 8) {
       console.error(`[Combat] WARNING: HP low (${combatHp.toFixed(1)}/20). Proceeding with caution.`);
@@ -2320,7 +2318,7 @@ export async function mc_combat(
           if (closestHostileDist <= blockDist) {
             const timeNote = combatIsNight ? "at night" : "";
             const armorNote = combatArmorCount <= 1 ? " NO ARMOR —" : "";
-            return `[BLOCKED] Cannot hunt ${target}: ${nearbyHostiles.length} hostile(s) nearby (${threatList}).${armorNote} ${timeNote} Hostile within ${closestHostileDist}m — approaching passive mob exposes you to attack during the 10-30s approach. Use mc_flee or mc_combat() (no target = attack nearest hostile) to clear threats first.`;
+            hostileWarning = `\n[WARNING] Cannot safely hunt ${target}: ${nearbyHostiles.length} hostile(s) nearby (${threatList}).${armorNote} ${timeNote} Hostile within ${closestHostileDist}m.\n[推奨アクション]\n1. bot.combat() — 最も近い敵を先に倒す（引数なし=最近接敵）\n2. bot.flee(20) — 敵から離れてから狩りを再開\n3. bot.equipArmor() — 防具を装備してから狩り`;
           }
           hostileWarning = `\n[WARNING] ${nearbyHostiles.length} hostile(s) nearby while hunting ${target}: ${threatList}. Be cautious.`;
         }
