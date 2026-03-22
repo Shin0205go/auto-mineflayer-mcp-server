@@ -420,6 +420,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
     const RANGED_APPROACH_MOBS = ["skeleton", "stray", "pillager", "drowned", "witch"];
     const isRangedMob = RANGED_APPROACH_MOBS.includes((target.name || "").toLowerCase());
     const approachStartHp = bot.health ?? 20;
+    const approachStartY = bot.entity.position.y;
 
     console.error(`[Attack] Target ${target.name} is ${distance.toFixed(1)} blocks away, moving closer...${isRangedMob ? " (ranged mob — sprint approach)" : ""}`);
     applySafePathfinderSettings(bot);
@@ -462,6 +463,24 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         if (approachHp < approachStartHp - 6 || approachHp < 8) {
           console.error(`[Attack] HP dropped during approach (${approachStartHp.toFixed(1)} → ${approachHp.toFixed(1)}). Aborting.`);
           approachAbortReason = `HP dropped from ${approachStartHp.toFixed(1)} to ${approachHp.toFixed(1)} during approach`;
+          clearInterval(check);
+          clearTimeout(timeout);
+          bot.pathfinder.setGoal(null);
+          resolve();
+          return;
+        }
+
+        // SAFETY: Y-descent detection during attack approach — abort if falling into cave.
+        // attack() uses applySafePathfinderSettings (maxDropDown=2, canDig=false) but
+        // didn't monitor Y-descent like moveToBasic and fight() do. Bot can still fall
+        // into caves via terrain holes that maxDropDown=2 allows incrementally.
+        // Bot1/Bot2 [2026-03-22]: fell underground during attack approach, trapped in cave.
+        // Bot2: descended to Y=53 during combat, completely stuck.
+        // Threshold: 4 blocks — allows natural 1-3 block terrain drops but catches cave entries.
+        const attackApproachYDescent = approachStartY - bot.entity.position.y;
+        if (attackApproachYDescent > 4) {
+          console.error(`[Attack] CAVE DESCENT during approach: dropped ${attackApproachYDescent.toFixed(1)} blocks (Y=${approachStartY.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Aborting.`);
+          approachAbortReason = `Cave descent detected: dropped ${attackApproachYDescent.toFixed(0)} blocks during approach`;
           clearInterval(check);
           clearTimeout(timeout);
           bot.pathfinder.setGoal(null);

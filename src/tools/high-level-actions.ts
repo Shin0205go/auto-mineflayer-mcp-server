@@ -198,27 +198,44 @@ export async function minecraft_gather_resources(
           break;
         }
 
-        // Parse position from findResult (format: "Found blockname at (x, y, z)")
-        const posMatch = findResult.match(/\((-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\)/);
-        if (!posMatch) {
+        // Parse ALL positions from findResult (format: "blockname at (x, y, z) - N blocks")
+        // findBlock returns up to 10 nearest blocks. Parse all and pick the first one
+        // not in failedPositions. Previously only the first match was parsed, so if it was
+        // in failedPositions, the code would call findBlock again on the next iteration and
+        // get the same first result — looping until the 120s outer timeout.
+        // Bot1 bug: coal_ore/birch_log "nearby" but path to nearest blocked; other instances
+        // at different positions were available but never tried because only first was parsed.
+        const allPosMatches = [...findResult.matchAll(/\((-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\)/g)];
+        if (allPosMatches.length === 0) {
           console.error(`[GatherResources] Could not parse position from: ${findResult}`);
           break;
         }
 
-        const x = parseFloat(posMatch[1]);
-        const y = parseFloat(posMatch[2]);
-        const z = parseFloat(posMatch[3]);
-
-        // Skip blocks we've already failed to reach — prevents retrying the same
-        // unreachable block until the 120s outer timeout fires.
-        // Bot1 bug: coal_ore/birch_log "nearby" but path blocked, retried same block for 120s.
-        const pk = posKey(x, y, z);
-        if (failedPositions.has(pk)) {
+        // Find the first position not already marked as unreachable
+        let x = 0, y = 0, z = 0;
+        let foundReachable = false;
+        for (const posMatch of allPosMatches) {
+          const px = parseFloat(posMatch[1]);
+          const py = parseFloat(posMatch[2]);
+          const pz = parseFloat(posMatch[3]);
+          const pk = posKey(px, py, pz);
+          if (!failedPositions.has(pk)) {
+            x = px;
+            y = py;
+            z = pz;
+            foundReachable = true;
+            break;
+          }
           console.error(`[GatherResources] Skipping already-failed position (${pk})`);
-          consecutiveFailures++;
-          continue;
+        }
+        if (!foundReachable) {
+          // All returned positions have been tried and failed
+          console.error(`[GatherResources] All ${allPosMatches.length} found positions for ${blockNameToMine} already failed — all nearby blocks unreachable.`);
+          results.push(`${item.name}: ${collected}/${targetCount} (all ${allPosMatches.length} nearby blocks unreachable — try moving to a different area)`);
+          break;
         }
 
+        const pk = posKey(x, y, z);
         console.error(`[GatherResources] Found ${blockNameToMine} at (${x}, ${y}, ${z})`);
 
         // Safety check: Skip only if target is far above bot (floating island / sky structure)
