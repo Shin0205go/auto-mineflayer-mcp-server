@@ -294,6 +294,20 @@ export async function mc_gather(
       const logs: string[] = [];
       for (const pos of matureWheat) {
         if (gathered >= count) break;
+        // Safety: HP/hostile check between wheat harvest iterations.
+        // The main mc_gather path has a 1s HP monitor, but this wheat harvest sub-path
+        // had no safety checks — moveTo + dig + collectItems runs unmonitored.
+        // Bot1/Bot2: mobs attacked during long gather operations with no abort.
+        const wheatHp = bot.health ?? 20;
+        if (wheatHp < 8) {
+          logs.push(`[ABORTED] HP critically low during wheat harvest (${wheatHp.toFixed(1)}/20). Stopping.`);
+          break;
+        }
+        const wheatDanger = checkDangerNearby(bot, 16);
+        if (wheatDanger.dangerous && wheatDanger.nearestHostile && wheatDanger.nearestHostile.distance <= 12) {
+          logs.push(`[ABORTED] Hostile ${wheatDanger.nearestHostile.name} detected ${wheatDanger.nearestHostile.distance.toFixed(1)} blocks away during wheat harvest. Stopping.`);
+          break;
+        }
         try {
           await botManager.moveTo(username, pos.x, pos.y, pos.z);
           const wb = bot.blockAt(pos);
@@ -1344,6 +1358,7 @@ export async function mc_navigate(
     if (!bot) throw new Error("Not connected");
 
     const entities = Object.values(bot.entities);
+    let bestScore = Infinity;
     let closestDist = Infinity;
     let closestPos: { x: number; y: number; z: number } | null = null;
 
@@ -1353,6 +1368,7 @@ export async function mc_navigate(
     // Bot1 death: fight("pig") matched zombified_piglin. Same risk exists in navigation.
     const targetLower = args.target_entity.toLowerCase();
     const targetIsHostile = isHostileMob(bot, targetLower);
+    const botY = bot.entity.position.y;
 
     for (const entity of entities) {
       if (!entity || !entity.position) continue;
@@ -1370,7 +1386,16 @@ export async function mc_navigate(
       }
 
       const dist = entity.position.distanceTo(bot.entity.position);
-      if (dist < closestDist) {
+      // Surface preference scoring: penalize entities underground relative to bot.
+      // Bot1 Sessions 31-34,44, Bot2, Bot3 #3: mc_navigate to passive mobs (cow, pig)
+      // picked the closest entity by distance, which was often underground in a cave.
+      // Navigating to underground entities causes cave routing and repeated deaths.
+      // Penalty: +3 distance per block below bot's Y level (beyond 5-block tolerance).
+      // Surface/above entities get no penalty. Same approach as findBlock surface preference.
+      const depthBelowBot = Math.max(botY - entity.position.y - 5, 0);
+      const score = dist + depthBelowBot * 3;
+      if (score < bestScore) {
+        bestScore = score;
         closestDist = dist;
         closestPos = { x: entity.position.x, y: entity.position.y, z: entity.position.z };
       }

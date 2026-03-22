@@ -652,11 +652,18 @@ export async function fight(
         return false;
       });
       if (candidates.length === 0) return null;
-      // Return closest match
-      return candidates.sort((a, b) =>
-        a.position.distanceTo(bot.entity.position) -
-        b.position.distanceTo(bot.entity.position)
-      )[0];
+      // Return best match with surface preference: penalize underground entities.
+      // Bot1 Sessions 31-34,44, Bot3 #3: mc_combat(target="cow") picked underground
+      // entity as closest, bot navigated into cave, got trapped and died.
+      // Penalty: +3 per block below bot Y (beyond 5-block tolerance).
+      const combatBotY = bot.entity.position.y;
+      return candidates.sort((a, b) => {
+        const aDist = a.position.distanceTo(bot.entity.position);
+        const bDist = b.position.distanceTo(bot.entity.position);
+        const aDepth = Math.max(combatBotY - a.position.y - 5, 0);
+        const bDepth = Math.max(combatBotY - b.position.y - 5, 0);
+        return (aDist + aDepth * 3) - (bDist + bDepth * 3);
+      })[0];
     }
     return entities
       .filter(e => isHostileMob(bot, e.name?.toLowerCase() || ""))
