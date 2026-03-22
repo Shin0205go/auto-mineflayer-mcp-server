@@ -29,8 +29,6 @@ export const TIER1_CORE_TOOLS = new Set([
   "mc_chat",
   // Hot-reload after code changes
   "mc_reload",
-  // Tool search for discovering legacy tools if needed
-  "search_tools",
 ]);
 
 /**
