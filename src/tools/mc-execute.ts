@@ -174,8 +174,8 @@ export async function mc_execute(
             // Abort wait if bot is in water (drowning risk)
             const feetBlock = waitBot.blockAt(waitBot.entity.position);
             const headBlock = waitBot.blockAt(waitBot.entity.position.offset(0, 1, 0));
-            const inWater = (feetBlock && feetBlock.name === "water") ||
-                            (headBlock && headBlock.name === "water");
+            const isWater = (n: string | undefined) => n === "water" || n === "flowing_water";
+            const inWater = isWater(feetBlock?.name) || isWater(headBlock?.name);
             if (inWater && hp < 10) {
               clearTimeout(timer);
               clearInterval(safetyInterval);

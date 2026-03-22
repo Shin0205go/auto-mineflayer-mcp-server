@@ -2541,7 +2541,7 @@ export class BotManager extends EventEmitter {
 
       for (const blockPos of blocksToDig) {
         const block = bot.blockAt(new Vec3(blockPos.x, blockPos.y, blockPos.z));
-        if (!block || block.name === "air" || block.name === "water" || block.name === "lava") {
+        if (!block || block.name === "air" || block.name === "water" || block.name === "flowing_water" || block.name === "lava" || block.name === "flowing_lava") {
           continue;
         }
 

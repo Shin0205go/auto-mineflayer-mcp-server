@@ -3,7 +3,7 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 const { GoalBlock } = goals;
 import type { ManagedBot } from "./types.js";
-import { isHostileMob, isFoodItem, checkGroundBelow, isNearCliffEdge, KNOCKBACK_MOBS, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
+import { isHostileMob, isFoodItem, checkGroundBelow, isNearCliffEdge, KNOCKBACK_MOBS, EDIBLE_FOOD_NAMES, isWaterBlock, isLavaBlock } from "./minecraft-utils.js";
 import { equipArmor } from "./bot-items.js";
 import { safeSetGoal } from "./pathfinder-safety.js";
 
@@ -990,7 +990,7 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
           for (let dz = -1; dz <= 1; dz++) {
             const checkPos = targetPos.offset(dx, dy, dz);
             const block = bot.blockAt(checkPos);
-            if (block && block.name === "water") {
+            if (block && isWaterBlock(block.name)) {
               return true;
             }
           }
@@ -1384,7 +1384,7 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     for (const pos of candidates) {
       const b = bot.blockAt(pos);
       console.error(`[Pillar]   candidate (${pos.x},${pos.y},${pos.z}): ${b?.name ?? "null"} bb=${(b as any)?.boundingBox ?? "?"}`);
-      if (b && b.name !== "air" && b.name !== "cave_air" && b.name !== "water" && b.name !== "void_air") {
+      if (b && b.name !== "air" && b.name !== "cave_air" && !isWaterBlock(b.name) && b.name !== "void_air") {
         blockBelow = b;
         break;
       }
@@ -1424,7 +1424,7 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
         blockBelow = null;
         for (const pos of retryCandidates) {
           const b = bot.blockAt(pos);
-          if (b && b.name !== "air" && b.name !== "cave_air" && b.name !== "water" && b.name !== "void_air") {
+          if (b && b.name !== "air" && b.name !== "cave_air" && !isWaterBlock(b.name) && b.name !== "void_air") {
             blockBelow = b;
             break;
           }
@@ -1710,7 +1710,8 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
             const block = bot.blockAt(new Vec3(checkX, by - dy, checkZ));
             if (!block) continue;
             // Lava is NOT safe ground — Bot3 #8: fell into lava while fleeing.
-            if (block.name === "lava") {
+            // Check both source and flowing lava.
+            if (isLavaBlock(block.name)) {
               hasSafeGround = false;
               break;
             }
@@ -2298,7 +2299,7 @@ async function digStaircaseUp(managed: ManagedBot, height: number = 10): Promise
     // Dig the blocks
     for (const bp of blocksToDig) {
       const block = bot.blockAt(new Vec3(bp.x, bp.y, bp.z));
-      if (!block || block.name === "air" || block.name === "water" || block.hardness < 0) continue;
+      if (!block || block.name === "air" || isWaterBlock(block.name) || block.hardness < 0) continue;
       if (block.name.includes("_ore")) {
         oresFound[block.name] = (oresFound[block.name] || 0) + 1;
       }
@@ -2559,7 +2560,7 @@ export async function digTunnel(
 
     for (const blockPos of blocksToDig) {
       const block = bot.blockAt(new Vec3(blockPos.x, blockPos.y, blockPos.z));
-      if (!block || block.name === "air" || block.name === "water" || block.name === "lava") {
+      if (!block || block.name === "air" || isWaterBlock(block.name) || isLavaBlock(block.name)) {
         continue;
       }
 

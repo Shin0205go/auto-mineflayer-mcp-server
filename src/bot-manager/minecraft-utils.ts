@@ -1,6 +1,24 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
 
+// ========== Block Type Helpers ==========
+
+/** Check if a block name is any form of water (source or flowing).
+ * Used for drowning detection, pathfinder safety, and status reporting.
+ * Many places previously only checked "water" and missed "flowing_water",
+ * causing missed drowning warnings and failed safety aborts.
+ * Bot1 Sessions 31-44: drowned in flowing_water undetected.
+ * Bot2: tried to swim in water — flowing_water not detected by safety checks.
+ */
+export function isWaterBlock(name: string | undefined | null): boolean {
+  return name === "water" || name === "flowing_water";
+}
+
+/** Check if a block name is any form of lava (source or flowing). */
+export function isLavaBlock(name: string | undefined | null): boolean {
+  return name === "lava" || name === "flowing_lava";
+}
+
 // ========== Dynamic Entity/Block Helpers ==========
 // These use bot.registry for version-correct data instead of hardcoded lists
 

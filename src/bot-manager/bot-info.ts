@@ -1,7 +1,7 @@
 import type { Bot } from "mineflayer";
 import { Vec3 } from "vec3";
 import type { ManagedBot, ChatMessage, GameEvent } from "./types.js";
-import { isHostileMob, isNeutralMob, isPassiveMob, isFoodItem, isScaffoldBlock } from "./minecraft-utils.js";
+import { isHostileMob, isNeutralMob, isPassiveMob, isFoodItem, isScaffoldBlock, isWaterBlock } from "./minecraft-utils.js";
 
 /**
  * Get chat messages from a managed bot
@@ -140,7 +140,7 @@ export function getSurroundings(bot: Bot): string {
   // oxygenLevel can be stale/unreliable when not underwater
   const blockAtFeet = bot.blockAt(bot.entity.position);
   const blockAtHead = bot.blockAt(bot.entity.position.offset(0, 1, 0));
-  const isInWater = blockAtFeet?.name === "water" || blockAtHead?.name === "water";
+  const isInWater = isWaterBlock(blockAtFeet?.name) || isWaterBlock(blockAtHead?.name);
   if (oxygen < 10 && isInWater) {
     warnings.push(`🚨 酸素不足: ${oxygen}/20 - 水上へ脱出！`);
   }
