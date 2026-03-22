@@ -3,7 +3,7 @@ import { Vec3 } from "vec3";
 import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 import type { ManagedBot } from "./types.js";
-import { isHostileMob, isFoodItem, isBedBlock } from "./minecraft-utils.js";
+import { isHostileMob, isFoodItem, isBedBlock, isNearCliffEdge } from "./minecraft-utils.js";
 import { collectNearbyItems, equipArmor } from "./bot-items.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
@@ -687,6 +687,16 @@ export async function fight(
   let lastKnownFightPos = target.position.clone();
 
   console.error(`[BotManager] Starting fight with ${targetName}`);
+
+  // SAFETY: Cliff-edge check before combat — knockback from melee or ranged mobs can
+  // push bot off cliff edges, causing fatal fall damage regardless of HP.
+  // Bot1 Session 21b: "doomed to fall by Skeleton" during combat on elevated terrain.
+  // Bot2 [2026-03-22]: "doomed to fall by Pillager/Skeleton" — knockback fall deaths.
+  const cliffCheck = isNearCliffEdge(bot);
+  if (cliffCheck.nearEdge && cliffCheck.maxFallDistance > 4) {
+    console.error(`[Fight] CLIFF EDGE DETECTED: ${cliffCheck.maxFallDistance}-block drop (${cliffCheck.edgeDirections.join(",")}). Combat knockback is lethal. Refusing to fight.`);
+    return `[REFUSED] Too dangerous to fight ${targetName} — you are near a cliff edge with a ${cliffCheck.maxFallDistance}-block drop (directions: ${cliffCheck.edgeDirections.join(", ")}). Combat knockback can push you off the edge, causing fatal fall damage. Move away from the cliff first (mc_navigate to safer terrain), then engage.`;
+  }
 
   // Enderman strategy: approach to ~12 blocks if far, then stare to provoke
   let fightDistance = target.position.distanceTo(bot.entity.position);

@@ -3,7 +3,7 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 const { GoalBlock } = goals;
 import type { ManagedBot } from "./types.js";
-import { isHostileMob, checkGroundBelow, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
+import { isHostileMob, checkGroundBelow, isNearCliffEdge, KNOCKBACK_MOBS, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
 import { equipArmor } from "./bot-items.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
@@ -111,6 +111,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
   return new Promise((resolve) => {
     let resolved = false;
     let noProgressCount = 0;
+    let monitorTickCount = 0; // Increments each 500ms check interval
     let maxHeightReached = start.y;
     let underwaterTicks = 0; // Track consecutive checks with head underwater
     // Declare checkInterval first to avoid TDZ issues when event handlers fire early
@@ -211,6 +212,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
 
       const currentPos = bot.entity.position;
       const currentDist = currentPos.distanceTo(targetPos);
+      monitorTickCount++;
 
       // SAFETY: Detect falling — if Y dropped >3 blocks since last check, stop immediately
       const yDrop = lastPos.y - currentPos.y;
@@ -432,6 +434,39 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
               success: false,
               message: `Navigation aborted: HP=${Math.round(navHp*10)/10} ${timeNote} with ${nearHostiles.length} hostile(s) nearby (${threatList}).${armorNote} Current position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee, build shelter, or wait for dawn.`,
               stuckReason: navIsNight ? "night_danger" : "daytime_danger"
+            });
+            return;
+          }
+        }
+      }
+
+      // Check C: Cliff-edge + knockback mob detection — abort at ANY HP.
+      // Bot1 Session 21b: "doomed to fall by Skeleton" — skeleton knockback on cliff edge.
+      // Bot2 [2026-03-22]: "doomed to fall by Pillager/Skeleton" — knockback fall deaths on
+      // elevated terrain. These deaths happen regardless of HP because the knockback itself
+      // pushes the bot off the edge, and fall damage is the killer.
+      // Only check every ~2.5s (5 ticks) to avoid performance impact from block scanning.
+      if (monitorTickCount % 5 === 0) {
+        const cliffCheck = isNearCliffEdge(bot, currentPos);
+        if (cliffCheck.nearEdge && cliffCheck.maxFallDistance > 4) {
+          // Check for knockback-capable mobs within 16 blocks (skeleton range ~15 blocks)
+          const knockbackThreats: Array<{ name: string; dist: number }> = [];
+          for (const entity of Object.values(bot.entities)) {
+            if (!entity || !entity.position || entity === bot.entity) continue;
+            const eDist = entity.position.distanceTo(currentPos);
+            if (eDist > 16) continue;
+            const eName = entity.name?.toLowerCase() ?? "";
+            if (KNOCKBACK_MOBS.includes(eName) || (isHostileMob(bot, eName) && eDist < 6)) {
+              knockbackThreats.push({ name: eName, dist: Math.round(eDist * 10) / 10 });
+            }
+          }
+          if (knockbackThreats.length > 0) {
+            const kbThreatList = knockbackThreats.sort((a, b) => a.dist - b.dist).slice(0, 3).map(h => `${h.name}(${h.dist}m)`).join(", ");
+            console.error(`[MoveTo] CLIFF-EDGE KNOCKBACK DANGER: Near ${cliffCheck.maxFallDistance}-block drop (${cliffCheck.edgeDirections.join(",")}), ${knockbackThreats.length} knockback mob(s): ${kbThreatList}. Aborting.`);
+            finish({
+              success: false,
+              message: `Navigation aborted: CLIFF EDGE with ${cliffCheck.maxFallDistance}-block drop (${cliffCheck.edgeDirections.join(",")}) + knockback mob(s) nearby (${kbThreatList}). Knockback can push you off the edge — fatal fall. Move away from cliff edge first, or use mc_flee.`,
+              stuckReason: "cliff_knockback_danger"
             });
             return;
           }
@@ -1497,6 +1532,45 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       direction = vec.normalize();
       fleeFromName = "danger";
       console.error(`[Flee] No hostile found, fleeing in random direction`);
+    }
+
+    // SAFETY: Validate flee direction doesn't lead to a cliff edge.
+    // Bot1 Session 21b, Bot2 [2026-03-22]: fled toward cliff edge, knockback/momentum
+    // pushed bot off, causing fatal fall. Check if 3 blocks in flee direction has ground.
+    // If not, rotate 90° increments until a safe direction is found.
+    {
+      const botPos = bot.entity.position;
+      const bx = Math.floor(botPos.x);
+      const by = Math.floor(botPos.y);
+      const bz = Math.floor(botPos.z);
+      let bestDirection = direction;
+      let foundSafe = false;
+      for (let rotation = 0; rotation < 4; rotation++) {
+        const angle = Math.atan2(direction.z, direction.x) + (Math.PI / 2) * rotation;
+        const checkX = bx + Math.round(Math.cos(angle) * 3);
+        const checkZ = bz + Math.round(Math.sin(angle) * 3);
+        // Check if there's ground within 3 blocks below the flee direction
+        let hasSafeGround = false;
+        for (let dy = 0; dy <= 3; dy++) {
+          const block = bot.blockAt(new Vec3(checkX, by - dy, checkZ));
+          if (block && block.name !== "air" && block.name !== "cave_air" && block.name !== "void_air") {
+            hasSafeGround = true;
+            break;
+          }
+        }
+        if (hasSafeGround) {
+          if (rotation > 0) {
+            bestDirection = new (botPos as any).constructor(Math.cos(angle), 0, Math.sin(angle));
+            console.error(`[Flee] Original direction leads to cliff — rotated ${rotation * 90}° to safe direction.`);
+          }
+          foundSafe = true;
+          break;
+        }
+      }
+      if (!foundSafe) {
+        console.error(`[Flee] WARNING: All flee directions have cliff drops. Using original direction with maxDropDown=1 safety.`);
+      }
+      direction = bestDirection;
     }
 
     // Flee target at same Y level as bot — never target underground positions

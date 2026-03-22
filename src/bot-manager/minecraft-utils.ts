@@ -217,6 +217,59 @@ export function checkGroundBelow(bot: Bot, x: number, y: number, z: number, maxF
   return { safe: false, fallDistance: maxFallCheck };
 }
 
+/** Check if bot is near a cliff edge where knockback could cause a fatal fall.
+ * Scans cardinal+diagonal directions for gaps (air below) within 2 blocks horizontally.
+ * Returns true if any adjacent direction has a lethal drop (>3 blocks).
+ * Bot1 Session 21b: "doomed to fall by Skeleton" — skeleton knockback on elevated terrain.
+ * Bot2: "doomed to fall by Pillager", "doomed to fall by Skeleton" — knockback fall deaths.
+ * Bot3 Death #4: fell from high place after pathfinder routed to elevated terrain.
+ */
+export function isNearCliffEdge(bot: Bot, pos?: Vec3): { nearEdge: boolean; maxFallDistance: number; edgeDirections: string[] } {
+  const p = pos || bot.entity.position;
+  const bx = Math.floor(p.x);
+  const by = Math.floor(p.y);
+  const bz = Math.floor(p.z);
+  const directions: [string, number, number][] = [
+    ["N", 0, -1], ["S", 0, 1], ["E", 1, 0], ["W", -1, 0],
+    ["NE", 1, -1], ["NW", -1, -1], ["SE", 1, 1], ["SW", -1, 1],
+  ];
+  let maxFallDistance = 0;
+  const edgeDirections: string[] = [];
+
+  for (const [dir, dx, dz] of directions) {
+    // Check 1 and 2 blocks out in each direction
+    for (const range of [1, 2]) {
+      const checkX = bx + dx * range;
+      const checkZ = bz + dz * range;
+      // Check if there's a lethal drop at feet level
+      const feetBlock = bot.blockAt(new Vec3(checkX, by, checkZ));
+      const isFeetAir = !feetBlock || feetBlock.name === "air" || feetBlock.name === "cave_air" || feetBlock.name === "void_air";
+      if (isFeetAir) {
+        // Count how far the drop is
+        let fallDist = 0;
+        for (let dy = 1; dy <= 10; dy++) {
+          const below = bot.blockAt(new Vec3(checkX, by - dy, checkZ));
+          if (below && below.name !== "air" && below.name !== "cave_air" && below.name !== "void_air") {
+            break;
+          }
+          fallDist = dy;
+        }
+        if (fallDist > 3) { // >3 blocks = fall damage
+          maxFallDistance = Math.max(maxFallDistance, fallDist);
+          if (!edgeDirections.includes(dir)) {
+            edgeDirections.push(dir);
+          }
+        }
+      }
+    }
+  }
+
+  return { nearEdge: edgeDirections.length > 0, maxFallDistance, edgeDirections };
+}
+
+/** Mobs that deal knockback via ranged or melee attacks that can push bot off cliffs */
+export const KNOCKBACK_MOBS = ["skeleton", "stray", "pillager", "drowned", "blaze", "ghast", "shulker"];
+
 /** Check if block is solid and can be used as scaffold */
 export function isScaffoldBlock(bot: Bot, blockName: string): boolean {
   const blockInfo = bot.registry.blocksByName[blockName];
