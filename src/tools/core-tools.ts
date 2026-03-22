@@ -1634,6 +1634,28 @@ export async function mc_navigate(
         console.error(`[Navigate] Pre-nav auto-sleep skipped: ${sleepErr instanceof Error ? sleepErr.message : String(sleepErr)}`);
       }
     }
+
+    // Phantom insomnia auto-sleep: Phantoms spawn after 72000 ticks without sleeping and
+    // attack even during DAYTIME. mc_navigate can take 30-60s during which Phantoms
+    // dive-attack from above, and the bot can't dodge during pathfinder movement.
+    // mc_gather, mc_farm, and mc_combat all have this check, but mc_navigate did not.
+    // Bot1 [2026-03-22]: killed by Phantom during daytime navigation/farming after 3+ nights
+    // without sleep. The night auto-sleep above only fires at night; this fires at ANY time
+    // when insomnia is critical.
+    if (!isSleepableNight) {
+      const navWorldAge = bot.time?.age ?? 0;
+      const navLastSleep = lastSleepTick.get(username) ?? 0;
+      const navTicksSinceLastSleep = navWorldAge - navLastSleep;
+      if (navTicksSinceLastSleep > 60000 && navWorldAge > 0) {
+        console.error(`[Navigate] Phantom insomnia high (${navTicksSinceLastSleep} ticks). Attempting pre-nav sleep to reset timer.`);
+        try {
+          const sleepResult = await botManager.sleep(username);
+          console.error(`[Navigate] Phantom insomnia auto-sleep succeeded: ${sleepResult}`);
+        } catch (sleepErr) {
+          console.error(`[Navigate] Phantom insomnia auto-sleep skipped: ${sleepErr instanceof Error ? sleepErr.message : String(sleepErr)}`);
+        }
+      }
+    }
   }
 
   // Pre-navigation proactive eat: consume food before starting ANY navigation if HP < 18

@@ -7,6 +7,7 @@ import type { BotConfig, ManagedBot, GameEvent } from "./types.js";
 import { isHostileMob, isPassiveMob, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
 import { equipArmor } from "./bot-items.js";
 import { safeSetGoal } from "./pathfinder-safety.js";
+import { lastSleepTick } from "./bot-survival.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -318,6 +319,19 @@ export class BotCore extends EventEmitter {
         bot.chat("/gamerule doEntityDrops true");
         bot.chat("/gamerule doMobSpawning true");
         bot.chat("/gamerule keepInventory true");
+
+        // Initialize lastSleepTick to current world age on connect.
+        // Without this, lastSleepTick defaults to 0, making ticksSinceLastSleep = worldAge
+        // (always huge), which falsely triggers Phantom insomnia warnings on every fresh
+        // connection. By assuming the bot "just slept" on connect, we avoid the false alarm
+        // and start tracking from connection time. If the bot truly hasn't slept, phantoms
+        // will spawn after 72000 ticks from this point — giving the agent time to craft a bed.
+        // Bot1/Bot2/Bot3 [2026-03-22]: repeated false phantom insomnia warnings on session start.
+        const connectWorldAge = bot.time?.age ?? 0;
+        if (connectWorldAge > 0) {
+          lastSleepTick.set(config.username, connectWorldAge);
+          console.error(`[BotManager] Initialized lastSleepTick for ${config.username} to world age ${connectWorldAge}`);
+        }
 
         const managedBot: ManagedBot = {
           bot,
