@@ -1665,35 +1665,54 @@ export async function mc_navigate(
         // Raise threshold to HP<=14 when bot has no food — HP can't regenerate so any
         // damage from mobs during navigation is permanent and cumulative.
         // Bot1 Session 28: HP=14, hunger=1, died during night navigation.
+        // BUG FIX: Previously this only set nightWarning string but NEVER returned early,
+        // despite the comment saying "BLOCK". The bot continued navigating and got killed.
+        // Bot1 Sessions 20-42: 15+ deaths from night navigation with low HP + nearby mobs.
+        // Bot2 [2026-03-23]: killed by zombie during night navigation.
+        // Now actually blocks: return early when HP is below threshold at night with hostiles.
+        const nightHpBlock = hasFood ? 10 : 14;
+        if (hp <= nightHpBlock && closestDist <= 16) {
+          return `[BLOCKED] Navigation refused: HP=${hp} at night with ${nearbyHostiles.length} hostile(s) nearby (${threatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}Use mc_flee to escape, build a shelter (bot.place dirt around you), or wait for dawn. Position: (${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.y)}, ${Math.round(bot.entity.position.z)}).`;
+        }
         nightWarning = `\n[NIGHT WARNING] HP=${hp}, ${nearbyHostiles.length} hostile(s) nearby: ${threatList}. Consider mc_flee or shelter before long navigation.`;
       }
     } else {
       // DAYTIME close-range hostile check: pillagers, cave zombies, and other hostiles
-      // can attack during daytime. Only block navigation when a hostile is VERY close
-      // (within 10 blocks) AND HP is low — daytime is generally safer but not risk-free.
+      // can attack during daytime. Block navigation when a hostile is close AND HP is low.
       // Bot1 [2026-03-22]: killed by zombie during daytime navigation at low HP.
+      // Bot2 [2026-03-23]: killed by zombie during daytime moveTo with hunger=4.
       // Bot2: pillager knockback caused fall during daytime movement.
-      // The night check uses 16-block radius; daytime uses tighter 10-block radius
-      // since most daytime hostiles are remnants from night or cave dwellers.
-      if (hp < 12) {
-        const dayHostiles: Array<{ name: string; dist: number }> = [];
-        for (const entity of Object.values(bot.entities)) {
-          if (!entity || !entity.position || entity === bot.entity) continue;
-          const dist = entity.position.distanceTo(bot.entity.position);
-          if (dist > 10) continue;
-          const name = entity.name?.toLowerCase() ?? "";
-          if (isHostileMob(bot, name)) {
-            dayHostiles.push({ name, dist: Math.round(dist * 10) / 10 });
+      // Scan radius expanded from 10 to 16 — skeletons/pillagers shoot from 16+ blocks.
+      // Bot2 [2026-03-23]: zombie at 22.8m closed in during navigate and killed bot.
+      // HP threshold raised from 12 to 14 without food — permanent damage accumulates.
+      {
+        const dayHpCheck = hasFood ? 12 : 14;
+        if (hp <= dayHpCheck) {
+          const dayHostiles: Array<{ name: string; dist: number }> = [];
+          for (const entity of Object.values(bot.entities)) {
+            if (!entity || !entity.position || entity === bot.entity) continue;
+            const dist = entity.position.distanceTo(bot.entity.position);
+            if (dist > 16) continue;
+            const name = entity.name?.toLowerCase() ?? "";
+            if (isHostileMob(bot, name)) {
+              dayHostiles.push({ name, dist: Math.round(dist * 10) / 10 });
+            }
           }
-        }
-        if (dayHostiles.length > 0) {
-          // Armor already equipped above (always-equip). Just warn about threats.
-          const dayThreatList = dayHostiles
-            .sort((a, b) => a.dist - b.dist)
-            .slice(0, 5)
-            .map(h => `${h.name}(${h.dist}m)`)
-            .join(", ");
-          nightWarning += `\n[DANGER WARNING] HP=${hp}, ${dayHostiles.length} hostile(s) within 10 blocks: ${dayThreatList}. Use mc_flee or mc_combat before navigating.`;
+          if (dayHostiles.length > 0) {
+            const dayThreatList = dayHostiles
+              .sort((a, b) => a.dist - b.dist)
+              .slice(0, 5)
+              .map(h => `${h.name}(${h.dist}m)`)
+              .join(", ");
+            // BUG FIX: Previously only set nightWarning string but didn't block.
+            // Bot2 [2026-03-23]: killed by zombie during daytime navigation at low HP.
+            // Now actually blocks when hostiles are within 10 blocks and HP is critical.
+            const closestDayDist = dayHostiles.sort((a, b) => a.dist - b.dist)[0].dist;
+            if (closestDayDist <= 10) {
+              return `[BLOCKED] Navigation refused: HP=${hp} with ${dayHostiles.length} hostile(s) nearby (${dayThreatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}Use mc_flee or mc_combat to handle threats first. Position: (${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.y)}, ${Math.round(bot.entity.position.z)}).`;
+            }
+            nightWarning += `\n[DANGER WARNING] HP=${hp}, ${dayHostiles.length} hostile(s) within 16 blocks: ${dayThreatList}. Use mc_flee or mc_combat before navigating.`;
+          }
         }
       }
     }
