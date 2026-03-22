@@ -153,7 +153,12 @@ export async function minecraft_gather_resources(
           const danger = checkDangerNearby(bot, 20);
           if (danger.dangerous) {
             console.error(`[GatherResources] Danger detected: ${danger.hostileCount} hostile(s), nearest: ${danger.nearestHostile?.name} at ${danger.nearestHostile?.distance.toFixed(1)}m, action: ${danger.recommendation}`);
-            if (danger.recommendation === "flee") {
+            // At low HP, always flee instead of fighting — a single mob hit at HP < 10
+            // during attack() can be fatal. attack() is a basic single-hit function with
+            // no flee mechanism, so the bot takes full damage during the attack animation.
+            // Bot2: skeleton shot bot from HP 8 to death during gather danger-clear attack.
+            const gatherDangerHp = bot.health ?? 20;
+            if (danger.recommendation === "flee" || gatherDangerHp < 10) {
               await botManager.flee(username, 20);
               consecutiveFailures++;
               continue;
@@ -965,7 +970,11 @@ export async function minecraft_survival_routine(
       console.error("[SurvivalRoutine] No food animals found (checked: cow, pig, chicken, sheep within 128 blocks), trying alternatives");
 
       // EMERGENCY FALLBACK 1: Hunt zombies for rotten_flesh (better than starving)
-      if (nearbyEntities.includes("zombie")) {
+      // HP gate: same as food animal combat above. At HP < 8, a zombie hit (3-4 dmg)
+      // during fight() setup (equip armor/weapon, find target) can kill the bot before
+      // the flee threshold triggers in the combat loop.
+      // Bot3 Deaths #9,#16: survival_routine attempted combat at HP 2.2-7.2, died.
+      if (nearbyEntities.includes("zombie") && currentHP >= 8) {
         console.error("[SurvivalRoutine] Found zombie - hunting for rotten_flesh (emergency food)");
         try {
           const fightResult = await botManager.fight(username, "zombie", 8); // flee at 8 HP — zombie hits deal 3-4 dmg
@@ -993,6 +1002,9 @@ export async function minecraft_survival_routine(
         } catch (err) {
           results.push(`Emergency zombie hunt failed: ${err}`);
         }
+      } else if (nearbyEntities.includes("zombie") && currentHP < 8) {
+        console.error(`[SurvivalRoutine] HP CRITICAL (${currentHP}/20) — skipping zombie combat to avoid death.`);
+        results.push(`HP critical (${currentHP}/20): Skipped zombie combat. Too dangerous at this HP.`);
       } else {
         // EMERGENCY FALLBACK 2: Try fishing
         console.error("[SurvivalRoutine] No zombies nearby, attempting fishing");
