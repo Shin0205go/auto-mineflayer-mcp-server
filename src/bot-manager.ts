@@ -1936,12 +1936,19 @@ export class BotManager extends EventEmitter {
     }
 
     const bot = managed.bot;
+    // Prioritized food list — must include ALL items from EDIBLE_FOOD_NAMES.
+    // Bug: missing golden_carrot, dried_kelp, mushroom_stew, rabbit_stew, beetroot_soup,
+    // suspicious_stew, glow_berries, chorus_fruit, rotten_flesh, potato.
+    // Bot1/Bot2/Bot3: "No food in inventory" despite having rotten_flesh/dried_kelp.
     const foods = [
+      "enchanted_golden_apple", "golden_carrot", "golden_apple",
       "cooked_beef", "cooked_porkchop", "cooked_mutton", "cooked_chicken",
-      "cooked_rabbit", "cooked_salmon", "cooked_cod", "bread", "apple",
-      "golden_apple", "enchanted_golden_apple", "carrot", "baked_potato",
-      "beetroot", "melon_slice", "sweet_berries", "cookie", "pumpkin_pie",
+      "cooked_rabbit", "cooked_salmon", "cooked_cod", "bread", "baked_potato",
+      "pumpkin_pie", "mushroom_stew", "rabbit_stew", "beetroot_soup",
+      "suspicious_stew", "apple", "melon_slice", "sweet_berries", "glow_berries",
+      "carrot", "potato", "beetroot", "dried_kelp", "cookie",
       "beef", "porkchop", "mutton", "chicken", "rabbit", "salmon", "cod",
+      "chorus_fruit", "rotten_flesh",
     ];
 
     // Find food in inventory

@@ -100,9 +100,10 @@ export function isLogBlock(blockName: string): boolean {
 export const EDIBLE_FOOD_NAMES = new Set([
   "bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton",
   "cooked_rabbit", "cooked_cod", "cooked_salmon", "baked_potato", "golden_apple",
-  "golden_carrot", "apple", "melon_slice", "sweet_berries", "carrot", "potato",
+  "enchanted_golden_apple", "golden_carrot", "apple", "melon_slice",
+  "sweet_berries", "glow_berries", "carrot", "potato",
   "beetroot", "dried_kelp", "cookie", "pumpkin_pie", "mushroom_stew",
-  "rabbit_stew", "beetroot_soup", "suspicious_stew",
+  "rabbit_stew", "beetroot_soup", "suspicious_stew", "chorus_fruit",
   // Raw meats — edible but less effective
   "beef", "porkchop", "chicken", "mutton", "rabbit", "cod", "salmon",
   // Emergency food — better than starving

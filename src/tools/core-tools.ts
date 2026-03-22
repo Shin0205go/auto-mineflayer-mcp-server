@@ -65,20 +65,20 @@ export async function mc_status(): Promise<string> {
   const foodItems: string[] = [];
   const materials: string[] = [];
   const toolSuffixes = ["_pickaxe", "_axe", "_sword", "_shovel", "_hoe", "fishing_rod", "shield", "bow", "crossbow", "shears", "flint_and_steel"];
-  const foodNames = new Set([
-    "bread", "cooked_beef", "cooked_porkchop", "cooked_chicken", "cooked_mutton",
-    "cooked_rabbit", "cooked_cod", "cooked_salmon", "baked_potato", "golden_apple",
-    "golden_carrot", "apple", "melon_slice", "sweet_berries", "carrot", "potato",
-    "beetroot", "cookie", "pumpkin_pie", "cake", "mushroom_stew", "rabbit_stew",
-    "beef", "porkchop", "chicken", "mutton", "rabbit", "cod", "salmon",
-    "rotten_flesh", "spider_eye", "poisonous_potato",
-  ]);
+  // Use centralized EDIBLE_FOOD_NAMES for food categorization — ensures consistency
+  // between "status shows food available" and "auto-eat can actually eat it".
+  // Bug: mc_status had a local foodNames set that included spider_eye/poisonous_potato
+  // (harmful) and was missing dried_kelp/beetroot_soup/suspicious_stew/enchanted_golden_apple
+  // (all edible). This caused agents to believe they had food when they didn't, or miss
+  // food items categorized as "materials" in the status output.
+  // Also include "cake" for display — it's a placeable food block that's useful to report.
+  const foodDisplayNames = new Set([...EDIBLE_FOOD_NAMES, "cake"]);
 
   for (const item of inventory) {
     const isTool = toolSuffixes.some(s => item.name.includes(s));
     if (isTool) {
       tools.push(item.name);
-    } else if (foodNames.has(item.name)) {
+    } else if (foodDisplayNames.has(item.name)) {
       foodItems.push(`${item.name} x${item.count}`);
     } else {
       materials.push(`${item.name} x${item.count}`);
@@ -2369,14 +2369,20 @@ export async function mc_eat(food?: string): Promise<string> {
   }
 
   // Smart eat: check inventory for food and eat best available
+  // Priority ordered by saturation value (higher = more efficient healing).
+  // Must include ALL items from EDIBLE_FOOD_NAMES to prevent "no food" when food exists.
+  // Bug: mc_eat was missing dried_kelp, beetroot_soup, suspicious_stew, enchanted_golden_apple,
+  // glow_berries, chorus_fruit — agents would get "No food in inventory" despite having these items.
   const inventory = botManager.getInventory(username);
   const foodPriority = [
-    "golden_carrot", "golden_apple", "cooked_beef", "cooked_porkchop",
-    "cooked_mutton", "cooked_salmon", "cooked_chicken", "cooked_rabbit",
-    "cooked_cod", "baked_potato", "bread", "pumpkin_pie", "mushroom_stew",
-    "rabbit_stew", "apple", "melon_slice", "sweet_berries", "carrot",
-    "potato", "beetroot", "cookie", "beef", "porkchop", "mutton",
-    "chicken", "rabbit", "cod", "salmon", "rotten_flesh",
+    "enchanted_golden_apple", "golden_carrot", "golden_apple",
+    "cooked_beef", "cooked_porkchop", "cooked_mutton", "cooked_salmon",
+    "cooked_chicken", "cooked_rabbit", "cooked_cod", "baked_potato",
+    "bread", "pumpkin_pie", "mushroom_stew", "rabbit_stew", "beetroot_soup",
+    "suspicious_stew", "apple", "melon_slice", "sweet_berries", "glow_berries",
+    "carrot", "potato", "beetroot", "dried_kelp", "cookie",
+    "beef", "porkchop", "mutton", "chicken", "rabbit", "cod", "salmon",
+    "chorus_fruit", "rotten_flesh",
   ];
 
   // Check if we have food and a furnace nearby to cook raw meat
