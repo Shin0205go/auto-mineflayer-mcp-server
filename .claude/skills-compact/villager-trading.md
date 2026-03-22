@@ -1,9 +1,11 @@
 ---
 name: villager-trading
-description: 村人交易。エメラルド・特殊アイテム入手
+description: 村人交易。エメラルド・特殊アイテム入手（mc_execute用）
 ---
 ## 村人を見つける
-`mc_navigate(target_entity="villager", max_distance=64)`
+```js
+await bot.navigate("villager"); // entity検索
+```
 
 ## 職業ブロック（村人の職業を決定）
 - 司書 → lectern（本棚関連）

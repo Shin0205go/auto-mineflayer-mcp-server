@@ -1,18 +1,24 @@
 ---
 name: team-coordination
-description: 最優先。チーム連携ルール・役割・チャットタグ
+description: 最優先。チーム連携ルール・役割・チャットタグ（mc_execute用）
 ---
 ## 接続直後（全員）
-1. `mc_chat()` — リーダー指示を確認
-2. `mc_status()` — 状況把握
-3. 指示あり → `mc_chat(message="[了解] ...")` + 実行
-4. 指示なし → Day 1 Protocol（survival.md参照）
+```js
+const msgs = await bot.getMessages();
+bot.log(`Messages: ${msgs}`);
+const s = await bot.status();
+bot.log(`HP:${s.hp} Hunger:${s.hunger} Pos:${JSON.stringify(s.position)}`);
+// 指示あり → 実行、指示なし → フェーズ目標で自律行動
+```
 
 ## リーダー（Claude1）
-1. `mc_chat()` で全ボット状況を確認
-2. `mc_chat(message="[フェーズ] Phase N 開始。目標: ...")` で宣言
-3. 各ボットに `[指示] @ClaudeN タスク(座標含む)` を送信
-4. 2アクションごとに `mc_chat()` で報告確認
+```js
+// フェーズ宣言
+await bot.chat("[フェーズ] Phase 2 開始。目標: チェストに食料20個以上");
+// タスク割当
+await bot.chat("[指示] @Claude2 農場で小麦収穫、パン作成して");
+await bot.chat("[指示] @Claude3 羊を探してベッド作成して");
+```
 
 ## フォロワー優先順位
 1. 人間チャット → 最優先
@@ -20,10 +26,13 @@ description: 最優先。チーム連携ルール・役割・チャットタグ
 3. `[SOS]` → 近ければ救援
 4. フェーズ目標で自律行動
 
-## しきい値
-- チェスト食料 < 20 → 空き時間に補充
-- hunger < 15 → `mc_eat()` 即時
-- HP < 4 → `mc_flee()` + 食べる
+## 安全チェック（毎ターン）
+```js
+const s = await bot.status();
+if (s.hunger < 15) await bot.eat();
+if (s.hp < 4) { await bot.flee(); return; }
+await bot.equipArmor();
+```
 
 ## チャットタグ
 - `[フェーズ]` リーダーのみ、フェーズ宣言
@@ -32,8 +41,3 @@ description: 最優先。チーム連携ルール・役割・チャットタグ
 - `[報告]` 進捗・完了
 - `[SOS]` 緊急救助要請
 - `[資源]` 発見共有
-
-## 禁止
-- 3アクション以上チャット未確認
-- リスポーンでHP回復（食料を食べろ）
-- 指示なしで勝手なフェーズ行動

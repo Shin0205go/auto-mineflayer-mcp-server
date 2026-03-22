@@ -1,11 +1,17 @@
 ---
 name: potion-brewing
-description: ポーション醸造。醸造台設置からレシピまで
+description: ポーション醸造。醸造台設置からレシピまで（mc_execute用）
 ---
 ## 醸造台作成
-1. `mc_combat(target="blaze")` → blaze_rod x1
-2. `mc_craft(item="brewing_stand")`
-3. `mc_place_block(block_type="brewing_stand", x=..., y=..., z=...)`
+```js
+await bot.combat("blaze"); // blaze_rod x1
+await bot.craft("brewing_stand");
+const s = await bot.status();
+const x = Math.floor(s.position.x);
+const y = Math.floor(s.position.y);
+const z = Math.floor(s.position.z);
+await bot.place("brewing_stand", x+1, y, z);
+```
 
 ## 基本レシピ（水入り瓶→各ポーション）
 - 水入り瓶 + nether_wart → awkward_potion（基本）

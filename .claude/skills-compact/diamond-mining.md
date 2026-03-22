@@ -1,16 +1,21 @@
 ---
 name: diamond-mining
-description: ダイヤ採掘。Y=-59、鉄ピッケル必須
+description: ダイヤ採掘。Y=-59、鉄ピッケル必須（mc_execute用）
 ---
 ## 前提
 - 鉄ピッケル以上（木・石では採掘不可）
-- 水バケツ（溶岩対策）
-- 松明、食料
+- 水バケツ（溶岩対策）、松明、食料
 
 ## 手順
-1. `mc_navigate(x=current_x, y=-59, z=current_z)` — 最適高度へ
-2. `mc_gather(block="diamond_ore", count=5)` — 自動採掘
-3. `mc_chat(message="[資源] ダイヤ発見: x=..., z=..., Y=-59")`
+```js
+const s = await bot.status();
+// 最適高度へ移動
+await bot.moveTo(s.position.x, -59, s.position.z);
+// ダイヤ採掘
+await bot.gather("diamond_ore", 5);
+await bot.chat("[資源] ダイヤ発見!");
+bot.log("ダイヤ採掘完了");
+```
 
 ## 採掘量の目安
 - ダイヤピッケル: 3、ダイヤ剣: 2、フルアーマー: 24、エンチャント台: 2

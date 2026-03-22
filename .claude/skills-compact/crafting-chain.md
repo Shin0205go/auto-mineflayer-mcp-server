@@ -1,28 +1,42 @@
 ---
 name: crafting-chain
-description: mc_craftで依存関係自動解決。autoGather=trueで素材も自動収集
+description: bot.craftで依存関係自動解決。autoGather=trueで素材自動収集（mc_execute用）
 ---
 ## 基本
-```
-mc_craft(item="wooden_pickaxe", autoGather=true)
+```js
+await bot.craft("wooden_pickaxe", 1, true); // autoGather=true
 ```
 
 ## Stone Upgrade (Phase 3)
-1. `mc_gather(block="cobblestone", count=20)`
-2. `mc_craft(item="stone_pickaxe")`
-3. `mc_craft(item="stone_axe")`
-4. `mc_craft(item="stone_sword")`
+```js
+await bot.gather("cobblestone", 20);
+await bot.craft("stone_pickaxe");
+await bot.craft("stone_axe");
+await bot.craft("stone_sword");
+bot.log("石ツール完成");
+```
 
 ## Iron Upgrade (Phase 4)
-1. `mc_gather(block="iron_ore", count=12)`
-2. `mc_craft(item="furnace")` — なければ作成
-3. `mc_craft(item="iron_pickaxe", autoGather=true)`
-4. `mc_craft(item="iron_sword", autoGather=true)`
+```js
+await bot.gather("iron_ore", 12);
+await bot.craft("furnace"); // なければ作成
+await bot.smelt("raw_iron", 12);
+await bot.craft("iron_pickaxe");
+await bot.craft("iron_sword");
+bot.log("鉄装備完成");
+```
 
 ## Diamond Upgrade (Phase 5)
-1. `mc_gather(block="diamond_ore", count=5)` — Y=-59
-2. `mc_craft(item="diamond_pickaxe")`
-3. `mc_craft(item="diamond_sword")`
+```js
+await bot.gather("diamond_ore", 5); // Y=-59
+await bot.craft("diamond_pickaxe");
+await bot.craft("diamond_sword");
+bot.log("ダイヤ装備完成");
+```
 
 ## 失敗時
-- missing items が返る → `mc_gather(block=...)` で収集して再実行
+```js
+// missing items エラー → 素材収集して再実行
+const result = await bot.craft("iron_pickaxe");
+bot.log(result); // エラーなら足りない素材が表示される
+```

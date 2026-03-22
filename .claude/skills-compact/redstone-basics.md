@@ -1,6 +1,6 @@
 ---
 name: redstone-basics
-description: レッドストーン基礎回路。自動化に使用
+description: レッドストーン基礎回路。自動化に使用（mc_execute用）
 ---
 ## 基本素材
 - redstone_dust（回路）、lever/button（入力）、redstone_torch（信号反転）

@@ -1,18 +1,38 @@
 ---
 name: exploration
-description: mc_navigateで広範囲探索。バイオーム・村・資源を発見
+description: bot.navigateで広範囲探索。バイオーム・村・資源発見（mc_execute用）
 ---
 ## 基本パターン
-- ブロック探索: `mc_navigate(target_block="iron_ore", max_distance=64)`
-- エンティティ探索: `mc_navigate(target_entity="villager", max_distance=64)`
-- 座標移動: `mc_navigate(x=250, y=64, z=-200)`
+```js
+// ブロック探索
+await bot.navigate("iron_ore");
+await bot.navigate({target_block: "diamond_ore", max_distance: 64});
 
-## 探索後
-`mc_status()` → nearby_resources で周囲資源を確認
+// エンティティ探索
+await bot.navigate("villager");
+await bot.navigate("cow");
+
+// 座標移動
+await bot.moveTo(250, 64, -200);
+```
+
+## 探索後の周囲確認
+```js
+const s = await bot.status();
+bot.log(`Biome: ${s.biome}`);
+bot.log(`Resources: ${JSON.stringify(s.nearbyResources)}`);
+bot.log(`Entities: ${JSON.stringify(s.nearbyEntities)}`);
+```
 
 ## 重要な発見はチャット共有
-`mc_chat(message="[資源] diamond_ore発見: x=..., y=..., z=...")`
+```js
+await bot.chat("[資源] diamond_ore発見: x=123, y=-59, z=456");
+```
 
 ## 見つからない時
-- `max_distance` を増やす
-- 別の座標に移動してから再探索
+```js
+// 別エリアに移動してから再探索
+const s = await bot.status();
+await bot.moveTo(s.position.x + 150, 64, s.position.z + 150);
+await bot.navigate("villager");
+```

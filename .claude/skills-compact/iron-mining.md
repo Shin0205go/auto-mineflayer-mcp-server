@@ -1,15 +1,27 @@
 ---
 name: iron-mining
-description: 鉄鉱石採掘→精錬→鉄インゴット
+description: 鉄鉱石採掘→精錬→鉄インゴット（mc_execute用）
 ---
 ## 前提
 - 石ピッケル以上必須（木では掘れない）
 - かまど + 燃料(coal/oak_log)
 
 ## 手順
-1. `mc_status()` — 道具確認
-2. `mc_gather(block="iron_ore", count=16)` — Y=16付近が最多
-3. `mc_smelt(item_name="raw_iron", count=16)` または `mc_craft(item="iron_pickaxe", autoGather=true)`
+```js
+const s = await bot.status();
+bot.log(`ツール: ${JSON.stringify(s.inventory)}`);
+
+// 鉄鉱石採掘（Y=16付近が最多）
+await bot.gather("iron_ore", 16);
+
+// 精錬
+await bot.smelt("raw_iron", 16);
+
+// 鉄ツール作成
+await bot.craft("iron_pickaxe");
+await bot.craft("iron_sword");
+bot.log("鉄装備完成");
+```
 
 ## 必要数の目安
 - 鉄ピッケル: 3個、鉄の剣: 2個、バケツ: 3個 → 最低8個

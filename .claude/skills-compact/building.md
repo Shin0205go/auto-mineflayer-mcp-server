@@ -1,21 +1,33 @@
 ---
 name: building
-description: mc_buildで構造物を建設。place_blockの手動繰り返し不要
+description: bot.buildで構造物建設。place手動繰り返し不要（mc_execute用）
 ---
 ## 基本
-```
-mc_build(preset="shelter", size="small")
+```js
+await bot.build("shelter"); // small がデフォルト
+await bot.build("shelter", "medium");
 ```
 presets: shelter / wall / platform / tower
 sizes: small(50ブロック) / medium(150) / large(300)
 
 ## Base Protocol (Phase 1)
-1. `mc_gather(block="oak_log", count=16)`
-2. `mc_craft(item="crafting_table")`
-3. `mc_gather(block="cobblestone", count=24)`
-4. `mc_craft(item="furnace")`
-5. `mc_craft(item="chest", count=3)`
-6. `mc_build(preset="shelter", size="small")`
+```js
+await bot.gather("oak_log", 16);
+await bot.craft("crafting_table");
+await bot.gather("cobblestone", 24);
+await bot.craft("furnace");
+await bot.craft("chest", 3);
+await bot.build("shelter");
+bot.log("拠点完成");
+```
 
-## 個別ブロック設置が必要な時
-`mc_place_block(block_type="furnace", x=..., y=..., z=...)`
+## 個別ブロック設置
+```js
+const s = await bot.status();
+const x = Math.floor(s.position.x);
+const y = Math.floor(s.position.y);
+const z = Math.floor(s.position.z);
+await bot.place("furnace", x+2, y, z);
+await bot.place("crafting_table", x+3, y, z);
+await bot.place("chest", x+4, y, z);
+```

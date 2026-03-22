@@ -1,30 +1,62 @@
 ---
 name: survival
-description: 食料確保・HP回復・夜間対処の手順
+description: 食料確保・HP回復・夜間対処の手順（mc_execute用）
 ---
-## Day 1
-1. `mc_status()` — 状況把握
-2. `mc_gather(block="oak_log", count=10)`
-3. `mc_craft(item="crafting_table")`
-4. `mc_craft(item="wooden_pickaxe")`
-5. `mc_craft(item="wooden_sword")`
-6. `mc_combat(target="cow")` — pig/chicken/sheep/zombie でも可
-7. `mc_eat()`
-8. `mc_gather(block="cobblestone", count=20)`
-9. `mc_craft(item="stone_pickaxe")`
-10. `mc_craft(item="stone_sword")`
-11. `mc_build(preset="shelter", size="small")`
+## Day 1（mc_execute コード）
+```js
+const s = await bot.status();
+bot.log(`HP:${s.hp} Hunger:${s.hunger}`);
 
-## HP/食料しきい値
-- hunger < 15 → `mc_eat()`
-- HP < 10 → `mc_eat()` 優先（リスポーン禁止）
-- HP < 4 + 脅威 → `mc_flee()` 即時
+// 木材→作業台→ピッケル→剣
+await bot.gather("oak_log", 10);
+await bot.craft("crafting_table");
+await bot.craft("wooden_pickaxe");
+await bot.craft("wooden_sword");
+
+// 食料確保
+await bot.combat("cow"); // pig/chicken/sheep でも可
+await bot.eat();
+
+// 石ツール
+await bot.gather("cobblestone", 20);
+await bot.craft("stone_pickaxe");
+await bot.craft("stone_sword");
+
+// シェルター
+await bot.build("shelter");
+bot.log("Day 1 完了");
+```
+
+## HP/食料チェック（毎ターン先頭に入れろ）
+```js
+const s = await bot.status();
+if (s.hp < 4) { await bot.flee(); return "HP危険、逃走"; }
+if (s.hp < 10) await bot.eat();
+if (s.hunger < 15) await bot.eat();
+await bot.equipArmor();
+```
 
 ## 食料ない時
-1. `mc_store(action="list")` でチェスト確認
-2. `mc_combat(target="cow")` で狩猟
-3. 最終手段: `mc_combat(target="zombie")` → rotten_flesh
+```js
+// 1. チェスト確認
+const chest = await bot.store("list");
+bot.log(chest);
+// 2. 動物を狩る
+await bot.combat("cow");
+// 3. 最終手段: 腐肉
+await bot.combat("zombie");
+```
 
 ## 夜間
-- ベッドあり → `mc_sleep()`
-- なし → `mc_build(preset="shelter", size="small")`
+```js
+const s = await bot.status();
+if (s.time > 12500) {
+  const inv = await bot.inventory();
+  if (inv.find(i => i.name.includes('bed'))) {
+    await bot.navigate("white_bed"); // ベッドに移動
+    // bot.sleep() はmc_sleepツール経由
+  } else {
+    await bot.build("shelter");
+  }
+}
+```
