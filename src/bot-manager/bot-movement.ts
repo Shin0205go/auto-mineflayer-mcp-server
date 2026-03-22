@@ -1371,7 +1371,13 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
           if (!freshBlock) freshBlock = blockBelow;
 
           // Place on top of block below (this puts block at feet level, lifting us up)
-          await bot.placeBlock(freshBlock!, new Vec3(0, 1, 0));
+          // CRITICAL FIX: Use _placeBlockWithOptions with forceLook:'ignore'.
+          // bot.placeBlock() internally calls lookAt() on the reference block face,
+          // which is async and adds ~50-100ms of latency. During that time the bot
+          // falls past the placement point, causing the server to reject the placement.
+          // We already looked straight down before jumping (line 1316), so skip the
+          // redundant lookAt inside placeBlock to place immediately while still airborne.
+          await (bot as any)._placeBlockWithOptions(freshBlock!, new Vec3(0, 1, 0), { forceLook: 'ignore', swingArm: 'right' });
           blocksPlaced++;
           placed = true;
           console.error(`[Pillar] Placed ${blocksPlaced}/${targetHeight} at Y=${currentY}`);
