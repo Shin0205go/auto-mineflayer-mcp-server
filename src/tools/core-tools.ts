@@ -684,10 +684,31 @@ export async function mc_farm(): Promise<string> {
       } else {
         logs.push("No farmable blocks within irrigation range of nearby water. Searching for better water source...");
       }
-      const farWater = bot.findBlock({
+      // Search for water with surface preference: underground water (caves, ravines)
+      // causes mc_farm to navigate underground where bot gets trapped by mobs.
+      // Bot1 [2026-03-22]: mc_navigate to water routed underground, drowned.
+      // Bot2: mc_farm navigated to underground water, skeleton killed bot.
+      // Use bot.findBlocks to get multiple candidates and pick the closest surface one.
+      const botFarmY = bot.entity.position.y;
+      const waterCandidates = bot.findBlocks({
         matching: (b: any) => b.name === "water",
         maxDistance: 64,
+        count: 20,
       });
+      // Score candidates: prefer water at or above bot Y, penalize underground water
+      let farWater: { position: { x: number; y: number; z: number } } | null = null;
+      if (waterCandidates.length > 0) {
+        let bestScore = Infinity;
+        for (const wp of waterCandidates) {
+          const dist = bot.entity.position.distanceTo(wp);
+          const depthBelow = Math.max(botFarmY - wp.y - 3, 0); // 3-block tolerance
+          const score = dist + depthBelow * 5; // Same 5x penalty as findBlock
+          if (score < bestScore) {
+            bestScore = score;
+            farWater = { position: { x: wp.x, y: wp.y, z: wp.z } };
+          }
+        }
+      }
       if (farWater) {
         logs.push(`Found water at (${farWater.position.x}, ${farWater.position.y}, ${farWater.position.z}), moving close...`);
         try {
@@ -714,7 +735,23 @@ export async function mc_farm(): Promise<string> {
             landTarget = { x: wp.x + 2, y: wp.y + 1, z: wp.z };
           }
           logs.push(`Navigating to land near water at (${landTarget.x}, ${landTarget.y}, ${landTarget.z})`);
-          await botManager.moveTo(username, landTarget.x, landTarget.y, landTarget.z);
+          const moveToWaterResult = await botManager.moveTo(username, landTarget.x, landTarget.y, landTarget.z);
+          // SAFETY: Abort if moveTo routed underground (cave routing).
+          // Bot1/Bot2 [2026-03-22]: mc_farm navigated to water, pathfinder routed underground,
+          // bot got trapped in cave with mobs. The moveTo result contains "underground" or
+          // "cave" when cave routing is detected. Also check Y descent: if bot ended up
+          // significantly below its starting Y, it's likely underground.
+          const postMoveY = bot.entity.position.y;
+          if (moveToWaterResult.includes("underground") || moveToWaterResult.includes("cave") || moveToWaterResult.includes("descended")) {
+            logs.push(`[ABORTED] Navigation to water caused underground routing: ${moveToWaterResult}`);
+            const finalBot = botManager.getBot(username);
+            return logs.join("\n") + `\nmc_farm aborted: pathfinder routed underground while navigating to water. HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}. Use mc_navigate to return to surface first.`;
+          }
+          if (botFarmY - postMoveY > 8) {
+            logs.push(`[ABORTED] Bot descended ${(botFarmY - postMoveY).toFixed(0)} blocks (Y=${botFarmY.toFixed(0)}→${postMoveY.toFixed(0)}) during navigation to water — likely underground.`);
+            const finalBot = botManager.getBot(username);
+            return logs.join("\n") + `\nmc_farm aborted: bot fell underground during water navigation (Y=${botFarmY.toFixed(0)}→${postMoveY.toFixed(0)}). HP: ${finalBot?.health ?? '?'}. Use minecraft_pillar_up or mc_navigate to return to surface.`;
+          }
           // Re-scan for tillable blocks near water — MUST be within 4 blocks of water for irrigation
           const waterX = farWater.position.x, waterY = farWater.position.y, waterZ = farWater.position.z;
           farmCoords.length = 0;
@@ -879,12 +916,28 @@ export async function mc_farm(): Promise<string> {
             }
           }
 
-          // Option 3: Search wider (200 blocks) for water
+          // Option 3: Search wider (200 blocks) for water with surface preference
           logs.push("Searching up to 200 blocks for water...");
-          const veryFarWater = bot.findBlock({
+          // Use findBlocks for multiple candidates + surface preference scoring.
+          // Same logic as the 64-block search above: penalize underground water.
+          const veryFarCandidates = bot.findBlocks({
             matching: (b: any) => b.name === "water",
             maxDistance: 200,
+            count: 30,
           });
+          let veryFarWater: { position: { x: number; y: number; z: number } } | null = null;
+          if (veryFarCandidates.length > 0) {
+            let bestVScore = Infinity;
+            for (const vwp of veryFarCandidates) {
+              const vDist = bot.entity.position.distanceTo(vwp);
+              const vDepthBelow = Math.max(botFarmY - vwp.y - 3, 0);
+              const vScore = vDist + vDepthBelow * 5;
+              if (vScore < bestVScore) {
+                bestVScore = vScore;
+                veryFarWater = { position: { x: vwp.x, y: vwp.y, z: vwp.z } };
+              }
+            }
+          }
           if (veryFarWater) {
             logs.push(`Found water at (${veryFarWater.position.x}, ${veryFarWater.position.y}, ${veryFarWater.position.z}), moving near...`);
             try {
@@ -899,7 +952,19 @@ export async function mc_farm(): Promise<string> {
                   break;
                 }
               }
-              await botManager.moveTo(username, vLandTarget.x, vLandTarget.y, vLandTarget.z);
+              const vMoveResult = await botManager.moveTo(username, vLandTarget.x, vLandTarget.y, vLandTarget.z);
+              // SAFETY: Abort if moveTo routed underground (same check as 64-block search)
+              const vPostMoveY = bot.entity.position.y;
+              if (vMoveResult.includes("underground") || vMoveResult.includes("cave") || vMoveResult.includes("descended")) {
+                logs.push(`[ABORTED] Navigation to far water caused underground routing: ${vMoveResult}`);
+                const finalBot = botManager.getBot(username);
+                return logs.join("\n") + `\nmc_farm aborted: pathfinder routed underground. HP: ${finalBot?.health ?? '?'}. Return to surface first.`;
+              }
+              if (botFarmY - vPostMoveY > 8) {
+                logs.push(`[ABORTED] Bot descended ${(botFarmY - vPostMoveY).toFixed(0)} blocks during far water navigation.`);
+                const finalBot = botManager.getBot(username);
+                return logs.join("\n") + `\nmc_farm aborted: bot fell underground (Y=${botFarmY.toFixed(0)}→${vPostMoveY.toFixed(0)}). HP: ${finalBot?.health ?? '?'}. Return to surface first.`;
+              }
               // Re-scan for tillable blocks near water — MUST be within 4 blocks of water for irrigation.
               // Bug: bot1/bot3 farmland reverted to dirt because previous scan used bot position
               // instead of water position, finding blocks >4 blocks from water (no irrigation).
