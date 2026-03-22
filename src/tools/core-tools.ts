@@ -265,6 +265,31 @@ export async function mc_gather(
 ): Promise<string> {
   const username = botManager.requireSingleBot();
 
+  // Early exit for smelted/crafted items that cannot be gathered from the world.
+  // Bot1 [2026-03-22]: bot.gather("iron_ore", 10) returned 0 in 47ms; bot.gather("iron_ingot")
+  // tried to find "iron_ingot" blocks (which don't exist in the world) and exited instantly.
+  // Agents commonly confuse gathering raw ores vs smelted products.
+  // Provide a clear error message directing them to the correct API.
+  const SMELTED_ITEMS: Record<string, string> = {
+    iron_ingot: "raw_iron (from iron_ore)",
+    gold_ingot: "raw_gold (from gold_ore)",
+    copper_ingot: "raw_copper (from copper_ore)",
+    glass: "sand",
+    smooth_stone: "cobblestone",
+    charcoal: "oak_log",
+    cooked_beef: "beef (from cow)",
+    cooked_porkchop: "porkchop (from pig)",
+    cooked_chicken: "chicken (from chicken)",
+    cooked_mutton: "mutton (from sheep)",
+    cooked_cod: "cod (from cod)",
+    cooked_salmon: "salmon (from salmon)",
+    brick: "clay_ball",
+    nether_brick: "netherrack",
+  };
+  if (SMELTED_ITEMS[block]) {
+    return `Cannot gather "${block}" — it's a smelted/cooked item, not a mineable block. Use bot.craft("${block}", ${count}, true) to smelt from ${SMELTED_ITEMS[block]}, or gather the raw material first with bot.gather().`;
+  }
+
   // Safety: Auto-equip armor before gathering at night.
   // mc_gather is a long-running operation (up to 120s). Bot is stationary while mining,
   // exposed to mob attacks. Bot1: mc_gather(short_grass) timed out 120s, mobs killed bot.
@@ -531,7 +556,24 @@ export async function mc_craft(
   const CRAFT_TIMEOUT_MS = 180000;
   const craftPromise = async () => {
     if (count === 1) {
-      return await getHighLevel().minecraft_craft_chain(username, item, autoGather);
+      // Track inventory before crafting to verify actual gain — same as count>1 path.
+      // Bot1/Bot2 [2026-03-22]: bot.craft('chest', 1) and bot.craft('white_bed', 1) reported
+      // success but inventory had no item — craft_chain caught internal errors and returned
+      // a "complete" message without verifying items were actually added. The agent thought
+      // the craft succeeded and wasted time on subsequent steps.
+      // The count>1 path (commit 0b960b9) already had this check; count==1 did not.
+      const invBefore = botManager.getInventory(username);
+      const countBefore = invBefore.find(i => i.name === item)?.count ?? 0;
+      const result = await getHighLevel().minecraft_craft_chain(username, item, autoGather);
+      const invAfter = botManager.getInventory(username);
+      const countAfter = invAfter.find(i => i.name === item)?.count ?? 0;
+      const actualGain = countAfter - countBefore;
+      if (actualGain <= 0) {
+        // craft_chain said it completed but item count didn't increase — report failure
+        const invStr = invAfter.map((i: { name: string; count: number }) => `${i.name}(${i.count})`).join(", ");
+        return `Failed to craft ${item}: craft_chain returned "${result}" but inventory has ${countAfter}x ${item} (unchanged). Inventory: ${invStr}`;
+      }
+      return result;
     }
 
     // For count > 1 non-smelt items, craft multiple times
