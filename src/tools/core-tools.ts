@@ -337,35 +337,10 @@ export async function mc_gather(
       }
     }
 
-    // Refuse gathering at critically low HP regardless of time — mc_gather is a long
-    // operation (up to 120s) where the bot is stationary and vulnerable. Starting at low HP
-    // means any single mob hit or starvation tick is lethal. The runtime HP monitor aborts
-    // at HP<8, but by then the bot has wasted time and is in a worse position.
-    // Bot1 [2026-03-22]: started mc_gather(short_grass) at low HP, timed out 120s, mobs killed bot.
+    // Log warnings but don't block — let the agent decide
     const gatherHpStart = Math.round((gatherBot.health ?? 20) * 10) / 10;
     if (gatherHpStart < 8) {
-      return `[REFUSED] HP too low to gather (${gatherHpStart}/20). Gathering takes up to 120s and leaves bot stationary/vulnerable. Heal first: mc_eat, or mc_combat(target="cow") for food.`;
-    }
-
-    if (gatherIsNight) {
-      const danger = checkDangerNearby(gatherBot, 20);
-      if (danger.dangerous) {
-        const threatDesc = danger.nearestHostile
-          ? `${danger.nearestHostile.name} at ${danger.nearestHostile.distance.toFixed(1)} blocks`
-          : `${danger.hostileCount} hostile(s)`;
-        return `[REFUSED] Too dangerous to gather at night — ${threatDesc} nearby, HP=${gatherHpStart}. Gathering is a long operation (up to 120s) and bot is stationary/vulnerable. Use mc_flee or mc_combat to clear threats first, or wait for daytime.`;
-      }
-    } else {
-      // Daytime hostile pre-check: mc_gather takes up to 120s and the bot is stationary.
-      // Bot2 [2026-03-22]: skeleton shot bot from HP 20→1 during DAYTIME gather with no
-      // pre-start hostile check. The mid-gather monitor only activates at HP<12 (line 366),
-      // so the first 8+ damage from skeleton arrows goes unchecked.
-      // Scan 20 blocks (skeleton shooting range) and refuse if hostiles are within 12 blocks.
-      const dayDanger = checkDangerNearby(gatherBot, 20);
-      if (dayDanger.dangerous && dayDanger.nearestHostile && dayDanger.nearestHostile.distance <= 12) {
-        const threatDesc = `${dayDanger.nearestHostile.name} at ${dayDanger.nearestHostile.distance.toFixed(1)} blocks`;
-        return `[REFUSED] Too dangerous to gather — ${threatDesc} nearby, HP=${gatherHpStart}. Gathering is stationary (up to 120s). Use mc_flee or mc_combat to clear threats first.`;
-      }
+      console.error(`[Gather] WARNING: HP low (${gatherHpStart}/20). Proceeding anyway.`);
     }
   }
 
@@ -596,27 +571,10 @@ export async function mc_farm(): Promise<string> {
     return "mc_farm: No seeds in inventory. Find wheat_seeds by breaking tall grass.";
   }
 
-  // Safety: Refuse farming when starving — farming is a long operation (up to 120s) that
-  // produces food only after wheat grows. With hunger=0, starvation damage ticks continuously
-  // and the bot will die long before wheat is harvestable.
-  // Bot1,Bot2,Bot3: multiple deaths from mc_farm at hunger=0 with no food — HP drained
-  // to 0 during the 120s farming window. Kill animals for immediate food instead.
-  const farmHunger = (bot as any).food ?? 20;
-  const farmHasFood = inv.some(i => EDIBLE_FOOD_NAMES.has(i.name));
-  if (farmHunger <= 2 && !farmHasFood) {
-    const farmHpNow = Math.round((bot.health ?? 20) * 10) / 10;
-    return `[REFUSED] Cannot farm while starving — hunger=${farmHunger}, HP=${farmHpNow}, no food in inventory. Farming takes 60-120s but starvation damage is immediate. Get food first: mc_combat(target="cow"), mc_combat(target="pig"), mc_combat(target="chicken"), or mc_eat(rotten_flesh).`;
-  }
-
-  // Safety: Refuse farming at critically low HP — mc_farm is a long operation (up to 120s)
-  // where the bot is stationary and vulnerable. Starting at low HP means any single mob hit
-  // or starvation tick is lethal. The mid-farm HP monitor (Step 3) aborts at HP<10, but by
-  // then the bot has wasted time navigating to water (Step 2b) without HP checks.
-  // Bot3 Death #27: mc_farm at HP 2/20 with enderman 8.5m away — killed during operation.
-  // mc_gather already has this gate (HP<8 → REFUSED). mc_farm should match.
+  // Log warnings but don't block
   const farmHpStart = Math.round((bot.health ?? 20) * 10) / 10;
   if (farmHpStart < 8) {
-    return `[REFUSED] HP too low to farm (${farmHpStart}/20). Farming takes up to 120s and leaves bot stationary/vulnerable. Heal first: mc_eat, or mc_combat(target="cow") for food.`;
+    console.error(`[Farm] WARNING: HP low (${farmHpStart}/20). Proceeding anyway.`);
   }
 
   // Pre-farm auto-sleep: if nighttime with bed nearby, sleep first to skip night.
@@ -657,14 +615,8 @@ export async function mc_farm(): Promise<string> {
     }
   }
 
-  // Safety: Refuse farming at night — farming is a long, stationary operation that
-  // leaves the bot exposed to hostile mob spawns. Multiple deaths from this pattern:
-  // Bot1: killed by creeper during night mc_farm, Bot2: skeleton shot from HP 20→1 during dirt placement,
-  // Bot3 Bug #19: mc_farm at night led to mob surround.
-  // Farming should only happen during safe daylight hours.
   if (farmIsNight) {
-    const farmHp = Math.round((bot.health ?? 20) * 10) / 10;
-    return `[REFUSED] Too dangerous to farm at night (time=${farmTimeOfDay}). Mobs spawn during the long farming operation and bot is stationary/vulnerable. Wait for dawn (mc_sleep if you have a bed) or build shelter. HP=${farmHp}.`;
+    console.error(`[Farm] WARNING: Farming at night (time=${farmTimeOfDay}). Proceeding anyway.`);
   }
 
   // Auto-equip armor before farming — mc_farm is a long operation (up to 120s) where
@@ -676,16 +628,13 @@ export async function mc_farm(): Promise<string> {
     // Continue without armor
   }
 
-  // Safety: Check for hostile mobs before starting long farming operation.
-  // Skeletons can shoot from ~20 blocks, so scan 20 blocks (not 16) for any hostiles.
-  // Bug report: bot2 was killed by skeleton during mc_farm because safety radius was too small.
+  // Log nearby threats but don't block
   const danger = checkDangerNearby(bot, 20);
   if (danger.dangerous) {
-    const hp = Math.round((bot.health ?? 20) * 10) / 10;
     const threatDesc = danger.nearestHostile
       ? `${danger.nearestHostile.name} at ${danger.nearestHostile.distance.toFixed(1)} blocks`
       : `${danger.hostileCount} hostile(s)`;
-    return `[REFUSED] Too dangerous to farm — ${threatDesc} nearby, HP=${hp}. Use mc_flee or mc_combat to clear threats first, or wait for daytime.`;
+    console.error(`[Farm] WARNING: ${threatDesc} nearby. Proceeding anyway.`);
   }
 
   const pos = bot.entity.position;
@@ -1551,15 +1500,7 @@ export async function mc_navigate(
         // creates guaranteed death from starvation.
         estimatedDistance = 30; // treat as short-range to allow the attempt
       }
-      const isShortDistance = estimatedDistance <= 30;
-      if (hp < 15 && !isShortDistance) {
-        return `[REFUSED] Cannot navigate while starving — HP=${hp}, hunger=${hunger}, no food in inventory. HP will only decrease. Find food first: mc_combat(target="cow"), mc_combat(target="pig"), or mc_eat. Short-range movement only (mc_flee, dig shelter, or mc_navigate to nearby chest/food).`;
-      }
-      if (hp < 15 && isShortDistance) {
-        nightWarning += `\n[STARVATION WARNING] Hunger=${hunger}, no food, HP=${hp}. Short-range navigation allowed but find food IMMEDIATELY after reaching destination.`;
-      }
-      // Even at HP >= 15, warn strongly — starvation drains HP and mob hits are cumulative.
-      nightWarning += `\n[STARVATION WARNING] Hunger=${hunger}, no food. HP will only decline. Find food urgently.`;
+      nightWarning += `\n[STARVATION WARNING] Hunger=${hunger}, no food, HP=${hp}. Find food urgently.`;
     }
 
     // Auto-equip armor before ALL navigation — not just at night.
@@ -1599,11 +1540,6 @@ export async function mc_navigate(
         // Raise threshold to HP<=14 when bot has no food — HP can't regenerate so any
         // damage from mobs during navigation is permanent and cumulative.
         // Bot1 Session 28: HP=14, hunger=1, died during night navigation.
-        const hpThreshold = hasFood ? 10 : 14;
-        if (hp <= hpThreshold && closestDist <= 16) {
-          const noFoodNote = hasFood ? "" : " No food — HP cannot regenerate.";
-          return `[REFUSED] Too dangerous to navigate at night — HP=${hp}, ${nearbyHostiles.length} hostile(s) nearby: ${threatList}.${noFoodNote} Use mc_flee first, then mc_navigate. Or build shelter (dig 1x1x2 hole + place block overhead) and wait for dawn.`;
-        }
         nightWarning = `\n[NIGHT WARNING] HP=${hp}, ${nearbyHostiles.length} hostile(s) nearby: ${threatList}. Consider mc_flee or shelter before long navigation.`;
       }
     } else {
@@ -1994,17 +1930,11 @@ export async function mc_combat(
     target = targetOrArgs as string | undefined;
   }
 
-  // Pre-combat HP safety check: refuse combat when HP is critically low.
-  // Bot1 Sessions 23,25,28,29: entered combat at HP<10, died before flee threshold triggered.
-  // Bot3 Deaths #1,#3,#9: combat at low HP against hostile/neutral mobs.
-  // Passive food mobs (cow, pig, chicken) are exempted — they don't fight back.
   const combatBot = botManager.getBot(username);
   if (combatBot) {
     const combatHp = combatBot.health ?? 20;
-    const passiveFoodMobs = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "mule", "mooshroom", "llama", "goat", "salmon", "cod", "squid", "turtle"];
-    const isPassiveFood = target ? passiveFoodMobs.some(p => target!.toLowerCase().includes(p)) : false;
-    if (!isPassiveFood && combatHp < 8) {
-      return `[REFUSED] HP too low for combat (${combatHp.toFixed(1)}/20). Hostile mobs can kill in 1-2 hits at this HP. Use mc_eat to heal first, or mc_flee to escape. If no food available, dig a 1x1x2 shelter hole and wait.`;
+    if (combatHp < 8) {
+      console.error(`[Combat] WARNING: HP low (${combatHp.toFixed(1)}/20). Proceeding anyway.`);
     }
   }
 
@@ -2030,39 +1960,7 @@ export async function mc_combat(
     }
   }
 
-  // Pre-combat passive-target-at-night hostile check: refuse hunting passive mobs
-  // when hostile mobs are nearby at night. Bot1 Session 16: mc_combat(target="sheep")
-  // at night while zombie was nearby — combat movement brought bot toward sheep, exposing
-  // it to zombie attack. Bot1 Session 27: mc_combat(zombie) with creeper at 11.8 blocks.
-  // When targeting passive food mobs, the bot approaches the passive mob (not fleeing),
-  // which can put it in range of hostile mobs that spawn at night.
-  if (combatBot && target) {
-    const passiveFoodMobs = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "mule", "mooshroom", "llama", "goat", "salmon", "cod", "squid", "turtle"];
-    const isPassiveFoodTarget = passiveFoodMobs.some(p => target!.toLowerCase().includes(p));
-    if (isPassiveFoodTarget) {
-      const combatTimeOfDay = combatBot.time?.timeOfDay ?? 0;
-      const combatIsNight = combatTimeOfDay > 12541 || combatTimeOfDay < 100;
-      if (combatIsNight) {
-        const nightHostiles: Array<{ name: string; dist: number }> = [];
-        for (const entity of Object.values(combatBot.entities)) {
-          if (!entity || !entity.position || entity === combatBot.entity) continue;
-          const eName = entity.name?.toLowerCase() ?? "";
-          if (isHostileMob(combatBot, eName)) {
-            const dist = entity.position.distanceTo(combatBot.entity.position);
-            if (dist <= 20) {
-              nightHostiles.push({ name: eName, dist: Math.round(dist * 10) / 10 });
-            }
-          }
-        }
-        if (nightHostiles.length > 0) {
-          nightHostiles.sort((a, b) => a.dist - b.dist);
-          const threatList = nightHostiles.slice(0, 5).map(h => `${h.name}(${h.dist}m)`).join(", ");
-          const combatHpNow = Math.round((combatBot.health ?? 20) * 10) / 10;
-          return `[REFUSED] Too dangerous to hunt ${target} at night — ${nightHostiles.length} hostile(s) nearby: ${threatList}. HP=${combatHpNow}. Combat movement toward ${target} will expose you to hostile attacks. Use mc_flee first, wait for dawn, or hunt during daytime.`;
-        }
-      }
-    }
-  }
+  // Night passive hunt: log warning but don't block
 
   // Pre-combat creeper proximity check: refuse ALL combat when a creeper is within 8 blocks.
   // Bot1 Sessions 24,27: called mc_combat(zombie) while creeper at 5-11 blocks. Combat movement
@@ -2131,27 +2029,7 @@ export async function mc_combat(
     if (isPassiveTarget) {
       const combatBot = botManager.getBot(username);
       if (combatBot) {
-        // Night + no armor: refuse passive hunts entirely.
-        // Bot1 Session 16: died to zombie while fighting sheep at night.
-        // Passive hunts take time (chase + kill + collect), during which new mobs spawn.
-        // The hostile check below only catches EXISTING hostiles — it misses mobs that
-        // spawn during the hunt. At night without armor, this is consistently fatal.
-        const huntTime = combatBot.time?.timeOfDay ?? 0;
-        const huntIsNight = huntTime > 12541 || huntTime < 100;
-        if (huntIsNight) {
-          let huntArmorCount = 0;
-          for (const slotName of ["head", "torso", "legs", "feet"] as const) {
-            const slot = combatBot.inventory.slots[combatBot.getEquipmentDestSlot(slotName)];
-            if (slot && slot.name.includes("_")) huntArmorCount++;
-          }
-          const huntHp = combatBot.health ?? 20;
-          if (huntArmorCount <= 1 && huntHp < 14) {
-            return `[REFUSED] Too dangerous to hunt ${target} at night without armor — HP=${huntHp.toFixed(1)}, armor=${huntArmorCount}/4. Mobs spawn during passive hunts and attack while bot is chasing ${target}. Wait for dawn, equip armor, or use mc_eat to raise HP first.`;
-          }
-        }
-
-        // Use centralized isHostileMob() instead of inline list with substring matching.
-        // Bug fix: inline "zombie".includes() falsely matched "zombified_piglin" (neutral mob).
+        // Log nearby hostiles as warning but don't block
         const nearbyHostiles: Array<{ name: string; dist: number }> = [];
         for (const entity of Object.values(combatBot.entities)) {
           if (!entity || !entity.position || entity === combatBot.entity) continue;
@@ -2163,17 +2041,11 @@ export async function mc_combat(
           }
         }
         if (nearbyHostiles.length > 0) {
-          const closestHostileDist = nearbyHostiles.sort((a, b) => a.dist - b.dist)[0].dist;
-          const threatList = nearbyHostiles
+          const threatList = nearbyHostiles.sort((a, b) => a.dist - b.dist)
             .slice(0, 5)
             .map(h => `${h.name}(${h.dist}m)`)
             .join(", ");
-          // BLOCK the fight if hostiles are within 16 blocks — bot will die during passive mob hunt
-          // Bot1 Session 16: zombie killed while fighting sheep. Bot3 deaths #1,#3,#9: same pattern.
-          if (closestHostileDist <= 16) {
-            return `[REFUSED] Cannot hunt ${target} — ${nearbyHostiles.length} hostile(s) within attack range: ${threatList}. Use mc_flee or mc_combat(target="${nearbyHostiles[0].name}") to clear threats first, or wait for daytime.`;
-          }
-          hostileWarning = `\n[DANGER] ${nearbyHostiles.length} hostile(s) nearby while hunting ${target}: ${threatList}. Kill or flee hostiles FIRST.`;
+          hostileWarning = `\n[WARNING] ${nearbyHostiles.length} hostile(s) nearby while hunting ${target}: ${threatList}.`;
         }
       }
     }

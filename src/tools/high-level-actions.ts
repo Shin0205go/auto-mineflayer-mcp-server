@@ -393,24 +393,11 @@ export async function minecraft_build_structure(
     }
   }
 
-  // Pre-build HP check: building is a long, stationary operation.
-  // Bot1 [2026-03-22]: killed by skeleton during mc_build(shelter) at Y=38, HP=9.
-  // Building places blocks one by one — bot is vulnerable the entire time.
+  // Log warnings but don't block
   if (bot) {
     const buildHp = bot.health ?? 20;
     if (buildHp < 8) {
-      return `[REFUSED] HP too low to build (${buildHp.toFixed(1)}/20). Building is a long operation — you'll be stationary and vulnerable. Use mc_eat or mc_flee first.`;
-    }
-  }
-
-  // Pre-build hostile check: abort if hostiles are nearby.
-  // Bot1 [2026-03-22]: called mc_build(shelter) at night with skeleton nearby, died during construction.
-  // Building takes many seconds — any nearby hostile will attack the stationary bot.
-  if (bot) {
-    const buildDanger = checkDangerNearby(bot, 16);
-    if (buildDanger.dangerous && buildDanger.nearestHostile) {
-      const threat = `${buildDanger.nearestHostile.name} at ${buildDanger.nearestHostile.distance.toFixed(1)} blocks`;
-      return `[REFUSED] Cannot build — hostile detected nearby: ${threat}. Clear threats with mc_combat or mc_flee first, then build.`;
+      console.error(`[Build] WARNING: HP low (${buildHp.toFixed(1)}/20). Proceeding anyway.`);
     }
   }
 
