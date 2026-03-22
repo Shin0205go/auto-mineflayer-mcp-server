@@ -679,15 +679,14 @@ export async function mc_farm(): Promise<string> {
     return "mc_farm: No seeds in inventory. Find wheat_seeds by breaking tall grass.";
   }
 
-  // Pre-farm HP check: ABORT if HP < 8.
-  // mc_farm is a 60-120s stationary operation. Starting at low HP means any mob hit
-  // or starvation tick during tilling/planting is fatal.
-  // Bot1/Bot2/Bot3 [2026-03-22]: started farm at low HP, died during operation.
-  // Previously this only logged a warning and continued — now aborts immediately.
+  // Pre-farm HP check: WARNING (not block) if HP < 8.
+  // Bot3 Bug #22 [2026-03-23]: farm/gather/combat all blocked simultaneously = deadlock.
+  // Converting to WARNING: operation continues but agent is warned.
+  let farmWarning = "";
   const farmHpStart = Math.round((bot.health ?? 20) * 10) / 10;
   if (farmHpStart < 8) {
-    console.error(`[Farm] ABORT: HP too low (${farmHpStart}/20) for 60-120s stationary operation.`);
-    return `mc_farm aborted: HP too low (${farmHpStart}/20). Farming is a long stationary operation (60-120s) — starting at low HP is lethal. Use mc_eat to heal or mc_combat(target="cow") for food first.`;
+    console.error(`[Farm] WARNING: HP low (${farmHpStart}/20) for 60-120s stationary operation. Proceeding despite risk.`);
+    farmWarning += `\n[WARNING] HP low (${farmHpStart}/20). Farming is a long stationary operation (60-120s) — starting at low HP is risky.\n[推奨アクション]\n1. bot.eat() — 食料があればHP回復\n2. bot.combat("cow") — 食料動物を狩って食料確保\n3. bot.flee(20) — 敵から逃走してから再試行`;
   }
 
   // Pre-farm auto-sleep: if nighttime with bed nearby, sleep first to skip night.
@@ -741,20 +740,16 @@ export async function mc_farm(): Promise<string> {
     // Continue without armor
   }
 
-  // Pre-farm hostile check: ABORT if hostiles within 20 blocks.
-  // mc_farm is a 60-120s stationary operation. Starting with known nearby hostiles
-  // is repeatedly fatal — the mid-farm loop (Step 3) aborts, but by then the bot
-  // has already navigated to water (10-30s exposed) and taken damage.
-  // Bot2 [2026-03-22]: skeleton shot bot HP 20→1 during dirt placement.
-  // Bot1/Bot2/Bot3: multiple deaths from mob damage during farming loops.
-  // Previously this only logged a warning and continued — now aborts immediately.
+  // Pre-farm hostile check: WARNING (not block) if hostiles within 20 blocks.
+  // Bot3 Bug #22 [2026-03-23]: farm blocked + combat blocked + gather blocked = deadlock.
+  // Converting to WARNING: operation continues but agent is warned.
   const danger = checkDangerNearby(bot, 20);
   if (danger.dangerous) {
     const threatDesc = danger.nearestHostile
       ? `${danger.nearestHostile.name} at ${danger.nearestHostile.distance.toFixed(1)} blocks`
       : `${danger.hostileCount} hostile(s)`;
-    console.error(`[Farm] ABORT: ${threatDesc} nearby. Too dangerous to start 60-120s farming.`);
-    return `mc_farm aborted: ${threatDesc} within 20 blocks. Farming is a long stationary operation (60-120s) — starting with nearby hostiles is lethal. Use mc_flee or mc_combat to clear threats first. HP: ${farmHpStart}/20.`;
+    console.error(`[Farm] WARNING: ${threatDesc} nearby. Proceeding despite risk.`);
+    farmWarning += `\n[WARNING] ${threatDesc} within 20 blocks. Farming is stationary — nearby hostiles are dangerous.\n[推奨アクション]\n1. bot.flee(20) — 敵から逃走してから農場作業\n2. bot.combat() — 敵を先に倒す\n3. bot.equipArmor() — 防具を装備`;
   }
 
   const pos = bot.entity.position;
@@ -1554,7 +1549,7 @@ export async function mc_farm(): Promise<string> {
     `mc_farm complete. HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}`,
     ...logs,
     `Inventory: ${finalInv.map(i => `${i.name}(${i.count})`).join(", ")}`,
-  ].join("\n");
+  ].join("\n") + farmWarning;
 }
 
 // ─── mc_build ────────────────────────────────────────────────────────────────
