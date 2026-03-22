@@ -198,6 +198,13 @@ export async function mc_status(): Promise<string> {
   if (foodItems.length === 0 && food < 10) {
     warnings.push("NO FOOD in inventory. Hunger will deplete. Hunt animals (mc_combat cow/pig) or harvest crops before it's critical.");
   }
+  // Underground warning: many deaths from being trapped underground where mobs are dense.
+  // Bot1 Sessions 31-44: 15+ deaths from pathfinder routing underground into cave systems.
+  // Bot2/Bot3: repeated deaths from being underground with no escape path.
+  // Warn when Y < 60 so the agent knows to return to surface before doing anything else.
+  if (pos.y < 60) {
+    warnings.push(`UNDERGROUND: You are at Y=${Math.round(pos.y)} (below surface). Cave mobs are dense and escape is difficult. Return to surface (mc_navigate to Y=80+ or mc_tunnel direction=up) before other actions.`);
+  }
 
   const result = {
     health: Math.round(health * 10) / 10,
@@ -572,13 +579,30 @@ export async function mc_farm(): Promise<string> {
     return `[REFUSED] HP too low to farm (${farmHpStart}/20). Farming takes up to 120s and leaves bot stationary/vulnerable. Heal first: mc_eat, or mc_combat(target="cow") for food.`;
   }
 
+  // Pre-farm auto-sleep: if nighttime with bed nearby, sleep first to skip night.
+  // mc_navigate and mc_gather both auto-sleep before operating; mc_farm did not,
+  // causing REFUSED deadlocks where bot had a bed but couldn't farm because it was night.
+  // Bot1/Bot2/Bot3 [2026-03-22]: multiple "REFUSED at night" while holding a bed.
+  // Sleeping first makes it daytime, allowing farming to proceed safely.
+  let farmTimeOfDay = bot.time?.timeOfDay ?? 0;
+  let farmIsNight = farmTimeOfDay > 12541 || farmTimeOfDay < 100;
+  if (farmIsNight) {
+    try {
+      const sleepResult = await botManager.sleep(username);
+      console.error(`[Farm] Pre-farm auto-sleep succeeded: ${sleepResult}`);
+      // Re-check time after sleep — should now be daytime
+      farmTimeOfDay = bot.time?.timeOfDay ?? 0;
+      farmIsNight = farmTimeOfDay > 12541 || farmTimeOfDay < 100;
+    } catch (sleepErr) {
+      console.error(`[Farm] Pre-farm auto-sleep skipped: ${sleepErr instanceof Error ? sleepErr.message : String(sleepErr)}`);
+    }
+  }
+
   // Safety: Refuse farming at night — farming is a long, stationary operation that
   // leaves the bot exposed to hostile mob spawns. Multiple deaths from this pattern:
   // Bot1: killed by creeper during night mc_farm, Bot2: skeleton shot from HP 20→1 during dirt placement,
   // Bot3 Bug #19: mc_farm at night led to mob surround.
   // Farming should only happen during safe daylight hours.
-  const farmTimeOfDay = bot.time?.timeOfDay ?? 0;
-  const farmIsNight = farmTimeOfDay > 12541 || farmTimeOfDay < 100;
   if (farmIsNight) {
     const farmHp = Math.round((bot.health ?? 20) * 10) / 10;
     return `[REFUSED] Too dangerous to farm at night (time=${farmTimeOfDay}). Mobs spawn during the long farming operation and bot is stationary/vulnerable. Wait for dawn (mc_sleep if you have a bed) or build shelter. HP=${farmHp}.`;
@@ -1879,6 +1903,28 @@ export async function mc_combat(
     const isPassiveFood = target ? passiveFoodMobs.some(p => target!.toLowerCase().includes(p)) : false;
     if (!isPassiveFood && combatHp < 8) {
       return `[REFUSED] HP too low for combat (${combatHp.toFixed(1)}/20). Hostile mobs can kill in 1-2 hits at this HP. Use mc_eat to heal first, or mc_flee to escape. If no food available, dig a 1x1x2 shelter hole and wait.`;
+    }
+  }
+
+  // Pre-combat auto-sleep for passive food hunts at night: if bot has a bed, sleep first.
+  // mc_navigate and mc_gather both auto-sleep; mc_combat did not, causing deadlocks:
+  // Bot needs food -> mc_combat(cow) REFUSED at night -> no food -> starvation -> death.
+  // If bot has a bed, sleeping skips night and allows safe passive mob hunting.
+  // Bot1/Bot2 [2026-03-22]: starvation deadlock at night while holding a bed.
+  if (combatBot && target) {
+    const passiveFoodMobsSleep = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "mule", "mooshroom", "llama", "goat", "salmon", "cod", "squid", "turtle"];
+    const isPassiveSleep = passiveFoodMobsSleep.some(p => target!.toLowerCase().includes(p));
+    if (isPassiveSleep) {
+      const preCombatTime = combatBot.time?.timeOfDay ?? 0;
+      const preCombatIsNight = preCombatTime > 12541 || preCombatTime < 100;
+      if (preCombatIsNight) {
+        try {
+          const sleepResult = await botManager.sleep(username);
+          console.error(`[Combat] Pre-combat auto-sleep succeeded: ${sleepResult}`);
+        } catch (sleepErr) {
+          console.error(`[Combat] Pre-combat auto-sleep skipped: ${sleepErr instanceof Error ? sleepErr.message : String(sleepErr)}`);
+        }
+      }
     }
   }
 

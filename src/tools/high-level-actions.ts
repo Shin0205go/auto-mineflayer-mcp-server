@@ -375,6 +375,24 @@ export async function minecraft_build_structure(
 
   const bot = botManager.getBot(username);
 
+  // Pre-build auto-sleep: if nighttime with bed nearby, sleep first to skip night.
+  // Building at night is extremely dangerous (mobs spawn and attack stationary bot).
+  // mc_navigate and mc_gather both auto-sleep; mc_build did not, causing the bot to
+  // get REFUSED at night even when holding a bed that could skip the night.
+  // Bot1 [2026-03-22]: mc_build("shelter") timeout at night — could have slept first.
+  if (bot) {
+    const buildTimeOfDay = bot.time?.timeOfDay ?? 0;
+    const buildIsNight = buildTimeOfDay > 12541 || buildTimeOfDay < 100;
+    if (buildIsNight) {
+      try {
+        const sleepResult = await botManager.sleep(username);
+        console.error(`[Build] Pre-build auto-sleep succeeded: ${sleepResult}`);
+      } catch (sleepErr) {
+        console.error(`[Build] Pre-build auto-sleep skipped: ${sleepErr instanceof Error ? sleepErr.message : String(sleepErr)}`);
+      }
+    }
+  }
+
   // Pre-build HP check: building is a long, stationary operation.
   // Bot1 [2026-03-22]: killed by skeleton during mc_build(shelter) at Y=38, HP=9.
   // Building places blocks one by one — bot is vulnerable the entire time.
