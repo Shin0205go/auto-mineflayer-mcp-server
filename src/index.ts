@@ -15,6 +15,14 @@ import { getAgentType } from "./agent-state.js";
 import { botManager } from "./bot-manager/index.js";
 import { registry } from "./tool-handler-registry.js";
 
+// Eagerly import high-level-actions to populate registry.highLevel at startup.
+// Bot1/Bot2 [2026-03-22]: mc_craft/mc_gather/mc_build crashed with
+// "Cannot read properties of undefined (reading 'minecraft_craft_chain')"
+// because registry.highLevel was only set when high-level-actions.ts was loaded,
+// but no static import existed — only the dynamic import inside mc_reload.
+// On first boot, getHighLevel() returned undefined, crashing all craft/gather/build calls.
+import "./tools/high-level-actions.js";
+
 // Tool definitions for tools/list and CallTool
 const allToolDefs: Record<string, { description: string; inputSchema: object }> = {
   ...coreTools,

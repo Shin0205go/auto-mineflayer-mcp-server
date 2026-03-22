@@ -147,8 +147,52 @@ export async function mc_execute(
       }
     },
     wait: (ms: number) => {
+      // Bot1 [2026-03-22]: drowned during bot.wait() at y=86 with hunger=0.
+      // wait() was a raw setTimeout with no safety monitoring — bot took damage
+      // from water/mobs for the entire wait duration with no abort mechanism.
+      // Now: check HP every 2s during wait. If HP drops below 4 or bot is in water,
+      // resolve early so the agent can react (flee, eat, move to safety).
       const waitMs = Math.min(ms, MAX_WAIT_MS);
-      return new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+      return new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, waitMs);
+        const safetyInterval = setInterval(() => {
+          try {
+            const username = botManager.requireSingleBot();
+            const waitBot = botManager.getBot(username);
+            if (!waitBot) return;
+            const hp = waitBot.health ?? 20;
+            // Abort wait if HP critically low — bot is under attack or drowning
+            if (hp < 4) {
+              clearTimeout(timer);
+              clearInterval(safetyInterval);
+              if (logs.length < MAX_LOG_LINES) {
+                logs.push(`[wait] ABORTED: HP dropped to ${hp.toFixed(1)} during wait`);
+              }
+              resolve();
+              return;
+            }
+            // Abort wait if bot is in water (drowning risk)
+            const feetBlock = waitBot.blockAt(waitBot.entity.position);
+            const headBlock = waitBot.blockAt(waitBot.entity.position.offset(0, 1, 0));
+            const inWater = (feetBlock && feetBlock.name === "water") ||
+                            (headBlock && headBlock.name === "water");
+            if (inWater && hp < 10) {
+              clearTimeout(timer);
+              clearInterval(safetyInterval);
+              if (logs.length < MAX_LOG_LINES) {
+                logs.push(`[wait] ABORTED: In water with HP=${hp.toFixed(1)} — drowning risk`);
+              }
+              resolve();
+              return;
+            }
+          } catch { /* ignore errors during safety check */ }
+        }, 2000);
+        // Clean up interval when wait resolves normally
+        const origResolve = resolve;
+        setTimeout(() => {
+          clearInterval(safetyInterval);
+        }, waitMs + 100);
+      });
     },
   };
 
