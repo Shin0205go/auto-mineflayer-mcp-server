@@ -259,6 +259,24 @@ export async function mc_gather(
       // Continue without armor
     }
 
+    // Pre-gather proactive eat: consume food before gathering if HP < 18 OR hunger < 14.
+    // mc_gather is a long operation (up to 120s) where the bot is stationary. Without
+    // sufficient hunger/saturation, HP drops from starvation during the operation.
+    // Bot1: started gather at low hunger, hunger hit 0 mid-gather, HP drained, died.
+    // Bot2/Bot3: similar starvation-during-gather patterns.
+    const preGatherHp = gatherBot.health ?? 20;
+    const preGatherHunger = (gatherBot as any).food ?? 20;
+    if (preGatherHp < 18 || preGatherHunger < 14) {
+      const preGatherFood = gatherBot.inventory.items().find((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
+      if (preGatherFood) {
+        try {
+          await gatherBot.equip(preGatherFood, "hand");
+          await gatherBot.consume();
+          console.error(`[Gather] Pre-gather auto-ate ${preGatherFood.name} (HP: ${preGatherHp.toFixed(1)} → ${gatherBot.health?.toFixed(1)}, hunger: ${preGatherHunger} → ${(gatherBot as any).food ?? "?"})`);
+        } catch (_) { /* ignore eat errors */ }
+      }
+    }
+
     // Refuse gathering at critically low HP regardless of time — mc_gather is a long
     // operation (up to 120s) where the bot is stationary and vulnerable. Starting at low HP
     // means any single mob hit or starvation tick is lethal. The runtime HP monitor aborts
@@ -1374,20 +1392,22 @@ export async function mc_navigate(
     }
   }
 
-  // Pre-navigation proactive eat: consume food before starting ANY navigation if HP < 18.
-  // Bot1 Sessions 28,30,35: HP dropped during travel but food in inventory was never consumed.
-  // The between-segment auto-eat only triggers for dist>50 multi-segment nav. Short-distance
-  // navigations (<=50 blocks) skip it entirely, so bot starts travel with low HP and dies
-  // to first mob hit. Eating BEFORE navigation maintains HP buffer for the entire journey.
+  // Pre-navigation proactive eat: consume food before starting ANY navigation if HP < 18
+  // OR hunger < 14. HP-only check missed starvation spirals: Bot1 Session 28 started at
+  // HP=14/hunger=1, hunger hit 0 mid-travel, HP couldn't regenerate, died to mobs.
+  // Bot2/Bot3: multiple hunger-0 deadlocks where HP was initially fine but hunger depletion
+  // during navigation caused irrecoverable starvation. Eating at hunger<14 maintains the
+  // saturation buffer that prevents hunger from hitting 0 during travel.
   if (bot) {
     const preNavHp = bot.health ?? 20;
-    if (preNavHp < 18) {
+    const preNavHunger = (bot as any).food ?? 20;
+    if (preNavHp < 18 || preNavHunger < 14) {
       const preNavFood = bot.inventory.items().find((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
       if (preNavFood) {
         try {
           await bot.equip(preNavFood, "hand");
           await bot.consume();
-          console.error(`[Navigate] Pre-nav auto-ate ${preNavFood.name} (HP: ${preNavHp.toFixed(1)} → ${bot.health?.toFixed(1)})`);
+          console.error(`[Navigate] Pre-nav auto-ate ${preNavFood.name} (HP: ${preNavHp.toFixed(1)} → ${bot.health?.toFixed(1)}, hunger: ${preNavHunger} → ${(bot as any).food ?? "?"})`);
         } catch (_) { /* ignore eat errors */ }
       }
     }
@@ -1577,18 +1597,20 @@ export async function mc_navigate(
                 }
               }
             }
-            // Auto-eat between segments when HP is not full and food is available.
+            // Auto-eat between segments when HP < 18 OR hunger < 14.
             // Bot1 Sessions 28,30,35: HP dropped during multi-segment travel but food in
-            // inventory was never consumed because each segment was < 30 blocks (moveTo
-            // auto-eat threshold). Eating proactively at HP<18 maintains HP buffer for mob hits.
-            // Previous threshold was HP<14, but mobs can deal 4-8 damage per hit — need buffer.
-            if (segHp < 18 && segHasFood) {
+            // inventory was never consumed. Previous threshold was HP-only, but the root cause
+            // of many death spirals is hunger depletion: Bot1 Session 28 (hunger=1→0, died),
+            // Bot2/Bot3 (hunger 0 deadlocks). At hunger<14, saturation is depleted and hunger
+            // bar drops rapidly during sprinting/navigation. Eating proactively prevents the
+            // hunger→0→starvation→death chain that kills bots even at full HP.
+            if ((segHp < 18 || segHunger < 14) && segHasFood) {
               const segFoodItem = segBot.inventory.items().find((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
               if (segFoodItem) {
                 try {
                   await segBot.equip(segFoodItem, "hand");
                   await segBot.consume();
-                  console.error(`[Navigate] Auto-ate ${segFoodItem.name} between segments (HP: ${segHp.toFixed(1)} → ${segBot.health?.toFixed(1)})`);
+                  console.error(`[Navigate] Auto-ate ${segFoodItem.name} between segments (HP: ${segHp.toFixed(1)} → ${segBot.health?.toFixed(1)}, hunger: ${segHunger} → ${(segBot as any).food ?? "?"})`);
                 } catch (_) { /* ignore eat errors */ }
               }
             }
@@ -1709,19 +1731,23 @@ export async function mc_combat(
     }
   }
 
-  // Pre-combat proactive eat: consume food before fighting if HP < 16.
+  // Pre-combat proactive eat: consume food before fighting if HP < 16 OR hunger < 14.
   // Bot1 Sessions 23,28,29: started combat at HP 10-14 with food in inventory, never ate,
   // died during combat when flee threshold triggered too late. Eating before combat provides
   // HP buffer that can mean the difference between surviving a hit and dying.
+  // Also eat when hunger < 14: combat drains hunger rapidly (sprinting + attacking), and
+  // if hunger hits 0 during combat, HP stops regenerating — making every hit potentially fatal.
+  // Bot1 Session 28: hunger=1 at combat start, hunger hit 0 mid-fight, HP couldn't regen, died.
   if (combatBot) {
     const preCombatHp = combatBot.health ?? 20;
-    if (preCombatHp < 16) {
+    const preCombatHunger = (combatBot as any).food ?? 20;
+    if (preCombatHp < 16 || preCombatHunger < 14) {
       const preCombatFood = combatBot.inventory.items().find((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
       if (preCombatFood) {
         try {
           await combatBot.equip(preCombatFood, "hand");
           await combatBot.consume();
-          console.error(`[Combat] Pre-combat auto-ate ${preCombatFood.name} (HP: ${preCombatHp.toFixed(1)} → ${combatBot.health?.toFixed(1)})`);
+          console.error(`[Combat] Pre-combat auto-ate ${preCombatFood.name} (HP: ${preCombatHp.toFixed(1)} → ${combatBot.health?.toFixed(1)}, hunger: ${preCombatHunger} → ${(combatBot as any).food ?? "?"})`);
         } catch (_) { /* ignore eat errors */ }
       }
     }

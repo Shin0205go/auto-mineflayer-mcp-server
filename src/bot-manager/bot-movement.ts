@@ -1724,8 +1724,17 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     // because canDig was restored to true, defeating the night cave-routing protection.
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.allowSprinting = prevAllowSprinting;
-      bot.pathfinder.movements.maxDropDown = prevMaxDropDown;
-      (bot.pathfinder.movements as any).liquidCost = prevLiquidCost;
+      // Restore maxDropDown to safe default (2), NOT the previous value.
+      // prevMaxDropDown could be higher than 2 if set by other code or mineflayer defaults,
+      // which would undo the safe limit. moveToBasic always sets maxDropDown=2 (line 595),
+      // so restoring to 2 matches the expected safe state for subsequent navigation.
+      // The flee itself uses maxDropDown=1 (extra cautious); after flee, 2 is safe for
+      // normal pathfinding while still preventing lethal 3+ block falls.
+      bot.pathfinder.movements.maxDropDown = 2;
+      // Keep liquidCost high to prevent water routing (drowning risk).
+      // Don't restore prevLiquidCost — it may have been the low default value.
+      // moveToBasic always sets liquidCost=10000, so maintain that safe state.
+      (bot.pathfinder.movements as any).liquidCost = 10000;
       // canDig is intentionally NOT restored — next moveTo handles it
     }
 
@@ -1775,7 +1784,10 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
         bot.pathfinder.movements.maxDropDown = 2; // restore safe default (2-block max drop, physics fall detector catches >3)
         (bot.pathfinder.movements as any).liquidCost = 10000; // keep water avoidance
         bot.pathfinder.movements.allowSprinting = true; // restore default
-        bot.pathfinder.movements.canDig = true; // restore default
+        // Do NOT restore canDig=true — let the next moveTo decide based on time-of-day/HP.
+        // Same rationale as the normal-exit path: restoring canDig=true at night defeats
+        // the cave-routing protection in moveToBasic.
+        // bot.pathfinder.movements.canDig stays at its current value (false from flee)
       }
     } catch { /* bot may be disconnected */ }
     return `Flee interrupted: ${errMsg}`;
