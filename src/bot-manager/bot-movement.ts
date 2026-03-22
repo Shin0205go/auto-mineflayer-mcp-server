@@ -728,10 +728,18 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   const isNetherOrEnd = currentDimension.includes("nether") || currentDimension.includes("end");
   // In Nether/End: treat as daytime (no night cycle). In OW: check actual time.
   const isDaytime = isNetherOrEnd || timeOfDay < 12541;
+  // Use centralized isHostileMob() instead of hardcoded 6-name list.
+  // Bug: previous list missed pillager, drowned, phantom, stray, husk, vindicator,
+  // ravager, blaze, ghast, hoglin, piglin_brute — all of which killed bots.
+  // Bot1/Bot2/Bot3 [2026-03-22]: deaths from pillagers/drowned during moveTo that
+  // were not detected by the old hasHostileNearby check, allowing unsafe movement
+  // (starvation deadlock exception at HP>=2 when hostiles WERE present).
   const hasHostileNearby = Object.values(bot.entities).some((e: any) => {
-    if (!e || !e.position) return false;
+    if (!e || !e.position || e === bot.entity) return false;
     const dist = e.position.distanceTo(bot.entity.position);
-    return dist < 20 && e.type === "mob" && (e.name === "creeper" || e.name === "skeleton" || e.name === "zombie" || e.name === "spider" || e.name === "enderman" || e.name === "witch");
+    if (dist >= 20) return false;
+    const eName = (e.name || "").toLowerCase();
+    return isHostileMob(bot, eName);
   });
 
   // Auto-eat if food available and HP is low — prevents navigating into death

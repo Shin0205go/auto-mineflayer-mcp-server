@@ -517,6 +517,89 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
     }
 
     distance = target.position.distanceTo(bot.entity.position);
+
+    // BOW FALLBACK: If ranged mob is still far after approach, use bow attack.
+    // Bot1 [2026-03-22]: mc_combat("skeleton") always timed out because skeletons
+    // retreat faster than the bot can chase. After sprint approach, skeleton is still
+    // at 8-15 blocks. Instead of entering melee loop (which will timeout chasing),
+    // use bow if available. This matches the end_crystal bow strategy above.
+    // Bow deals 6-10 damage (fully charged) — kills most mobs in 2-3 shots.
+    if (isRangedMob && distance > 5) {
+      const bow = bot.inventory.items().find(i => i.name === "bow" || i.name === "crossbow");
+      const arrows = bot.inventory.items().find(i => i.name === "arrow" || i.name === "spectral_arrow" || i.name === "tipped_arrow");
+      if (bow && arrows) {
+        console.error(`[Attack] Ranged mob ${target.name} still at ${distance.toFixed(1)} blocks after approach. Using bow (${bow.name}).`);
+        let bowLastPos = target.position.clone();
+        try {
+          await bot.equip(bow, "hand");
+          let bowKill = false;
+          for (let shot = 0; shot < 7; shot++) {
+            const bowTarget = Object.values(bot.entities).find(e => e.id === target.id);
+            if (!bowTarget) { bowKill = true; break; }
+            // HP check during bow fight
+            if (bot.health <= 12) {
+              console.error(`[Attack] HP low (${bot.health}) during bow fight. Stopping.`);
+              break;
+            }
+            bowLastPos = bowTarget.position.clone();
+            // Lead the shot slightly — aim at center mass
+            await bot.lookAt(bowTarget.position.offset(0, bowTarget.height * 0.6, 0));
+            bot.activateItem(); // Start drawing bow
+            await delay(bow.name === "crossbow" ? 1250 : 1000); // Draw time
+            // Re-aim right before release (target may have moved)
+            const reTarget = Object.values(bot.entities).find(e => e.id === target.id);
+            if (reTarget) {
+              await bot.lookAt(reTarget.position.offset(0, reTarget.height * 0.6, 0));
+              bowLastPos = reTarget.position.clone();
+            }
+            bot.deactivateItem(); // Release arrow
+            await delay(400); // Arrow flight time
+            console.error(`[Attack] Bow shot ${shot + 1}/7 at ${target.name}`);
+          }
+          // Re-equip melee weapon
+          for (const wn of weaponPriority) {
+            const w = bot.inventory.items().find(i => i.name === wn);
+            if (w) { try { await bot.equip(w, "hand"); } catch (_) {} break; }
+          }
+          if (bowKill) {
+            // Collect drops
+            try {
+              const distToDrops = bot.entity.position.distanceTo(bowLastPos);
+              if (distToDrops > 3) {
+                applySafePathfinderSettings(bot);
+                const collectGoal = new goals.GoalNear(bowLastPos.x, bowLastPos.y, bowLastPos.z, 2);
+                bot.pathfinder.setGoal(collectGoal);
+                await new Promise<void>((resolve) => {
+                  const timeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 5000);
+                  const check = setInterval(() => {
+                    if (bot.entity.position.distanceTo(bowLastPos) < 3 || !bot.pathfinder.isMoving()) {
+                      clearInterval(check); clearTimeout(timeout); bot.pathfinder.setGoal(null); resolve();
+                    }
+                  }, 200);
+                });
+              }
+              await delay(800);
+              await collectNearbyItems(managed);
+            } catch (_) {}
+            const inv = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
+            return `Killed ${target.name} with ${bow.name}. HP: ${(bot.health ?? 0).toFixed(1)}/20. Inventory: ${inv}`;
+          }
+          // If bow didn't kill, fall through to melee loop
+          const bowTarget = Object.values(bot.entities).find(e => e.id === target.id);
+          if (bowTarget) {
+            distance = bowTarget.position.distanceTo(bot.entity.position);
+            target = bowTarget;
+          }
+        } catch (bowErr) {
+          console.error(`[Attack] Bow attack failed: ${bowErr}, falling back to melee`);
+          // Re-equip melee weapon
+          for (const wn of weaponPriority) {
+            const w = bot.inventory.items().find(i => i.name === wn);
+            if (w) { try { await bot.equip(w, "hand"); } catch (_) {} break; }
+          }
+        }
+      }
+    }
   }
 
   // Attack repeatedly until entity is dead or too far
