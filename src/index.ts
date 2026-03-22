@@ -117,6 +117,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   };
 });
 
+// Global tool timeout (5 minutes) — prevents any tool from hanging indefinitely
+const TOOL_TIMEOUT_MS = 300_000;
+
 // Handle tool execution — routes to appropriate handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
@@ -125,9 +128,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     let result: string;
 
+    // Wrap all tool execution with a global timeout
+    const toolExecution = async (): Promise<string> => {
+    let toolResult: string;
+
     // Route: Tier 1 core tools (mc_*)
     if (name in coreTools) {
-      result = await handleCoreTool(name, toolArgs);
+      toolResult = await handleCoreTool(name, toolArgs);
       // After mc_connect, refresh tools/list so Tier 2 tools (based on bot state) become visible
       if (name === "mc_connect" && toolArgs.action !== "disconnect") {
         try {
@@ -137,31 +144,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     // Route: Tier 2 situational tools
     else if (name in tier2ToolDefs) {
-      result = await handleTier2Tool(name, toolArgs);
+      toolResult = await handleTier2Tool(name, toolArgs);
     }
     // Route: Tier 3 legacy tools (minecraft_*)
     else if (name in connectionTools) {
-      result = await handleConnectionTool(name, toolArgs);
+      toolResult = await handleConnectionTool(name, toolArgs);
     } else if (name in movementTools) {
-      result = await handleMovementTool(name, toolArgs);
+      toolResult = await handleMovementTool(name, toolArgs);
     } else if (name in environmentTools) {
-      result = await handleEnvironmentTool(name, toolArgs);
+      toolResult = await handleEnvironmentTool(name, toolArgs);
     } else if (name in buildingTools) {
-      result = await handleBuildingTool(name, toolArgs);
+      toolResult = await handleBuildingTool(name, toolArgs);
     } else if (name in craftingTools) {
-      result = await handleCraftingTool(name, toolArgs);
+      toolResult = await handleCraftingTool(name, toolArgs);
     } else if (name in storageTools) {
-      result = await handleStorageTool(name, toolArgs);
+      toolResult = await handleStorageTool(name, toolArgs);
     } else if (name in combatTools) {
-      result = await handleCombatTool(name, toolArgs);
+      toolResult = await handleCombatTool(name, toolArgs);
     } else if (name in highLevelActionTools) {
-      result = await handleHighLevelActionTool(name, toolArgs);
+      toolResult = await handleHighLevelActionTool(name, toolArgs);
     } else if (name in debugCraftingTools) {
-      result = await handleDebugCraftingTool(name, toolArgs);
+      toolResult = await handleDebugCraftingTool(name, toolArgs);
     } else if (name in bootstrapTools) {
-      result = await handleBootstrapTool(name, toolArgs);
+      toolResult = await handleBootstrapTool(name, toolArgs);
     } else if (name === "mc_reload") {
-      result = await reloadModules();
+      toolResult = await reloadModules();
     } else if (name === "search_tools") {
       const query = (toolArgs.query as string) || "";
       const detail = (toolArgs.detail as "brief" | "full") || "brief";
@@ -179,7 +186,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             priority: metadata?.priority || 0,
           };
         });
-        result = JSON.stringify({ query, count: results.length, tools: results }, null, 2);
+        toolResult = JSON.stringify({ query, count: results.length, tools: results }, null, 2);
       } else {
         const results = matchedTools.map(toolName => {
           const metadata = TOOL_METADATA[toolName];
@@ -192,10 +199,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             inputSchema: toolDef?.inputSchema || {},
           };
         });
-        result = JSON.stringify({ query, count: results.length, tools: results }, null, 2);
+        toolResult = JSON.stringify({ query, count: results.length, tools: results }, null, 2);
       }
     } else {
       throw new Error(`Unknown tool: ${name}`);
+    }
+    return toolResult;
+    }; // end toolExecution
+
+    // mc_execute has its own timeout; for all others, apply global timeout
+    const useTimeout = name !== "mc_execute";
+    if (useTimeout) {
+      const timeoutPromise = new Promise<string>((_, reject) => {
+        setTimeout(() => reject(new Error(`Tool '${name}' timed out after ${TOOL_TIMEOUT_MS / 1000}s`)), TOOL_TIMEOUT_MS);
+      });
+      result = await Promise.race([toolExecution(), timeoutPromise]);
+    } else {
+      result = await toolExecution();
     }
 
     // Auto-inject unread chat messages into every tool result

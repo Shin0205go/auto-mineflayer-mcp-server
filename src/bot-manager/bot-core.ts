@@ -218,6 +218,7 @@ export class BotCore extends EventEmitter {
       });
 
       bot.once("spawn", () => {
+       try {
         // Load pathfinder plugin
         bot.loadPlugin(pathfinder);
         const movements = new Movements(bot);
@@ -944,10 +945,18 @@ export class BotCore extends EventEmitter {
         // Return connection info
         const result = `Connected as ${config.username} (${gameMode} mode)`;
         if (gameMode !== "survival") {
+          this.connectingPromises.delete(config.username);
           return resolve(`${result}. WARNING: Not in survival mode! Run /gamemode survival ${config.username} for items to drop.`);
         }
         this.connectingPromises.delete(config.username);
         resolve(result);
+       } catch (err) {
+        // If spawn handler throws, reject the promise instead of hanging forever
+        console.error(`[BotManager] Spawn handler error for ${config.username}:`, err);
+        this.connectingPromises.delete(config.username);
+        try { bot.quit(); } catch (_) { /* ignore */ }
+        reject(new Error(`Spawn handler error: ${err instanceof Error ? err.message : String(err)}`));
+       }
       });
 
       bot.once("error", (err) => {
@@ -962,9 +971,19 @@ export class BotCore extends EventEmitter {
       });
     });
 
+    // Add 60s timeout to prevent indefinite hangs
+    const CONNECTION_TIMEOUT_MS = 60_000;
+    const timeoutPromise = new Promise<string>((_, reject) => {
+      setTimeout(() => {
+        this.connectingPromises.delete(config.username);
+        reject(new Error(`Connection timed out after ${CONNECTION_TIMEOUT_MS / 1000}s for ${config.username}`));
+      }, CONNECTION_TIMEOUT_MS);
+    });
+    const racedPromise = Promise.race([connectionPromise, timeoutPromise]);
+
     // Store the promise and return it
-    this.connectingPromises.set(config.username, connectionPromise);
-    return connectionPromise;
+    this.connectingPromises.set(config.username, racedPromise);
+    return racedPromise;
   }
 
   async disconnect(username: string): Promise<void> {
