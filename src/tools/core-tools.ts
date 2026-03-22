@@ -563,7 +563,7 @@ export async function mc_farm(): Promise<string> {
       const beforeCount = farmCoords.length;
       for (let i = farmCoords.length - 1; i >= 0; i--) {
         const fc = farmCoords[i];
-        const dist = Math.abs(fc.x - wp.x) + Math.abs(fc.z - wp.z); // Manhattan distance on XZ
+        const dist = Math.max(Math.abs(fc.x - wp.x), Math.abs(fc.z - wp.z)); // Chebyshev distance on XZ (Minecraft irrigation is 9x9 area)
         const yDiff = Math.abs(fc.y - wp.y);
         if (dist > 4 || yDiff > 1) {
           farmCoords.splice(i, 1);
@@ -616,7 +616,7 @@ export async function mc_farm(): Promise<string> {
           farmCoords.length = 0;
           for (let dx2 = -4; dx2 <= 4 && farmCoords.length < seedCount; dx2++) {
             for (let dz2 = -4; dz2 <= 4 && farmCoords.length < seedCount; dz2++) {
-              if (Math.abs(dx2) + Math.abs(dz2) > 4) continue; // Manhattan distance <= 4 from water
+              if (Math.max(Math.abs(dx2), Math.abs(dz2)) > 4) continue; // Chebyshev distance <= 4 from water (9x9 irrigation area)
               const cx = waterX + dx2, cz = waterZ + dz2;
               for (let dy2 = 0; dy2 >= -5; dy2--) {
                 const cy = waterY + dy2;
@@ -664,7 +664,7 @@ export async function mc_farm(): Promise<string> {
                     break;
                   }
                   if (pdx === 0 && pdz === 0) continue; // skip water position
-                  if (Math.abs(pdx) + Math.abs(pdz) > 4) continue; // stay within irrigation range
+                  if (Math.max(Math.abs(pdx), Math.abs(pdz)) > 4) continue; // Chebyshev distance <= 4 from water (irrigation range)
                   const px = waterPos.x + pdx, pz = waterPos.z + pdz;
                   // Scan from high to low to find the surface (first solid block with air above)
                   for (let py = waterPos.y + 3; py >= waterPos.y - 3; py--) {
@@ -793,7 +793,7 @@ export async function mc_farm(): Promise<string> {
               farmCoords.length = 0;
               for (let dx3 = -4; dx3 <= 4 && farmCoords.length < seedCount; dx3++) {
                 for (let dz3 = -4; dz3 <= 4 && farmCoords.length < seedCount; dz3++) {
-                  if (Math.abs(dx3) + Math.abs(dz3) > 4) continue; // Manhattan distance <= 4 from water
+                  if (Math.max(Math.abs(dx3), Math.abs(dz3)) > 4) continue; // Chebyshev distance <= 4 from water (9x9 irrigation area)
                   const cx = vWaterX + dx3, cz = vWaterZ + dz3;
                   for (let dy3 = 0; dy3 >= -5; dy3--) {
                     const cy = vWaterY + dy3;

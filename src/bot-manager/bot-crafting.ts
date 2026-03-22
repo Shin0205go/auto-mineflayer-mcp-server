@@ -567,7 +567,7 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       allRecipes = [manualRecipe as any];
     }
 
-    if (itemName === "bread" || itemName === "bone_meal" || itemName === "shield") {
+    if (itemName === "bread" || itemName === "bone_meal" || itemName === "shield" || itemName === "white_bed") {
       console.error(`[Craft] Using manual recipe for ${itemName} (bypassing potentially broken recipesAll)...`);
 
       if (itemName === "bread") {
@@ -634,6 +634,40 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           ],
           requiresTable: true
         };
+        allRecipes = [manualRecipe as any];
+      }
+
+      if (itemName === "white_bed") {
+        // White bed: 3 white_wool (top row) + 3 planks (bottom row)
+        // Bot2 bug [2026-03-22]: recipesAll returned a dye-based variant requiring bone_meal→bone,
+        // causing craft_chain to fail trying to craft "bone" (a mob drop, not craftable).
+        // The correct recipe uses wool directly (sheep drop white wool by default).
+        const woolItem = mcData.itemsByName["white_wool"];
+        if (!woolItem) throw new Error("Cannot find white_wool item data");
+        const woolInv = inventoryItems.filter(i => i.name === "white_wool").reduce((s, i) => s + i.count, 0);
+        if (woolInv < 3) throw new Error(`Cannot craft white_bed: Need 3 white_wool, have ${woolInv}. Kill sheep for wool or use shears.`);
+        // Find any planks
+        const plankItem = inventoryItems.find(i => i.name.endsWith("_planks"));
+        if (!plankItem) throw new Error("Cannot craft white_bed: Need 3 planks. Craft planks from logs first.");
+        const plankMcData = mcData.itemsByName[plankItem.name];
+        if (!plankMcData) throw new Error(`Cannot find item data for ${plankItem.name}`);
+        const plankInv = inventoryItems.filter(i => i.name === plankItem.name).reduce((s, i) => s + i.count, 0);
+        if (plankInv < 3) throw new Error(`Cannot craft white_bed: Need 3 planks, have ${plankInv}`);
+
+        const W = woolItem.id;
+        const P = plankMcData.id;
+        const manualRecipe = {
+          result: { id: item.id, count: 1 },
+          inShape: [[W, W, W], [P, P, P]],
+          ingredients: [W, W, W, P, P, P],
+          delta: [
+            { id: item.id, count: 1 },
+            { id: woolItem.id, count: -3 },
+            { id: plankMcData.id, count: -3 }
+          ],
+          requiresTable: true
+        };
+        console.error(`[Craft] Manual recipe created for white_bed using white_wool + ${plankItem.name}`);
         allRecipes = [manualRecipe as any];
       }
     }
