@@ -1,93 +1,34 @@
 ---
 name: bed-crafting
-description: |
-  ベッドの作成手順。羊を探して羊毛を集め、板材と組み合わせてベッドをクラフト。
-  Use when: ベッドを作りたい、夜をスキップしたい、スポーン地点を設定したい、羊毛が必要な時。
+description: ベッド作成。夜スキップ・リスポーン地点設定（mc_execute用）
 ---
-
-# ベッド作成スキル
-
-ベッドは夜をスキップし、リスポーン地点を設定する最重要アイテム。
-
 ## 必要素材
-
-| アイテム | 数量 | 入手方法 |
-|---------|------|---------|
-| 羊毛 (wool) | 3個 | 羊を倒す or ハサミで刈る |
-| 板材 (planks) | 3個 | 原木をクラフト |
+- wool x3（羊3匹分）、oak_planks x3（原木1個で可）
 
 ## 手順
+```js
+// 羊を探して狩る（wool x3）
+await bot.navigate("sheep");
+await bot.combat("sheep");
+await bot.combat("sheep");
+await bot.combat("sheep");
 
-### 1. 羊を探す
+// 原木を確保してベッドをクラフト
+await bot.gather("oak_log", 1);
+await bot.craft("white_bed");
 
-```
-mc_navigate(target_entity="sheep", max_distance=64)
-```
-
-**羊がいない場合:**
-- plainsバイオームへ移動して探す
-- 羊が多いバイオーム: plains, sunflower_plains, meadow, forest
-
-### 2. 羊を狩る
-
-```
-mc_combat(target="sheep")
-```
-
-- 羊1匹 = 羊毛1個 + 羊肉1個
-- **3匹必要**（同じ色推奨だが混色でもOK）
-
-### 3. 木を集める
-
-```
-mc_gather(block="oak_log", count=1)
+// ベッドを設置
+const s = await bot.status();
+const x = Math.floor(s.position.x);
+const y = Math.floor(s.position.y);
+const z = Math.floor(s.position.z);
+await bot.place("white_bed", x+1, y, z);
+bot.log("ベッド設置完了");
 ```
 
-原木1個 → 板材4個なので、原木1個でOK
-
-### 4. クラフト
-
+## 羊が見つからない
+plains / forest バイオームへ移動して探す:
+```js
+await bot.moveTo(s.position.x + 100, 64, s.position.z);
+await bot.navigate("sheep");
 ```
-# 板材を作る（作業台不要）
-mc_craft(item="oak_planks", count=1)
-
-# ベッドを作る（作業台必要）
-mc_craft(item="white_bed", count=1)
-```
-
-**注意**: ベッドのクラフトには作業台が必要
-
-### 5. ベッドを設置
-
-低レベルツール使用: `search_tools(query="place")` → `minecraft_place_block`
-```
-minecraft_place_block(block_type="white_bed", x=..., y=..., z=...)
-```
-
-- 平らな場所に2ブロック分のスペースが必要
-- 屋根があると安全
-
-### 6. 寝る
-
-```
-mc_sleep()
-```
-
-- 夜（13000-23000 tick）のみ可能（Tier2ツール、夜のみ表示）
-- 近くにモンスターがいると寝れない
-
-## トラブルシューティング
-
-| 問題 | 解決策 |
-|------|--------|
-| 羊が見つからない | plainsバイオームへ移動 |
-| 羊毛の色が違う | 混色でもベッドは作れる |
-| 作業台がない | `mc_craft(item="crafting_table")` |
-| 寝れない | モンスターを倒すか離れる |
-| 設置できない | 2ブロックの平らな場所を確保 |
-
-## ベッドの重要性
-
-1. **夜スキップ**: モンスタースポーンを回避
-2. **リスポーン設定**: 死んでも近くで復活
-3. **時間効率**: 探索・作業時間を最大化

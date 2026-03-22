@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"\nimport sys,json,os\np=json.load(sys.stdin).get('tool_input',{}).get('file_path','')\nnorm=p.replace(os.sep,'/')\nallowed=['src/','bug-issues/','.claude/','CLAUDE.md','package.json','.mcp.json']\nif any(norm.startswith(a) or a in norm for a in allowed):\n  exit(0)\nprint('BLOCKED: Write only allowed in src/, bug-issues/, .claude/skills-compact/')\nexit(2)\n\"",
+            "command": "python3 -c \"\nimport sys,json,os\np=json.load(sys.stdin).get('tool_input',{}).get('file_path','')\nnorm=p.replace(os.sep,'/')\nallowed=['src/','bug-issues/','.claude/','CLAUDE.md','package.json','.mcp.json']\nif any(norm.startswith(a) or a in norm for a in allowed):\n  exit(0)\nprint('BLOCKED: Write only allowed in src/, bug-issues/, .claude/')\nexit(2)\n\"",
             "statusMessage": "Checking file permissions"
           }
         ]

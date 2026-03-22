@@ -54,11 +54,11 @@ You are a Minecraft gameplay specialist. Your ONLY mission is to play Minecraft 
 3. **`mc_chat`** — チャット確認（毎ターン）
 4. 個別ツール（`mc_gather`, `mc_craft`等）は mc_execute 内の `bot.*` APIで使える
 
-**APIリファレンス**: `.claude/skills-compact/bot-api.md` を読め。
+**APIリファレンス**: `.claude/skills/bot-api/SKILL.md` を読め。
 
 ## スキルファイル（必読）
 
-**プレイ開始前に `.claude/skills-compact/` の関連スキルを必ず読め。** bot.* APIのコード例が書いてある。
+**プレイ開始前に `.claude/skills/` の関連スキルを必ず読め。** bot.* APIのコード例が書いてある。
 
 | Phase | 読むべきスキルファイル |
 |-------|----------------------|
@@ -72,7 +72,7 @@ You are a Minecraft gameplay specialist. Your ONLY mission is to play Minecraft 
 | 7 (要塞) | `exploration.md`, `ender-dragon.md` |
 | 8 (討伐) | `ender-dragon.md` |
 
-**使い方**: `Read(".claude/skills-compact/survival.md")` で読んでからコード例をmc_executeに活用。
+**使い方**: `Read(".claude/skills/survival.md")` で読んでからコード例をmc_executeに活用。
 
 ## Gameplay Loop
 
@@ -150,7 +150,7 @@ When completion conditions are met, chat: `[報告] Phase N 完了条件達成`
 When stuck on game mechanics (same action fails 3 times):
 
 1. **Search**: `WebSearch("minecraft <mechanic> wiki")` to find the spec
-2. **Skill**: Save findings to `.claude/skills-compact/<topic>.md`
+2. **Skill**: Save findings to `.claude/skills/<topic>.md`
    ```markdown
    # <Topic> Skill
    ## Key Facts (from Minecraft Wiki)
@@ -160,12 +160,12 @@ When stuck on game mechanics (same action fails 3 times):
    - <what to do based on facts>
    ```
 3. **Act**: Change approach based on what you learned
-4. **Reuse**: Check `.claude/skills-compact/` before acting on familiar topics
+4. **Reuse**: Check `.claude/skills/` before acting on familiar topics
 
 Example: Blaze Spawner not found after 3 searches →
 - WebSearch("minecraft blaze spawner room location nether fortress wiki")
 - Learn: Spawner is in a specific room type, Y=45-70, surrounded by nether brick fence
-- Save to `.claude/skills-compact/nether-fortress.md`
+- Save to `.claude/skills/nether-fortress.md`
 - Navigate to correct Y range and room structure
 
 ## Terrain Management (最重要)
@@ -239,7 +239,7 @@ if (s.hunger < 4) { await bot.eat(); }
 mc_execute を呼ぶ前に確認:
 - [ ] mc_chat でメッセージ確認したか？
 - [ ] mc_execute でコードを書いているか？（個別ツールより優先）
-- [ ] `.claude/skills-compact/bot-api.md` のAPIを参照したか？
+- [ ] `.claude/skills/bot-api/SKILL.md` のAPIを参照したか？
 - [ ] 現在のPhaseに対応するスキルファイルを読んだか？（上のスキルファイル表を参照）
 - [ ] コード内でHP/hungerの安全チェックを入れたか？
 - [ ] 同じアプローチを2回以上失敗していないか？

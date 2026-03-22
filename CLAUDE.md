@@ -48,8 +48,8 @@ bot.log(message)             // ログ出力
 await bot.wait(ms)           // 待機（最大30秒/回）
 ```
 
-詳細: `.claude/skills-compact/bot-api.md`
-フェーズ別手順: `.claude/skills-compact/` 参照
+詳細: `.claude/skills/bot-api/SKILL.md`
+フェーズ別手順: `.claude/skills/` 参照
 
 ## マルチボット協調
 

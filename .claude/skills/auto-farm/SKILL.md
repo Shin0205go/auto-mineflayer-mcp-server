@@ -1,118 +1,40 @@
 ---
 name: auto-farm
-description: |
-  自動農場の構築と運用。小麦・サトウキビ・カボチャ・スイカの農場を作って食料を自動生産。
-  Use when: 食料の安定供給が必要、農場を作りたい、小麦を育てたい、パンを焼きたい、食料不足を根本解決したい時。
+description: 食料の農場運用（mc_execute用）
 ---
+## 小麦農場
+```js
+// bot.farm() が全自動: 水源探し→耕作→種植え→収穫
+await bot.farm();
 
-# 自動農場スキル
-
-食料と資源を自動生産する農場の作り方。
-
-## 小麦農場（基本）
-
-### 必要素材
-| アイテム | 数量 |
-|---------|------|
-| クワ (hoe) | 1個 |
-| 水バケツ | 1個 |
-| 小麦の種 | 適量 |
-| 土ブロック | 適量 |
-
-### 手順
-
-1. **水源を設置**
-   低レベルツール使用: `search_tools(query="use_item")` → `minecraft_use_item_on_block`
-   - 水源から4ブロック以内が耕作可能
-
-2. **土を耕す**
-   低レベルツール使用: `search_tools(query="use_item")` → `minecraft_use_item_on_block`
-   ```
-   minecraft_use_item_on_block(item_name="wooden_hoe", x=..., y=..., z=...)
-   ```
-
-3. **種を植える**
-   低レベルツール使用: `search_tools(query="place")` → `minecraft_place_block`
-   ```
-   minecraft_place_block(block_type="wheat_seeds", x=..., y=..., z=...)
-   ```
-
-4. **収穫**（成長後）
-   ```
-   mc_gather(block="wheat", count=20)
-   ```
-
-### 効率的なレイアウト
-```
-# 9x9農場（水源1つで最大効率）
-FFFFFFFFF
-FFFFFFFFF
-FFFFFFFFF
-FFFFFFFFF
-FFFFWFFFF  (W=水源)
-FFFFFFFFF
-FFFFFFFFF
-FFFFFFFFF
-FFFFFFFFF
+// 小麦があればパン作成
+const inv = await bot.inventory();
+const wheat = inv.find(i => i.name === 'wheat');
+if (wheat && wheat.count >= 3) {
+  await bot.craft('bread');
+  bot.log('パン作成完了');
+}
 ```
 
-## サトウキビ農場
-
-### 条件
-- **水に隣接**した砂/土の上にのみ設置可能
-- 最大3ブロックまで成長
-
-### 半自動収穫
-```
-# 横から見た図
-S S S S  ← ピストンで2段目を押す
-S S S S  ← サトウキビ（1段目は残す）
-D D D D  ← 砂/土
-W W W W  ← 水
+## 骨粉で即時成長
+```js
+// 骨→骨粉
+await bot.craft("bone_meal", 3);
+// bot.farm() 内で自動的に骨粉が使われる
+await bot.farm();
 ```
 
-## カボチャ・スイカ農場
+## チェストに食料を貯蔵 (Phase 2 目標: 20個以上)
+```js
+const inv = await bot.inventory();
+const bread = inv.find(i => i.name === 'bread');
+if (bread && bread.count >= 5) {
+  await bot.store("store", "bread", bread.count - 2); // 2個は持っておく
+  bot.log(`パン${bread.count - 2}個をチェストに格納`);
+}
+```
 
-### 特徴
-- 茎から実が隣接ブロックに生成
-- 茎は残る（再収穫可能）
-
-## 村人式全自動農場
-
-### 仕組み
-- 農民の村人が自動で収穫・植え付け
-- 村人のインベントリが一杯になると作物を投げる
-- ホッパーで回収
-
-### 必要素材
-| アイテム | 数量 |
-|---------|------|
-| 農民の村人 | 1人 |
-| コンポスター | 1個（職業ブロック）|
-| ホッパー | 農場下全面 |
-| ガラス | 囲い用 |
-| 松明 | 照明用 |
-
-## 成長速度
-
-| 作物 | 成長時間（目安） |
-|------|-----------------|
-| 小麦 | 20-30分 |
-| ニンジン | 20-30分 |
-| ジャガイモ | 20-30分 |
-| サトウキビ | 16分/段 |
-| カボチャ | 10-30分 |
-
-### 成長促進
-- **骨粉**で即時成長（小麦、ニンジン等）
-- **光レベル9以上**で成長
-- **夜も成長**（昼夜関係なし）
-
-## トラブルシューティング
-
-| 問題 | 原因 | 解決策 |
-|------|------|--------|
-| 作物が育たない | 光不足 | 松明を追加 |
-| | 水が遠い | 4ブロック以内に水源 |
-| サトウキビが植えられない | 水に隣接してない | 横に水を設置 |
-| 村人が収穫しない | 職業が農民じゃない | コンポスター設置 |
+## 成長時間目安
+- 小麦/ニンジン/ジャガイモ: 20-30分
+- サトウキビ: 16分/段
+- 骨粉で即時成長可能

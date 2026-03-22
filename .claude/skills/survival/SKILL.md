@@ -1,81 +1,52 @@
 ---
 name: survival
-description: |
-  サバイバル行動の手順書。mc_*コアツールで食料確保・HP回復・夜間処理・緊急対応を実行。
-  ALWAYS use when: お腹が空いた、HPが低い、食料がない、夜になった、リスポーン直後、生存の基本行動が必要な時。
+description: 食料確保・HP回復・夜間対処の手順（mc_execute用）
 ---
+## Day 1（mc_execute コード）
+```js
+const s = await bot.status();
+bot.log(`HP:${s.hp} Hunger:${s.hunger}`);
 
-# サバイバルスキル
+// 木材→作業台→ピッケル→剣
+await bot.gather("oak_log", 10);
+await bot.craft("crafting_table");
+await bot.craft("wooden_pickaxe");
+await bot.craft("wooden_sword");
 
-mc_*コアツールを使ったサバイバル手順書。各ステップの結果を見て次の判断をせよ。
+// 食料確保
+await bot.combat("cow"); // pig/chicken/sheep でも可
+await bot.eat();
 
-## Day 1 Protocol（初日プロトコル）
+// 石ツール
+await bot.gather("cobblestone", 20);
+await bot.craft("stone_pickaxe");
+await bot.craft("stone_sword");
 
-新規セッション開始時、この順番で1ステップずつ実行せよ。
+// シェルター
+await bot.build("shelter");
+bot.log("Day 1 完了");
+```
 
-| # | ツール | 目的 | 失敗時の代替 |
-|---|--------|------|-------------|
-| 1 | `mc_status()` | 状況把握（HP/位置/バイオーム/インベントリ） | — |
-| 2 | `mc_gather(block="oak_log", count=10)` | 木材収集 | birch_log, spruce_logを試す |
-| 3 | `mc_craft(item="crafting_table")` | 作業台 | — |
-| 4 | `mc_craft(item="wooden_pickaxe")` | ツルハシ | — |
-| 5 | `mc_craft(item="wooden_sword")` | 剣 | — |
-| 6 | `mc_combat(target="cow")` | 食料狩り | pig→chicken→sheep→zombie(rotten_flesh) |
-| 7 | `mc_eat()` | 食事 | — |
-| 8 | `mc_gather(block="cobblestone", count=20)` | 石収集 | — |
-| 9 | `mc_craft(item="stone_pickaxe")` | 石ツルハシ | — |
-| 10 | `mc_craft(item="stone_sword")` | 石の剣 | — |
-| 11 | `mc_build(preset="shelter", size="small")` | シェルター | 壁を建てるだけでも可 |
+## 食料ない時
+```js
+// 1. チェスト確認
+const chest = await bot.store("list");
+bot.log(chest);
+// 2. 動物を狩る
+await bot.combat("cow");
+// 3. 最終手段: 腐肉
+await bot.combat("zombie");
+```
 
-**各ステップは独立して完結。失敗したら次に進め（完璧を求めるな）。**
-
----
-
-## Night Protocol（夜間プロトコル）
-
-`mc_status()`でtime.phase="night"/"midnight"の時：
-
-1. `mc_status()` — 脅威を確認
-2. ベッドがインベントリにあれば → `mc_sleep()` (Tier2ツール、夜のみ表示)
-3. ベッドがなければ：
-   - シェルター内にいるか確認
-   - シェルターがなければ `mc_build(preset="shelter", size="small")`
-   - 敵が近ければ `mc_combat()` で排除
-4. 夜明けまで `mc_status()` で状況監視
-
----
-
-## Food Emergency Protocol（食料緊急プロトコル）
-
-食料が尽きた時の優先順位：
-
-1. `mc_status()` — インベントリ内の食料確認
-2. `mc_eat()` — 何か食べられるものがあれば即食べる
-3. `mc_store(action="list")` — チェストに食料があるか確認
-4. チェストに食料あれば → `mc_store(action="withdraw", item_name="bread")`
-5. チェストにもなければ → 狩猟:
-   - `mc_combat(target="cow")` → cow>pig>chicken>sheep
-   - `mc_eat()` — 生肉でも食べる
-6. 動物もいなければ → ゾンビ狩り:
-   - `mc_combat(target="zombie")` → rotten_fleshを得る
-   - `mc_eat(food="rotten_flesh")` — 飢餓死よりマシ
-7. 最終手段 → 釣り (search_toolsで"fish"を検索)
-
-**HPが低くてもリスポーンするな。食料で回復せよ。**
-
----
-
-## 食料の選好順
-
-1. 調理済み肉（cooked_beef等）← 最高効率
-2. パン・農作物 ← あれば使う
-3. 生肉（beef, porkchop等）← 十分に有効
-4. 腐った肉（rotten_flesh）← 飢餓死よりマシ。緊急時OK
-
----
-
-## エラー対応
-
-- `No food in inventory`: Food Emergency Protocol実行
-- 動物がいない: チェスト確認 → ゾンビ狩り → 釣り
-- サーバーに動物がスポーンしない: チェストのみが食料源
+## 夜間
+```js
+const s = await bot.status();
+if (s.time > 12500) {
+  const inv = await bot.inventory();
+  if (inv.find(i => i.name.includes('bed'))) {
+    await bot.navigate("white_bed");
+  } else {
+    await bot.build("shelter");
+  }
+}
+```
