@@ -17,6 +17,28 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
+ * Apply safe pathfinder settings before any setGoal() in combat approach phases.
+ * Without this, approach/chase movement uses whatever settings are currently active,
+ * which may allow cave routing (canDig=true), water routing (liquidCost=default),
+ * or cliff falls (maxDropDown too high).
+ * Bot1 Sessions 31-44, Bot2, Bot3: multiple deaths during combat approach phases
+ * because setGoal() was called without the safety settings that moveToBasic applies.
+ */
+function applySafePathfinderSettings(bot: Bot): void {
+  if (!bot.pathfinder.movements) return;
+  const timeOfDay = bot.time?.timeOfDay ?? 0;
+  const isNight = timeOfDay > 12541 || timeOfDay < 100;
+  const hp = bot.health ?? 20;
+  // Disable canDig at night or low HP to prevent cave routing (same logic as moveToBasic)
+  if (isNight || hp < 10) {
+    bot.pathfinder.movements.canDig = false;
+  }
+  bot.pathfinder.movements.maxDropDown = 2;
+  (bot.pathfinder.movements as any).liquidCost = 10000;
+  bot.pathfinder.movements.allowFreeMotion = false;
+}
+
+/**
  * Get brief status after an action (HP, hunger, position, surroundings, dangers)
  * Only returns status if APPEND_BRIEF_STATUS=true (for Mamba agent)
  */
@@ -280,6 +302,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
     // If enderman is far, approach to ~12 blocks first for reliable provocation
     if (distance > 16) {
       console.error(`[Attack] Enderman at ${distance.toFixed(1)} blocks — approaching to 12 blocks first...`);
+      applySafePathfinderSettings(bot);
       const approachGoal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 12);
       bot.pathfinder.setGoal(approachGoal);
       await new Promise<void>((resolve) => {
@@ -330,6 +353,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       }
     }
     // Sprint toward blaze
+    applySafePathfinderSettings(bot);
     bot.setControlState("sprint", true);
     const blazeGoal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2);
     bot.pathfinder.setGoal(blazeGoal);
@@ -399,6 +423,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
   // Move closer if needed
   if (distance > 3) {
     console.error(`[Attack] Target ${target.name} is ${distance.toFixed(1)} blocks away, moving closer...`);
+    applySafePathfinderSettings(bot);
     const goal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2);
     bot.pathfinder.setGoal(goal);
 
@@ -446,8 +471,9 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       if (bot.health <= 12) {
         console.error(`[Attack] HP low (${bot.health}), fleeing from ${target.name}!`);
         bot.pathfinder.setGoal(null);
-        // Try to eat food while fleeing
-        const food = bot.inventory.items().find(i => i.name === "bread" || i.name === "cooked_beef" || i.name === "cooked_porkchop" || i.name === "cooked_chicken" || i.name === "golden_apple" || i.name === "baked_potato" || i.name === "cooked_mutton" || i.name === "cooked_cod" || i.name === "cooked_salmon");
+        // Try to eat food while fleeing — use isFoodItem for complete coverage.
+        // Previous hardcoded list missed rotten_flesh, golden_carrot, sweet_berries, etc.
+        const food = bot.inventory.items().find(i => isFoodItem(bot, i.name));
         if (food) {
           try {
             await bot.equip(food, "hand");
@@ -485,6 +511,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         const distToLastPos = bot.entity.position.distanceTo(lastKnownTargetPos);
         if (distToLastPos > 3) {
           console.error(`[Attack] Target died ${distToLastPos.toFixed(1)} blocks away, moving to last known pos to collect drops`);
+          applySafePathfinderSettings(bot);
           const collectGoal = new goals.GoalNear(lastKnownTargetPos.x, lastKnownTargetPos.y, lastKnownTargetPos.z, 2);
           bot.pathfinder.setGoal(collectGoal);
           await new Promise<void>((resolve) => {
@@ -524,6 +551,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         }
 
         console.error(`[Attack] Target ${target.name} moved to ${currentDist.toFixed(1)} blocks, chasing...`);
+        applySafePathfinderSettings(bot);
         const goal = new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2);
         bot.pathfinder.setGoal(goal);
 
@@ -717,6 +745,7 @@ export async function fight(
     // Approach closer first if far away for reliable provocation
     if (fightDistance > 16) {
       console.error(`[Fight] Enderman at ${fightDistance.toFixed(1)} blocks — approaching to 12 blocks first...`);
+      applySafePathfinderSettings(bot);
       const approachGoal = new goals.GoalNear(target!.position.x, target!.position.y, target!.position.z, 12);
       bot.pathfinder.setGoal(approachGoal);
       await new Promise<void>((resolve) => {
@@ -818,6 +847,7 @@ export async function fight(
       const distToLast = bot.entity.position.distanceTo(lastKnownFightPos);
       if (distToLast > 3) {
         console.error(`[Fight] Target died ${distToLast.toFixed(1)} blocks away, moving to collect drops`);
+        applySafePathfinderSettings(bot);
         const collectGoal = new goals.GoalNear(lastKnownFightPos.x, lastKnownFightPos.y, lastKnownFightPos.z, 2);
         bot.pathfinder.setGoal(collectGoal);
         await new Promise<void>((resolve) => {
@@ -864,6 +894,7 @@ export async function fight(
 
     // Move closer if needed
     if (distance > attackRange) {
+      applySafePathfinderSettings(bot);
       bot.pathfinder.setGoal(new goals.GoalNear(
         target.position.x, target.position.y, target.position.z, isBlaze ? 4 : 2
       ));
