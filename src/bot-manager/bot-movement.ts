@@ -1793,7 +1793,13 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       bot.pathfinder.movements.canDig = false;
     }
 
-    const fleeGoalHandle = safeSetGoal(bot,
+    // Use a mutable reference so flee retries can replace the handle.
+    // The in-loop retries previously used raw bot.pathfinder.setGoal() without
+    // safeSetGoal, bypassing Y-descent monitoring. This allowed retries to route
+    // into caves without any abort.
+    // Bot2 [2026-03-22]: flee retry sent bot from Y=80 into cave at Y=56 because
+    // the retry direction bypassed safeSetGoal's Y-descent check.
+    let currentFleeHandle = safeSetGoal(bot,
       new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3),
       {
         onAbort: (yDescent) => {
@@ -1832,7 +1838,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
           const distMoved = bot.entity.position.distanceTo(startPos);
           const elapsed = Date.now() - fleeStartTime;
 
-          if (fleeGoalHandle.aborted) {
+          if (currentFleeHandle.aborted) {
             clearInterval(check);
             clearTimeout(timeout);
             resolve();
@@ -1866,7 +1872,16 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
               const retryTarget = curPos.offset(Math.cos(rotAngle) * distance, 0, Math.sin(rotAngle) * distance);
               const retryGoal = new goals.GoalNear(retryTarget.x, retryTarget.y, retryTarget.z, 3);
               console.error(`[Flee] Retry #${retryCount}: rotating ${90 * retryCount}° from original direction (moved ${distMoved.toFixed(1)} blocks so far)`);
-              try { bot.pathfinder.setGoal(retryGoal); } catch { /* ignore */ }
+              // Clean up the previous safeSetGoal monitor before starting a new one.
+              // Previously used raw bot.pathfinder.setGoal() which bypassed Y-descent monitoring,
+              // allowing retries to route into caves.
+              currentFleeHandle.cleanup();
+              currentFleeHandle = safeSetGoal(bot, retryGoal, {
+                onAbort: (yDescent) => {
+                  console.error(`[Flee] CAVE DESCENT ABORT during retry #${retryCount}: dropped ${yDescent.toFixed(1)} blocks (Y=${startPos.y.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Stopping.`);
+                  try { bot.setControlState("sprint", false); bot.setControlState("sneak", false); } catch { /* ignore */ }
+                }
+              });
             } else {
               clearInterval(check);
               clearTimeout(timeout);
@@ -1898,7 +1913,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     // based on current time-of-day and HP (see moveToBasic L541-557).
     // Bot1/Bot2/Bot3 [2026-03-22]: multiple deaths from cave routing after mc_flee
     // because canDig was restored to true, defeating the night cave-routing protection.
-    fleeGoalHandle.cleanup();
+    currentFleeHandle.cleanup();
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.allowSprinting = prevAllowSprinting;
       // Restore maxDropDown to safe default (2), NOT the previous value.

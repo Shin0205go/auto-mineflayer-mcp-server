@@ -2169,7 +2169,7 @@ export async function mc_drop(
       // Only walk if there's solid ground and no water/lava
       if (groundBlock && groundBlock.name !== "air" && groundBlock.name !== "water" && groundBlock.name !== "lava" &&
           feetBlock && (feetBlock.name === "air" || feetBlock.name === "cave_air")) {
-        bot.look(yaw, 0);
+        await bot.look(yaw, 0);
         await new Promise(r => setTimeout(r, 100));
         bot.setControlState("forward", true);
         await new Promise(r => setTimeout(r, 1500));
