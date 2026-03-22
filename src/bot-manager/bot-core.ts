@@ -623,7 +623,8 @@ export class BotCore extends EventEmitter {
 
                 const fleeTarget = bot.entity.position.offset(dirX * 15, 0, dirZ * 15);
                 // Keep Y coordinate to avoid falling off cliffs
-                fleeTarget.y = bot.entity.position.y;
+                const autoFleeStartY = bot.entity.position.y;
+                fleeTarget.y = autoFleeStartY;
                 const fleeFromName = allHostiles.length === 1 ? allHostiles[0].name : `${allHostiles.length} hostiles`;
                 console.error(`[AutoFlee] HP=${bot.health.toFixed(1)}, fleeing from ${fleeFromName}`);
                 try {
@@ -637,6 +638,22 @@ export class BotCore extends EventEmitter {
                     (bot.pathfinder.movements as any).liquidCost = 10000;
                   }
                   bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
+                  // SAFETY: Y-descent monitoring during AutoFlee.
+                  // mc_flee has a real-time Y-descent abort (4 blocks), but AutoFlee uses
+                  // setGoal() directly with no monitoring. Bot2 [2026-03-22]: AutoFlee/mc_flee
+                  // dropped bot from Y=80 to Y=56 into a cave. With canDig=false and maxDropDown=1,
+                  // the pathfinder can still descend gradually through cave entrances via 1-block steps.
+                  // This interval checks every 300ms and stops the pathfinder if Y drops >4 blocks.
+                  const autoFleeYMonitor = setInterval(() => {
+                    try {
+                      const yDescent = autoFleeStartY - bot.entity.position.y;
+                      if (yDescent > 4) {
+                        console.error(`[AutoFlee] CAVE DESCENT ABORT: Y dropped ${yDescent.toFixed(1)} blocks (Y=${autoFleeStartY.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Stopping to prevent underground trapping.`);
+                        clearInterval(autoFleeYMonitor);
+                        try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+                      }
+                    } catch { clearInterval(autoFleeYMonitor); }
+                  }, 300);
                   // Restore maxDropDown after 5 seconds (AutoFlee is short-lived).
                   // NOTE: Do NOT restore canDig=true here. The next moveTo call will set
                   // canDig appropriately based on time-of-day and HP. Unconditionally restoring
@@ -645,6 +662,7 @@ export class BotCore extends EventEmitter {
                   // overwrote it back to true, defeating cave-routing protection.
                   // Bot1/Bot2/Bot3 [2026-03-22]: multiple deaths from cave routing after AutoFlee.
                   setTimeout(() => {
+                    clearInterval(autoFleeYMonitor);
                     try {
                       if (bot.pathfinder.movements) {
                         bot.pathfinder.movements.maxDropDown = 2;
@@ -844,7 +862,8 @@ export class BotCore extends EventEmitter {
             const dist = creeper.position.distanceTo(bot.entity.position);
             const dir = bot.entity.position.minus(creeper.position).normalize();
             const fleeTarget = bot.entity.position.plus(dir.scaled(12));
-            fleeTarget.y = bot.entity.position.y;
+            const creeperFleeStartY = bot.entity.position.y;
+            fleeTarget.y = creeperFleeStartY;
             console.error(`[CreeperFlee] Creeper detected ${dist.toFixed(1)} blocks away! Fleeing preemptively.`);
             creeperFleeActive = true;
             // Sprint-flee immediately using control states (faster than pathfinder)
@@ -863,12 +882,27 @@ export class BotCore extends EventEmitter {
               }
               bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
             } catch (_) { /* ignore */ }
+            // SAFETY: Y-descent monitoring during CreeperFlee (same as AutoFlee).
+            // CreeperFlee uses setGoal() directly with no Y monitoring.
+            // Even with canDig=false + maxDropDown=1, bot can gradually descend through
+            // cave entrances. Abort if Y drops >4 blocks to prevent underground trapping.
+            const creeperFleeYMonitor = setInterval(() => {
+              try {
+                const yDescent = creeperFleeStartY - bot.entity.position.y;
+                if (yDescent > 4) {
+                  console.error(`[CreeperFlee] CAVE DESCENT ABORT: Y dropped ${yDescent.toFixed(1)} blocks (Y=${creeperFleeStartY.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Stopping to prevent underground trapping.`);
+                  clearInterval(creeperFleeYMonitor);
+                  try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+                }
+              } catch { clearInterval(creeperFleeYMonitor); }
+            }, 300);
             // Reset flee flag and restore maxDropDown after 3 seconds.
             // NOTE: Do NOT restore canDig=true here — same race condition as AutoFlee.
             // If mc_navigate starts within 3 seconds, moveToBasic sets canDig=false for
             // night safety, but this setTimeout would override it back to true, allowing
             // the pathfinder to dig into caves. Let the next moveTo call decide canDig.
             setTimeout(() => {
+              clearInterval(creeperFleeYMonitor);
               bot.setControlState("sprint", false);
               bot.setControlState("forward", false);
               creeperFleeActive = false;
