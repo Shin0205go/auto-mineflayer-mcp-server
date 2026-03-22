@@ -9,6 +9,11 @@ import { collectNearbyItems, equipArmor } from "./bot-items.js";
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
 
+// Track last successful sleep world-age tick per username for Phantom insomnia warnings.
+// Phantoms spawn after 72000 ticks (3 in-game days) without sleeping.
+// Exported so mc_status can read it; updated in sleep() on success.
+export const lastSleepTick: Map<string, number> = new Map();
+
 /**
  * Helper function to delay execution
  */
@@ -195,6 +200,12 @@ export async function sleep(managed: ManagedBot): Promise<string> {
     try {
       await bot.sleep(bed);
       await delay(5000);
+      // Record successful sleep tick for phantom insomnia tracking.
+      // bot.time.age is the world age in ticks — phantoms spawn after 72000 ticks
+      // (3 in-game days) since last sleep.
+      const sleepAge = bot.time?.age ?? 0;
+      lastSleepTick.set(managed.username, sleepAge);
+      console.error(`[Sleep] Recorded last sleep at world tick ${sleepAge} for ${managed.username}`);
       return "Slept through the night. It's now morning!";
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -854,6 +865,8 @@ export async function fight(
     if (Date.now() - fightStartTime > FIGHT_TIMEOUT_MS) {
       console.error(`[Fight] Global timeout (${FIGHT_TIMEOUT_MS / 1000}s) reached after ${attackCount} attacks. Aborting.`);
       bot.pathfinder.setGoal(null);
+      // Clean up sprint state — may have been set for ranged mob approach.
+      try { bot.setControlState("sprint", false); } catch { /* ignore */ }
       return `Fight timed out after ${attackCount} attacks (${FIGHT_TIMEOUT_MS / 1000}s). Target may be unreachable.` + getBriefStatus(bot);
     }
 
@@ -862,6 +875,8 @@ export async function fight(
     if (health <= fleeHealthThreshold) {
       console.error(`[BotManager] Health low (${health}), fleeing!`);
       bot.pathfinder.setGoal(null);
+      // Clean up sprint state before flee — flee sets its own sprint control.
+      try { bot.setControlState("sprint", false); } catch { /* ignore */ }
       await flee(managed, 20);
       return `Fled! Health was ${health}. Attacked ${attackCount} times.` + getBriefStatus(bot);
     }
@@ -1018,6 +1033,14 @@ export async function fight(
           const rangedNote = isRangedTarget ? ` ${targetName} is a ranged mob dealing continuous damage during approach.` : "";
           console.error(`[Fight] Approach stalled: distance to ${targetName} hasn't decreased in ${approachStallCount} iterations (${distance.toFixed(1)} blocks).${rangedNote} Target may be unreachable.`);
           bot.pathfinder.setGoal(null);
+          // Clean up sprint state on abort — sprint was enabled for ranged mobs (L1028-1031)
+          // but never cleared on this early-return path. Sprint persists into subsequent actions
+          // (eating, crafting, gathering), draining hunger and preventing food consumption.
+          // Bot1/Bot2/Bot3 [2026-03-22]: hunger drained rapidly after combat abort due to
+          // sprint state leak. Same bug pattern as the flee sprint leak fix.
+          try {
+            bot.setControlState("sprint", false);
+          } catch { /* bot may be disconnected */ }
           return `[ABORTED] Cannot reach ${targetName} (${distance.toFixed(1)} blocks away). Approach stalled after ${attackCount} attacks — target may be across a gap or obstacle.${rangedNote} Try mc_flee to escape ranged damage, then approach from a different direction.` + getBriefStatus(bot);
         }
       }

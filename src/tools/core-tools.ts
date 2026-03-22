@@ -12,6 +12,7 @@ import { botManager } from "../bot-manager/index.js";
 import { checkDangerNearby, isHostileMob, isNeutralMob, EDIBLE_FOOD_NAMES } from "../bot-manager/minecraft-utils.js";
 import { setAgentType } from "../agent-state.js";
 import { registry } from "../tool-handler-registry.js";
+import { lastSleepTick } from "../bot-manager/bot-survival.js";
 
 // High-level actions accessed via registry for hot-reload support
 function getHighLevel() {
@@ -190,6 +191,25 @@ export async function mc_status(): Promise<string> {
     const hasBedDay = inventory.some(i => i.name.includes("_bed"));
     if (!hasBedDay) {
       warnings.push("NO BED: Craft a bed (3 wool + 3 planks) before nightfall. Sleeping resets the Phantom insomnia timer — without it, Phantoms spawn after 3 nights and attack from above (hard to flee).");
+    }
+  }
+  // Phantom insomnia tracking: warn when bot hasn't slept for too long.
+  // Phantoms spawn after 72000 ticks (3 in-game days) without sleeping.
+  // Bot1 [2026-03-22]: killed by Phantom during daytime farming — had not slept for multiple nights.
+  // Bot1 Session 43: killed by Phantom at night. Phantom attacks from above, hard to flee.
+  // This provides actionable warning BEFORE phantoms spawn, so the agent can proactively sleep.
+  {
+    const worldAge = bot.time?.age ?? 0;
+    const lastSleep = lastSleepTick.get(username) ?? 0;
+    const ticksSinceLastSleep = worldAge - lastSleep;
+    // 72000 ticks = 3 in-game days. Warn at 48000 (2 days) so there's time to act.
+    if (ticksSinceLastSleep > 48000 && worldAge > 0) {
+      const nightsAwake = Math.floor(ticksSinceLastSleep / 24000);
+      if (ticksSinceLastSleep >= 72000) {
+        warnings.push(`PHANTOM IMMINENT: ${nightsAwake} night(s) without sleeping (${ticksSinceLastSleep} ticks). Phantoms ARE spawning! Sleep in a bed NOW or they will attack from above. If no bed, craft one IMMEDIATELY (3 wool + 3 planks).`);
+      } else {
+        warnings.push(`PHANTOM WARNING: ${nightsAwake} night(s) without sleeping (${ticksSinceLastSleep} ticks). Phantoms spawn at 72000 ticks. Sleep soon to reset the insomnia timer.`);
+      }
     }
   }
   if (food <= 0 && health < 10) {
@@ -788,6 +808,31 @@ export async function mc_farm(): Promise<string> {
             const finalBot = botManager.getBot(username);
             return logs.join("\n") + `\nmc_farm aborted: bot fell underground during water navigation (Y=${botFarmY.toFixed(0)}→${postMoveY.toFixed(0)}). HP: ${finalBot?.health ?? '?'}. Use minecraft_pillar_up or mc_navigate to return to surface.`;
           }
+          // POST-WATER-NAVIGATION SAFETY: Re-check HP and hostiles after reaching water.
+          // Navigation to water can take 10-30s during which the bot may take damage from
+          // mobs or starvation. The initial pre-farm safety checks passed, but conditions
+          // may have changed during travel. Without this re-check, bot starts the long
+          // tilling loop (60-120s stationary) at dangerously low HP.
+          // Bot1/Bot2 [2026-03-22]: navigated to water, took skeleton/mob damage during travel,
+          // then started farming at HP<8 and died during tilling.
+          // Bot2: skeleton appeared during navigation to water, no re-check before tilling.
+          {
+            const postNavHp = bot.health ?? 20;
+            if (postNavHp < 10) {
+              logs.push(`[ABORTED] HP dropped to ${postNavHp.toFixed(1)} during water navigation. Too low to start tilling (stationary for 60-120s).`);
+              const finalBot = botManager.getBot(username);
+              return logs.join("\n") + `\nmc_farm aborted: HP critically low after reaching water (${postNavHp.toFixed(1)}/20). Heal first: mc_eat or mc_combat(target="cow"). HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}.`;
+            }
+            const postNavDanger = checkDangerNearby(bot, 20);
+            if (postNavDanger.dangerous) {
+              const ptd = postNavDanger.nearestHostile
+                ? `${postNavDanger.nearestHostile.name} at ${postNavDanger.nearestHostile.distance.toFixed(1)} blocks`
+                : `${postNavDanger.hostileCount} hostile(s)`;
+              logs.push(`[ABORTED] Hostile detected after reaching water: ${ptd}. Too dangerous to start tilling.`);
+              const finalBot = botManager.getBot(username);
+              return logs.join("\n") + `\nmc_farm aborted: hostile mob appeared during water navigation (${ptd}). Use mc_flee or mc_combat to clear threats first. HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}.`;
+            }
+          }
           // Re-scan for tillable blocks near water — MUST be within 4 blocks of water for irrigation
           const waterX = farWater.position.x, waterY = farWater.position.y, waterZ = farWater.position.z;
           farmCoords.length = 0;
@@ -1000,6 +1045,24 @@ export async function mc_farm(): Promise<string> {
                 logs.push(`[ABORTED] Bot descended ${(botFarmY - vPostMoveY).toFixed(0)} blocks during far water navigation.`);
                 const finalBot = botManager.getBot(username);
                 return logs.join("\n") + `\nmc_farm aborted: bot fell underground (Y=${botFarmY.toFixed(0)}→${vPostMoveY.toFixed(0)}). HP: ${finalBot?.health ?? '?'}. Return to surface first.`;
+              }
+              // POST-FAR-WATER-NAVIGATION SAFETY: same HP/hostile re-check as the near-water path.
+              {
+                const postFarNavHp = bot.health ?? 20;
+                if (postFarNavHp < 10) {
+                  logs.push(`[ABORTED] HP dropped to ${postFarNavHp.toFixed(1)} during far water navigation. Too low to start tilling.`);
+                  const finalBot = botManager.getBot(username);
+                  return logs.join("\n") + `\nmc_farm aborted: HP critically low after reaching far water (${postFarNavHp.toFixed(1)}/20). Heal first. HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}.`;
+                }
+                const postFarNavDanger = checkDangerNearby(bot, 20);
+                if (postFarNavDanger.dangerous) {
+                  const fptd = postFarNavDanger.nearestHostile
+                    ? `${postFarNavDanger.nearestHostile.name} at ${postFarNavDanger.nearestHostile.distance.toFixed(1)} blocks`
+                    : `${postFarNavDanger.hostileCount} hostile(s)`;
+                  logs.push(`[ABORTED] Hostile detected after reaching far water: ${fptd}. Too dangerous to start tilling.`);
+                  const finalBot = botManager.getBot(username);
+                  return logs.join("\n") + `\nmc_farm aborted: hostile appeared during far water navigation (${fptd}). Use mc_flee or mc_combat first. HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}.`;
+                }
               }
               // Re-scan for tillable blocks near water — MUST be within 4 blocks of water for irrigation.
               // Bug: bot1/bot3 farmland reverted to dirt because previous scan used bot position
