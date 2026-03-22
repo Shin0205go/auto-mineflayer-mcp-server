@@ -774,15 +774,17 @@ export async function mc_farm(): Promise<string> {
                 }
               }
               await botManager.moveTo(username, vLandTarget.x, vLandTarget.y, vLandTarget.z);
-              // Re-scan for tillable blocks near water
-              const newPos2 = bot.entity.position;
-              const nbx2 = Math.floor(newPos2.x), nby2 = Math.floor(newPos2.y), nbz2 = Math.floor(newPos2.z);
+              // Re-scan for tillable blocks near water — MUST be within 4 blocks of water for irrigation.
+              // Bug: bot1/bot3 farmland reverted to dirt because previous scan used bot position
+              // instead of water position, finding blocks >4 blocks from water (no irrigation).
+              const vWaterX = veryFarWater.position.x, vWaterY = veryFarWater.position.y, vWaterZ = veryFarWater.position.z;
               farmCoords.length = 0;
-              for (let dx3 = -3; dx3 <= 3 && farmCoords.length < seedCount; dx3++) {
-                for (let dz3 = -3; dz3 <= 3 && farmCoords.length < seedCount; dz3++) {
-                  const cx = nbx2 + dx3, cz = nbz2 + dz3;
+              for (let dx3 = -4; dx3 <= 4 && farmCoords.length < seedCount; dx3++) {
+                for (let dz3 = -4; dz3 <= 4 && farmCoords.length < seedCount; dz3++) {
+                  if (Math.abs(dx3) + Math.abs(dz3) > 4) continue; // Manhattan distance <= 4 from water
+                  const cx = vWaterX + dx3, cz = vWaterZ + dz3;
                   for (let dy3 = 0; dy3 >= -5; dy3--) {
-                    const cy = nby2 + dy3;
+                    const cy = vWaterY + dy3;
                     const gb = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy, cz));
                     const ab = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy + 1, cz));
                     const a2b = bot.blockAt(new (bot.entity.position.constructor as any)(cx, cy + 2, cz));
