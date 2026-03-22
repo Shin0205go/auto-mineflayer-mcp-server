@@ -289,7 +289,11 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       }
 
       // SAFETY: Detect underground cave routing — abort if bot descends far below expected path.
-      // Case 1: Target is at/above start — bot should NOT descend more than 5 blocks below start.
+      // Case 1: Target is at/above start — bot should NOT descend more than 3 blocks below start.
+      //   Reduced from 5 to 3: Bot1 Sessions 42-44, Bot3 #17,#19: bots descended 5+ blocks
+      //   into caves before the old threshold caught it, by which point they were surrounded
+      //   by underground mobs. 3 blocks allows natural terrain variation (hills, ravine edges)
+      //   but catches cave entries much earlier, limiting underground exposure.
       // Case 2: Target is below start — bot should NOT descend more than 10 blocks below target Y.
       //   The pathfinder may legitimately descend when target is lower, but it should converge
       //   toward target Y, not dive far below it through cave systems.
@@ -298,7 +302,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       // Bot3 Death #4: navigated from Y=9 to Y=64, pathfinder went to Y=112 then fell.
       const yDescentFromStart = start.y - currentPos.y;
       const targetIsAtOrAboveStart = y >= start.y - 5; // target within 5 blocks below start is "surface-level"
-      if (targetIsAtOrAboveStart && yDescentFromStart > 5) {
+      if (targetIsAtOrAboveStart && yDescentFromStart > 3) {
         console.error(`[MoveTo] UNDERGROUND ROUTING DETECTED: Bot descended ${yDescentFromStart.toFixed(1)} blocks below start (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}) while target Y=${y.toFixed(1)} is at/above start. Pathfinder is routing through caves. Aborting.`);
         finish({
           success: false,
@@ -504,6 +508,21 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       // pathfinder routes through rivers/water at Y=61-62, causing repeated drowned deaths.
       // Bot1 Sessions 31-34,40b,44: 6+ deaths from pathfinder choosing water-level routes.
       (bot.pathfinder.movements as any).liquidCost = 10000;
+
+      // SAFETY: Disable canDig at night to prevent pathfinder from digging into caves.
+      // Bot1 Sessions 42-44, Bot3 #17,#19: pathfinder with canDig=true digs through terrain,
+      // opening cave systems where underground mobs (skeletons, zombies, creepers) surround
+      // the bot. At night, hostile mobs fill caves densely. Disabling canDig forces the
+      // pathfinder to route around obstacles on the surface instead of through them.
+      // Daytime digging is safe because cave mobs are sparser.
+      const navTimeOfDay = bot.time?.timeOfDay ?? 0;
+      const navIsNight = navTimeOfDay > 12541 || navTimeOfDay < 100;
+      if (navIsNight) {
+        bot.pathfinder.movements.canDig = false;
+        console.error(`[MoveTo] Night mode: canDig disabled to prevent cave routing (time=${navTimeOfDay})`);
+      } else {
+        bot.pathfinder.movements.canDig = true;
+      }
       // Enable scaffolding with available blocks (dirt, cobblestone, netherrack)
       const scaffoldBlocks: number[] = [];
       const mcData = (bot as any).registry || require("minecraft-data")(bot.version);

@@ -453,6 +453,18 @@ export async function mc_farm(): Promise<string> {
     return "mc_farm: No seeds in inventory. Find wheat_seeds by breaking tall grass.";
   }
 
+  // Safety: Refuse farming when starving — farming is a long operation (up to 120s) that
+  // produces food only after wheat grows. With hunger=0, starvation damage ticks continuously
+  // and the bot will die long before wheat is harvestable.
+  // Bot1,Bot2,Bot3: multiple deaths from mc_farm at hunger=0 with no food — HP drained
+  // to 0 during the 120s farming window. Kill animals for immediate food instead.
+  const farmHunger = (bot as any).food ?? 20;
+  const farmHasFood = inv.some(i => EDIBLE_FOOD_NAMES.has(i.name));
+  if (farmHunger <= 2 && !farmHasFood) {
+    const farmHpNow = Math.round((bot.health ?? 20) * 10) / 10;
+    return `[REFUSED] Cannot farm while starving — hunger=${farmHunger}, HP=${farmHpNow}, no food in inventory. Farming takes 60-120s but starvation damage is immediate. Get food first: mc_combat(target="cow"), mc_combat(target="pig"), mc_combat(target="chicken"), or mc_eat(rotten_flesh).`;
+  }
+
   // Safety: Refuse farming at night — farming is a long, stationary operation that
   // leaves the bot exposed to hostile mob spawns. Multiple deaths from this pattern:
   // Bot1: killed by creeper during night mc_farm, Bot2: skeleton shot from HP 20→1 during dirt placement,
