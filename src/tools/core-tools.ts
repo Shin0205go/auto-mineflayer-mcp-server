@@ -1635,9 +1635,13 @@ export async function mc_navigate(
         estimatedDistance = 30; // treat as short-range to allow the attempt
       }
       if (estimatedDistance > 30) {
-        // Warn about long-distance navigation at low hunger with no food.
+        // HARD BLOCK long-distance navigation at low hunger with no food.
         // Bot2 [2026-03-23]: HP>14, hunger=4, moveTo(80,69,-13) ~50+ blocks, killed by zombie.
-        nightWarning += `\n[WARNING] hunger=${hunger}, HP=${hp}, no food. Long-distance nav (${Math.round(estimatedDistance)} blocks) risks starvation mid-travel.\n[推奨アクション]\n1. bot.combat("cow") or bot.combat("pig") — 近くの動物を狩って食料確保\n2. bot.eat() — 食料があればHP回復\n3. bot.navigate({target_block:"chest"}) — 近くのチェストから食料取得（<30ブロック）\n4. bot.farm() — 農場で食料収穫`;
+        // Previously only warned — agent ignored warnings and proceeded, dying every time.
+        // Sprinting depletes ~1 hunger/7s, so hunger=4-6 hits 0 within 30-40s of navigation.
+        // After hunger=0, HP drains 1/4s from starvation and cannot regenerate. Any mob hit is lethal.
+        console.error(`[Navigate] BLOCKED: hunger=${hunger}, HP=${hp}, no food, distance=${Math.round(estimatedDistance)}. Long-distance nav risks starvation death.`);
+        return `mc_navigate REFUSED: hunger=${hunger}, HP=${hp}, no food in inventory. Long-distance navigation (${Math.round(estimatedDistance)} blocks) will cause starvation death mid-travel.\n[推奨アクション]\n1. bot.combat("cow") or bot.combat("pig") — 近くの動物を狩って食料確保\n2. bot.eat() — 食料があればHP回復\n3. bot.navigate({target_block:"chest"}) — 近くのチェストから食料取得（<30ブロック）\n4. bot.farm() — 農場で食料収穫`;
       }
       // Short-distance: only block when HP is already low (<=14), allowing emergency
       // food/chest access at higher HP.
@@ -1690,9 +1694,14 @@ export async function mc_navigate(
         // Now actually blocks: return early when HP is below threshold at night with hostiles.
         const nightHpBlock = hasFood ? 10 : 14;
         if (hp <= nightHpBlock && closestDist <= 16) {
-          nightWarning += `\n[WARNING] HP=${hp} at night with ${nearbyHostiles.length} hostile(s) nearby (${threatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}\n[推奨アクション]\n1. bot.flee(20) — 敵から逃走\n2. bot.place("dirt", x, y, z) — 周囲にブロックを置いてシェルター建設\n3. bot.eat() — 食料があればHP回復${!hasFood ? "\n4. bot.combat(\"cow\") — 食料動物を狩って食料確保" : ""}\n5. bot.wait(30000) — 夜明けまで安全な場所で待機`;
+          // HARD BLOCK: return early instead of just warning.
+          // Bot1 Sessions 20-42: 15+ deaths from night navigation with low HP + nearby mobs.
+          // Bot2 [2026-03-23]: killed by zombie during night navigation.
+          // Previous code only appended to nightWarning string — agent ignored it and proceeded.
+          console.error(`[Navigate] BLOCKED: HP=${hp} at night with ${nearbyHostiles.length} hostile(s) nearby (${threatList}). closestDist=${closestDist}.`);
+          return `mc_navigate REFUSED: HP=${hp} at night with ${nearbyHostiles.length} hostile(s) nearby (${threatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}Navigation at night with low HP and nearby hostiles is lethal.\n[推奨アクション]\n1. bot.flee(20) — 敵から逃走\n2. bot.place("dirt", x, y, z) — 周囲にブロックを置いてシェルター建設\n3. bot.eat() — 食料があればHP回復${!hasFood ? "\n4. bot.combat(\"cow\") — 食料動物を狩って食料確保" : ""}\n5. bot.wait(30000) — 夜明けまで安全な場所で待機`;
         }
-        nightWarning = `\n[NIGHT WARNING] HP=${hp}, ${nearbyHostiles.length} hostile(s) nearby: ${threatList}. Consider mc_flee or shelter before long navigation.`;
+        nightWarning += `\n[NIGHT WARNING] HP=${hp}, ${nearbyHostiles.length} hostile(s) nearby: ${threatList}. Consider mc_flee or shelter before long navigation.`;
       }
     } else {
       // DAYTIME close-range hostile check: pillagers, cave zombies, and other hostiles
@@ -1745,9 +1754,13 @@ export async function mc_navigate(
             // pass the scan but not the block check.
             const dayBlockDist = hasFood ? 10 : 24;
             if (closestDayDist <= dayBlockDist) {
-              nightWarning += `\n[WARNING] HP=${hp} with ${dayHostiles.length} hostile(s) nearby (${dayThreatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}\n[推奨アクション]\n1. bot.flee(20) — 敵から逃走\n2. bot.combat() — 最も近い敵を倒す（引数なし=最近接敵）\n3. bot.eat() — 食料があればHP回復${!hasFood ? "\n4. bot.combat(\"cow\") — 食料動物を狩って食料確保" : ""}`;
+              // HARD BLOCK: return early instead of just warning.
+              // Bot2 [2026-03-23]: killed by zombie during daytime navigation at low HP.
+              // Previous code only appended to nightWarning string — agent ignored it and proceeded.
+              console.error(`[Navigate] BLOCKED: HP=${hp} daytime with ${dayHostiles.length} hostile(s) nearby (${dayThreatList}). closestDist=${closestDayDist}.`);
+              return `mc_navigate REFUSED: HP=${hp} with ${dayHostiles.length} hostile(s) within ${closestDayDist.toFixed(1)} blocks (${dayThreatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}Navigation with low HP and nearby hostiles is lethal.\n[推奨アクション]\n1. bot.flee(20) — 敵から逃走\n2. bot.combat() — 最も近い敵を倒す（引数なし=最近接敵）\n3. bot.eat() — 食料があればHP回復${!hasFood ? "\n4. bot.combat(\"cow\") — 食料動物を狩って食料確保" : ""}`;
             }
-            nightWarning += `\n[DANGER WARNING] HP=${hp}, ${dayHostiles.length} hostile(s) within 16 blocks: ${dayThreatList}. Use mc_flee or mc_combat before navigating.`;
+            nightWarning += `\n[DANGER WARNING] HP=${hp}, ${dayHostiles.length} hostile(s) within ${dayScanRadius} blocks: ${dayThreatList}. Use mc_flee or mc_combat before navigating.`;
           }
         }
       }
