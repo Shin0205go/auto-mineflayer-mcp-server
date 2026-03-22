@@ -407,25 +407,37 @@ export async function mc_gather(
           resolve(`[ABORTED] mc_gather stopped: HP dropped to ${monHp.toFixed(1)} during gathering. Use mc_flee or mc_eat before retrying.`);
           return;
         }
-        // Hostile check during gathering — both night AND daytime.
+        // Hostile check during gathering — ALWAYS, both night AND daytime.
         // mc_gather can take up to 120s. The bot is stationary/moving slowly, vulnerable.
         // Night: check 20-block radius (mobs are everywhere).
-        // Daytime: check 12-block radius when HP<12 — pillagers, cave zombies, and
-        // remnant mobs attack during day. Bot2 [2026-03-22]: skeleton shot bot from
-        // HP 20→1 during daytime dirt placement. The initial night-only check missed this.
+        // Daytime: check 16-block radius — pillagers, cave zombies, skeletons attack 24/7.
+        // Bot2 [2026-03-22]: skeleton shot bot from HP 20→1 during DAYTIME gather.
+        // Previous code gated daytime checks on monHp<12, meaning the first 8+ damage
+        // from skeleton arrows went completely unchecked. Skeletons deal 4-5 damage per
+        // hit with no armor, so HP can drop from 20 to 1 in 4-5 hits (~4 seconds).
+        // Now: ALWAYS check hostiles regardless of HP. The pre-start check catches mobs
+        // present at start, but mobs spawn or approach DURING the 120s operation.
         const monTime = monBot.time?.timeOfDay ?? 0;
         const monIsNight = monTime > 12541 || monTime < 100;
-        const gatherScanRadius = monIsNight ? 20 : 12;
-        const shouldCheckHostiles = monIsNight || monHp < 12;
-        if (shouldCheckHostiles) {
+        const gatherScanRadius = monIsNight ? 20 : 16;
+        {
           const monDanger = checkDangerNearby(monBot, gatherScanRadius);
-          const distThreshold = monIsNight ? 16 : 10;
-          if (monDanger.dangerous && monDanger.nearestHostile && monDanger.nearestHostile.distance <= distThreshold) {
-            clearInterval(hpCheckInterval);
-            try { monBot.pathfinder?.stop(); } catch (_) {}
-            const timeNote = monIsNight ? "night fell and " : "";
-            resolve(`[ABORTED] mc_gather stopped: ${timeNote}${monDanger.nearestHostile.name} detected ${monDanger.nearestHostile.distance.toFixed(1)} blocks away (HP=${monHp.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`);
-            return;
+          // Night: abort if hostile within 16 blocks.
+          // Day: abort if hostile within 12 blocks (closer threshold since fewer mobs).
+          // Ranged mobs (skeleton, pillager): always abort within 16 blocks regardless of time.
+          const distThreshold = monIsNight ? 16 : 12;
+          if (monDanger.dangerous && monDanger.nearestHostile) {
+            const nearName = monDanger.nearestHostile.name;
+            const nearDist = monDanger.nearestHostile.distance;
+            const RANGED_MOBS = ["skeleton", "stray", "pillager", "drowned"];
+            const effectiveThreshold = RANGED_MOBS.includes(nearName) ? 16 : distThreshold;
+            if (nearDist <= effectiveThreshold) {
+              clearInterval(hpCheckInterval);
+              try { monBot.pathfinder?.stop(); } catch (_) {}
+              const timeNote = monIsNight ? "night fell and " : "";
+              resolve(`[ABORTED] mc_gather stopped: ${timeNote}${nearName} detected ${nearDist.toFixed(1)} blocks away (HP=${monHp.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`);
+              return;
+            }
           }
         }
       } catch (_) {
@@ -1732,6 +1744,11 @@ export async function mc_navigate(
                 const RANGED_MOBS = ["skeleton", "stray", "pillager", "drowned"];
                 const isRangedMobClose = segArmorCount <= 1 && RANGED_MOBS.includes(nearName) && nearDist <= 16;
                 if (isCreeperClose || isHostileClose || isNightHostileClose || isRangedMobClose) {
+                  // Auto-equip armor on abort — bot is left standing near hostiles.
+                  // Bot1 Sessions 22-42, Bot2 [2026-03-22]: navigation aborted due to hostile
+                  // but bot had no armor equipped, making subsequent hits lethal.
+                  // Equipping armor is cheap (~100ms) and reduces damage by 30-60%.
+                  try { await botManager.equipArmor(username); } catch { /* ignore */ }
                   const curPos2 = botManager.getPosition(username);
                   const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
                   const timeNote = segIsNight ? "at night" : "during daytime";

@@ -1634,10 +1634,14 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       console.error(`[Flee] No hostile found, fleeing in random direction`);
     }
 
-    // SAFETY: Validate flee direction doesn't lead to a cliff edge.
+    // SAFETY: Validate flee direction doesn't lead to a cliff, hole, or lava.
     // Bot1 Session 21b, Bot2 [2026-03-22]: fled toward cliff edge, knockback/momentum
-    // pushed bot off, causing fatal fall. Check if 3 blocks in flee direction has ground.
-    // If not, rotate 90° increments until a safe direction is found.
+    // pushed bot off, causing fatal fall. Bot2: fled into cave hole (Y=80→Y=56).
+    // Bot3 Death #8: fell into lava while fleeing.
+    // Check at 3 AND 5 blocks in flee direction for ground safety.
+    // Previous check only scanned 3 blocks — insufficient for birch_forest terrain where
+    // cliffs and cave openings appear at 4-6 blocks from the bot's position.
+    // If not safe, rotate 90° increments until a safe direction is found.
     {
       const botPos = bot.entity.position;
       const bx = Math.floor(botPos.x);
@@ -1647,28 +1651,43 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       let foundSafe = false;
       for (let rotation = 0; rotation < 4; rotation++) {
         const angle = Math.atan2(direction.z, direction.x) + (Math.PI / 2) * rotation;
-        const checkX = bx + Math.round(Math.cos(angle) * 3);
-        const checkZ = bz + Math.round(Math.sin(angle) * 3);
-        // Check if there's ground within 3 blocks below the flee direction
-        let hasSafeGround = false;
-        for (let dy = 0; dy <= 3; dy++) {
-          const block = bot.blockAt(new Vec3(checkX, by - dy, checkZ));
-          if (block && block.name !== "air" && block.name !== "cave_air" && block.name !== "void_air") {
-            hasSafeGround = true;
+        // Check TWO points along the flee path: 3 blocks and 5 blocks ahead.
+        // Checking only 3 blocks missed cliffs/holes at 4-5 blocks out.
+        let directionSafe = true;
+        for (const checkDist of [3, 5]) {
+          const checkX = bx + Math.round(Math.cos(angle) * checkDist);
+          const checkZ = bz + Math.round(Math.sin(angle) * checkDist);
+          // Check for ground within 3 blocks below — also reject lava.
+          let hasSafeGround = false;
+          for (let dy = 0; dy <= 3; dy++) {
+            const block = bot.blockAt(new Vec3(checkX, by - dy, checkZ));
+            if (!block) continue;
+            // Lava is NOT safe ground — Bot3 #8: fell into lava while fleeing.
+            if (block.name === "lava") {
+              hasSafeGround = false;
+              break;
+            }
+            if (block.name !== "air" && block.name !== "cave_air" && block.name !== "void_air") {
+              hasSafeGround = true;
+              break;
+            }
+          }
+          if (!hasSafeGround) {
+            directionSafe = false;
             break;
           }
         }
-        if (hasSafeGround) {
+        if (directionSafe) {
           if (rotation > 0) {
             bestDirection = new (botPos as any).constructor(Math.cos(angle), 0, Math.sin(angle));
-            console.error(`[Flee] Original direction leads to cliff — rotated ${rotation * 90}° to safe direction.`);
+            console.error(`[Flee] Original direction leads to cliff/hole/lava — rotated ${rotation * 90}° to safe direction.`);
           }
           foundSafe = true;
           break;
         }
       }
       if (!foundSafe) {
-        console.error(`[Flee] WARNING: All flee directions have cliff drops. Using original direction with maxDropDown=1 safety.`);
+        console.error(`[Flee] WARNING: All flee directions have cliff drops or hazards. Using original direction with maxDropDown=1 safety.`);
       }
       direction = bestDirection;
     }
