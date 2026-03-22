@@ -318,6 +318,7 @@ export async function mc_gather(
   // exposed to mob attacks. Bot1: mc_gather(short_grass) timed out 120s, mobs killed bot.
   // Bot2: skeleton shot bot from HP 20→8 during gather because no armor equipped.
   // mc_navigate and mc_combat auto-equip armor, but mc_gather did not — fixed here.
+  let gatherWarning = "";
   const gatherBot = botManager.getBot(username);
   if (gatherBot) {
     const gatherTime = gatherBot.time?.timeOfDay ?? 0;
@@ -385,31 +386,29 @@ export async function mc_gather(
       }
     }
 
-    // Pre-gather HP check: ABORT if HP < 8.
-    // mc_gather is a 120s stationary operation. Starting at low HP means any mob hit
-    // or starvation tick is fatal — the bot can't recover during gathering.
-    // Bot1 [2026-03-22]: started gather at low HP, died during operation.
-    // Bot2/Bot3: similar patterns — low HP + long operation = death.
-    // Previously this only logged a warning and continued — now aborts immediately.
+    // Pre-gather HP check: WARNING (not block) if HP < 8.
+    // Bot3 Bug #22 [2026-03-23]: gather ABORTED at HP<8, combat REFUSED at cliff, flee
+    // returned 0m, navigate blocked by hostiles — complete deadlock, all actions blocked.
+    // Converting to WARNING: operation continues but agent is strongly warned.
+    // The mid-gather HP monitor (line ~495) will still abort if HP drops further during operation.
     const gatherHpStart = Math.round((gatherBot.health ?? 20) * 10) / 10;
     if (gatherHpStart < 8) {
-      console.error(`[Gather] ABORT: HP too low (${gatherHpStart}/20) for 120s stationary operation.`);
-      return `mc_gather aborted: HP too low (${gatherHpStart}/20). Gathering is a long stationary operation (up to 120s) — starting at low HP is lethal. Use mc_eat to heal or mc_combat(target="cow") for food first.`;
+      console.error(`[Gather] WARNING: HP low (${gatherHpStart}/20) for 120s stationary operation. Proceeding despite risk.`);
+      gatherWarning += `\n[WARNING] HP low (${gatherHpStart}/20). Gathering is a long stationary operation (up to 120s) — starting at low HP is risky.\n[推奨アクション]\n1. bot.eat() — 食料があればHP回復\n2. bot.combat("cow") — 食料動物を狩って食料確保\n3. bot.flee(20) — 敵から逃走してから再試行`;
     }
 
-    // Pre-gather hostile check: ABORT if hostiles within 20 blocks.
-    // Same rationale as mc_farm — starting a long operation with known threats nearby
-    // results in taking damage while stationary (mining). The mid-gather loop checks
-    // for threats, but by then the bot may have already navigated to the block and
-    // started mining (exposed and stationary).
-    // Bot1/Bot2 [2026-03-22]: died from mob damage during gather operations.
+    // Pre-gather hostile check: WARNING (not block) if hostiles within 20 blocks.
+    // Bot3 Bug #22 [2026-03-23]: gather blocked by "skeleton at 8.8 blocks", combat
+    // also blocked (cliff), flee returned 0m — nothing could be done. Deadlock.
+    // Converting to WARNING: operation continues but agent is warned to clear threats.
+    // The mid-gather hostile monitor will still abort if mobs close in during operation.
     const gatherDanger = checkDangerNearby(gatherBot, 20);
     if (gatherDanger.dangerous) {
       const gThreat = gatherDanger.nearestHostile
         ? `${gatherDanger.nearestHostile.name} at ${gatherDanger.nearestHostile.distance.toFixed(1)} blocks`
         : `${gatherDanger.hostileCount} hostile(s)`;
-      console.error(`[Gather] ABORT: ${gThreat} nearby. Too dangerous to start gathering.`);
-      return `mc_gather aborted: ${gThreat} within 20 blocks. Gathering is stationary — starting with nearby hostiles is dangerous. Use mc_flee or mc_combat to clear threats first. HP: ${gatherHpStart}/20.`;
+      console.error(`[Gather] WARNING: ${gThreat} nearby. Proceeding despite risk.`);
+      gatherWarning += `\n[WARNING] ${gThreat} within 20 blocks. Gathering is stationary — nearby hostiles are dangerous.\n[推奨アクション]\n1. bot.flee(20) — 敵から逃走してから採掘\n2. bot.combat() — 敵を先に倒す\n3. bot.equipArmor() — 防具を装備`;
     }
   }
 
@@ -467,7 +466,7 @@ export async function mc_gather(
       }
       const inv = botManager.getInventory(username);
       const wheatInInv = inv.find(i => i.name === "wheat");
-      return `Gathered ${gathered} wheat. ${logs.join("; ")}. Wheat in inventory: ${wheatInInv?.count ?? 0}`;
+      return `Gathered ${gathered} wheat. ${logs.join("; ")}. Wheat in inventory: ${wheatInInv?.count ?? 0}` + gatherWarning;
     }
   }
 
@@ -540,11 +539,12 @@ export async function mc_gather(
     timeoutPromise.catch(() => clearInterval(hpCheckInterval));
   });
   try {
-    return await Promise.race([gatherPromise, timeoutPromise, hpMonitorPromise]);
+    const gatherResult = await Promise.race([gatherPromise, timeoutPromise, hpMonitorPromise]);
+    return gatherResult + gatherWarning;
   } catch (e) {
     // Stop pathfinder on timeout
     try { botManager.getBot(username)?.pathfinder?.stop(); } catch (_) {}
-    return e instanceof Error ? e.message : String(e);
+    return (e instanceof Error ? e.message : String(e)) + gatherWarning;
   }
 }
 
@@ -2144,21 +2144,21 @@ export async function mc_combat(
     target = targetOrArgs as string | undefined;
   }
 
+  let combatHpWarning = "";
   const combatBot = botManager.getBot(username);
   if (combatBot) {
     const combatHp = combatBot.health ?? 20;
-    // REFUSE combat at HP < 5: one hit from any mob (zombie 3-4 dmg, skeleton 4-5 dmg,
-    // spider 2-3 dmg) is immediately lethal at this HP level. The survival_routine already
-    // guards at HP < 8 (high-level-actions.ts), but direct bot.combat() calls from agents
-    // bypass that guard. Bot3 Deaths #9,#16: combat attempted at HP 2.2-7.2, died instantly.
-    // Bot2 [2026-03-22]: survival_routine forced combat at critical HP, died to Drowned.
-    // HP < 5 is used instead of < 8 to avoid creating a deadlock where the bot can't hunt
-    // food animals at moderate HP. At HP 5-7, the bot can survive 1-2 hits and flee.
+    // WARNING (not block) at HP < 5: one hit from any mob is lethal.
+    // Bot3 Bug #22 [2026-03-23]: combat REFUSED at HP<5 caused complete deadlock when
+    // flee, gather, navigate were also blocked. Bot couldn't fight zombies to escape,
+    // couldn't gather dirt for shelter, couldn't navigate away — stuck until death.
+    // Converting to WARNING: operation continues but agent is strongly advised to flee.
+    // Creeper proximity and cliff edge remain the only REFUSED exceptions.
     if (combatHp < 5) {
       const combatHasFood = combatBot.inventory.items().some((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
-      return `[WARNING] HP critically low (${combatHp.toFixed(1)}/20). One mob hit (3-5 damage) is lethal.\n[推奨アクション]\n1. bot.flee(20) — 敵から逃走（最優先）\n2. bot.eat() — 食料があればHP回復${!combatHasFood ? "\n3. bot.combat(\"cow\") — 食料動物を狩って食料確保（HP5以上推奨）" : ""}\n4. bot.place(\"dirt\", x, y, z) — シェルター建設\n5. bot.wait(30000) — hunger>=18なら自然回復を待つ`;
-    }
-    if (combatHp < 8) {
+      combatHpWarning = `\n[WARNING] HP critically low (${combatHp.toFixed(1)}/20). One mob hit (3-5 damage) is lethal.\n[推奨アクション]\n1. bot.flee(20) — 敵から逃走（最優先）\n2. bot.eat() — 食料があればHP回復${!combatHasFood ? "\n3. bot.combat(\"cow\") — 食料動物を狩って食料確保（HP5以上推奨）" : ""}\n4. bot.place(\"dirt\", x, y, z) — シェルター建設\n5. bot.wait(30000) — hunger>=18なら自然回復を待つ`;
+      console.error(`[Combat] WARNING: HP critically low (${combatHp.toFixed(1)}/20). Proceeding despite risk — blocking causes deadlock.`);
+    } else if (combatHp < 8) {
       console.error(`[Combat] WARNING: HP low (${combatHp.toFixed(1)}/20). Proceeding with caution.`);
     }
   }
@@ -2334,11 +2334,12 @@ export async function mc_combat(
       }
     }
     const fightResult = await botManager.fight(username, target, fleeAtHp);
-    return fightResult + hostileWarning;
+    return fightResult + hostileWarning + combatHpWarning;
   }
 
   // Attack nearest hostile
-  return await botManager.attack(username);
+  const attackResult = await botManager.attack(username);
+  return attackResult + combatHpWarning;
 }
 
 // ─── mc_drop ─────────────────────────────────────────────────────────────────
