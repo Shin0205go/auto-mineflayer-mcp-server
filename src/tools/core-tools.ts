@@ -1300,20 +1300,25 @@ export async function mc_navigate(
     const inv = botManager.getInventory(username);
     const hasFood = inv.some(i => EDIBLE_FOOD_NAMES.has(i.name));
 
-    // BLOCK navigation when starving with no food — regardless of time of day.
+    // BLOCK navigation when starving or near-starving with no food — regardless of time of day.
     // Bot1 Session 44: hunger=0, navigated to find animals, fell into cave, drowned.
     // Bot3 Death #11: hunger=0, navigated to farm, fell into ravine.
+    // Bot1 Session 28: hunger=1, navigated at night, hunger hit 0 mid-travel, died.
     // Without food, HP only declines. Long navigation = guaranteed death.
-    if (hunger <= 0 && !hasFood) {
-      // At hunger=0 without food, HP only declines — any navigation leads to death.
-      // Bot1 Sessions 28,35,44: died at HP 10-14 navigating with hunger=0, no food.
-      // Previous threshold (hp < 10) was too lenient — mobs + starvation killed at HP 14.
-      // Block all non-emergency navigation when starving without food.
+    // Threshold raised from 0 to 2: at hunger=1-2, sprint drains the remaining hunger
+    // to 0 within seconds of navigation start, then starvation damage begins immediately.
+    // Navigation at hunger 1-2 without food is functionally identical to hunger=0.
+    if (hunger <= 2 && !hasFood) {
+      // At hunger<=2 without food, HP only declines — any navigation leads to death.
+      // Bot1 Sessions 28,35,44: died at HP 10-14 navigating with hunger=0-1, no food.
+      // Previous threshold (hunger=0 && hp < 15) was too lenient — hunger=1 depletes to 0
+      // within the first navigation segment, and mobs + starvation killed at HP 14.
+      // Block all non-emergency navigation when near-starving without food.
       if (hp < 15) {
-        return `[REFUSED] Cannot navigate while starving — HP=${hp}, hunger=0, no food in inventory. HP will only decrease. Find food first: mc_combat(target="cow"), mc_combat(target="pig"), or mc_eat. Short-range movement only (mc_flee, dig shelter).`;
+        return `[REFUSED] Cannot navigate while starving — HP=${hp}, hunger=${hunger}, no food in inventory. HP will only decrease. Find food first: mc_combat(target="cow"), mc_combat(target="pig"), or mc_eat. Short-range movement only (mc_flee, dig shelter).`;
       }
       // Even at HP >= 15, warn strongly — starvation drains HP and mob hits are cumulative.
-      nightWarning += `\n[STARVATION WARNING] Hunger=0, no food. HP will only decline. Find food urgently.`;
+      nightWarning += `\n[STARVATION WARNING] Hunger=${hunger}, no food. HP will only decline. Find food urgently.`;
     }
 
     // Auto-equip armor before ALL navigation — not just at night.

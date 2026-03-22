@@ -1572,6 +1572,13 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       .sort((a, b) => a.dist - b.dist);
 
     const hostile = allHostiles[0]?.entity;
+    // Record initial distance to nearest hostile for post-flee validation.
+    // Bot2 [2026-03-22]: mc_flee moved bot TOWARD enemies (distance 9.6→10.5→7.6m),
+    // but there was no detection or warning. Track initial distance so we can warn
+    // the caller if flee failed to increase distance (terrain routing issue).
+    const initialHostileDist = hostile
+      ? bot.entity.position.distanceTo(hostile.position)
+      : Infinity;
 
     // Calculate flee direction
     let direction: { x: number; y: number; z: number; scaled: (n: number) => any };
@@ -1777,6 +1784,13 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       }, 200);
     });
 
+    // Clear sprint control state after flee completes.
+    // bot.setControlState("sprint", true) was set at line ~1695 but never cleared on
+    // normal exit. Sprint persists into subsequent actions (eating, crafting, gathering),
+    // draining hunger faster and preventing reliable food consumption.
+    // Bot1/Bot2 [2026-03-22]: hunger dropped rapidly after flee, causing starvation spiral.
+    bot.setControlState("sprint", false);
+
     // Restore previous pathfinder settings after flee completes.
     // NOTE: Do NOT restore canDig here — same race condition as AutoFlee/CreeperFlee.
     // If mc_navigate starts immediately after flee, moveToBasic sets canDig=false
@@ -1833,7 +1847,21 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     const distMoved = bot.entity.position.distanceTo(startPos);
     if (hostile) {
       const newDist = bot.entity.position.distanceTo(hostile.position);
-      return `Fled from ${fleeFromName}! Now ${newDist.toFixed(1)} blocks away. HP: ${(bot.health ?? 0).toFixed(1)}/20` + caveWarning;
+      // Post-flee hostile distance validation: detect when flee moved TOWARD enemies.
+      // Bot2 [2026-03-22]: mc_flee(30) x3 caused distance to DECREASE (9.6→10.5→7.6m).
+      // This happens when terrain forces the pathfinder to route around obstacles toward
+      // the hostile, or when the flee direction calculation pointed toward a blocked area.
+      // Warn the caller so they can try a different escape strategy (dig shelter, pillar up).
+      let fleeFailWarning = "";
+      if (newDist < initialHostileDist && initialHostileDist < Infinity) {
+        console.error(`[Flee] WARNING: Flee moved bot CLOSER to hostile! Distance: ${initialHostileDist.toFixed(1)} → ${newDist.toFixed(1)}. Terrain may be forcing unsafe routing.`);
+        fleeFailWarning = ` [WARNING] Flee moved CLOSER to hostile (${initialHostileDist.toFixed(0)}→${newDist.toFixed(0)} blocks). Terrain is blocking escape routes. Try: dig 1x1x2 shelter hole, minecraft_pillar_up, or mc_navigate to specific safe coordinates instead.`;
+      } else if (distMoved < distance * 0.3) {
+        // Also warn when flee barely moved (less than 30% of requested distance)
+        console.error(`[Flee] WARNING: Only fled ${distMoved.toFixed(1)} blocks (requested ${distance}). Terrain may be very constrained.`);
+        fleeFailWarning = ` [WARNING] Only fled ${distMoved.toFixed(0)}/${distance} blocks. Terrain is constrained. Try: dig shelter, minecraft_pillar_up, or mc_navigate to specific coordinates.`;
+      }
+      return `Fled from ${fleeFromName}! Now ${newDist.toFixed(1)} blocks away (was ${initialHostileDist.toFixed(1)}). Moved ${distMoved.toFixed(1)} blocks. HP: ${(bot.health ?? 0).toFixed(1)}/20` + fleeFailWarning + caveWarning;
     }
     return `Fled ${distMoved.toFixed(1)} blocks from ${fleeFromName}! HP: ${(bot.health ?? 0).toFixed(1)}/20` + caveWarning;
   } catch (err) {
