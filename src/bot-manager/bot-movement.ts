@@ -1966,8 +1966,14 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
           bot.pathfinder.setGoal(retryGoal);
           await new Promise<void>((resolve) => {
             const retryTimeout = setTimeout(() => { bot.pathfinder.setGoal(null); resolve(); }, 8000);
+            const retryStartMs = Date.now();
             const retryCheck = setInterval(() => {
-              if (!bot.pathfinder.isMoving()) {
+              // Wait at least 1.5s before checking isMoving() — pathfinder may take 500-1000ms
+              // to compute a path and start moving. Without this delay, the check fires at 300ms
+              // when isMoving()=false (path not computed yet), immediately aborting the retry.
+              // Bot2 [2026-03-22]: perpendicular retry exited instantly, no actual movement.
+              const retryElapsed = Date.now() - retryStartMs;
+              if (retryElapsed > 1500 && !bot.pathfinder.isMoving()) {
                 clearInterval(retryCheck); clearTimeout(retryTimeout);
                 bot.pathfinder.setGoal(null); resolve();
               }

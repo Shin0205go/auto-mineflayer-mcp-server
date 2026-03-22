@@ -536,11 +536,13 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         return `Attack timed out after ${attacks} attacks. Target may be unreachable.`;
       }
       // Check HP - flee if low (raised from 8 to 12 for better survival margin)
+      // Bug fix: previously this just returned "Fled" without actually fleeing — bot stayed
+      // in place next to the hostile mob. Now actually moves away using pathfinder.
+      // Bot1 [2026-03-22]: "Fled from skeleton" but skeleton kept shooting because bot didn't move.
       if (bot.health <= 12) {
         console.error(`[Attack] HP low (${bot.health}), fleeing from ${target.name}!`);
         bot.pathfinder.setGoal(null);
-        // Try to eat food while fleeing — use isFoodItem for complete coverage.
-        // Previous hardcoded list missed rotten_flesh, golden_carrot, sweet_berries, etc.
+        // Try to eat food before fleeing
         const food = bot.inventory.items().find(i => isFoodItem(bot, i.name));
         if (food) {
           try {
@@ -549,7 +551,36 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
             await bot.consume();
           } catch (_) { /* ignore eat errors during flee */ }
         }
+        // Actually flee: move away from the hostile mob (20 blocks).
+        // fight() calls flee() properly; attack() was missing this, leaving bot in danger.
+        try {
+          const { flee: fleeFunc } = await import("./bot-movement.js");
+          await fleeFunc(managed, 20);
+        } catch (fleeErr) {
+          console.error(`[Attack] Flee failed: ${fleeErr}`);
+        }
         return `Fled from ${target.name} at low HP (${bot.health}/20) after ${attacks} attacks. Eat food and try again.`;
+      }
+
+      // Mid-combat auto-eat: if HP dropped below 14 and food is available, eat between attacks.
+      // Previously only worked for blaze targets. Bot1 [2026-03-22]: mc_combat("skeleton")
+      // timed out at 60s — skeleton dealt continuous ranged damage but bot never ate mid-combat.
+      // fight() already has this for all mobs; attack() was missing it for non-blaze targets.
+      if (bot.health < 14 && attacks > 0 && attacks % 3 === 0) {
+        const midAttackFood = bot.inventory.items().find(i => isFoodItem(bot, i.name));
+        if (midAttackFood) {
+          try {
+            bot.pathfinder.setGoal(null); // Stop moving while eating
+            await bot.equip(midAttackFood, "hand");
+            await bot.consume();
+            console.error(`[Attack] Mid-combat auto-ate ${midAttackFood.name} (HP: ${bot.health})`);
+            // Re-equip weapon after eating
+            for (const wn of weaponPriority) {
+              const w = bot.inventory.items().find(i => i.name === wn);
+              if (w) { try { await bot.equip(w, "hand"); } catch (_) {} break; }
+            }
+          } catch (_) { /* ignore eat errors — continue fighting */ }
+        }
       }
 
       // Creeper proximity check: abort if creeper within 12 blocks during non-creeper combat.
@@ -684,18 +715,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         continue;
       }
 
-      // Mid-combat eat for ranged mobs (blazes deal sustained damage)
-      if (target.name === "blaze" && bot.health < 16 && bot.food < 20 && attacks % 3 === 0) {
-        const midFood = bot.inventory.items().find(i => isFoodItem(bot, i.name));
-        if (midFood) {
-          try { await bot.equip(midFood, "hand"); await bot.consume(); console.error(`[Attack] Mid-combat eat vs blaze (HP: ${bot.health})`); } catch (_) {}
-          // Re-equip weapon
-          for (const wn of ["netherite_sword", "diamond_sword", "iron_sword", "stone_sword"]) {
-            const w = bot.inventory.items().find(i => i.name === wn);
-            if (w) { try { await bot.equip(w, "hand"); } catch (_) {} break; }
-          }
-        }
-      }
+      // Mid-combat eat for blaze is now handled by the generic mid-combat eat above (all mobs).
 
       // Attack
       await bot.lookAt(currentTarget.position.offset(0, currentTarget.height * 0.8, 0));
