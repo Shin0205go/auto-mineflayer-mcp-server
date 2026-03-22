@@ -934,21 +934,31 @@ export async function fight(
 
     // Move closer if needed
     if (distance > attackRange) {
-      // Approach stall detection: if distance to target hasn't decreased in 6 consecutive
-      // approach iterations (3s), the target is likely unreachable (across gap, cliff, water).
+      // Approach stall detection: if distance to target hasn't decreased in N consecutive
+      // approach iterations, the target is likely unreachable (across gap, cliff, water).
       // Bot1 [2026-03-22]: mc_combat("skeleton") timed out at 60s because pathfinder couldn't
       // reach skeleton across a gap. Bot took arrow damage for 60s while approaching failed.
       // Abort early instead of waiting for the full 60s timeout.
+      //
+      // Ranged mobs (skeleton, stray, pillager, drowned, witch, blaze) get a LOWER stall
+      // threshold (3 iterations = 1.5s) because they deal continuous damage during approach.
+      // Bot1 [2026-03-22]: skeleton dealt 2 arrows (8-10 damage) in the 3s it took for the
+      // old 6-iteration threshold to fire. By that point HP was already critical.
+      // Melee mobs keep the original 6 iterations (3s) since they can't damage during approach.
+      const RANGED_COMBAT_MOBS = ["skeleton", "stray", "pillager", "drowned", "witch", "blaze"];
+      const isRangedTarget = RANGED_COMBAT_MOBS.includes(targetName.toLowerCase());
+      const stallThreshold = isRangedTarget ? 3 : 6;
       if (distance < lastApproachDist - 0.5) {
         // Making progress — reset stall counter
         approachStallCount = 0;
         lastApproachDist = distance;
       } else {
         approachStallCount++;
-        if (approachStallCount >= 6) {
-          console.error(`[Fight] Approach stalled: distance to ${targetName} hasn't decreased in ${approachStallCount} iterations (${distance.toFixed(1)} blocks). Target may be unreachable.`);
+        if (approachStallCount >= stallThreshold) {
+          const rangedNote = isRangedTarget ? ` ${targetName} is a ranged mob dealing continuous damage during approach.` : "";
+          console.error(`[Fight] Approach stalled: distance to ${targetName} hasn't decreased in ${approachStallCount} iterations (${distance.toFixed(1)} blocks).${rangedNote} Target may be unreachable.`);
           bot.pathfinder.setGoal(null);
-          return `[ABORTED] Cannot reach ${targetName} (${distance.toFixed(1)} blocks away). Approach stalled after ${attackCount} attacks — target may be across a gap or obstacle. Try mc_flee to escape ranged damage, then approach from a different direction.` + getBriefStatus(bot);
+          return `[ABORTED] Cannot reach ${targetName} (${distance.toFixed(1)} blocks away). Approach stalled after ${attackCount} attacks — target may be across a gap or obstacle.${rangedNote} Try mc_flee to escape ranged damage, then approach from a different direction.` + getBriefStatus(bot);
         }
       }
       applySafePathfinderSettings(bot);

@@ -426,8 +426,15 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         // Bot1/Bot2 [2026-03-22]: killed by pillagers during daytime navigation.
         // Ranged mobs are uniquely dangerous: they attack while the bot is walking,
         // dealing repeated damage before the next safety check fires (500ms interval).
-        const RANGED_MOBS = ["skeleton", "stray", "pillager", "drowned"];
-        if (armorCount <= 1) {
+        //
+        // Expanded to armorCount <= 2 (was <= 1): drowned with tridents deal 9 damage,
+        // pillagers deal 4-5 with crossbow. Even with 2 armor pieces (e.g. iron boots +
+        // iron helmet), these are lethal over a 30s navigation — bot takes 3-5 hits.
+        // Bot2 [2026-03-22]: killed by drowned and skeleton during navigation with partial armor.
+        // Bot1 [2026-03-22]: killed by pillager during daytime with iron_boots only.
+        // Added "witch" to ranged list — witches throw potions at 10+ blocks.
+        const RANGED_MOBS = ["skeleton", "stray", "pillager", "drowned", "witch"];
+        if (armorCount <= 2) {
           for (const entity of Object.values(bot.entities)) {
             if (!entity || !entity.position || entity === bot.entity) continue;
             const eDist = entity.position.distanceTo(currentPos);
@@ -435,10 +442,11 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
             const eName = entity.name?.toLowerCase() ?? "";
             if (RANGED_MOBS.includes(eName)) {
               const timeNote = navIsNight ? "at night" : "during daytime";
+              const armorNote = armorCount === 0 ? "NO ARMOR" : `PARTIAL ARMOR (${armorCount}/4)`;
               console.error(`[MoveTo] RANGED MOB DANGER (${timeNote}): ${eName} at ${eDist.toFixed(1)} blocks, armor=${armorCount}/4, HP=${navHp.toFixed(1)}. Aborting.`);
               finish({
                 success: false,
-                message: `Navigation aborted: ${eName} detected ${eDist.toFixed(1)} blocks away ${timeNote}, HP=${Math.round(navHp*10)/10}. NO ARMOR — ranged mobs deal 4-5 damage per shot. Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`,
+                message: `Navigation aborted: ${eName} detected ${eDist.toFixed(1)} blocks away ${timeNote}, HP=${Math.round(navHp*10)/10}. ${armorNote} — ranged mobs deal 4-9 damage per shot. Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`,
                 stuckReason: "ranged_mob_danger"
               });
               return;
@@ -1641,7 +1649,13 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     // Check at 3 AND 5 blocks in flee direction for ground safety.
     // Previous check only scanned 3 blocks — insufficient for birch_forest terrain where
     // cliffs and cave openings appear at 4-6 blocks from the bot's position.
-    // If not safe, rotate 90° increments until a safe direction is found.
+    // If not safe, try 8 directions (45° increments) before giving up.
+    // Previously only tried 4 directions (90° increments). On complex terrain like
+    // old_growth_birch_forest with ravines/caves, all 4 cardinal rotations can be unsafe
+    // while diagonal directions between them are safe.
+    // Bot1/Bot2/Bot3 [2026-03-22]: "All flee directions have cliff drops" logged frequently,
+    // causing flee to use the original unsafe direction. With 8 directions, the chance of
+    // finding a safe path doubles.
     {
       const botPos = bot.entity.position;
       const bx = Math.floor(botPos.x);
@@ -1649,8 +1663,9 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       const bz = Math.floor(botPos.z);
       let bestDirection = direction;
       let foundSafe = false;
-      for (let rotation = 0; rotation < 4; rotation++) {
-        const angle = Math.atan2(direction.z, direction.x) + (Math.PI / 2) * rotation;
+      // Try 8 directions: 0°, 45°, 90°, 135°, 180°, 225°, 270°, 315° from original
+      for (let rotation = 0; rotation < 8; rotation++) {
+        const angle = Math.atan2(direction.z, direction.x) + (Math.PI / 4) * rotation;
         // Check TWO points along the flee path: 3 blocks and 5 blocks ahead.
         // Checking only 3 blocks missed cliffs/holes at 4-5 blocks out.
         let directionSafe = true;
@@ -1680,14 +1695,14 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
         if (directionSafe) {
           if (rotation > 0) {
             bestDirection = new (botPos as any).constructor(Math.cos(angle), 0, Math.sin(angle));
-            console.error(`[Flee] Original direction leads to cliff/hole/lava — rotated ${rotation * 90}° to safe direction.`);
+            console.error(`[Flee] Original direction leads to cliff/hole/lava — rotated ${rotation * 45}° to safe direction.`);
           }
           foundSafe = true;
           break;
         }
       }
       if (!foundSafe) {
-        console.error(`[Flee] WARNING: All flee directions have cliff drops or hazards. Using original direction with maxDropDown=1 safety.`);
+        console.error(`[Flee] WARNING: All 8 flee directions have cliff drops or hazards. Using original direction with maxDropDown=1 safety.`);
       }
       direction = bestDirection;
     }
