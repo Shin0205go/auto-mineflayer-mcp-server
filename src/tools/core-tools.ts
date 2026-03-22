@@ -181,6 +181,17 @@ export async function mc_status(): Promise<string> {
       warnings.push("PHANTOM RISK: Sleeping in a bed resets insomnia. Without sleep for 3+ nights, Phantoms will spawn and attack from above. Craft a bed (3 wool + 3 planks) when possible.");
     }
   }
+  // Daytime phantom/bed reminder: Phantoms spawn after 3+ nights without sleeping.
+  // Bot1 [2026-03-22]: killed by Phantom during daytime farming. Bot1 Session 43: killed by
+  // Phantom at night. The night-only warning (above) only fires at night when it may be too
+  // late to craft a bed. Warn during daytime so the agent can proactively craft a bed.
+  // Only show if the bot doesn't have a bed in inventory (avoids nagging).
+  if (!isNight) {
+    const hasBedDay = inventory.some(i => i.name.includes("_bed"));
+    if (!hasBedDay) {
+      warnings.push("NO BED: Craft a bed (3 wool + 3 planks) before nightfall. Sleeping resets the Phantom insomnia timer — without it, Phantoms spawn after 3 nights and attack from above (hard to flee).");
+    }
+  }
   if (food <= 0 && health < 10) {
     warnings.push(`STARVATION: Hunger=${food}, HP=${Math.round(health*10)/10}. Find food IMMEDIATELY — mc_combat(cow/pig/chicken) or mc_eat. Do NOT navigate long distances.`);
   }
@@ -1609,7 +1620,21 @@ export async function mc_navigate(
         return segResult + nightWarning;
       }
     }
-    const directResult = await botManager.moveTo(username, nx, ny, nz);
+    // SAFETY: For short-distance navigation, clamp target Y to prevent cave routing.
+    // When target Y is significantly below bot's current Y, pathfinder routes underground
+    // through caves to reach the lower elevation. The segmented path (dist>50) already
+    // keeps intermediate Y at bot level, but short-distance direct paths had no such
+    // protection. Bot1 Sessions 42-44, Bot2/Bot3: pathfinder routed underground for
+    // short-distance navigation to lower-Y targets (e.g., chest at Y=62, bot at Y=96).
+    // Fix: if target Y is >5 blocks below bot, use bot's current Y instead. The pathfinder's
+    // cave detection in moveToBasic catches descent, but it allows 8 blocks of drop before
+    // aborting — by then the bot is already in a cave. Clamping Y prevents the attempt.
+    let safeNy = ny;
+    if (pos && ny < pos.y - 5) {
+      console.error(`[Navigate] Short-distance Y-clamp: target Y=${ny} is ${(pos.y - ny).toFixed(1)} blocks below bot Y=${pos.y.toFixed(1)}. Using bot Y to prevent cave routing.`);
+      safeNy = Math.round(pos.y);
+    }
+    const directResult = await botManager.moveTo(username, nx, safeNy, nz);
     return directResult + nightWarning;
   }
 
@@ -1652,16 +1677,19 @@ export async function mc_combat(
   // Pre-combat creeper proximity check: refuse ALL combat when a creeper is within 8 blocks.
   // Bot1 Sessions 24,27: called mc_combat(zombie) while creeper at 5-11 blocks. Combat movement
   // brought bot near creeper, which exploded (up to 49 damage unarmored, lethal at any HP).
-  // The existing creeper check only applies to passive targets. Creepers are lethal during ANY
-  // combat because the bot moves toward its target, potentially closing distance to the creeper.
-  if (combatBot && target) {
+  // Applies to ALL combat — with or without target. When mc_combat() is called without a target,
+  // bot approaches the nearest hostile, potentially walking toward a creeper or closing distance
+  // to one. The in-loop creeper check in attack()/fight() only fires mid-combat, but by then
+  // the bot may already be within explosion range.
+  if (combatBot) {
     for (const entity of Object.values(combatBot.entities)) {
       if (!entity || !entity.position || entity === combatBot.entity) continue;
       const eName = entity.name?.toLowerCase() ?? "";
       if (eName !== "creeper") continue;
       const creeperDist = entity.position.distanceTo(combatBot.entity.position);
       if (creeperDist <= 8) {
-        return `[REFUSED] Creeper detected ${creeperDist.toFixed(1)} blocks away — too dangerous to engage ${target}. Creeper explosion deals up to 49 damage, lethal at any HP without blast protection armor. Use mc_flee first to escape the creeper, THEN engage ${target}.`;
+        const engageTarget = target || "nearest hostile";
+        return `[REFUSED] Creeper detected ${creeperDist.toFixed(1)} blocks away — too dangerous to engage ${engageTarget}. Creeper explosion deals up to 49 damage, lethal at any HP without blast protection armor. Use mc_flee first to escape the creeper, THEN engage.`;
       }
     }
   }
