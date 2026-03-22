@@ -1706,7 +1706,11 @@ export async function mc_navigate(
       // Bot2 [2026-03-23]: zombie at 22.8m closed in during navigate and killed bot.
       // HP threshold raised from 12 to 14 without food — permanent damage accumulates.
       {
-        const dayHpCheck = hasFood ? 12 : 14;
+        // Without food: scan at ANY HP because damage is permanent and cannot regenerate.
+        // Bot2 [2026-03-23]: HP>14, no food, zombie at 22.8m — old check skipped entirely
+        // because hp (16+) > dayHpCheck (14), so no warning was shown. Bot navigated into
+        // the zombie and died. With food, limit to HP<=12 (can eat to recover).
+        const dayHpCheck = hasFood ? 12 : 20;
         if (hp <= dayHpCheck) {
           // Scan radius: 16 blocks with food, 24 without food.
           // Bot2 [2026-03-23]: zombie at 22.8m was outside 16-block scan radius,

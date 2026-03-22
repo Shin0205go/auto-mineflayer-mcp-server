@@ -3,7 +3,7 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 const { GoalBlock } = goals;
 import type { ManagedBot } from "./types.js";
-import { isHostileMob, isFoodItem, checkGroundBelow, isNearCliffEdge, KNOCKBACK_MOBS, EDIBLE_FOOD_NAMES, isWaterBlock, isLavaBlock } from "./minecraft-utils.js";
+import { isHostileMob, checkGroundBelow, isNearCliffEdge, KNOCKBACK_MOBS, EDIBLE_FOOD_NAMES, isWaterBlock, isLavaBlock } from "./minecraft-utils.js";
 import { equipArmor } from "./bot-items.js";
 import { safeSetGoal } from "./pathfinder-safety.js";
 
@@ -681,7 +681,12 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       {
         const currentHp = bot.health ?? 0;
         const hpDrop = startHp - currentHp;
-        const hasFood = bot.inventory.items().some((item: any) => isFoodItem(bot, item.name));
+        // Use EDIBLE_FOOD_NAMES instead of isFoodItem for consistency with mc_navigate
+        // pre-checks. isFoodItem includes spider_eye (causes poison) which shouldn't
+        // count as "has food" for safety threshold calculations. A bot with only
+        // spider_eye in inventory is effectively foodless — eating it costs 2 hearts
+        // of poison damage, making it worse than starving.
+        const hasFood = bot.inventory.items().some((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
         const dropThreshold = hasFood ? 6 : 4;
         const hpFloor = hasFood ? 14 : 16;
         // Use <= instead of < to catch exact boundary: skeleton hit from HP 20 deals 4 damage
