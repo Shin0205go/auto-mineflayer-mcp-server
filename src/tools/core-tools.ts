@@ -496,6 +496,17 @@ export async function mc_farm(): Promise<string> {
     return `[REFUSED] Cannot farm while starving — hunger=${farmHunger}, HP=${farmHpNow}, no food in inventory. Farming takes 60-120s but starvation damage is immediate. Get food first: mc_combat(target="cow"), mc_combat(target="pig"), mc_combat(target="chicken"), or mc_eat(rotten_flesh).`;
   }
 
+  // Safety: Refuse farming at critically low HP — mc_farm is a long operation (up to 120s)
+  // where the bot is stationary and vulnerable. Starting at low HP means any single mob hit
+  // or starvation tick is lethal. The mid-farm HP monitor (Step 3) aborts at HP<10, but by
+  // then the bot has wasted time navigating to water (Step 2b) without HP checks.
+  // Bot3 Death #27: mc_farm at HP 2/20 with enderman 8.5m away — killed during operation.
+  // mc_gather already has this gate (HP<8 → REFUSED). mc_farm should match.
+  const farmHpStart = Math.round((bot.health ?? 20) * 10) / 10;
+  if (farmHpStart < 8) {
+    return `[REFUSED] HP too low to farm (${farmHpStart}/20). Farming takes up to 120s and leaves bot stationary/vulnerable. Heal first: mc_eat, or mc_combat(target="cow") for food.`;
+  }
+
   // Safety: Refuse farming at night — farming is a long, stationary operation that
   // leaves the bot exposed to hostile mob spawns. Multiple deaths from this pattern:
   // Bot1: killed by creeper during night mc_farm, Bot2: skeleton shot from HP 20→1 during dirt placement,
