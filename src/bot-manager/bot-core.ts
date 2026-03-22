@@ -637,12 +637,18 @@ export class BotCore extends EventEmitter {
                     (bot.pathfinder.movements as any).liquidCost = 10000;
                   }
                   bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
-                  // Restore pathfinder settings after 5 seconds (AutoFlee is short-lived)
+                  // Restore maxDropDown after 5 seconds (AutoFlee is short-lived).
+                  // NOTE: Do NOT restore canDig=true here. The next moveTo call will set
+                  // canDig appropriately based on time-of-day and HP. Unconditionally restoring
+                  // canDig=true caused a race condition: if mc_navigate/mc_flee started within
+                  // 5 seconds, moveToBasic set canDig=false (night safety), then this setTimeout
+                  // overwrote it back to true, defeating cave-routing protection.
+                  // Bot1/Bot2/Bot3 [2026-03-22]: multiple deaths from cave routing after AutoFlee.
                   setTimeout(() => {
                     try {
                       if (bot.pathfinder.movements) {
-                        bot.pathfinder.movements.canDig = true;
                         bot.pathfinder.movements.maxDropDown = 2;
+                        // canDig is intentionally NOT restored — next moveTo handles it
                       }
                     } catch { /* bot may be disconnected */ }
                   }, 5000);
@@ -857,15 +863,19 @@ export class BotCore extends EventEmitter {
               }
               bot.pathfinder.setGoal(new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3));
             } catch (_) { /* ignore */ }
-            // Reset flee flag and restore pathfinder settings after 3 seconds
+            // Reset flee flag and restore maxDropDown after 3 seconds.
+            // NOTE: Do NOT restore canDig=true here — same race condition as AutoFlee.
+            // If mc_navigate starts within 3 seconds, moveToBasic sets canDig=false for
+            // night safety, but this setTimeout would override it back to true, allowing
+            // the pathfinder to dig into caves. Let the next moveTo call decide canDig.
             setTimeout(() => {
               bot.setControlState("sprint", false);
               bot.setControlState("forward", false);
               creeperFleeActive = false;
               try {
                 if (bot.pathfinder.movements) {
-                  bot.pathfinder.movements.canDig = true;
                   bot.pathfinder.movements.maxDropDown = 2;
+                  // canDig is intentionally NOT restored — next moveTo handles it
                 }
               } catch { /* bot may be disconnected */ }
             }, 3000);

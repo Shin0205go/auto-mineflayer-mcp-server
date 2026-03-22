@@ -237,16 +237,15 @@ export async function mc_gather(
     const gatherTime = gatherBot.time?.timeOfDay ?? 0;
     const gatherIsNight = gatherTime > 12541 || gatherTime < 100;
 
-    // Auto-equip armor before gathering — mobs can attack during long gather operations.
-    // Always equip at night. During daytime, equip if hostiles are nearby (pillagers, cave
-    // zombies). Bot2 [2026-03-22]: skeleton shot bot HP 20→1 during daytime gather, no armor.
-    const shouldEquipArmor = gatherIsNight || checkDangerNearby(gatherBot, 20).dangerous;
-    if (shouldEquipArmor) {
-      try {
-        await botManager.equipArmor(username);
-      } catch {
-        // Continue without armor
-      }
+    // Auto-equip armor before ALL gathering — not just at night or when danger detected.
+    // mc_gather is a long operation (up to 120s) where the bot is stationary/vulnerable.
+    // Surprise attacks from pillagers, cave zombies, and skeletons happen during daytime too.
+    // Bot2 [2026-03-22]: skeleton shot bot HP 20→1 during daytime gather, no armor equipped.
+    // Equipping armor is cheap (milliseconds) and prevents significant damage.
+    try {
+      await botManager.equipArmor(username);
+    } catch {
+      // Continue without armor
     }
 
     // Refuse gathering at critically low HP regardless of time — mc_gather is a long
@@ -507,6 +506,15 @@ export async function mc_farm(): Promise<string> {
   if (farmIsNight) {
     const farmHp = Math.round((bot.health ?? 20) * 10) / 10;
     return `[REFUSED] Too dangerous to farm at night (time=${farmTimeOfDay}). Mobs spawn during the long farming operation and bot is stationary/vulnerable. Wait for dawn (mc_sleep if you have a bed) or build shelter. HP=${farmHp}.`;
+  }
+
+  // Auto-equip armor before farming — mc_farm is a long operation (up to 120s) where
+  // the bot is stationary and vulnerable. Bot2 [2026-03-22]: skeleton shot bot from HP 20→1
+  // during dirt placement with no armor equipped. Equipping armor prevents 4-8 damage per hit.
+  try {
+    await botManager.equipArmor(username);
+  } catch {
+    // Continue without armor
   }
 
   // Safety: Check for hostile mobs before starting long farming operation.
@@ -1247,14 +1255,19 @@ export async function mc_navigate(
       nightWarning += `\n[STARVATION WARNING] Hunger=0, no food. HP will only decline. Find food urgently.`;
     }
 
-    if (isNight) {
-      // Auto-equip armor before navigating at night
-      try {
-        await botManager.equipArmor(username);
-      } catch {
-        // Continue without armor
-      }
+    // Auto-equip armor before ALL navigation — not just at night.
+    // Bot1/Bot2 [2026-03-22]: multiple deaths from surprise pillager/skeleton attacks during
+    // daytime navigation. Pillagers are active 24/7, cave zombies surface near openings.
+    // Equipping armor is cheap (milliseconds) and prevents 4-8 damage per unarmored hit.
+    // Previous code only equipped at night or when daytime hostiles were already detected,
+    // which misses surprise attacks that happen DURING pathfinder movement.
+    try {
+      await botManager.equipArmor(username);
+    } catch {
+      // Continue without armor
+    }
 
+    if (isNight) {
       // Scan for nearby hostile threats using centralized isHostileMob().
       // Bug fix: inline list with .includes() falsely matched "zombified_piglin" via "zombie" substring.
       const nearbyHostiles: Array<{ name: string; dist: number }> = [];
@@ -1306,14 +1319,7 @@ export async function mc_navigate(
           }
         }
         if (dayHostiles.length > 0) {
-          // Auto-equip armor when daytime hostiles are detected nearby.
-          // Bot2 [2026-03-22]: pillager knockback fall death, no armor equipped during day.
-          // Bot1: killed by zombie during daytime at low HP, no armor.
-          try {
-            await botManager.equipArmor(username);
-          } catch {
-            // Continue without armor
-          }
+          // Armor already equipped above (always-equip). Just warn about threats.
           const dayThreatList = dayHostiles
             .sort((a, b) => a.dist - b.dist)
             .slice(0, 5)
