@@ -82,21 +82,21 @@ export async function mc_execute(
       return await mc_navigate(target);
     },
     flee: async (distance?: number) => {
-      return await mc_flee(distance || 20);
+      return await mc_flee(distance ?? 20);
     },
     pillarUp: async (height?: number) => {
-      return await minecraft_pillar_up(height || 1);
+      return await minecraft_pillar_up(height ?? 1);
     },
 
     // Resources
     gather: async (block: string, count?: number, maxDistance?: number) => {
-      return await mc_gather(block, count || 1, maxDistance);
+      return await mc_gather(block, count ?? 1, maxDistance);
     },
     craft: async (item: string, count?: number, autoGather?: boolean) => {
-      return await mc_craft(item, count || 1, autoGather || false);
+      return await mc_craft(item, count ?? 1, autoGather ?? false);
     },
     smelt: async (item: string, count?: number) => {
-      return await mc_smelt(item, count || 1);
+      return await mc_smelt(item, count ?? 1);
     },
 
     // Combat & Survival
@@ -104,7 +104,9 @@ export async function mc_execute(
       return await mc_eat(food);
     },
     combat: async (target?: string, fleeAtHp?: number) => {
-      return await mc_combat(target, fleeAtHp || 10);
+      // Use ?? (not ||) so that fleeAtHp=0 is respected (meaning "never flee").
+      // With ||, fleeAtHp=0 was silently overridden to 10, ignoring the agent's intent.
+      return await mc_combat(target, fleeAtHp ?? 10);
     },
     equipArmor: async () => {
       const username = botManager.requireSingleBot();
@@ -279,21 +281,40 @@ export async function mc_execute(
                 }
                 // Look toward land (or random if no land found)
                 await waitBot.look(bestAngle, 0, true);
-                // Jump + forward to swim out
+                // Jump + forward to swim out.
+                // Set jump FIRST — in water, jump makes the bot swim upward to the surface.
+                // Without surfacing first, forward movement is ineffective (bot swims into
+                // underwater terrain instead of toward land on the surface).
+                // Bot2 [2026-03-23]: 5 cycles of forward+jump didn't exit water because
+                // forward was set before jump, causing the bot to swim horizontally underwater
+                // instead of surfacing first then swimming toward shore.
+                let exitedWater = false;
                 for (let jumpAttempt = 0; jumpAttempt < 5; jumpAttempt++) {
-                  waitBot.setControlState("forward", true);
                   waitBot.setControlState("jump", true);
-                  await new Promise(r => setTimeout(r, 350));
+                  waitBot.setControlState("forward", true);
+                  await new Promise(r => setTimeout(r, 400));
                   waitBot.setControlState("jump", false);
-                  await new Promise(r => setTimeout(r, 50));
+                  await new Promise(r => setTimeout(r, 100));
                   // Check if we exited water
                   const checkFeet = waitBot.blockAt(waitBot.entity.position);
                   const checkHead = waitBot.blockAt(waitBot.entity.position.offset(0, 1, 0));
                   if (!isWater(checkFeet?.name) && !isWater(checkHead?.name)) {
+                    exitedWater = true;
                     break;
                   }
                 }
-                waitBot.clearControlStates();
+                // Only clear control states if we exited water.
+                // If still submerged, keep jump=true so the bot continues swimming upward
+                // between wait() calls — clearing states would make the bot sink and drown.
+                // Bot2 [2026-03-23]: clearControlStates() after failed swim stopped all
+                // upward momentum, bot sank back from HP 9.8 to death between wait calls.
+                if (exitedWater) {
+                  waitBot.clearControlStates();
+                } else {
+                  // Keep jump active to stay near surface, stop forward to prevent
+                  // swimming into deeper water if no land was found.
+                  waitBot.setControlState("forward", false);
+                }
               } catch { /* ignore jump errors */ }
               doResolve();
               return;
