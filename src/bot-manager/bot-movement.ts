@@ -483,14 +483,23 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         // The HP-gated check below (B3) only fires at HP<=14 (unarmored at night), so a zombie
         // can walk up to the bot and land 2-3 hits (3-6 damage each) before the HP threshold
         // triggers. By that point, HP may be too low to flee successfully.
-        // This check fires regardless of HP when a melee hostile is within 6 blocks — close
-        // enough that the next hit is imminent (melee range is ~3 blocks + approach time).
+        // Daytime: abort when melee hostile within 6 blocks (close enough for imminent attack).
+        // Night: expand to 12 blocks for unarmored (0-1 pieces) — zombies walk at 2.3 blocks/s,
+        //   so a zombie at 12 blocks reaches melee range in ~4 seconds. With 500ms check interval,
+        //   a 6-block threshold gives only 1-2 checks before impact. At 12 blocks, there are 4-5
+        //   checks, giving the agent time to flee after the abort.
+        //   Bot2 [2026-03-23]: zombie at 22.8m closed to melee during navigation and killed bot.
+        //   The old 6-block threshold didn't trigger until the zombie was already hitting.
         // Full iron armor (4/4) absorbs enough damage to survive multiple hits, so skip for those.
         if (armorCount <= 2) {
+          // Night + unarmored: wider detection. Night + partial: moderate. Day: tight.
+          const meleeAbortDist = navIsNight
+            ? (armorCount <= 1 ? 12 : 8)
+            : 6;
           for (const entity of Object.values(bot.entities)) {
             if (!entity || !entity.position || entity === bot.entity) continue;
             const eDist = entity.position.distanceTo(currentPos);
-            if (eDist > 6) continue;
+            if (eDist > meleeAbortDist) continue;
             const eName = entity.name?.toLowerCase() ?? "";
             // Skip ranged mobs — already handled by check B1 above at 16-block radius.
             if (RANGED_MOBS.includes(eName)) continue;
@@ -500,7 +509,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
               console.error(`[MoveTo] CLOSE MELEE DANGER (${timeNote}): ${eName} at ${eDist.toFixed(1)} blocks, armor=${armorCount}/4, HP=${navHp.toFixed(1)}. Aborting.`);
               finish({
                 success: false,
-                message: `Navigation aborted: ${eName} within ${eDist.toFixed(1)} blocks ${timeNote}, HP=${Math.round(navHp*10)/10}. ${armorNote} — melee mob about to attack. Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`,
+                message: `Navigation aborted: ${eName} within ${eDist.toFixed(1)} blocks ${timeNote}, HP=${Math.round(navHp*10)/10}. ${armorNote} — melee mob approaching. Position: (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`,
                 stuckReason: "melee_mob_danger"
               });
               return;
