@@ -1728,7 +1728,13 @@ export async function mc_navigate(
             // in during navigate and killed bot with no food to regenerate. 16 blocks was
             // insufficient; at 20 blocks the pre-check catches most approaching zombies.
             const closestDayDist = dayHostiles.sort((a, b) => a.dist - b.dist)[0].dist;
-            const dayBlockDist = hasFood ? 10 : 20;
+            // Bot2 [2026-03-23]: zombie at 22.8m passed pre-check (dayBlockDist=20),
+            // closed in during navigate, killed bot with no food. 20 blocks gives only
+            // ~8.7s before a zombie reaches melee (2.3 blocks/s). During a 30-60s navigation,
+            // the bot may move toward the mob, cutting closure time further. 24 blocks gives
+            // ~10.4s and matches the dayScanRadius for no-food, eliminating the gap where mobs
+            // pass the scan but not the block check.
+            const dayBlockDist = hasFood ? 10 : 24;
             if (closestDayDist <= dayBlockDist) {
               return `[BLOCKED] Navigation refused: HP=${hp} with ${dayHostiles.length} hostile(s) nearby (${dayThreatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}Use mc_flee or mc_combat to handle threats first. Position: (${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.y)}, ${Math.round(bot.entity.position.z)}).`;
             }
@@ -2123,8 +2129,18 @@ export async function mc_combat(
   const combatBot = botManager.getBot(username);
   if (combatBot) {
     const combatHp = combatBot.health ?? 20;
+    // REFUSE combat at HP < 5: one hit from any mob (zombie 3-4 dmg, skeleton 4-5 dmg,
+    // spider 2-3 dmg) is immediately lethal at this HP level. The survival_routine already
+    // guards at HP < 8 (high-level-actions.ts), but direct bot.combat() calls from agents
+    // bypass that guard. Bot3 Deaths #9,#16: combat attempted at HP 2.2-7.2, died instantly.
+    // Bot2 [2026-03-22]: survival_routine forced combat at critical HP, died to Drowned.
+    // HP < 5 is used instead of < 8 to avoid creating a deadlock where the bot can't hunt
+    // food animals at moderate HP. At HP 5-7, the bot can survive 1-2 hits and flee.
+    if (combatHp < 5) {
+      return `[REFUSED] Combat refused: HP critically low (${combatHp.toFixed(1)}/20). One mob hit (3-5 damage) is lethal at this HP. Use mc_flee to escape, eat food to heal, or build a shelter. If no food available and no escape, use bot.wait() for passive HP regeneration (requires hunger >= 18).`;
+    }
     if (combatHp < 8) {
-      console.error(`[Combat] WARNING: HP low (${combatHp.toFixed(1)}/20). Proceeding anyway.`);
+      console.error(`[Combat] WARNING: HP low (${combatHp.toFixed(1)}/20). Proceeding with caution.`);
     }
   }
 

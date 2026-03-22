@@ -540,9 +540,15 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
           // converge from different directions. Bot1 Sessions 20-44: 15+ deaths at night from
           // mobs closing in during navigation. 12 blocks gave only 5.2s before impact.
           const navHasFood = bot.inventory.items().some((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
+          // Bot2 [2026-03-23]: zombie at 22.8m passed mc_navigate pre-check (dayBlockDist=20),
+          // then closed in during navigation. The mid-nav meleeAbortDist was also 20, creating
+          // a gap where mobs at 20-24 blocks could approach undetected by either check if the
+          // bot moved toward them. Increase no-food daytime to 24 to match the pre-nav scan
+          // radius, closing the detection gap. A zombie at 24 blocks reaches melee in ~10.4s
+          // at 2.3 blocks/s — with 500ms check interval, that's 20+ checks to detect and abort.
           const meleeAbortDist = navIsNight
             ? (armorCount <= 1 ? 16 : 10)
-            : (navHasFood ? 6 : 20);
+            : (navHasFood ? 6 : 24);
           for (const entity of Object.values(bot.entities)) {
             if (!entity || !entity.position || entity === bot.entity) continue;
             const eDist = entity.position.distanceTo(currentPos);
