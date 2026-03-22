@@ -266,7 +266,7 @@ export async function mc_execute(
                 let bestAngle = 0;
                 let bestDist = Infinity;
                 const isWaterName = (n: string | undefined) => n === "water" || n === "flowing_water" || n === "air" || n === "cave_air";
-                for (let scanDist = 1; scanDist <= 6; scanDist++) {
+                for (let scanDist = 1; scanDist <= 10; scanDist++) {
                   for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]]) {
                     const cx = wx + dx * scanDist;
                     const cz = wz + dz * scanDist;
@@ -294,11 +294,16 @@ export async function mc_execute(
                 // Bot2 [2026-03-23]: 5 cycles of forward+jump didn't exit water because
                 // forward was set before jump, causing the bot to swim horizontally underwater
                 // instead of surfacing first then swimming toward shore.
+                // Increase swim attempts from 5 to 8 and duration per attempt from 400ms to 600ms.
+                // Bot2 [2026-03-23]: 5 * 500ms = 2.5s of swimming was insufficient to exit
+                // large water bodies in birch_forest biome. HP dropped 15.8→3.8→death between
+                // wait() calls because the bot couldn't reach shore. 8 * 700ms = 5.6s gives
+                // enough time to swim ~10 blocks (Minecraft swim speed ~1.8 blocks/s).
                 let exitedWater = false;
-                for (let jumpAttempt = 0; jumpAttempt < 5; jumpAttempt++) {
+                for (let jumpAttempt = 0; jumpAttempt < 8; jumpAttempt++) {
                   waitBot.setControlState("jump", true);
                   waitBot.setControlState("forward", true);
-                  await new Promise(r => setTimeout(r, 400));
+                  await new Promise(r => setTimeout(r, 600));
                   waitBot.setControlState("jump", false);
                   await new Promise(r => setTimeout(r, 100));
                   // Check if we exited water

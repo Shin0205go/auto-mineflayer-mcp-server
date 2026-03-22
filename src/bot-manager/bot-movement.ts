@@ -493,9 +493,14 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         // Full iron armor (4/4) absorbs enough damage to survive multiple hits, so skip for those.
         if (armorCount <= 2) {
           // Night + unarmored: wider detection. Night + partial: moderate. Day: tight.
+          // Bot2 [2026-03-23]: zombie at 22.8m closed to 6 blocks during daytime navigation
+          // and killed bot before the abort triggered. Without food, any damage is permanent,
+          // so increase daytime melee abort to 10 blocks (gives ~4s reaction time at zombie
+          // walk speed of 2.3 blocks/s, enough for 8 safety checks at 500ms interval).
+          const navHasFood = bot.inventory.items().some((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
           const meleeAbortDist = navIsNight
             ? (armorCount <= 1 ? 12 : 8)
-            : 6;
+            : (navHasFood ? 6 : 10);
           for (const entity of Object.values(bot.entities)) {
             if (!entity || !entity.position || entity === bot.entity) continue;
             const eDist = entity.position.distanceTo(currentPos);

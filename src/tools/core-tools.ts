@@ -1688,11 +1688,16 @@ export async function mc_navigate(
       {
         const dayHpCheck = hasFood ? 12 : 14;
         if (hp <= dayHpCheck) {
+          // Scan radius: 16 blocks with food, 24 without food.
+          // Bot2 [2026-03-23]: zombie at 22.8m was outside 16-block scan radius,
+          // pre-check didn't detect it, bot navigated and zombie closed in during travel.
+          // Without food, damage is permanent — widen scan to catch approaching mobs.
+          const dayScanRadius = hasFood ? 16 : 24;
           const dayHostiles: Array<{ name: string; dist: number }> = [];
           for (const entity of Object.values(bot.entities)) {
             if (!entity || !entity.position || entity === bot.entity) continue;
             const dist = entity.position.distanceTo(bot.entity.position);
-            if (dist > 16) continue;
+            if (dist > dayScanRadius) continue;
             const name = entity.name?.toLowerCase() ?? "";
             if (isHostileMob(bot, name)) {
               dayHostiles.push({ name, dist: Math.round(dist * 10) / 10 });
@@ -1707,8 +1712,14 @@ export async function mc_navigate(
             // BUG FIX: Previously only set nightWarning string but didn't block.
             // Bot2 [2026-03-23]: killed by zombie during daytime navigation at low HP.
             // Now actually blocks when hostiles are within 10 blocks and HP is critical.
+            // Without food, increase block radius to 16 — any damage is permanent, and
+            // mobs at 10-16 blocks close in during navigation (zombie walks at 2.3 blocks/s,
+            // so a mob at 16 blocks reaches melee in ~7s — well within typical nav duration).
+            // Bot2 [2026-03-23]: zombie at 22.8m was outside 10-block block radius, closed
+            // in during navigate and killed bot with no food to regenerate.
             const closestDayDist = dayHostiles.sort((a, b) => a.dist - b.dist)[0].dist;
-            if (closestDayDist <= 10) {
+            const dayBlockDist = hasFood ? 10 : 16;
+            if (closestDayDist <= dayBlockDist) {
               return `[BLOCKED] Navigation refused: HP=${hp} with ${dayHostiles.length} hostile(s) nearby (${dayThreatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}Use mc_flee or mc_combat to handle threats first. Position: (${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.y)}, ${Math.round(bot.entity.position.z)}).`;
             }
             nightWarning += `\n[DANGER WARNING] HP=${hp}, ${dayHostiles.length} hostile(s) within 16 blocks: ${dayThreatList}. Use mc_flee or mc_combat before navigating.`;
