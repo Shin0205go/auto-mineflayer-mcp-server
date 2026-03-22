@@ -1710,7 +1710,22 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
         }
       }
       if (!foundSafe) {
-        console.error(`[Flee] WARNING: All 8 flee directions have cliff drops or hazards. Using original direction with maxDropDown=1 safety.`);
+        // All 8 directions are unsafe (cliff/hole/lava). Reduce flee distance to 5 blocks
+        // to minimize exposure to the hazard while still creating some distance from hostiles.
+        // Bot1/Bot2/Bot3 [2026-03-22]: full-distance flee into unsafe terrain caused falls
+        // (Y=80→56, Y=116→86) because maxDropDown=1 doesn't prevent the bot from CHOOSING
+        // a path toward a cliff — it only limits per-step drops. Short distance means the bot
+        // stops before reaching the hazard in most cases.
+        // Also try fleeing perpendicular to the nearest hostile (likely less obstructed).
+        if (allHostiles.length > 0) {
+          const nearestAway = bot.entity.position.minus(allHostiles[0].entity.position);
+          const perpAngle = Math.atan2(nearestAway.z, nearestAway.x) + Math.PI / 2;
+          bestDirection = new (bot.entity.position as any).constructor(Math.cos(perpAngle), 0, Math.sin(perpAngle));
+          console.error(`[Flee] WARNING: All 8 flee directions unsafe. Using perpendicular direction with reduced distance (${Math.min(distance, 5)} blocks).`);
+        } else {
+          console.error(`[Flee] WARNING: All 8 flee directions unsafe. Using original direction with reduced distance (${Math.min(distance, 5)} blocks).`);
+        }
+        distance = Math.min(distance, 5);
       }
       direction = bestDirection;
     }

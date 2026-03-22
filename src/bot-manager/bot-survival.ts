@@ -1101,8 +1101,29 @@ export async function fight(
       bot.pathfinder.setGoal(new goals.GoalNear(
         target.position.x, target.position.y, target.position.z, isBlaze ? 4 : 2
       ));
-      await delay(500);
-      // Clean up sprint state
+      // Wait up to 1.5s for approach, with HP monitoring every 200ms.
+      // Previous: 500ms fixed delay with no HP check — too short for sprint to close
+      // distance, and ranged mobs dealt 8-10 damage during approach with no abort.
+      // Bot1 [2026-03-22]: skeleton approach drained HP from 14 to 3 over multiple
+      // 500ms approach iterations, each too short to close the gap.
+      // New: 1.5s gives sprint time to close 5-7 blocks, and HP check every 200ms
+      // catches damage early. Break immediately if within attack range.
+      {
+        const approachHpStart = bot.health ?? 20;
+        for (let tick = 0; tick < 8; tick++) { // 8 * 200ms = 1.6s max
+          await delay(200);
+          const curTarget = Object.values(bot.entities).find(e => e.id === targetId);
+          if (!curTarget) break; // Target died
+          const curDist = curTarget.position.distanceTo(bot.entity.position);
+          if (curDist <= attackRange) break; // Close enough to attack
+          const approachHpNow = bot.health ?? 20;
+          if (approachHpNow < approachHpStart - 6 || approachHpNow <= fleeHealthThreshold) {
+            console.error(`[Fight] HP dropped during ranged approach (${approachHpStart.toFixed(1)} → ${approachHpNow.toFixed(1)}). Breaking approach.`);
+            break;
+          }
+        }
+      }
+      // Clean up sprint state after approach completes
       if (isRangedTarget && !isBlaze) {
         bot.setControlState("sprint", false);
       }
