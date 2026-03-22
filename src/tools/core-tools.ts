@@ -536,9 +536,19 @@ export async function mc_craft(
 
     // For count > 1 non-smelt items, craft multiple times
     const results: string[] = [];
+    // Track inventory before crafting to verify actual gain
+    const invBefore = botManager.getInventory(username);
+    const countBefore = invBefore.find(i => i.name === item)?.count ?? 0;
+    let successCount = 0;
     for (let i = 0; i < count; i++) {
       try {
         const result = await getHighLevel().minecraft_craft_chain(username, item, autoGather);
+        // Check if result indicates failure (craft_chain returns "failed" on error instead of throwing)
+        if (result.includes("failed") || result.includes("Failed")) {
+          results.push(`Attempt ${i + 1}: ${result}`);
+          break;
+        }
+        successCount++;
         results.push(result);
       } catch (err) {
         results.push(`Attempt ${i + 1} failed: ${err}`);
@@ -548,6 +558,18 @@ export async function mc_craft(
 
     const inventory = botManager.getInventory(username);
     const invStr = inventory.map(i => `${i.name}(${i.count})`).join(", ");
+    // Verify actual inventory change to avoid misleading "Crafted" message
+    // Bot1 [2026-03-22]: bot.craft('chest', 2) reported "Crafted chest x2" but inventory
+    // had no chest — the internal craft_chain caught errors and returned "complete" without
+    // verifying items were actually added. Agent thought craft succeeded, wasted time.
+    const countAfter = inventory.find(i => i.name === item)?.count ?? 0;
+    const actualGain = countAfter - countBefore;
+    if (actualGain <= 0 && successCount === 0) {
+      return `Failed to craft ${item} x${count}. ${results.join("; ")}. Inventory: ${invStr}`;
+    }
+    if (actualGain < count) {
+      return `Partially crafted ${item}: ${actualGain}/${count} in inventory (${successCount} attempts succeeded). ${results.join("; ")}. Inventory: ${invStr}`;
+    }
     return `Crafted ${item} x${count}. ${results.join("; ")}. Inventory: ${invStr}`;
   };
 

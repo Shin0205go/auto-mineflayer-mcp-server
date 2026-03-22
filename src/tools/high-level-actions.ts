@@ -944,10 +944,25 @@ export async function minecraft_craft_chain(
     return !rawMaterials.includes(itemName) && !isItemSmeltable(itemName);
   };
 
+  // Track inventory before crafting to detect silent failures.
+  // Bot1 [2026-03-22]: bot.craft('chest', 2) returned "Crafted chest x2" but inventory
+  // had no chest. Mineflayer bot.craft() resolved without error but the server silently
+  // rejected the craft (e.g., wrong recipe, window timing issue). The agent relied on the
+  // "complete" message and didn't check inventory, wasting time on subsequent steps.
+  const invBeforeCraft = botManager.getInventory(username);
+  const targetCountBefore = invBeforeCraft.find(i => i.name === target)?.count ?? 0;
+
   try {
     await craftRecursive(target, 1);
     const inventory = botManager.getInventory(username);
     const invStr = inventory.map(i => `${i.name}(${i.count})`).join(", ");
+    // Verify the target item actually increased in inventory.
+    // Some items produce a different output name (e.g., "planks" → "oak_planks"),
+    // so only flag as failed when the target name matches exactly and count didn't increase.
+    const targetCountAfter = inventory.find(i => i.name === target)?.count ?? 0;
+    if (targetCountAfter <= targetCountBefore) {
+      return `Crafting chain WARNING for ${target}: craft reported success but ${target} not found in inventory (had ${targetCountBefore}, now ${targetCountAfter}). The craft may have silently failed. ${results.join("; ")}. Inventory: ${invStr}`;
+    }
     return `Crafting chain complete for ${target}. ${results.join("; ")}. Inventory: ${invStr}`;
   } catch (err) {
     const inventory = botManager.getInventory(username);
