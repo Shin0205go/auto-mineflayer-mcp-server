@@ -70,6 +70,60 @@ bot.store(action, ...)    // チェスト操作
 // 他: pillarUp, smelt, equipArmor, place, drop, chat, getMessages, log, wait
 ```
 
+### bot.* API と mineflayer の関係
+
+bot.* APIは **mineflayer の生APIを直接公開しているわけではない。**
+3層の抽象化で、安全なゲームプレイ操作に変換している。
+
+```
+エージェントが書くコード:   bot.gather("oak_log", 10)
+                              ↓
+(1) mc-execute.ts:          vm sandboxで実行、bot APIオブジェクトにディスパッチ
+                              ↓
+(2) core-tools.ts:          安全チェック（REFUSED判定） → 実行ロジック
+    - HP < 8 → [REFUSED] 操作拒否
+    - 夜間 + 敵接近 → [REFUSED] 操作拒否
+    - クリーパー8m以内 → [REFUSED] 操作拒否
+    - 飢餓状態 → [REFUSED] 長時間操作拒否
+                              ↓
+(3) bot-manager/:           mineflayer API + mineflayer-pathfinder を呼び出し
+    bot-movement.ts         → bot.pathfinder.goto(), bot.entity.position
+    bot-survival.ts         → bot.attack(), bot.useOn()
+    bot-crafting.ts         → bot.craft(), bot.openContainer()
+    bot-core.ts             → mineflayer.createBot(), pathfinder plugin
+```
+
+**REFUSEDシステム**: core-tools.ts には7箇所の安全ゲートがあり、
+危険な状況（低HP、夜間敵接近、クリーパー近接、飢餓）で操作を拒否して
+`[REFUSED] 理由と代替手段` を返す。エージェントはこのメッセージを見て
+別のアプローチ（flee → eat → 再試行）を選択する。
+
+### 既知の制約
+
+mineflayer / mineflayer-pathfinder に起因する制約:
+
+| 制約 | 原因 | 対処 |
+|------|------|------|
+| 地下からの脱出困難 | pathfinderは上方向の経路探索が苦手 | `bot.pillarUp()` or `bot.flee()` 連打 |
+| 構造物内で移動不能 | ドア・はしご・段差で経路が見つからない | 座標直指定の `bot.moveTo()` |
+| 採掘でアイテムが拾えない | アイテムエンティティの回収タイミング | `collectItemDrop` 待機（bot-survival.ts） |
+| navigate完了だが未移動 | pathfinderが「到達済み」と誤判定 | 移動距離チェック + リトライ |
+| 長距離移動のタイムアウト | pathfinder計算が重い（>100ブロック） | 中間地点に分割して移動 |
+
+### ブートストラップ
+
+新規ワールドでは最初のアイテム入手にサーバー管理者の介入が必要:
+
+```bash
+# Minecraftサーバーコンソールで実行
+/give Claude1 wooden_pickaxe 1
+/give Claude1 bread 10
+# 以降はbot自身でgather → craft → 自立
+```
+
+keepInventory有効推奨（`/gamerule keepInventory true`）。
+死亡はバグとして扱い、意図的なリスポーンは禁止。
+
 ## エージェント構成
 
 3体のゲームエージェント + 1体のコードレビューアー:
