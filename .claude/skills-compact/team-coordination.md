@@ -26,14 +26,6 @@ await bot.chat("[指示] @Claude3 羊を探してベッド作成して");
 3. `[SOS]` → 近ければ救援
 4. フェーズ目標で自律行動
 
-## 安全チェック（毎ターン）
-```js
-const s = await bot.status();
-if (s.hunger < 15) await bot.eat();
-if (s.hp < 4) { await bot.flee(); return; }
-await bot.equipArmor();
-```
-
 ## チャットタグ
 - `[フェーズ]` リーダーのみ、フェーズ宣言
 - `[指示]` リーダーのみ、タスク割当

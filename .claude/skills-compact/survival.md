@@ -27,15 +27,6 @@ await bot.build("shelter");
 bot.log("Day 1 完了");
 ```
 
-## HP/食料チェック（毎ターン先頭に入れろ）
-```js
-const s = await bot.status();
-if (s.hp < 4) { await bot.flee(); return "HP危険、逃走"; }
-if (s.hp < 10) await bot.eat();
-if (s.hunger < 15) await bot.eat();
-await bot.equipArmor();
-```
-
 ## 食料ない時
 ```js
 // 1. チェスト確認
@@ -53,8 +44,7 @@ const s = await bot.status();
 if (s.time > 12500) {
   const inv = await bot.inventory();
   if (inv.find(i => i.name.includes('bed'))) {
-    await bot.navigate("white_bed"); // ベッドに移動
-    // bot.sleep() はmc_sleepツール経由
+    await bot.navigate("white_bed");
   } else {
     await bot.build("shelter");
   }
