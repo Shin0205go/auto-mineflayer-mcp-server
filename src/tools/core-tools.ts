@@ -337,10 +337,31 @@ export async function mc_gather(
       }
     }
 
-    // Log warnings but don't block — let the agent decide
+    // Pre-gather HP check: ABORT if HP < 8.
+    // mc_gather is a 120s stationary operation. Starting at low HP means any mob hit
+    // or starvation tick is fatal — the bot can't recover during gathering.
+    // Bot1 [2026-03-22]: started gather at low HP, died during operation.
+    // Bot2/Bot3: similar patterns — low HP + long operation = death.
+    // Previously this only logged a warning and continued — now aborts immediately.
     const gatherHpStart = Math.round((gatherBot.health ?? 20) * 10) / 10;
     if (gatherHpStart < 8) {
-      console.error(`[Gather] WARNING: HP low (${gatherHpStart}/20). Proceeding anyway.`);
+      console.error(`[Gather] ABORT: HP too low (${gatherHpStart}/20) for 120s stationary operation.`);
+      return `mc_gather aborted: HP too low (${gatherHpStart}/20). Gathering is a long stationary operation (up to 120s) — starting at low HP is lethal. Use mc_eat to heal or mc_combat(target="cow") for food first.`;
+    }
+
+    // Pre-gather hostile check: ABORT if hostiles within 20 blocks.
+    // Same rationale as mc_farm — starting a long operation with known threats nearby
+    // results in taking damage while stationary (mining). The mid-gather loop checks
+    // for threats, but by then the bot may have already navigated to the block and
+    // started mining (exposed and stationary).
+    // Bot1/Bot2 [2026-03-22]: died from mob damage during gather operations.
+    const gatherDanger = checkDangerNearby(gatherBot, 20);
+    if (gatherDanger.dangerous) {
+      const gThreat = gatherDanger.nearestHostile
+        ? `${gatherDanger.nearestHostile.name} at ${gatherDanger.nearestHostile.distance.toFixed(1)} blocks`
+        : `${gatherDanger.hostileCount} hostile(s)`;
+      console.error(`[Gather] ABORT: ${gThreat} nearby. Too dangerous to start gathering.`);
+      return `mc_gather aborted: ${gThreat} within 20 blocks. Gathering is stationary — starting with nearby hostiles is dangerous. Use mc_flee or mc_combat to clear threats first. HP: ${gatherHpStart}/20.`;
     }
   }
 
@@ -571,10 +592,15 @@ export async function mc_farm(): Promise<string> {
     return "mc_farm: No seeds in inventory. Find wheat_seeds by breaking tall grass.";
   }
 
-  // Log warnings but don't block
+  // Pre-farm HP check: ABORT if HP < 8.
+  // mc_farm is a 60-120s stationary operation. Starting at low HP means any mob hit
+  // or starvation tick during tilling/planting is fatal.
+  // Bot1/Bot2/Bot3 [2026-03-22]: started farm at low HP, died during operation.
+  // Previously this only logged a warning and continued — now aborts immediately.
   const farmHpStart = Math.round((bot.health ?? 20) * 10) / 10;
   if (farmHpStart < 8) {
-    console.error(`[Farm] WARNING: HP low (${farmHpStart}/20). Proceeding anyway.`);
+    console.error(`[Farm] ABORT: HP too low (${farmHpStart}/20) for 60-120s stationary operation.`);
+    return `mc_farm aborted: HP too low (${farmHpStart}/20). Farming is a long stationary operation (60-120s) — starting at low HP is lethal. Use mc_eat to heal or mc_combat(target="cow") for food first.`;
   }
 
   // Pre-farm auto-sleep: if nighttime with bed nearby, sleep first to skip night.
@@ -628,13 +654,20 @@ export async function mc_farm(): Promise<string> {
     // Continue without armor
   }
 
-  // Log nearby threats but don't block
+  // Pre-farm hostile check: ABORT if hostiles within 20 blocks.
+  // mc_farm is a 60-120s stationary operation. Starting with known nearby hostiles
+  // is repeatedly fatal — the mid-farm loop (Step 3) aborts, but by then the bot
+  // has already navigated to water (10-30s exposed) and taken damage.
+  // Bot2 [2026-03-22]: skeleton shot bot HP 20→1 during dirt placement.
+  // Bot1/Bot2/Bot3: multiple deaths from mob damage during farming loops.
+  // Previously this only logged a warning and continued — now aborts immediately.
   const danger = checkDangerNearby(bot, 20);
   if (danger.dangerous) {
     const threatDesc = danger.nearestHostile
       ? `${danger.nearestHostile.name} at ${danger.nearestHostile.distance.toFixed(1)} blocks`
       : `${danger.hostileCount} hostile(s)`;
-    console.error(`[Farm] WARNING: ${threatDesc} nearby. Proceeding anyway.`);
+    console.error(`[Farm] ABORT: ${threatDesc} nearby. Too dangerous to start 60-120s farming.`);
+    return `mc_farm aborted: ${threatDesc} within 20 blocks. Farming is a long stationary operation (60-120s) — starting with nearby hostiles is lethal. Use mc_flee or mc_combat to clear threats first. HP: ${farmHpStart}/20.`;
   }
 
   const pos = bot.entity.position;
