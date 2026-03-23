@@ -1000,6 +1000,14 @@ export async function fight(
     // Food-desperate: don't escalate beyond caller's threshold. The caller (mc_combat)
     // already set a food-desperate cap (typically 8). Escalating further creates deadlock.
     console.error(`[Fight] FOOD DESPERATE: ${nearbyHostileCountFight} hostiles nearby but targeting food animal "${entityName}" with no food, hunger=${hungerLevel}. Keeping fleeHealthThreshold=${fleeHealthThreshold} (no escalation).`);
+  } else if (isFoodAnimalTarget) {
+    // Passive mob hunt: do NOT escalate flee threshold based on nearby hostiles.
+    // Bot1/Bot2/Bot3 [2026-03-23]: combat("cow") with 2+ hostiles within 16 blocks
+    // raised fleeHealthThreshold to 14-16, causing immediate flee at HP 10-14.
+    // The mid-combat hostile abort (5-block check) provides safety during passive hunts.
+    // Escalating the flee threshold makes passive hunting impossible at night when
+    // hostiles are always nearby. Keep the caller's threshold (typically 10).
+    console.error(`[Fight] Passive mob hunt "${entityName}": ${nearbyHostileCountFight} hostiles nearby but NOT escalating fleeHealthThreshold (keeping ${fleeHealthThreshold}). Mid-combat hostile abort provides safety.`);
   } else if (nearbyHostileCountFight >= 3) {
     fleeHealthThreshold = Math.max(fleeHealthThreshold, 16);
     console.error(`[Fight] ${nearbyHostileCountFight} hostiles nearby — raised fleeHealthThreshold to ${fleeHealthThreshold}`);
@@ -1145,7 +1153,7 @@ export async function fight(
   const maxAttacks = 30; // Safety limit
   let lastKnownFightPos = target.position.clone();
 
-  console.error(`[BotManager] Starting fight with ${targetName} at ${target.position.distanceTo(bot.entity.position).toFixed(1)} blocks`);
+  console.error(`[BotManager] Starting fight with ${targetName} (id=${target.id}) at ${target.position.distanceTo(bot.entity.position).toFixed(1)} blocks, HP=${bot.health?.toFixed(1)}, fleeThreshold=${fleeHealthThreshold}, isFoodDesperate=${isFoodDesperateFight}`);
 
   // Passive mob chase phase: navigate closer before entering combat loop.
   // Passive mobs (cow, pig, sheep, etc.) wander at ~1-2 blocks/s. The combat loop's
@@ -1329,7 +1337,11 @@ export async function fight(
   // stall abort fires at 4 iterations instead of 3 — an extra ~0.5s of arrow damage.
   // Bot1 [2026-03-22]: skeleton at 10.8m caused 60s timeout; faster stall detection helps.
   let lastApproachDist = target.position.distanceTo(bot.entity.position);
+  let loopIteration = 0;
   while (attackCount < maxAttacks) {
+    loopIteration++;
+    console.error(`[Fight] Loop iteration #${loopIteration}: attackCount=${attackCount}, elapsed=${((Date.now() - fightStartTime)/1000).toFixed(1)}s, HP=${bot.health?.toFixed(1)}, targetId=${targetId}`);
+
     // Global timeout check
     if (Date.now() - fightStartTime > FIGHT_TIMEOUT_MS) {
       console.error(`[Fight] Global timeout (${FIGHT_TIMEOUT_MS / 1000}s) reached after ${attackCount} attacks. Aborting.`);
@@ -1432,23 +1444,44 @@ export async function fight(
         const distToTarget = target ? target.position.distanceTo(bot.entity.position) : 999;
         const alreadyInRange = distToTarget <= 3.5; // melee range (passive mobs are never blaze)
 
-        if (!alreadyInRange) {
+        // CRITICAL FIX [2026-03-23]: Don't abort on the first loop iteration before any
+        // approach has been attempted. The pre-combat hostile check in mc_combat already
+        // warned the agent. Aborting on iteration 1 means combat("cow") returns in <1s
+        // with "HOSTILE ABORT, Attacked 0 times" every single time at night.
+        // Bot1/Bot2/Bot3: combat("cow/pig/chicken/sheep") all completed in ~1s because
+        // hostile abort triggered on the very first loop iteration before approach started.
+        // Allow at least 2 approach iterations (8-10s) before hostile-abort can trigger.
+        // The HP flee check (line above) still protects against actual damage.
+        const minIterationsBeforeAbort = 2;
+
+        if (!alreadyInRange && loopIteration > minIterationsBeforeAbort) {
           const nearbyHostile = Object.values(bot.entities).find(e => {
             if (!e || e === bot.entity || !e.position) return false;
             const eName = e.name?.toLowerCase() ?? "";
             if (!isHostileMob(bot, eName)) return false;
-            // Only abort when hostile is within actual melee danger range (5 blocks).
-            // At 5 blocks, a zombie reaches the bot in ~2s. Beyond that, the bot has
-            // enough time to land hits on the passive target and flee if needed.
-            return e.position.distanceTo(bot.entity.position) < 5;
+            // Only abort when hostile is within actual melee danger range (4 blocks).
+            // Reduced from 5 to 4: at 5 blocks, the hostile is still 1-2s away from
+            // melee range. 4 blocks means it's about to attack — genuine emergency.
+            return e.position.distanceTo(bot.entity.position) < 4;
           });
           if (nearbyHostile) {
             const hostileName = nearbyHostile.name ?? "hostile";
             const hostileDist = nearbyHostile.position.distanceTo(bot.entity.position).toFixed(1);
-            console.error(`[Fight] Hostile ${hostileName} at ${hostileDist}m during ${entityName} hunt! Aborting to flee.`);
+            console.error(`[Fight] Hostile ${hostileName} at ${hostileDist}m during ${entityName} hunt (iteration #${loopIteration})! Aborting to flee.`);
             bot.pathfinder.setGoal(null);
             await flee(managed, 20);
             return `[HOSTILE ABORT] Fled from ${hostileName} (${hostileDist}m away) during ${entityName} hunt. Attacked ${attackCount} times. Clear hostiles first, then re-hunt.` + getBriefStatus(bot);
+          }
+        } else if (!alreadyInRange && loopIteration <= minIterationsBeforeAbort) {
+          // Log but don't abort on early iterations
+          const earlyHostile = Object.values(bot.entities).find(e => {
+            if (!e || e === bot.entity || !e.position) return false;
+            const eName = e.name?.toLowerCase() ?? "";
+            if (!isHostileMob(bot, eName)) return false;
+            return e.position.distanceTo(bot.entity.position) < 4;
+          });
+          if (earlyHostile) {
+            console.error(`[Fight] Hostile ${earlyHostile.name} at ${earlyHostile.position.distanceTo(bot.entity.position).toFixed(1)}m during ${entityName} hunt, but skipping abort on early iteration #${loopIteration} (need ${minIterationsBeforeAbort}+ iterations).`);
           }
         }
       }
@@ -1495,6 +1528,13 @@ export async function fight(
     // Re-find target (it might have moved or died)
     target = Object.values(bot.entities).find(e => e.id === targetId) || null;
     if (!target) {
+      // Log all entities of matching type to diagnose disappearance
+      const matchingEntities = Object.values(bot.entities).filter(e => {
+        if (!e || e === bot.entity) return false;
+        const eName = (e.name || "").toLowerCase();
+        return entityName ? eName.includes(entityName.toLowerCase()) : isHostileMob(bot, eName);
+      });
+      console.error(`[Fight] Target id=${targetId} (${targetName}) NOT FOUND in bot.entities. Matching entities of same type: ${matchingEntities.length} [${matchingEntities.map(e => `id=${e.id} name=${e.name} dist=${e.position.distanceTo(bot.entity.position).toFixed(1)}`).join(", ")}]`);
       // Bot2 [2026-03-23]: combat("cow") returned "defeated" with 0 attacks and no drops.
       // Entity disappeared from bot.entities without being attacked — likely walked out of
       // render distance (passive mobs wander away) or chunk was unloaded. With attackCount=0,
@@ -1678,6 +1718,7 @@ export async function fight(
     lastKnownFightPos = target.position.clone();
 
     const distance = target.position.distanceTo(bot.entity.position);
+    console.error(`[Fight] Distance to ${targetName}: ${distance.toFixed(1)} blocks (attackRange=${targetName === "blaze" ? 5.5 : 3.5})`);
 
     // Creeper special case - keep distance and use bow if available
     if (target.name === "creeper" && distance < 4) {
@@ -1788,6 +1829,7 @@ export async function fight(
       if ((isRangedTarget && !isBlaze) || isPassiveApproachSprint) {
         bot.setControlState("sprint", false);
       }
+      console.error(`[Fight] Approach phase complete, continuing loop. Target id=${targetId}, current distance=${target ? target.position.distanceTo(bot.entity.position).toFixed(1) : "unknown"}`);
       continue;
     }
     // Reset approach stall when within attack range

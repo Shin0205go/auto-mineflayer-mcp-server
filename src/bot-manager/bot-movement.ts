@@ -2111,7 +2111,12 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     const prevCanDig = bot.pathfinder.movements?.canDig ?? true;
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.maxDropDown = 2;
-      (bot.pathfinder.movements as any).liquidCost = 10000;
+      (bot.pathfinder.movements as any).liquidCost = 100000;
+      // Disable water walking entirely — liquidCost alone is sometimes insufficient.
+      // Bot2 [2026-03-23]: flee routed into water despite liquidCost=10000 because
+      // pathfinder calculated water path as only viable option. With placeLiquid=false
+      // and very high liquidCost, pathfinder should refuse water paths more aggressively.
+      bot.pathfinder.movements.allowParkour = false;
       // Enable sprinting during flee — this is an emergency escape, speed is critical.
       // Bot3 #26: fled only 7.2 blocks in 8s without sprint. Sprinting doubles speed.
       bot.pathfinder.movements.allowSprinting = true;
@@ -2177,15 +2182,40 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
             return;
           }
 
-          // SAFETY: Abort flee if bot enters water — prevents drowning deaths.
+          // SAFETY: Abort flee if bot enters water OR is about to enter water.
           // Bot1 Session 39, Bot2 [2026-03-23]: flee routed into water despite liquidCost=10000.
           // When pathfinder can't find a pure-land route, it routes through water as a fallback.
           // Detect this and abort immediately — staying on land near a hostile is safer than drowning.
-          // The bot will swim up via jump control, then the caller can try pillarUp or shelter.
+          // Also check 2 blocks ahead in movement direction for PREDICTIVE water avoidance.
+          // Bot2 [2026-03-23]: 200ms check interval meant bot was already submerged before abort.
           {
             const fleePos = bot.entity.position;
             const fleeFeetBlock = bot.blockAt(new Vec3(Math.floor(fleePos.x), Math.floor(fleePos.y), Math.floor(fleePos.z)));
             const fleeHeadBlock = bot.blockAt(new Vec3(Math.floor(fleePos.x), Math.floor(fleePos.y) + 1, Math.floor(fleePos.z)));
+
+            // Predictive check: look 2 blocks ahead in the direction bot is moving
+            const vel = bot.entity.velocity;
+            let waterAhead = false;
+            if (vel && (Math.abs(vel.x) > 0.05 || Math.abs(vel.z) > 0.05)) {
+              const speed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
+              if (speed > 0.05) {
+                const dx = vel.x / speed;
+                const dz = vel.z / speed;
+                for (const dist of [1, 2]) {
+                  const aheadX = Math.floor(fleePos.x + dx * dist);
+                  const aheadZ = Math.floor(fleePos.z + dz * dist);
+                  const aheadY = Math.floor(fleePos.y);
+                  const aheadBlock = bot.blockAt(new Vec3(aheadX, aheadY, aheadZ));
+                  const aheadBlockBelow = bot.blockAt(new Vec3(aheadX, aheadY - 1, aheadZ));
+                  if ((aheadBlock && isWaterBlock(aheadBlock.name)) ||
+                      (aheadBlockBelow && isWaterBlock(aheadBlockBelow.name))) {
+                    waterAhead = true;
+                    break;
+                  }
+                }
+              }
+            }
+
             if ((fleeFeetBlock && isWaterBlock(fleeFeetBlock.name)) || (fleeHeadBlock && isWaterBlock(fleeHeadBlock.name))) {
               console.error(`[Flee] WATER ABORT: Bot entered water at (${fleePos.x.toFixed(1)}, ${fleePos.y.toFixed(1)}, ${fleePos.z.toFixed(1)}). Stopping flee to prevent drowning.`);
               clearInterval(check);
@@ -2194,6 +2224,15 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
               // Try to swim up by holding jump
               try { bot.setControlState("jump", true); } catch { /* ignore */ }
               setTimeout(() => { try { bot.setControlState("jump", false); } catch { /* ignore */ } }, 3000);
+              resolve();
+              return;
+            }
+            if (waterAhead) {
+              console.error(`[Flee] WATER AHEAD ABORT: Water detected 1-2 blocks ahead of movement direction at (${fleePos.x.toFixed(1)}, ${fleePos.y.toFixed(1)}, ${fleePos.z.toFixed(1)}). Stopping flee to prevent entering water.`);
+              clearInterval(check);
+              clearTimeout(timeout);
+              try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+              try { bot.setControlState("sprint", false); } catch { /* ignore */ }
               resolve();
               return;
             }
@@ -2270,6 +2309,9 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     currentFleeHandle.cleanup();
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.allowSprinting = prevAllowSprinting;
+      // Restore allowParkour — was disabled during flee to prevent jumping into water.
+      // Safe to restore since non-flee navigation handles parkour independently.
+      bot.pathfinder.movements.allowParkour = true;
       // Restore maxDropDown to safe default (2), NOT the previous value.
       // prevMaxDropDown could be higher if set by other code or mineflayer defaults,
       // which would undo the safe limit. moveToBasic always sets maxDropDown=2,
