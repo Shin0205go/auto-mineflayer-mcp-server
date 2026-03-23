@@ -1624,10 +1624,33 @@ export async function mc_navigate(
         const ty = args.y ?? navPos.y;
         estimatedDistance = Math.sqrt((args.x - navPos.x) ** 2 + (ty - navPos.y) ** 2 + (args.z - navPos.z) ** 2);
       } else if (args.target_block || args.target_entity) {
-        // For block/entity targets, we don't know distance yet — allow it and let
-        // moveTo's internal safety checks handle danger. The alternative (blocking)
-        // creates guaranteed death from starvation.
-        estimatedDistance = 30; // treat as short-range to allow the attempt
+        // Try to estimate actual distance to entity/block target.
+        // Bot2 [2026-03-23]: hunger=4, no food, navigate("cow") roamed 50+ blocks
+        // because estimatedDistance was hardcoded to 30 (short-range bypass).
+        // The bot starved mid-travel and was killed by a zombie.
+        // Now: look up the target entity/block position to get real distance.
+        // If not found, default to 30 (allows the attempt — moveTo safety handles danger).
+        estimatedDistance = 30; // default: treat as short-range
+        if (args.target_entity) {
+          for (const entity of Object.values(bot.entities)) {
+            if (!entity || !entity.position || entity === bot.entity) continue;
+            const eName = entity.name?.toLowerCase() ?? "";
+            if (eName === args.target_entity.toLowerCase()) {
+              estimatedDistance = entity.position.distanceTo(navPos);
+              break;
+            }
+          }
+        } else if (args.target_block) {
+          try {
+            const foundBlock = bot.findBlock({
+              matching: (b: any) => b.name === args.target_block,
+              maxDistance: 128,
+            });
+            if (foundBlock) {
+              estimatedDistance = foundBlock.position.distanceTo(navPos);
+            }
+          } catch { /* ignore search errors */ }
+        }
       }
       if (estimatedDistance > 30) {
         // Warn about long-distance navigation at low hunger with no food.

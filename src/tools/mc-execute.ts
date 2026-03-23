@@ -26,6 +26,8 @@ import {
   mc_smelt,
 } from "./core-tools.js";
 import { botManager } from "../bot-manager/index.js";
+import { isHostileMob } from "../bot-manager/minecraft-utils.js";
+import { equipArmor } from "../bot-manager/bot-items.js";
 
 const MAX_TIMEOUT = 600_000;  // 10 minutes max for gameplay loops
 const DEFAULT_TIMEOUT = 120_000;  // 2 minutes default
@@ -148,7 +150,7 @@ export async function mc_execute(
         logs.push(String(message));
       }
     },
-    wait: (ms: number) => {
+    wait: async (ms: number) => {
       // Bot1 [2026-03-22]: drowned during bot.wait() at y=86 with hunger=0.
       // wait() was a raw setTimeout with no safety monitoring — bot took damage
       // from water/mobs for the entire wait duration with no abort mechanism.
@@ -173,6 +175,60 @@ export async function mc_execute(
         if (waitBot) {
           try { waitBot.pathfinder.setGoal(null); } catch { /* ignore */ }
           waitBot.clearControlStates();
+
+          // PRE-WAIT AUTO-EQUIP ARMOR: bot.wait() can last up to 30s — the bot is
+          // stationary and exposed to mob attacks the entire time. Without armor,
+          // each skeleton arrow deals 5 damage, each zombie hit 3-6 damage.
+          // Bot2 [2026-03-22]: HP 20→0.5 during night wait loops — no armor equipped.
+          // Bot2 [2026-03-23]: HP dropped from 15.8 during wait — unarmored.
+          // Equipping armor takes <200ms and significantly reduces damage taken.
+          try {
+            await equipArmor(waitBot);
+          } catch { /* continue without armor */ }
+
+          // PRE-WAIT HOSTILE PROXIMITY CHECK: if a hostile mob is within 6 blocks
+          // at the start of wait, auto-flee before entering the wait loop.
+          // Bot2 [2026-03-22]: HP 20→0.5 during repeated wait(5000) calls because
+          // mobs were already adjacent when wait started — the HP-drop check only
+          // fires AFTER the first hit, by which time 2-5 damage is already dealt.
+          // Bot2 [2026-03-23]: mob approached during wait and killed bot between calls.
+          // Pre-emptive flee before wait creates distance, preventing damage entirely.
+          {
+            let closestHostileDist = Infinity;
+            let closestHostileName = "";
+            for (const entity of Object.values(waitBot.entities)) {
+              if (!entity || !entity.position || entity === waitBot.entity) continue;
+              const eName = entity.name?.toLowerCase() ?? "";
+              if (!isHostileMob(waitBot, eName)) continue;
+              const dist = entity.position.distanceTo(waitBot.entity.position);
+              if (dist < closestHostileDist) {
+                closestHostileDist = dist;
+                closestHostileName = eName;
+              }
+            }
+            // Threshold raised from 6 to 8: a zombie at 6 blocks reaches melee in
+            // ~2.6s. The pre-wait flee takes ~1-2s to execute, meaning the zombie may hit
+            // the bot during the flee. At 8 blocks (3.5s to melee), the flee completes with
+            // ~1.5s buffer. Matches the mid-wait check threshold for consistency.
+            if (closestHostileDist <= 8) {
+              if (logs.length < MAX_LOG_LINES) {
+                logs.push(`[wait] Pre-wait: ${closestHostileName} at ${closestHostileDist.toFixed(1)} blocks — auto-fleeing before wait`);
+              }
+              try {
+                await mc_flee(15);
+                if (logs.length < MAX_LOG_LINES) {
+                  logs.push(`[wait] Pre-wait flee complete (HP: ${(waitBot.health ?? 0).toFixed(1)})`);
+                }
+              } catch (fleeErr) {
+                if (logs.length < MAX_LOG_LINES) {
+                  logs.push(`[wait] Pre-wait flee failed: ${fleeErr}`);
+                }
+              }
+              // Re-clear control states after flee
+              try { waitBot.pathfinder.setGoal(null); } catch { /* ignore */ }
+              waitBot.clearControlStates();
+            }
+          }
         }
       } catch { /* ignore if no bot */ }
       return new Promise<void>((resolve) => {
@@ -190,7 +246,9 @@ export async function mc_execute(
         // The old check only aborted at HP<4 — by then the bot was already nearly dead.
         // Tracking HP delta detects ongoing attacks early (3+ HP drop in 1s = mob hit).
         let lastCheckHp = -1;
+        let monitorCount = 0;
         const safetyInterval = setInterval(async () => {
+          monitorCount++;
           try {
             const username = botManager.requireSingleBot();
             const waitBot = botManager.getBot(username);
@@ -262,6 +320,56 @@ export async function mc_execute(
               return;
             }
             lastCheckHp = hp;
+            // MID-WAIT HOSTILE APPROACH DETECTION: check for hostiles closing in
+            // and auto-flee BEFORE they attack (preemptive, not reactive).
+            // The HP-drop check above only triggers AFTER taking a hit (2+ HP loss).
+            // By then, the bot has already lost health that may be unrecoverable (no food).
+            // Bot2 [2026-03-22]: HP 20→0.5 during wait — mobs attacked repeatedly between
+            // 1s checks, each hit undetected until cumulative damage reached threshold.
+            // Bot2 [2026-03-23]: zombie approached during wait, killed bot between calls.
+            // Checking entity proximity every 1s catches mobs approaching BEFORE they hit.
+            // Check every interval (every 1s) — previous 2s interval missed zombies
+            // that closed from 8 blocks to melee between checks. A zombie walks 2.3 blocks/s,
+            // so at 2s intervals a zombie at 5 blocks reaches melee before the next check.
+            // Bot2 [2026-03-23]: zombie approached during wait, killed bot between 2s checks.
+            // At 1s intervals + 8 block threshold, the bot gets 2-3 checks before a zombie
+            // reaches melee range, giving reliable time to auto-flee.
+            {
+              let midWaitClosestDist = Infinity;
+              let midWaitClosestName = "";
+              for (const entity of Object.values(waitBot.entities)) {
+                if (!entity || !entity.position || entity === waitBot.entity) continue;
+                const eName = entity.name?.toLowerCase() ?? "";
+                if (!isHostileMob(waitBot, eName)) continue;
+                const dist = entity.position.distanceTo(waitBot.entity.position);
+                if (dist < midWaitClosestDist) {
+                  midWaitClosestDist = dist;
+                  midWaitClosestName = eName;
+                }
+              }
+              // Threshold raised from 5 to 8 blocks: a zombie at 5 blocks reaches melee
+              // in ~2.2s at 2.3 blocks/s — with 1s check interval, only 2 checks before hit.
+              // At 8 blocks, there are 3-4 checks before melee, giving reliable abort time.
+              // Skeletons shoot from 16 blocks but deal less damage per hit (2-5 vs 3-6);
+              // the HP-drop check catches ranged damage. This check focuses on melee approach.
+              if (midWaitClosestDist <= 8) {
+                if (logs.length < MAX_LOG_LINES) {
+                  logs.push(`[wait] ABORTED: ${midWaitClosestName} approaching (${midWaitClosestDist.toFixed(1)} blocks) — auto-fleeing before attack`);
+                }
+                try {
+                  await mc_flee(15);
+                  if (logs.length < MAX_LOG_LINES) {
+                    logs.push(`[wait] Auto-fled from approaching ${midWaitClosestName} (HP now: ${(waitBot.health ?? 0).toFixed(1)})`);
+                  }
+                } catch (fleeErr) {
+                  if (logs.length < MAX_LOG_LINES) {
+                    logs.push(`[wait] Auto-flee failed: ${fleeErr}`);
+                  }
+                }
+                doResolve();
+                return;
+              }
+            }
             // Abort wait if bot is in water — drowning risk at ANY HP level.
             // Bot2 [2026-03-23]: previous threshold (HP<10) was too late; bot drowned
             // from HP 15.8 because abort didn't trigger until HP<10, leaving only ~4s.
