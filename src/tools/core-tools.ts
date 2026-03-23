@@ -93,11 +93,22 @@ export async function mc_status(): Promise<string> {
   // Use centralized isHostileMob() instead of inline list with substring matching.
   // Bug: inline "zombie".includes() falsely matched "zombified_piglin" (neutral mob).
   const entities = Object.values(bot.entities);
+  // nearbyEntities: count all entities within 24 blocks by name (passive, hostile, players, items).
+  // Bug [2026-03-23]: status.nearbyEntities was undefined — field was never included in the
+  // return object. Agents rely on this to find cows/pigs for food, detect players for team
+  // coordination, and verify entity presence before combat/navigate. Without it, agents
+  // called combat("cow") blindly, navigate("cow") without knowing if cows exist, and
+  // couldn't assess nearby passive mobs for food gathering.
+  const nearbyEntities: Record<string, number> = {};
   for (const entity of entities) {
     if (!entity || !entity.position || entity === bot.entity) continue;
     const dist = entity.position.distanceTo(bot.entity.position);
     if (dist > THREAT_RADIUS) continue;
     const name = entity.name ?? (entity as any).username ?? "unknown";
+    // Count all entities by name
+    if (name && name !== "unknown") {
+      nearbyEntities[name] = (nearbyEntities[name] || 0) + 1;
+    }
     if (isHostileMob(bot, name.toLowerCase())) {
       const dx = entity.position.x - pos.x;
       const dz = entity.position.z - pos.z;
@@ -252,6 +263,7 @@ export async function mc_status(): Promise<string> {
       materials,
       slots_used: inventory.length,
     },
+    nearbyEntities,
     threats,
     ...(warnings.length > 0 ? { warnings } : {}),
     nearby_resources: nearbyResources,

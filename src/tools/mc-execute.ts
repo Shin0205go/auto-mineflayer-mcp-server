@@ -62,8 +62,14 @@ export async function mc_execute(
     },
 
     // Movement
+    // bot.moveTo() uses botManager.moveTo() directly for simple pathfinder movement.
+    // Bug [2026-03-23]: moveTo was delegating to mc_navigate which has 200+ lines of
+    // safety pre-checks (hunger/HP/night/hostile/starvation) that could return early
+    // with WARNING strings without actually moving the bot. Agents calling bot.moveTo()
+    // expect direct movement; bot.navigate() provides the full safety-checked path.
     moveTo: async (x: number, y: number, z: number) => {
-      return await mc_navigate({ x, y, z });
+      const username = botManager.requireSingleBot();
+      return await botManager.moveTo(username, x, y, z);
     },
     navigate: async (target: string | { x?: number; y?: number; z?: number; target_block?: string; target_entity?: string; max_distance?: number }) => {
       if (typeof target === "string") {
