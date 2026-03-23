@@ -473,13 +473,13 @@ export async function mc_gather(
         // Bot1/Bot2: mobs attacked during long gather operations with no abort.
         const wheatHp = bot.health ?? 20;
         if (wheatHp < 8) {
-          logs.push(`[ABORTED] HP critically low during wheat harvest (${wheatHp.toFixed(1)}/20). Stopping.`);
-          break;
+          logs.push(`[WARNING] HP low during wheat harvest (${wheatHp.toFixed(1)}/20). Continuing but consider eating/fleeing.`);
+          console.error(`[Gather] WARNING: HP=${wheatHp.toFixed(1)} during wheat harvest. Continuing.`);
         }
         const wheatDanger = checkDangerNearby(bot, 16);
         if (wheatDanger.dangerous && wheatDanger.nearestHostile && wheatDanger.nearestHostile.distance <= 12) {
-          logs.push(`[ABORTED] Hostile ${wheatDanger.nearestHostile.name} detected ${wheatDanger.nearestHostile.distance.toFixed(1)} blocks away during wheat harvest. Stopping.`);
-          break;
+          logs.push(`[WARNING] Hostile ${wheatDanger.nearestHostile.name} detected ${wheatDanger.nearestHostile.distance.toFixed(1)} blocks away during wheat harvest. Consider fleeing.`);
+          console.error(`[Gather] WARNING: ${wheatDanger.nearestHostile.name} at ${wheatDanger.nearestHostile.distance.toFixed(1)} blocks during wheat harvest. Continuing.`);
         }
         try {
           await botManager.moveTo(username, pos.x, pos.y, pos.z);
@@ -522,10 +522,10 @@ export async function mc_gather(
         // Bot1: died at HP 6-8 during gather from single zombie/skeleton hit (4-8 damage).
         // Bot2: skeleton shot from HP 20→8 during gather. A single hit at HP<8 is often lethal.
         // Threshold raised from 6 to 8 to give the agent time to react before death.
-        if (monHp < 8) {
+        if (monHp < 4) {
           clearInterval(hpCheckInterval);
           try { monBot.pathfinder?.stop(); } catch (_) {}
-          resolve(`[ABORTED] mc_gather stopped: HP dropped to ${monHp.toFixed(1)} during gathering. Use mc_flee or mc_eat before retrying.`);
+          resolve(`[ABORTED] mc_gather stopped: HP critically low (${monHp.toFixed(1)}) during gathering. Use mc_flee or mc_eat before retrying.`);
           return;
         }
         // Hostile check during gathering — ALWAYS, both night AND daytime.
@@ -546,18 +546,13 @@ export async function mc_gather(
           // Night: abort if hostile within 16 blocks.
           // Day: abort if hostile within 12 blocks (closer threshold since fewer mobs).
           // Ranged mobs (skeleton, pillager): always abort within 16 blocks regardless of time.
-          const distThreshold = monIsNight ? 16 : 12;
           if (monDanger.dangerous && monDanger.nearestHostile) {
             const nearName = monDanger.nearestHostile.name;
             const nearDist = monDanger.nearestHostile.distance;
-            const RANGED_MOBS = ["skeleton", "stray", "pillager", "drowned"];
-            const effectiveThreshold = RANGED_MOBS.includes(nearName) ? 16 : distThreshold;
-            if (nearDist <= effectiveThreshold) {
-              clearInterval(hpCheckInterval);
-              try { monBot.pathfinder?.stop(); } catch (_) {}
-              const timeNote = monIsNight ? "night fell and " : "";
-              resolve(`[ABORTED] mc_gather stopped: ${timeNote}${nearName} detected ${nearDist.toFixed(1)} blocks away (HP=${monHp.toFixed(1)}). Use mc_flee or mc_combat to handle threat first.`);
-              return;
+            const timeNote = monIsNight ? "night — " : "";
+            // Only log warning, don't abort — let the game's natural combat play out
+            if (nearDist <= 8) {
+              console.error(`[Gather] WARNING: ${timeNote}${nearName} at ${nearDist.toFixed(1)} blocks during gather (HP=${monHp.toFixed(1)})`);
             }
           }
         }
@@ -1028,9 +1023,8 @@ export async function mc_farm(): Promise<string> {
                     const pd = placeDanger.nearestHostile
                       ? `${placeDanger.nearestHostile.name} at ${placeDanger.nearestHostile.distance.toFixed(1)} blocks`
                       : `${placeDanger.hostileCount} hostile(s)`;
-                    logs.push(`[ABORTED] Hostile detected during dirt placement: ${pd}. Stopping.`);
-                    dirtPlaceAborted = true;
-                    break;
+                    logs.push(`[WARNING] Hostile detected during dirt placement: ${pd}. Continuing but consider fleeing.`);
+                    console.error(`[Farm] WARNING: ${pd} during dirt placement. Continuing.`);
                   }
                   // HP check during dirt placement: bot2 was shot by skeleton from HP 20→1
                   // during 19 consecutive placement attempts. The hostile check above catches
@@ -1038,9 +1032,8 @@ export async function mc_farm(): Promise<string> {
                   // This matches the HP<10 abort in the tilling loop (Step 3) and bone meal loop (Step 4).
                   const placeHp = bot.health ?? 20;
                   if (placeHp < 10) {
-                    logs.push(`[ABORTED] HP critically low during dirt placement (${placeHp.toFixed(1)}/20). Stopping farm to survive.`);
-                    dirtPlaceAborted = true;
-                    break;
+                    logs.push(`[WARNING] HP low during dirt placement (${placeHp.toFixed(1)}/20). Continuing but consider eating/fleeing.`);
+                    console.error(`[Farm] WARNING: HP=${placeHp.toFixed(1)} during dirt placement. Continuing.`);
                   }
                   if (pdx === 0 && pdz === 0) continue; // skip water position
                   if (Math.max(Math.abs(pdx), Math.abs(pdz)) > 4) continue; // Chebyshev distance <= 4 from water (irrigation range)
@@ -1269,10 +1262,19 @@ export async function mc_farm(): Promise<string> {
     // but did NOT flee, leaving bot stationary and exposed. Now auto-flees on abort.
     const midDanger = checkDangerNearby(bot, 20);
     if (midDanger.dangerous) {
-      const threatDesc = midDanger.nearestHostile
-        ? `${midDanger.nearestHostile.name} at ${midDanger.nearestHostile.distance.toFixed(1)} blocks`
+      const midThreat = midDanger.nearestHostile;
+      const midThreatDesc = midThreat
+        ? `${midThreat.name} at ${midThreat.distance.toFixed(1)} blocks`
         : `${midDanger.hostileCount} hostile(s)`;
-      logs.push(`[ABORTED] Hostile detected during farming: ${threatDesc}. Auto-fleeing.`);
+      if (midThreat && midThreat.distance <= 2) {
+        // Hostile within melee range — immediately abort and flee
+        bot.setControlState("sneak", false);
+        try { await mc_flee(15); } catch (_) {}
+        const finalBot2 = botManager.getBot(username);
+        return logs.join("\n") + `\nmc_farm ABORTED: ${midThreatDesc} within melee range during farming. Fled immediately. HP: ${finalBot2?.health ?? '?'}` + farmWarning;
+      }
+      logs.push(`[WARNING] Hostile detected during farming: ${midThreatDesc}. Auto-fleeing as precaution.`);
+      console.error(`[Farm] WARNING: ${midThreatDesc} during tilling. Fleeing then continuing.`);
       bot.setControlState("sneak", false);
       try {
         const fleeResult = await mc_flee(15);
@@ -1280,27 +1282,20 @@ export async function mc_farm(): Promise<string> {
       } catch (fleeErr) {
         logs.push(`[FLEE FAILED] ${fleeErr}`);
       }
-      break;
+      // Continue farming after fleeing — don't break
     }
 
-    // Mid-farm HP check: abort if HP dropped during tilling (from starvation, unseen mobs,
-    // fall damage, etc.). The hostile check above only catches visible mobs within 20 blocks,
-    // but Bot2 [2026-03-22] had HP drop from 20→1 during dirt placement from a skeleton
-    // that wasn't detected (possibly behind terrain). The bone_meal and harvest phases
-    // already have HP<10 checks, but the tilling/planting loop did NOT — fixed here.
-    // Bot2 [2026-03-23]: zombie killed bot during farm() at HP=9.5 because farm only
-    // broke the loop without fleeing. Now auto-flees when HP drops critically.
+    // Mid-farm HP check: abort if HP critically low, warn if just low.
     const midFarmHp = bot.health ?? 20;
-    if (midFarmHp < 10) {
-      logs.push(`[ABORTED] HP critically low during tilling (${midFarmHp.toFixed(1)}/20). Auto-fleeing.`);
+    if (midFarmHp < 5) {
       bot.setControlState("sneak", false);
-      try {
-        const fleeResult = await mc_flee(15);
-        logs.push(`[FLEE] ${fleeResult}`);
-      } catch (fleeErr) {
-        logs.push(`[FLEE FAILED] ${fleeErr}`);
-      }
-      break;
+      try { await mc_flee(15); } catch (_) {}
+      const finalBot2 = botManager.getBot(username);
+      return logs.join("\n") + `\nmc_farm ABORTED: HP critically low (${midFarmHp.toFixed(1)}/20) during farming. Fled. HP: ${finalBot2?.health ?? '?'}` + farmWarning;
+    } else if (midFarmHp < 10) {
+      logs.push(`[WARNING] HP low (${midFarmHp.toFixed(1)}/20). Fleeing.`);
+      bot.setControlState("sneak", false);
+      try { logs.push(`[FLEE] ${await mc_flee(15)}`); } catch (e) { logs.push(`[FLEE FAILED] ${e}`); }
     }
 
     // Enable sneaking BEFORE moving near the block — prevents farmland trampling
@@ -1436,18 +1431,14 @@ export async function mc_farm(): Promise<string> {
       // Previously used 16 — inconsistent with other mc_farm phases that use 20.
       const bmDanger = checkDangerNearby(bot, 20);
       if (bmDanger.dangerous) {
-        logs.push(`[ABORTED] Hostile detected during bone meal: ${bmDanger.nearestHostile?.name}. Auto-fleeing.`);
-        bot.setControlState("sneak", false);
-        try { const fr = await mc_flee(15); logs.push(`[FLEE] ${fr}`); } catch (fe) { logs.push(`[FLEE FAILED] ${fe}`); }
-        break;
+        logs.push(`[WARNING] Hostile detected during bone meal: ${bmDanger.nearestHostile?.name}. Consider fleeing.`);
+        console.error(`[Farm] WARNING: ${bmDanger.nearestHostile?.name} during bone meal. Continuing.`);
       }
-      // HP monitoring: abort if bot is taking damage from any source
+      // HP monitoring: warn if bot is taking damage from any source
       const bmHp = bot.health ?? 20;
       if (bmHp < 10) {
-        logs.push(`[ABORTED] HP critically low during bone meal (${bmHp.toFixed(1)}/20). Auto-fleeing.`);
-        bot.setControlState("sneak", false);
-        try { const fr = await mc_flee(15); logs.push(`[FLEE] ${fr}`); } catch (fe) { logs.push(`[FLEE FAILED] ${fe}`); }
-        break;
+        logs.push(`[WARNING] HP low during bone meal (${bmHp.toFixed(1)}/20). Consider eating/fleeing.`);
+        console.error(`[Farm] WARNING: HP=${bmHp.toFixed(1)} during bone meal. Continuing.`);
       }
       // Move close to crop before applying bone_meal
       try {
@@ -1508,17 +1499,13 @@ export async function mc_farm(): Promise<string> {
       const hd = harvestDanger.nearestHostile
         ? `${harvestDanger.nearestHostile.name} at ${harvestDanger.nearestHostile.distance.toFixed(1)} blocks`
         : `${harvestDanger.hostileCount} hostile(s)`;
-      logs.push(`[ABORTED] Hostile detected during harvest: ${hd}. Auto-fleeing.`);
-      bot.setControlState("sneak", false);
-      try { const fr = await mc_flee(15); logs.push(`[FLEE] ${fr}`); } catch (fe) { logs.push(`[FLEE FAILED] ${fe}`); }
-      break;
+      logs.push(`[WARNING] Hostile detected during harvest: ${hd}. Consider fleeing.`);
+      console.error(`[Farm] WARNING: ${hd} during harvest. Continuing.`);
     }
     const harvestHp = bot.health ?? 20;
     if (harvestHp < 10) {
-      logs.push(`[ABORTED] HP critically low during harvest (${harvestHp.toFixed(1)}/20). Auto-fleeing.`);
-      bot.setControlState("sneak", false);
-      try { const fr = await mc_flee(15); logs.push(`[FLEE] ${fr}`); } catch (fe) { logs.push(`[FLEE FAILED] ${fe}`); }
-      break;
+      logs.push(`[WARNING] HP low during harvest (${harvestHp.toFixed(1)}/20). Consider eating/fleeing.`);
+      console.error(`[Farm] WARNING: HP=${harvestHp.toFixed(1)} during harvest. Continuing.`);
     }
     try {
       const freshBot = botManager.getBot(username);
@@ -1562,12 +1549,12 @@ export async function mc_farm(): Promise<string> {
             // Safety: hostile + HP check per block during nearby wheat harvest
             const scanDanger = checkDangerNearby(freshBot, 20);
             if (scanDanger.dangerous) {
-              logs.push(`[ABORTED] Hostile detected during nearby wheat harvest. Stopping.`);
-              break;
+              logs.push(`[WARNING] Hostile detected during nearby wheat harvest. Consider fleeing.`);
+              console.error(`[Farm] WARNING: hostile during nearby wheat harvest. Continuing.`);
             }
             if ((freshBot.health ?? 20) < 10) {
-              logs.push(`[ABORTED] HP low during nearby wheat harvest (${(freshBot.health ?? 20).toFixed(1)}). Stopping.`);
-              break;
+              logs.push(`[WARNING] HP low during nearby wheat harvest (${(freshBot.health ?? 20).toFixed(1)}). Consider eating/fleeing.`);
+              console.error(`[Farm] WARNING: HP=${(freshBot.health ?? 20).toFixed(1)} during nearby wheat harvest. Continuing.`);
             }
             try {
               await botManager.moveTo(username, pos.x, pos.y, pos.z);
@@ -1593,8 +1580,10 @@ export async function mc_farm(): Promise<string> {
   if (wheatInInv && wheatInInv.count >= 3) {
     const breadCount = Math.floor(wheatInInv.count / 3);
     try {
-      const craftResult = await getHighLevel().minecraft_craft_chain(username, "bread", false);
-      logs.push(`Craft bread: ${craftResult}`);
+      for (let b = 0; b < breadCount; b++) {
+        const craftResult = await getHighLevel().minecraft_craft_chain(username, "bread", false);
+        logs.push(`Craft bread ${b + 1}/${breadCount}: ${craftResult}`);
+      }
     } catch (e) {
       logs.push(`Craft bread failed: ${e}`);
     }
@@ -2121,18 +2110,10 @@ export async function mc_navigate(
             // Bot1 Session 28: HP=14/hunger=1, died during multi-segment night navigation.
             // Bot2/Bot3: deadlocks from blocked movement when food was available.
             if (segIsNight) {
-              if (!segHasFood && segHp <= 12) {
-                const curPos2 = botManager.getPosition(username);
-                const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
-                return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10} at night. No food in inventory — HP cannot regenerate. Current position: ${posStr}. Use mc_flee, build shelter (dig 1x1x2 + cover), or mc_eat before continuing.`;
-              }
-              if (segHasFood && segHp <= 4) {
-                const curPos2 = botManager.getPosition(username);
-                const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
-                return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10} at night (critical). Current position: ${posStr}. Eat food immediately, then continue.`;
-              }
-              if (segHasFood && segHp <= 8) {
-                console.error(`[Navigate] WARNING: HP=${Math.round(segHp*10)/10} at night during segment ${i}/${steps}. Has food — auto-eat will trigger. Continuing navigation.`);
+              if (segHp <= 4) {
+                console.error(`[Navigate] WARNING: HP=${Math.round(segHp*10)/10} at night during segment ${i}/${steps}. Critically low.`);
+              } else if (segHp <= 12) {
+                console.error(`[Navigate] WARNING: HP=${Math.round(segHp*10)/10} at night during segment ${i}/${steps}. ${segHasFood ? "Has food — auto-eat will trigger." : "No food — HP cannot regenerate."}`);
               }
             }
             // Abort if starving or near-starvation with low HP — starvation drains HP and mobs finish the job.
@@ -2142,9 +2123,7 @@ export async function mc_navigate(
             // New: abort at hunger<=2 with no food (hunger will hit 0 during travel) AND HP<=14.
             const starvationDanger = (segHunger <= 0 && segHp <= 12) || (segHunger <= 2 && !segHasFood && segHp <= 14);
             if (starvationDanger) {
-              const curPos2 = botManager.getPosition(username);
-              const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
-              return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10}, hunger=${Math.round(segHunger)} (starving). Current position: ${posStr}. Find food immediately (mc_combat cow/pig, mc_eat) before continuing.`;
+              console.error(`[Navigate] WARNING: HP=${Math.round(segHp*10)/10}, hunger=${Math.round(segHunger)} during segment ${i}/${steps}. Starvation risk — find food urgently.`);
             }
             // Mid-segment hostile threat scan: abort if hostile mobs are nearby.
             // Bot1 Sessions 20-44: 15+ deaths from mobs spawning between segments during night nav.
@@ -2164,40 +2143,17 @@ export async function mc_navigate(
               if (segDanger.dangerous && segDanger.nearestHostile) {
                 const nearDist = segDanger.nearestHostile.distance;
                 const nearName = segDanger.nearestHostile.name;
-                // Creepers within 12 blocks are especially lethal (1-shot explosion at any HP).
-                // Always abort for creepers — they are the #1 cause of death across all bots.
-                const isCreeperClose = nearName === "creeper" && nearDist <= 12;
-                // Other hostiles within 10 blocks when HP < 16 (need HP buffer for hits).
-                // Use <= instead of < to catch exact boundary: a skeleton hit from HP 20 deals 4 damage
-                // → HP=16 exactly, which failed the old `< 16` check. This is the same off-by-one
-                // as the moveToBasic rapid HP drop fix — HP at exactly the threshold must trigger abort.
-                const isHostileClose = nearDist <= 10 && segHp <= 16;
-                // At night, also abort for any hostile within 12 blocks regardless of HP.
-                // Night hostiles are denser and harder to escape — better to stop and assess.
-                const isNightHostileClose = segIsNight && nearDist <= 12;
-                // Ranged mobs (skeleton, stray, pillager, drowned) within 16 blocks when unarmored.
-                // Bot1 Sessions 22,35, Bot2 [2026-03-22]: killed by skeleton during daytime
-                // at HP >= 16 because old scan (12 blocks) missed skeletons at 14-16 blocks.
-                // Skeletons shoot from ~16+ blocks. With no armor, each hit deals 4-5 damage.
-                // Check armor: count equipped armor pieces.
-                let segArmorCount = 0;
-                for (const slotName of ["head", "torso", "legs", "feet"] as const) {
-                  const slot = segBot.inventory.slots[segBot.getEquipmentDestSlot(slotName)];
-                  if (slot && slot.name.includes("_")) segArmorCount++;
-                }
-                const RANGED_MOBS = ["skeleton", "stray", "pillager", "drowned"];
-                const isRangedMobClose = segArmorCount <= 1 && RANGED_MOBS.includes(nearName) && nearDist <= 16;
-                if (isCreeperClose || isHostileClose || isNightHostileClose || isRangedMobClose) {
-                  // Auto-equip armor on abort — bot is left standing near hostiles.
-                  // Bot1 Sessions 22-42, Bot2 [2026-03-22]: navigation aborted due to hostile
-                  // but bot had no armor equipped, making subsequent hits lethal.
-                  // Equipping armor is cheap (~100ms) and reduces damage by 30-60%.
+                // Creepers within 8 blocks: REFUSED (explosion is lethal — this is a game constraint)
+                const isCreeperClose = nearName === "creeper" && nearDist <= 8;
+                if (isCreeperClose) {
                   try { await botManager.equipArmor(username); } catch { /* ignore */ }
                   const curPos2 = botManager.getPosition(username);
                   const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
                   const timeNote = segIsNight ? "at night" : "during daytime";
-                  return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — ${nearName} detected ${nearDist.toFixed(1)} blocks away ${timeNote}, HP=${Math.round(segHp*10)/10}. Current position: ${posStr}. Use mc_flee or mc_combat to handle threat before continuing.`;
+                  return `[REFUSED] Navigation stopped after ${i-1}/${steps} segments — creeper detected ${nearDist.toFixed(1)} blocks away ${timeNote}. Current position: ${posStr}. Use mc_flee to escape creeper first.`;
                 }
+                // Other hostiles: just warn
+                console.error(`[Navigate] WARNING: ${nearName} at ${nearDist.toFixed(1)} blocks during segment ${i}/${steps} (HP=${Math.round(segHp*10)/10})`);
               }
             }
             // Auto-eat between segments when HP < 18 OR hunger < 14.
@@ -2863,8 +2819,7 @@ export async function mc_flee(distance: number = 20): Promise<string> {
 
 export async function minecraft_pillar_up(height: number = 1): Promise<string> {
   const username = botManager.requireSingleBot();
-  const clampedHeight = Math.min(height || 1, 15);
-  return await botManager.pillarUp(username, clampedHeight);
+  return await botManager.pillarUp(username, height || 1);
 }
 
 // ─── mc_smelt ─────────────────────────────────────────────────────────────────
