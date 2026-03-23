@@ -208,7 +208,24 @@ export async function mc_execute(
             // catches slow damage (starvation: 1 HP per tick) that doesn't trigger the delta.
             if (hp < 6) {
               if (logs.length < MAX_LOG_LINES) {
-                logs.push(`[wait] ABORTED: HP dropped to ${hp.toFixed(1)} during wait`);
+                logs.push(`[wait] ABORTED: HP dropped to ${hp.toFixed(1)} during wait — auto-fleeing from danger`);
+              }
+              // Auto-flee when HP critically low during wait: the agent takes 1-3s to
+              // react after wait() resolves, during which another mob hit is lethal.
+              // Bot2 [2026-03-22]: HP dropped 20→0.5 during repeated wait() calls because
+              // the bot only aborted but didn't flee — mobs continued hitting between calls.
+              // Bot2 [2026-03-23]: HP 15.8→3.8→death between wait() calls from mob damage.
+              // Auto-fleeing before resolving creates distance from the attacker, giving the
+              // agent time to eat/heal. Same pattern as the water auto-flee (line ~344).
+              try {
+                await mc_flee(15);
+                if (logs.length < MAX_LOG_LINES) {
+                  logs.push(`[wait] Auto-fled from danger (HP now: ${(waitBot.health ?? 0).toFixed(1)})`);
+                }
+              } catch (fleeErr) {
+                if (logs.length < MAX_LOG_LINES) {
+                  logs.push(`[wait] Auto-flee failed: ${fleeErr}`);
+                }
               }
               doResolve();
               return;
@@ -222,9 +239,25 @@ export async function mc_execute(
             const hpDrop = lastCheckHp - hp;
             if (hpDrop >= 2 && lastCheckHp > 0) {
               if (logs.length < MAX_LOG_LINES) {
-                logs.push(`[wait] ABORTED: Taking damage (HP ${lastCheckHp.toFixed(1)}→${hp.toFixed(1)}, -${hpDrop.toFixed(1)} in 0.5s) — under attack`);
+                logs.push(`[wait] ABORTED: Taking damage (HP ${lastCheckHp.toFixed(1)}→${hp.toFixed(1)}, -${hpDrop.toFixed(1)} in 0.5s) — auto-fleeing from attacker`);
               }
               lastCheckHp = hp;
+              // Auto-flee when taking active damage during wait: mob attacks deal 2-8 HP
+              // per hit, and the agent takes 1-3s to react after wait() resolves.
+              // Without auto-flee, the bot stays in melee range and takes 2-3 more hits
+              // before the agent can call flee() — often lethal at HP<14.
+              // Bot2 [2026-03-22]: HP 20→0.5 across repeated wait() calls, no auto-flee.
+              // Bot2 [2026-03-23]: HP 10→death during wait, zombie attacked from behind.
+              try {
+                await mc_flee(15);
+                if (logs.length < MAX_LOG_LINES) {
+                  logs.push(`[wait] Auto-fled from attacker (HP now: ${(waitBot.health ?? 0).toFixed(1)})`);
+                }
+              } catch (fleeErr) {
+                if (logs.length < MAX_LOG_LINES) {
+                  logs.push(`[wait] Auto-flee failed: ${fleeErr}`);
+                }
+              }
               doResolve();
               return;
             }

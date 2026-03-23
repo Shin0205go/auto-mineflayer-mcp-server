@@ -1926,13 +1926,39 @@ export async function mc_navigate(
   if (args.x !== undefined && args.y !== undefined && args.z !== undefined) {
     // Coerce to numbers (MCP may pass as strings)
     const nx = Number(args.x);
-    const ny = Number(args.y);
+    let ny = Number(args.y);
     const nz = Number(args.z);
     if (isNaN(nx) || isNaN(ny) || isNaN(nz)) {
       return `Invalid coordinates: x=${args.x}, y=${args.y}, z=${args.z}`;
     }
-    // For long distances, move in segments (from movement.ts logic)
+
+    // Y-level safety clamping: prevent pathfinder from routing through caves/underground.
+    // Bot1 Sessions 31-44: 15+ deaths from mc_navigate routing underground. The pathfinder
+    // finds paths through cave openings when the target Y is significantly below the bot.
+    // Bot2: mc_navigate fell bot from Y=97 to Y=68 (29 blocks) during navigation.
+    // Bot1 Session 44: navigated to (100,96,0), fell into cave at Y=72, drowned.
+    // Bot3 Death #4: move_to Y=64 routed through Y=112, then fell.
+    //
+    // Threshold depends on horizontal distance:
+    // - Long distance (>30 blocks): clamp at 10 blocks below. The pathfinder has more
+    //   opportunity to find and route through caves on long paths. 10 blocks allows hills.
+    // - Short distance (<=30 blocks): handled by existing 20-block clamp below (line ~2140).
+    //   Short navigation to nearby infrastructure (chest at Y-15) should work.
+    // If the agent genuinely needs to go underground, they should use moveTo in small steps
+    // or dig a tunnel with mc_tunnel.
     const pos = botManager.getPosition(username);
+    if (pos) {
+      const horizDist = Math.sqrt((nx - pos.x) ** 2 + (nz - pos.z) ** 2);
+      const yDescent = pos.y - ny;
+      if (horizDist > 30 && yDescent > 10) {
+        const clampedY = Math.round(pos.y - 10);
+        console.error(`[Navigate] Y-CLAMP: Target Y=${ny} is ${yDescent.toFixed(0)} blocks below bot Y=${pos.y.toFixed(0)} over ${horizDist.toFixed(0)} horizontal blocks. Clamping to Y=${clampedY} to prevent cave routing. Use bot.moveTo() in small steps for intentional underground navigation.`);
+        nightWarning += `\n[WARNING] Target Y=${ny} was ${yDescent.toFixed(0)} blocks below you over ${horizDist.toFixed(0)} blocks (cave routing risk). Clamped to Y=${clampedY}. For intentional underground travel, use bot.moveTo() in small Y-steps or bot.gather() for ores.`;
+        ny = clampedY;
+      }
+    }
+
+    // For long distances, move in segments (from movement.ts logic)
     if (pos) {
       const dx = nx - pos.x;
       const dy = ny - pos.y;
