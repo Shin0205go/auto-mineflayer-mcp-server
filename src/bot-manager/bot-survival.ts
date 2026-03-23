@@ -948,13 +948,33 @@ export async function fight(
   // HP dropped below 5 in one tick from simultaneous hits — bot died before flee triggered.
   // Two mobs deal ~6-10 damage per hit cycle, so fleeAtHp must account for burst damage.
   // Bot1/Bot2/Bot3: many deaths where fight() used the raw caller fleeAtHp while surrounded.
+  //
+  // EXCEPTION: food-desperate passive mob hunts. When the bot has no food and hunger <= 6,
+  // and is targeting a food animal (cow, pig, chicken, etc.), the multi-hostile escalation
+  // must be capped to avoid a starvation deadlock:
+  //   1. mc_combat("cow") sets fleeAtHp=8 (food-desperate cap in core-tools.ts)
+  //   2. fight() raises fleeHealthThreshold to 14-16 (multi-hostile escalation)
+  //   3. HP 1.8 <= 16 → immediate flee → never hunts cow → never gets food → death
+  // Bot1 [2026-03-23]: bot.combat("cow", 15) "instant completion" — fight() raised threshold
+  // to 16, HP 1.8 triggered immediate flee before any attack. Bot couldn't get food.
+  // Fix: detect food-desperate state and cap escalation at the caller's threshold.
+  const FOOD_ANIMALS_FIGHT = ["cow", "pig", "chicken", "sheep", "rabbit", "mooshroom", "goat", "salmon", "cod"];
+  const isFoodAnimalTarget = entityName && FOOD_ANIMALS_FIGHT.some(a => entityName.toLowerCase().includes(a));
+  const hasNoFood = !bot.inventory.items().some(i => EDIBLE_FOOD_NAMES.has(i.name));
+  const hungerLevel = (bot as any).food ?? 20;
+  const isFoodDesperateFight = isFoodAnimalTarget && hasNoFood && hungerLevel <= 6;
+
   const nearbyHostileCountFight = Object.values(bot.entities).filter(e => {
     if (!e || e === bot.entity || !e.position) return false;
     const eName = (e.name || "").toLowerCase();
     if (!isHostileMob(bot, eName)) return false;
     return e.position.distanceTo(bot.entity.position) < 16;
   }).length;
-  if (nearbyHostileCountFight >= 3) {
+  if (isFoodDesperateFight) {
+    // Food-desperate: don't escalate beyond caller's threshold. The caller (mc_combat)
+    // already set a food-desperate cap (typically 8). Escalating further creates deadlock.
+    console.error(`[Fight] FOOD DESPERATE: ${nearbyHostileCountFight} hostiles nearby but targeting food animal "${entityName}" with no food, hunger=${hungerLevel}. Keeping fleeHealthThreshold=${fleeHealthThreshold} (no escalation).`);
+  } else if (nearbyHostileCountFight >= 3) {
     fleeHealthThreshold = Math.max(fleeHealthThreshold, 16);
     console.error(`[Fight] ${nearbyHostileCountFight} hostiles nearby — raised fleeHealthThreshold to ${fleeHealthThreshold}`);
   } else if (nearbyHostileCountFight >= 2) {
@@ -1145,13 +1165,26 @@ export async function fight(
   // other mobs, starvation, or fall damage. Without this check, the combat loop starts
   // at dangerously low HP and the first combat hit is fatal.
   // Bot3 Deaths #9,#16: HP dropped to 2.2-7.2 during approach, entered combat loop, died.
+  //
+  // EXCEPTION: food-desperate passive mob hunts — if the bot has no food and is targeting
+  // a food animal, it MUST fight even at low HP. Without this exception, the bot enters
+  // a starvation deadlock: can't fight cow (HP too low) → can't get food → HP drops → death.
+  // Bot1 [2026-03-23]: HP=1.8, hunger=0, combat("cow") fled instantly because postApproachHp <= threshold.
+  // For food-desperate hunts, only abort at HP <= 2 (absolute minimum survivable).
   {
     const postApproachHp = bot.health ?? 20;
-    if (postApproachHp <= fleeHealthThreshold) {
-      console.error(`[Fight] HP dropped to ${postApproachHp.toFixed(1)} during approach (flee threshold: ${fleeHealthThreshold}). Fleeing instead of fighting.`);
+    const foodDesperateAbortThreshold = isFoodDesperateFight ? 2 : fleeHealthThreshold;
+    if (postApproachHp <= foodDesperateAbortThreshold) {
+      const reason = isFoodDesperateFight
+        ? `HP dropped to ${postApproachHp.toFixed(1)} — even food-desperate hunt too risky below HP 2.`
+        : `HP dropped to ${postApproachHp.toFixed(1)} during approach (flee threshold: ${fleeHealthThreshold}).`;
+      console.error(`[Fight] ${reason} Fleeing instead of fighting.`);
       bot.pathfinder.setGoal(null);
       await flee(managed, 20);
-      return `Fled before combat! HP dropped to ${postApproachHp.toFixed(1)} during approach to ${targetName}. Attacked 0 times.` + getBriefStatus(bot);
+      return `Fled before combat! ${reason} Attacked 0 times.` + getBriefStatus(bot);
+    }
+    if (isFoodDesperateFight && postApproachHp <= fleeHealthThreshold) {
+      console.error(`[Fight] FOOD DESPERATE: HP=${postApproachHp.toFixed(1)} is below normal flee threshold (${fleeHealthThreshold}), but continuing food hunt for survival.`);
     }
   }
 
@@ -1181,9 +1214,16 @@ export async function fight(
     }
 
     // Check health - flee if low
+    // EXCEPTION: food-desperate hunts use HP <= 2 threshold (absolute minimum).
+    // At HP 1.8 with no food, fleeing just delays death — the only survival path is
+    // killing a food animal and eating its drops. The food-desperate item collection
+    // logic (needsFoodDesperately) already handles low-HP drop pickup.
+    // Bot1 [2026-03-23]: HP=1.8, hunger=0, combat("cow") fled immediately because
+    // HP 1.8 < fleeAtHp 8. Bot never got food, died from starvation.
     const health = bot.health;
-    if (health <= fleeHealthThreshold) {
-      console.error(`[BotManager] Health low (${health}), fleeing!`);
+    const effectiveFleeThreshold = isFoodDesperateFight ? 2 : fleeHealthThreshold;
+    if (health <= effectiveFleeThreshold) {
+      console.error(`[BotManager] Health low (${health}), fleeing!${isFoodDesperateFight ? " (food-desperate threshold: 2)" : ""}`);
       bot.pathfinder.setGoal(null);
       // Clean up sprint state before flee — flee sets its own sprint control.
       try { bot.setControlState("sprint", false); } catch { /* ignore */ }

@@ -2399,12 +2399,16 @@ export async function mc_combat(
             // creates a starvation deadlock: bot at HP 12, hunger 0, no food → starts cow hunt
             // → immediately flees at HP 14 threshold → never gets food → dies from starvation.
             // Bot1/Bot2 [2026-03-22]: starvation deadlocks from flee threshold preventing food hunts.
-            // For food-desperate bots, cap fleeAtHp at 8 to allow the kill + collection cycle.
-            // fight() internally has needsFoodDesperately logic that forces item collection even at low HP.
+            // Bot1 [2026-03-23]: bot.combat("cow", 15) with HP=1.8 — fleeAtHp stayed at 15
+            // because Math.max(15, 8)=15. fight() then saw HP 1.8 < 15 → instant flee.
+            // Fix: for food-desperate bots, CAP fleeAtHp DOWN to 4 (not floor UP).
+            // At HP 1.8, the bot must fight — fleeing just delays starvation death.
+            // fight() internally has needsFoodDesperately logic that forces item collection
+            // even at low HP, and the food-desperate combat loop uses threshold 2.
             const isFoodDesperate = !combatHasFood && (combatBot!.food ?? 20) <= 6;
             if (isFoodDesperate) {
-              fleeAtHp = Math.max(fleeAtHp, 8);
-              console.error(`[Combat] Food-desperate: capped fleeAtHp to ${fleeAtHp} for passive hunt (hunger=${combatBot!.food}, no food).`);
+              fleeAtHp = Math.min(fleeAtHp, 4);
+              console.error(`[Combat] Food-desperate: capped fleeAtHp DOWN to ${fleeAtHp} for passive hunt (hunger=${combatBot!.food}, no food, HP=${combatBot!.health?.toFixed(1)}).`);
             } else {
               fleeAtHp = Math.max(fleeAtHp, 14);
               console.error(`[Combat] Raised fleeAtHp to ${fleeAtHp} for passive hunt near ${nearbyHostiles.length} hostile(s).`);
