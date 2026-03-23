@@ -1,6 +1,7 @@
 import { botManager } from "../bot-manager/index.js";
 import { checkDangerNearby, canPickaxeHarvest, getRequiredPickaxeTier, EDIBLE_FOOD_NAMES } from "../bot-manager/minecraft-utils.js";
 import { registry } from "../tool-handler-registry.js";
+import { Vec3 } from "vec3";
 
 /**
  * High-level, task-oriented Minecraft actions
@@ -245,6 +246,36 @@ export async function minecraft_gather_resources(
         if (botPos && y - botPos.y > 40) {
           console.error(`[GatherResources] Skipping block at Y=${y} - target is ${(y - botPos.y).toFixed(0)} blocks above bot (Y:${botPos.y.toFixed(0)}), likely floating/sky structure.`);
           continue; // Skip this block, try finding another reachable one
+        }
+
+        // Accessibility check: Skip ore blocks fully embedded in solid terrain.
+        // Bot1 [2026-03-22]: bot.gather("iron_ore") timed out at 120s because the ore was
+        // embedded in stone with no adjacent air — pathfinder (canDig=false) couldn't reach it.
+        // Bot2 [2026-03-23]: same pattern with iron_ore, cobblestone increased but raw_iron=0.
+        // Check if the target block has at least one adjacent air/cave_air/passable block.
+        // If fully surrounded by solid blocks, pathfinder can't reach it and bot.dig() can't
+        // mine it either (out of reach). Skip early and try another instance.
+        {
+          const gatherCheckBot = botManager.getBot(username);
+          if (gatherCheckBot) {
+            const adjacentOffsets = [
+              [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]
+            ];
+            let hasAccessible = false;
+            for (const [dx, dy, dz] of adjacentOffsets) {
+              const adjBlock = gatherCheckBot.blockAt(new Vec3(Math.floor(x) + dx, Math.floor(y) + dy, Math.floor(z) + dz));
+              if (!adjBlock || adjBlock.name === "air" || adjBlock.name === "cave_air" || adjBlock.name === "void_air"
+                  || adjBlock.name === "torch" || adjBlock.name === "wall_torch" || adjBlock.name === "ladder") {
+                hasAccessible = true;
+                break;
+              }
+            }
+            if (!hasAccessible) {
+              console.error(`[GatherResources] Skipping ${blockNameToMine} at (${x},${y},${z}) — fully embedded in solid blocks, unreachable with canDig=false.`);
+              failedPositions.add(pk);
+              continue;
+            }
+          }
         }
 
         // Move to the block (for crops like wheat, move to adjacent block since we can't stand on farmland)

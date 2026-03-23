@@ -1911,6 +1911,16 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
               hasSafeGround = false;
               break;
             }
+            // SAFETY: Treat water as unsafe ground during flee.
+            // Bot1 Session 39, Bot2 [2026-03-23]: flee routed into water, bot drowned.
+            // liquidCost=10000 penalizes water paths but doesn't prevent them when no
+            // land route exists. Treating water as unsafe in the direction check ensures
+            // flee never TARGETS a water area. The pathfinder may still touch water edges,
+            // but the flee direction won't aim at rivers/lakes/ocean.
+            if (isWaterBlock(block.name)) {
+              hasSafeGround = false;
+              break;
+            }
             if (block.name !== "air" && block.name !== "cave_air" && block.name !== "void_air") {
               hasSafeGround = true;
               break;
@@ -1924,14 +1934,14 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
         if (directionSafe) {
           if (rotation > 0) {
             bestDirection = new (botPos as any).constructor(Math.cos(angle), 0, Math.sin(angle));
-            console.error(`[Flee] Original direction leads to cliff/hole/lava — rotated ${rotation * 45}° to safe direction.`);
+            console.error(`[Flee] Original direction leads to cliff/hole/lava/water — rotated ${rotation * 45}° to safe direction.`);
           }
           foundSafe = true;
           break;
         }
       }
       if (!foundSafe) {
-        // All 8 directions are unsafe (cliff/hole/lava). Reduce flee distance to 5 blocks
+        // All 8 directions are unsafe (cliff/hole/lava/water). Reduce flee distance to 5 blocks
         // to minimize exposure to the hazard while still creating some distance from hostiles.
         // Bot1/Bot2/Bot3 [2026-03-22]: full-distance flee into unsafe terrain caused falls
         // (Y=80→56, Y=116→86) because maxDropDown=1 doesn't prevent the bot from CHOOSING
@@ -2031,6 +2041,28 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
             return;
           }
 
+          // SAFETY: Abort flee if bot enters water — prevents drowning deaths.
+          // Bot1 Session 39, Bot2 [2026-03-23]: flee routed into water despite liquidCost=10000.
+          // When pathfinder can't find a pure-land route, it routes through water as a fallback.
+          // Detect this and abort immediately — staying on land near a hostile is safer than drowning.
+          // The bot will swim up via jump control, then the caller can try pillarUp or shelter.
+          {
+            const fleePos = bot.entity.position;
+            const fleeFeetBlock = bot.blockAt(new Vec3(Math.floor(fleePos.x), Math.floor(fleePos.y), Math.floor(fleePos.z)));
+            const fleeHeadBlock = bot.blockAt(new Vec3(Math.floor(fleePos.x), Math.floor(fleePos.y) + 1, Math.floor(fleePos.z)));
+            if ((fleeFeetBlock && isWaterBlock(fleeFeetBlock.name)) || (fleeHeadBlock && isWaterBlock(fleeHeadBlock.name))) {
+              console.error(`[Flee] WATER ABORT: Bot entered water at (${fleePos.x.toFixed(1)}, ${fleePos.y.toFixed(1)}, ${fleePos.z.toFixed(1)}). Stopping flee to prevent drowning.`);
+              clearInterval(check);
+              clearTimeout(timeout);
+              try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+              // Try to swim up by holding jump
+              try { bot.setControlState("jump", true); } catch { /* ignore */ }
+              setTimeout(() => { try { bot.setControlState("jump", false); } catch { /* ignore */ } }, 3000);
+              resolve();
+              return;
+            }
+          }
+
           // Success: moved enough distance. Lowered from 0.7 to 0.5 — on constrained
           // terrain, achieving 50% of target distance is often sufficient to escape.
           // Waiting for 70% caused unnecessary timeout when 60% was already safe.
@@ -2128,6 +2160,21 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       caveWarning = ` [WARNING] Fell ${yDescent.toFixed(0)} blocks during flee (Y=${startPos.y.toFixed(0)}→${endPos.y.toFixed(0)}). May be underground — use minecraft_pillar_up or mc_navigate to return to surface.`;
     }
 
+    // Post-flee water warning: detect if bot ended up in water despite the water abort.
+    // Bot1 Session 39, Bot2 [2026-03-23]: flee deposited bot in water → pillarUp failed → drowned.
+    // This can happen if the water abort didn't trigger (e.g., bot entered water on the very last tick).
+    {
+      const endFeetBlock = bot.blockAt(new Vec3(Math.floor(endPos.x), Math.floor(endPos.y), Math.floor(endPos.z)));
+      if (endFeetBlock && isWaterBlock(endFeetBlock.name)) {
+        console.error(`[Flee] WARNING: Bot is in water after flee at (${endPos.x.toFixed(1)}, ${endPos.y.toFixed(1)}, ${endPos.z.toFixed(1)}). Swimming up.`);
+        caveWarning += ` [WARNING] Ended up in water after flee. Swim to land before pillarUp or other actions.`;
+        // Try to swim up
+        try { bot.setControlState("jump", true); } catch { /* ignore */ }
+        await new Promise(r => setTimeout(r, 2000));
+        try { bot.setControlState("jump", false); } catch { /* ignore */ }
+      }
+    }
+
     // Post-flee auto-eat: after fleeing, HP is often critically low from the attack
     // that triggered the flee. Without eating immediately, the next mob encounter
     // or starvation tick kills the bot before the agent can react.
@@ -2191,6 +2238,9 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
                   // commit 500965e which fixed this in the main flee direction check
                   // but not the perpendicular retry path. Bot3 Death #8: lava during flee.
                   if (isLavaBlock(block.name)) { hasSafeGround = false; break; }
+                  // SAFETY: Treat water as unsafe — same as main flee direction check.
+                  // Bot1/Bot2 [2026-03-23]: perpendicular retry routed into water → drowning.
+                  if (isWaterBlock(block.name)) { hasSafeGround = false; break; }
                   if (block.name !== "air" && block.name !== "cave_air" && block.name !== "void_air") {
                     hasSafeGround = true; break;
                   }
