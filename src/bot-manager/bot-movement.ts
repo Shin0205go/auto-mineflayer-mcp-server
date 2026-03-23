@@ -1422,6 +1422,15 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
   const bot = managed.bot;
   const startY = bot.entity.position.y;
 
+  // Global timeout: pillarUp should never exceed 45s.
+  // Bot1/Bot2 [2026-03-23]: pillarUp timed out at 60s+ when jump-place repeatedly
+  // failed but didn't break (e.g., insufficient rise, drift off pillar, server lag).
+  // Each level can take up to 3 attempts * (600ms jump + 500ms settle + 300ms retry) = ~4.2s,
+  // and targetHeight can be up to 15 or 50 (untilSky). Without a global timeout,
+  // the function hangs indefinitely while the bot is stationary and exposed to mobs.
+  const PILLAR_TIMEOUT_MS = 45000;
+  const pillarStartTime = Date.now();
+
   // SAFETY: Detect if bot is currently IN water — pillarUp cannot work in water.
   // Bot1 Session 38: pillarUp timed out at Y=44 underwater — jump-place doesn't work
   // in water because the bot floats and can't get stable footing on the placed block.
@@ -1562,6 +1571,16 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
   const pillarZ = Math.floor(bot.entity.position.z);
 
   for (let i = 0; i < targetHeight; i++) {
+    // Global timeout check: abort if pillarUp has been running too long.
+    // Bot1/Bot2 [2026-03-23]: pillarUp exceeded 60s when placement repeatedly failed,
+    // leaving bot stationary and exposed to mobs for the entire duration.
+    if (Date.now() - pillarStartTime > PILLAR_TIMEOUT_MS) {
+      const gained = bot.entity.position.y - startY;
+      console.error(`[Pillar] TIMEOUT after ${PILLAR_TIMEOUT_MS / 1000}s. Placed ${blocksPlaced}/${targetHeight}, gained ${gained.toFixed(1)} blocks.`);
+      bot.setControlState("sneak", false);
+      return `Pillared up ${gained.toFixed(1)} blocks (placed ${blocksPlaced}/${targetHeight}). TIMEOUT after ${PILLAR_TIMEOUT_MS / 1000}s — placement was too slow. Current Y=${bot.entity.position.y.toFixed(0)}.${getBriefStatus(managed)}`;
+    }
+
     // Use locked pillar column for X/Z, only Y changes
     const curX = pillarX;
     const currentY = Math.floor(bot.entity.position.y);

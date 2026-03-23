@@ -230,8 +230,13 @@ export async function mc_status(): Promise<string> {
     warnings.push(`UNDERGROUND: You are at Y=${Math.round(pos.y)} (below surface). Cave mobs are dense and escape is difficult. Return to surface (mc_navigate to Y=80+ or mc_tunnel direction=up) before other actions.`);
   }
 
+  // Include both "health" and "hp" keys so agents can access via either name.
+  // Bot2 [2026-03-23]: agent read status.hp but field was "health" → got undefined,
+  // causing HP management to fail (craft abort, eat skip, death).
+  const roundedHealth = Math.round(health * 10) / 10;
   const result = {
-    health: Math.round(health * 10) / 10,
+    health: roundedHealth,
+    hp: roundedHealth,
     hunger: Math.round(food * 10) / 10,
     position: {
       x: Math.round(pos.x * 10) / 10,
@@ -429,7 +434,21 @@ export async function mc_gather(
         count: count * 2,
       });
       if (matureWheat.length === 0) {
-        return `No mature wheat found within ${maxDistance} blocks. Wheat crops need more time to grow (age 7/7). Use mc_farm() to plant new seeds.`;
+        // Check for immature wheat to give the agent a more actionable message.
+        // Bot1 [2026-03-23]: agent kept retrying gather("wheat") not knowing crops were immature.
+        const anyWheat = bot.findBlocks({
+          matching: (b: any) => b.name === "wheat",
+          maxDistance: maxDistance,
+          count: 5,
+        });
+        if (anyWheat.length > 0) {
+          const { Vec3: V3 } = await import("vec3");
+          const sampleBlock = bot.blockAt(anyWheat[0]);
+          const sampleProps = sampleBlock && (sampleBlock as any).getProperties ? (sampleBlock as any).getProperties() : null;
+          const sampleAge = sampleProps?.age ?? (sampleBlock as any)?.metadata ?? 0;
+          return `No mature wheat found within ${maxDistance} blocks. Found ${anyWheat.length} immature wheat crop(s) (age ${sampleAge}/7). They need more time to grow to age 7. Options: (1) Use bot.farm() with bone_meal to speed up growth, (2) Wait ~5 minutes for natural growth, (3) Hunt animals for food instead.`;
+        }
+        return `No wheat found within ${maxDistance} blocks. Use bot.farm() to plant wheat_seeds, or hunt animals (bot.combat("cow")) for food.`;
       }
       // Harvest the mature wheat blocks directly
       let gathered = 0;
@@ -1926,6 +1945,48 @@ export async function mc_navigate(
 
   // Navigate to block type
   if (args.target_block) {
+    // Special case: wheat navigation should only target mature wheat (age>=7).
+    // Bot1 [2026-03-23]: bot.navigate("wheat") found immature wheat (age 0-6),
+    // then bot.gather("wheat") returned 0 because gather only harvests age>=7.
+    // This mismatch confused agents into thinking gather was broken.
+    // Navigate to mature wheat if any exists; otherwise report clearly.
+    if (args.target_block === "wheat") {
+      const bot = botManager.getBot(username);
+      if (bot) {
+        const { Vec3 } = await import("vec3");
+        const maxDist = args.max_distance ?? 32;
+        const matureWheat = bot.findBlocks({
+          matching: (b: any) => {
+            if (b.name !== "wheat") return false;
+            const props = b.getProperties ? b.getProperties() : null;
+            const age = props?.age ?? b.metadata ?? 0;
+            return age >= 7;
+          },
+          maxDistance: maxDist,
+          count: 1,
+        });
+        if (matureWheat.length > 0) {
+          const wp = matureWheat[0];
+          const blockNavResult = await mc_navigate({ x: wp.x, y: wp.y, z: wp.z });
+          return `Found mature wheat (age 7/7) at (${wp.x}, ${wp.y}, ${wp.z}).\n${blockNavResult}`;
+        }
+        // Check for any immature wheat
+        const anyWheat = bot.findBlocks({
+          matching: (b: any) => b.name === "wheat",
+          maxDistance: maxDist,
+          count: 1,
+        });
+        if (anyWheat.length > 0) {
+          const wp = anyWheat[0];
+          const block = bot.blockAt(wp);
+          const props = block && (block as any).getProperties ? (block as any).getProperties() : null;
+          const age = props?.age ?? (block as any)?.metadata ?? 0;
+          return `Found wheat at (${wp.x}, ${wp.y}, ${wp.z}) but it is still growing (age ${age}/7). Wait for it to mature, or use bot.farm() with bone_meal to speed up growth. Only mature wheat (age 7) can be harvested with bot.gather("wheat").`;
+        }
+        return `No wheat found within ${maxDist} blocks. Use bot.farm() to plant wheat_seeds first.`;
+      }
+    }
+
     const findResult = await botManager.findBlock(username, args.target_block, args.max_distance ?? 32);
     if (!findResult || findResult.includes("No ") || findResult.includes("not found")) {
       return `No ${args.target_block} found within ${args.max_distance ?? 32} blocks`;
