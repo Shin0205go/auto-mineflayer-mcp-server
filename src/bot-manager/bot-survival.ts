@@ -1405,29 +1405,47 @@ export async function fight(
     // Bot1 Session 16: killed by zombie while fighting sheep.
     // Bot3 Deaths #1, #3, #5: killed by hostile mobs during passive mob hunts.
     // When the bot moves toward a passive target, it may enter hostile mob range.
-    // Abort and flee if any hostile is within 12 blocks during passive mob combat.
-    // Radius widened from 8 to 12: zombies walk 2.3 blocks/s, so a zombie at 8 blocks
-    // reaches melee in 3.5s — only 7 loop iterations before impact. At 12 blocks, the
-    // bot has 5.2s (10+ iterations) to detect and flee.
-    // Bot2 [2026-03-23]: zombie at 10m closed in during cow combat, killed bot because
-    // the 8-block threshold didn't trigger until the zombie was already hitting.
+    //
+    // CRITICAL FIX [2026-03-23]: Previous 12-block abort radius was too aggressive — made
+    // passive mob hunting nearly impossible. Any hostile within 12 blocks (very common)
+    // caused immediate abort on the FIRST combat loop iteration, before the bot could ever
+    // land an attack. This completely blocked food acquisition from animals.
+    // combat("cow") would return in ~1s with "HOSTILE ABORT, Attacked 0 times" every time.
+    //
+    // New strategy:
+    // - Food-desperate (no food + hunger <= 6): SKIP hostile abort entirely. The bot dies
+    //   from starvation if it can't kill the food animal. A zombie hit is survivable; starving isn't.
+    // - Already within attack range (distance <= 3.5): finish the kill first, then flee.
+    //   A cow has 10 HP, takes 2-3 sword hits (~2s). Fleeing mid-kill wastes the approach.
+    // - Otherwise: only abort when hostile is within 5 blocks (actual melee danger range).
+    //   At 5 blocks, zombie reaches melee in ~2s — enough time for 1-2 attacks on the cow.
+    //   Previous 12-block radius meant hostiles that would never reach the bot caused aborts.
     if (entityName) {
       const passiveFoodMobs = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey", "mule", "mooshroom", "llama", "goat", "salmon", "cod", "squid", "turtle"];
       const isPassiveHunt = passiveFoodMobs.some(p => entityName.toLowerCase().includes(p));
-      if (isPassiveHunt) {
-        const nearbyHostile = Object.values(bot.entities).find(e => {
-          if (!e || e === bot.entity || !e.position) return false;
-          const eName = e.name?.toLowerCase() ?? "";
-          if (!isHostileMob(bot, eName)) return false;
-          return e.position.distanceTo(bot.entity.position) < 12;
-        });
-        if (nearbyHostile) {
-          const hostileName = nearbyHostile.name ?? "hostile";
-          const hostileDist = nearbyHostile.position.distanceTo(bot.entity.position).toFixed(1);
-          console.error(`[Fight] Hostile ${hostileName} at ${hostileDist}m during ${entityName} hunt! Aborting to flee.`);
-          bot.pathfinder.setGoal(null);
-          await flee(managed, 20);
-          return `[HOSTILE ABORT] Fled from ${hostileName} (${hostileDist}m away) during ${entityName} hunt. Attacked ${attackCount} times. Clear hostiles first, then re-hunt.` + getBriefStatus(bot);
+      if (isPassiveHunt && !isFoodDesperateFight) {
+        // Check distance to passive target — if we're already in attack range, prioritize killing
+        const distToTarget = target ? target.position.distanceTo(bot.entity.position) : 999;
+        const alreadyInRange = distToTarget <= 3.5; // melee range (passive mobs are never blaze)
+
+        if (!alreadyInRange) {
+          const nearbyHostile = Object.values(bot.entities).find(e => {
+            if (!e || e === bot.entity || !e.position) return false;
+            const eName = e.name?.toLowerCase() ?? "";
+            if (!isHostileMob(bot, eName)) return false;
+            // Only abort when hostile is within actual melee danger range (5 blocks).
+            // At 5 blocks, a zombie reaches the bot in ~2s. Beyond that, the bot has
+            // enough time to land hits on the passive target and flee if needed.
+            return e.position.distanceTo(bot.entity.position) < 5;
+          });
+          if (nearbyHostile) {
+            const hostileName = nearbyHostile.name ?? "hostile";
+            const hostileDist = nearbyHostile.position.distanceTo(bot.entity.position).toFixed(1);
+            console.error(`[Fight] Hostile ${hostileName} at ${hostileDist}m during ${entityName} hunt! Aborting to flee.`);
+            bot.pathfinder.setGoal(null);
+            await flee(managed, 20);
+            return `[HOSTILE ABORT] Fled from ${hostileName} (${hostileDist}m away) during ${entityName} hunt. Attacked ${attackCount} times. Clear hostiles first, then re-hunt.` + getBriefStatus(bot);
+          }
         }
       }
     }

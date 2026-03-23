@@ -2440,17 +2440,19 @@ export async function mc_combat(
             const item = combatBot.inventory.slots[slot];
             if (item) combatArmorCount++;
           }
-          // Block thresholds: distance at which to refuse combat with passive targets
-          // Night + no armor: 16 blocks (zombie walks 2.3 blocks/s, reaches melee in ~7s)
-          // Night + armor: 12 blocks
-          // Day + no armor + no food: 14 blocks (permanent damage)
-          // Day + no armor + food: 10 blocks
-          // Day + armor: 8 blocks
+          // Warning thresholds: distance at which to warn (not block) about hostiles.
+          // CRITICAL FIX [2026-03-23]: Previous thresholds (8-16 blocks) were too aggressive
+          // and made passive mob hunting nearly impossible. combat("cow") would get a WARNING,
+          // fleeAtHp raised to 14, and fight() would flee instantly at HP < 14.
+          // Reduced to match fight()'s new 5-block abort radius.
+          // Night + no armor: 8 blocks
+          // Night + armor: 6 blocks
+          // Day: 5 blocks (matches fight() mid-combat hostile abort radius)
           let blockDist: number;
           if (combatIsNight) {
-            blockDist = combatArmorCount <= 1 ? 16 : 12;
+            blockDist = combatArmorCount <= 1 ? 8 : 6;
           } else {
-            blockDist = combatArmorCount <= 1 ? (combatHasFood ? 10 : 14) : 8;
+            blockDist = 5;
           }
 
           if (closestHostileDist <= blockDist) {
@@ -2458,30 +2460,20 @@ export async function mc_combat(
             const armorNote = combatArmorCount <= 1 ? " NO ARMOR —" : "";
             hostileWarning = `\n[WARNING] Cannot safely hunt ${target}: ${nearbyHostiles.length} hostile(s) nearby (${threatList}).${armorNote} ${timeNote} Hostile within ${closestHostileDist}m.\n[推奨アクション]\n1. bot.combat() — 最も近い敵を先に倒す（引数なし=最近接敵）\n2. bot.flee(20) — 敵から離れてから狩りを再開\n3. bot.equipArmor() — 防具を装備してから狩り`;
             // Raise fleeAtHp when hunting passive targets near hostiles.
-            // Bot2 [2026-03-23]: fleeAtHp=5, zombie attacked from behind during cow hunt,
-            // bot didn't flee until HP 5 — one more hit was lethal. With hostiles nearby,
-            // the bot needs to flee much earlier (HP 14) to survive the combined damage from
-            // the passive mob approach + hostile mob ambush. This doesn't block the operation
-            // (per user instruction) but makes the bot escape before taking lethal damage.
-            // Bot3 Deaths #1,#3,#5: similar pattern with low fleeAtHp during passive hunts.
+            // CRITICAL FIX [2026-03-23]: Previous fleeAtHp=14 was too high — bots with HP 10-13
+            // would flee instantly before landing any attack. A cow takes 2-3 sword hits (~2s).
+            // Reduced to 10 (default) to allow the bot to finish the kill before fleeing.
+            // fight() mid-combat hostile abort (5 blocks) provides safety if hostile gets close.
             //
-            // EXCEPTION: food-desperate bots (no food + hunger <= 6). Raising fleeAtHp to 14
-            // creates a starvation deadlock: bot at HP 12, hunger 0, no food → starts cow hunt
-            // → immediately flees at HP 14 threshold → never gets food → dies from starvation.
-            // Bot1/Bot2 [2026-03-22]: starvation deadlocks from flee threshold preventing food hunts.
-            // Bot1 [2026-03-23]: bot.combat("cow", 15) with HP=1.8 — fleeAtHp stayed at 15
-            // because Math.max(15, 8)=15. fight() then saw HP 1.8 < 15 → instant flee.
-            // Fix: for food-desperate bots, CAP fleeAtHp DOWN to 4 (not floor UP).
+            // EXCEPTION: food-desperate bots (no food + hunger <= 6). Cap fleeAtHp DOWN to 4.
             // At HP 1.8, the bot must fight — fleeing just delays starvation death.
-            // fight() internally has needsFoodDesperately logic that forces item collection
-            // even at low HP, and the food-desperate combat loop uses threshold 2.
             const isFoodDesperate = !combatHasFood && (combatBot!.food ?? 20) <= 6;
             if (isFoodDesperate) {
               fleeAtHp = Math.min(fleeAtHp, 4);
               console.error(`[Combat] Food-desperate: capped fleeAtHp DOWN to ${fleeAtHp} for passive hunt (hunger=${combatBot!.food}, no food, HP=${combatBot!.health?.toFixed(1)}).`);
             } else {
-              fleeAtHp = Math.max(fleeAtHp, 14);
-              console.error(`[Combat] Raised fleeAtHp to ${fleeAtHp} for passive hunt near ${nearbyHostiles.length} hostile(s).`);
+              fleeAtHp = Math.max(fleeAtHp, 10);
+              console.error(`[Combat] Set fleeAtHp to ${fleeAtHp} for passive hunt near ${nearbyHostiles.length} hostile(s).`);
             }
           } else {
             hostileWarning = `\n[WARNING] ${nearbyHostiles.length} hostile(s) nearby while hunting ${target}: ${threatList}. Be cautious.`;
