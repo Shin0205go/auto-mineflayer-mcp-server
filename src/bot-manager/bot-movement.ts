@@ -1671,7 +1671,18 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
       console.error(`[Pillar] Out of blocks after ${blocksPlaced} placed`);
       break;
     }
-    await bot.equip(scaffold, "hand");
+    console.error(`[Pillar] Equipping scaffold: ${scaffold.name} x${scaffold.count} (slot ${scaffold.slot})`);
+    try {
+      await bot.equip(scaffold, "hand");
+    } catch (equipErr) {
+      console.error(`[Pillar] equip(${scaffold.name}) failed: ${equipErr} — trying next scaffold block`);
+      // Try to find another scaffold block and equip it
+      const altScaffold = bot.inventory.items().find(i => isScaffoldBlock(i.name) && i.slot !== scaffold.slot);
+      if (altScaffold) {
+        try { await bot.equip(altScaffold, "hand"); } catch { /* ignore */ }
+      }
+    }
+    console.error(`[Pillar] Held after equip: ${bot.heldItem?.name ?? 'null'}`);
 
     // 3. Get block below feet to place against
     // Use the locked pillar column as primary candidate — this is where we've been
@@ -1759,14 +1770,19 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
         await new Promise(r => setTimeout(r, 200));
       }
 
-      // CRITICAL: Look straight down at the block we're standing on BEFORE jumping.
-      // This is the scaffolding technique: look at the block under your feet, jump, place.
-      // By looking down before the jump, we avoid the async lookAt latency during the fall.
+      // Look at the top face of the block we'll place on BEFORE jumping.
+      // We use forceLook:true (synchronous) inside _placeBlockWithOptions rather than
+      // forceLook:'ignore', because modern Minecraft servers (1.19+) validate that the
+      // player's look direction matches the cursor position in the block_place packet.
+      // forceLook:'ignore' caused "No block has been placed" — server rejected because
+      // the bot's look direction (arbitrary) didn't match cursor dy=1.0 (top face).
+      // Bot1 [2026-03-24]: Both _placeBlockWithOptions('ignore') and bot.placeBlock fallback
+      // each waited 5 seconds for a blockUpdate that never came, totaling ~30s per attempt.
       const preJumpBlock = blockBelow!;
+      // Pre-aim at the top-face center of the reference block so the look is approximate
+      // before jumping. The forceLook:true in _placeBlockWithOptions will fine-tune it.
       const lookTarget = preJumpBlock.position.offset(0.5, 1, 0.5);
       await bot.lookAt(lookTarget, true);
-      // Set pitch to look straight down for maximum reliability
-      await bot.look(bot.entity.yaw, -Math.PI / 2, true);
       await new Promise(r => setTimeout(r, 100)); // Brief settle after look
 
       // Save reference block position before jumping
@@ -1775,16 +1791,13 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
       const jumpBaseY = bot.entity.position.y;
       bot.setControlState("jump", true);
 
-      // Wait until we've risen enough (>= 0.5 blocks). Don't wait for peak — place while
-      // still rising gives us more time before we fall past the placement point.
-      // The bot is already looking down, so no lookAt needed during the jump.
+      // Wait until we've risen enough (>= 0.5 blocks).
       let jumpOk = false;
       await new Promise<void>((resolve) => {
         let elapsed = 0;
         const interval = setInterval(() => {
           elapsed += 10;
           const rising = bot.entity.position.y - jumpBaseY;
-          // Place as soon as we've risen enough (while still going up or at peak)
           if (rising >= 0.5) {
             jumpOk = true;
             clearInterval(interval);
@@ -1798,7 +1811,6 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
 
       bot.setControlState("jump", false);
 
-      // Place immediately — no lookAt here, we already looked down before the jump
       if (jumpOk) {
         try {
           // Re-fetch the block at saved position for a fresh reference.
@@ -1823,26 +1835,15 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
           }
           if (!freshBlock) freshBlock = blockBelow;
 
-          // Place on top of block below (this puts block at feet level, lifting us up)
-          // CRITICAL FIX: Use _placeBlockWithOptions with forceLook:'ignore'.
-          // bot.placeBlock() internally calls lookAt() on the reference block face,
-          // which is async and adds ~50-100ms of latency. During that time the bot
-          // falls past the placement point, causing the server to reject the placement.
-          // We already looked straight down before jumping (line 1316), so skip the
-          // redundant lookAt inside placeBlock to place immediately while still airborne.
-          //
-          // FALLBACK: _placeBlockWithOptions is a private/internal mineflayer API that
-          // may not exist on all versions. If it fails or doesn't exist, fall back to
-          // the public placeBlock() API (slower but always works).
-          // Bot1 [2026-03-22]: "Placement failed" repeatedly — _placeBlockWithOptions
-          // may have thrown silently, and the catch didn't try an alternative approach.
-          try {
-            await (bot as any)._placeBlockWithOptions(freshBlock!, new Vec3(0, 1, 0), { forceLook: 'ignore', swingArm: 'right' });
-          } catch (placeErr) {
-            // Fallback to public API — has lookAt latency but works reliably
-            console.error(`[Pillar] _placeBlockWithOptions failed: ${placeErr}, trying placeBlock fallback...`);
-            await bot.placeBlock(freshBlock!, new Vec3(0, 1, 0));
-          }
+          // Place on top of block below using forceLook:true (synchronous look).
+          // forceLook:true makes mineflayer look at the reference face synchronously
+          // (no round-trip wait) before sending the block_place packet. This satisfies
+          // modern server validation that checks look direction matches cursor position.
+          // Bot1 [2026-03-24] Session 54: forceLook:'ignore' caused all placements to
+          // be silently rejected by server — server expected look direction to match
+          // cursor dy=1.0 (top face). Using forceLook:true fixes this.
+          console.error(`[Pillar] Placing on ${freshBlock!.name} at (${freshBlock!.position.x},${freshBlock!.position.y},${freshBlock!.position.z}), held=${bot.heldItem?.name ?? 'null'}`);
+          await (bot as any)._placeBlockWithOptions(freshBlock!, new Vec3(0, 1, 0), { forceLook: true, swingArm: 'right' });
           blocksPlaced++;
           placed = true;
           console.error(`[Pillar] Placed ${blocksPlaced}/${targetHeight} at Y=${currentY}`);
