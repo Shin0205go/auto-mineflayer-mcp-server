@@ -36,7 +36,7 @@ function applySafePathfinderSettings(bot: Bot): void {
   // Previously gated on night/low-HP, but daytime cave routing still killed bots at HP>=10.
   // Bot1/Bot2/Bot3 [2026-03-22]: multiple daytime deaths from canDig cave entry.
   bot.pathfinder.movements.canDig = false;
-  bot.pathfinder.movements.maxDropDown = 1;
+  bot.pathfinder.movements.maxDropDown = 2;
   (bot.pathfinder.movements as any).liquidCost = 10000;
   bot.pathfinder.movements.allowFreeMotion = false;
 }

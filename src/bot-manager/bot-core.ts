@@ -254,7 +254,7 @@ export class BotCore extends EventEmitter {
         movements.allowFreeMotion = false; // SAFETY: Disable everywhere — free motion skips intermediate path nodes, causing bot to walk off cliff edges between waypoints
         movements.allowParkour = false; // DISABLED in all dimensions (prevent gap jumps that can fail → fall damage)
         movements.allowSprinting = true;
-        movements.maxDropDown = 1; // Only 1-block drops (zero fall damage). Bot1 [2026-03-23]: maxDropDown=2 led to cliff-edge routing and fall deaths.
+        movements.maxDropDown = 2; // Allow 2-block drops for natural terrain. maxDropDown=1 was too restrictive — pathfinder couldn't find paths in hilly biomes (birch_forest). Physics fall detector (>3 blocks) catches unsafe falls.
 
         // Don't break blocks that would cause issues
         movements.dontMineUnderFallingBlock = true;
@@ -419,7 +419,7 @@ export class BotCore extends EventEmitter {
             // NETHER SAFETY: Restrict risky movements to prevent lava deaths and cliff falls
             movements.allowFreeMotion = false; // SAFETY: Disable everywhere — prevents cliff falls from skipped path nodes
             movements.allowParkour = false; // DISABLED in all dimensions (prevents fall damage)
-            movements.maxDropDown = 1; // Only 1-block drops everywhere — prevents cliff-edge routing
+            movements.maxDropDown = 2; // Allow 2-block drops for terrain navigation. Physics fall detector catches >2.5 block falls.
 
             bot.pathfinder.setMovements(movements);
             console.error(`[BotManager] Pathfinder updated for ${newDimension}: allowFreeMotion=${movements.allowFreeMotion}, allowParkour=${movements.allowParkour}, maxDropDown=${movements.maxDropDown}`);
@@ -692,7 +692,7 @@ export class BotCore extends EventEmitter {
             try {
               if (bot.pathfinder.movements) {
                 bot.pathfinder.movements.canDig = false;
-                bot.pathfinder.movements.maxDropDown = 1;
+                bot.pathfinder.movements.maxDropDown = 2;
                 (bot.pathfinder.movements as any).liquidCost = 10000;
               }
               creeperGoalHandle = safeSetGoal(bot,
@@ -711,7 +711,7 @@ export class BotCore extends EventEmitter {
               creeperFleeActive = false;
               try {
                 if (bot.pathfinder.movements) {
-                  bot.pathfinder.movements.maxDropDown = 1; // Restore to safe default (1, not 2)
+                  bot.pathfinder.movements.maxDropDown = 2; // Restore to safe default
                   // canDig is intentionally NOT restored — next moveTo handles it
                 }
               } catch { /* bot may be disconnected */ }

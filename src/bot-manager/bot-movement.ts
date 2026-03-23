@@ -811,10 +811,11 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         }
         const totalFall = fallStartY - cy;
 
-        // Stop immediately if cumulative fall exceeds 2.5 blocks (fall damage starts at 4 blocks).
-        // Threshold lowered from 3→2.5 now that maxDropDown=1 (planned drops are at most 1 block).
-        // Catches falls earlier, giving the bot more time to stop before taking damage.
-        if (totalFall > 2.5) {
+        // Stop immediately if cumulative fall exceeds 3 blocks (fall damage starts at 4 blocks).
+        // With maxDropDown=2, planned drops can be up to 2 blocks. Threshold=3 avoids
+        // false positives on planned 2-block drops while catching unsafe 3+ block falls
+        // before fall damage (4 blocks) is reached.
+        if (totalFall > 3) {
           console.error(`[MoveTo] PHYSICS FALL: ${totalFall.toFixed(1)} blocks cumulative (started at Y=${fallStartY.toFixed(1)}, now Y=${cy.toFixed(1)}). Emergency stop!`);
           bot.pathfinder.stop();
           bot.clearControlStates();
@@ -841,16 +842,14 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
     // by mineflayer-pathfinder internals or dimension-change handlers between calls.
     // Setting them here guarantees they are always active for this navigation call.
     if (bot.pathfinder.movements) {
-      // maxDropDown=1: Allow only 1-block drops (zero fall damage).
-      // Previously maxDropDown=2, but pathfinder could chain multiple 2-block drops along
-      // cliff/hill terrain, each within the limit but collectively routing the bot to a cliff edge
-      // where a slight misstep causes a lethal fall. The physics fall detector only catches
-      // continuous falls >3 blocks — it can't prevent the bot from REACHING an unsafe edge.
-      // Bot1 [2026-03-23]: fell from Y=85 during moveTo — pathfinder routed along cliff edge.
-      // Bot3 #4: pathfinder routed to Y=112 then fell during navigation.
-      // maxDropDown=1 is safer: natural 1-block drops are common in all biomes, so navigation
-      // still works on hills. 2-block drops are rare in safe paths and often indicate cliff edges.
-      bot.pathfinder.movements.maxDropDown = 1;
+      // maxDropDown=2: Allow 2-block drops for natural terrain navigation.
+      // maxDropDown=1 was too restrictive — pathfinder couldn't find paths in hilly biomes
+      // (birch_forest, mountains) where 2-block elevation changes are common, causing
+      // bot.moveTo() and bot.gather() to silently fail with no path found.
+      // The physics fall detector (>2.5 blocks cumulative) catches unsafe falls before
+      // fall damage starts (4 blocks). High-route and underground-routing detectors
+      // provide additional safety against cliff-edge routing.
+      bot.pathfinder.movements.maxDropDown = 2;
       bot.pathfinder.movements.allowFreeMotion = false; // Prevent cliff falls from skipped path nodes
       bot.pathfinder.movements.allow1by1towers = true; // Allow pillar up to reach higher terrain
       // Re-apply liquidCost every call — bot-core.ts sets it at init, but pathfinder
@@ -2106,12 +2105,12 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     // the pathfinder couldn't navigate at all because nearly every path involves a 1-block drop.
     // Bot3 #26: fled only 7.2 blocks because maxDropDown=0 blocked all downhill movement.
     // liquidCost=10000 prevents water routing (drowning).
-    const prevMaxDropDown = bot.pathfinder.movements?.maxDropDown ?? 1;
+    const prevMaxDropDown = bot.pathfinder.movements?.maxDropDown ?? 2;
     const prevLiquidCost = (bot.pathfinder.movements as any)?.liquidCost ?? 100;
     const prevAllowSprinting = bot.pathfinder.movements?.allowSprinting ?? true;
     const prevCanDig = bot.pathfinder.movements?.canDig ?? true;
     if (bot.pathfinder.movements) {
-      bot.pathfinder.movements.maxDropDown = 1;
+      bot.pathfinder.movements.maxDropDown = 2;
       (bot.pathfinder.movements as any).liquidCost = 10000;
       // Enable sprinting during flee — this is an emergency escape, speed is critical.
       // Bot3 #26: fled only 7.2 blocks in 8s without sprint. Sprinting doubles speed.
@@ -2271,11 +2270,11 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     currentFleeHandle.cleanup();
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.allowSprinting = prevAllowSprinting;
-      // Restore maxDropDown to safe default (1), NOT the previous value.
+      // Restore maxDropDown to safe default (2), NOT the previous value.
       // prevMaxDropDown could be higher if set by other code or mineflayer defaults,
-      // which would undo the safe limit. moveToBasic always sets maxDropDown=1,
-      // so restoring to 1 matches the expected safe state for subsequent navigation.
-      bot.pathfinder.movements.maxDropDown = 1;
+      // which would undo the safe limit. moveToBasic always sets maxDropDown=2,
+      // so restoring to 2 matches the expected safe state for subsequent navigation.
+      bot.pathfinder.movements.maxDropDown = 2;
       // Keep liquidCost high to prevent water routing (drowning risk).
       // Don't restore prevLiquidCost — it may have been the low default value.
       // moveToBasic always sets liquidCost=10000, so maintain that safe state.
@@ -2402,7 +2401,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
           );
           const retryGoal = new goals.GoalNear(perpTarget.x, perpTarget.y, perpTarget.z, 3);
           if (bot.pathfinder.movements) {
-            bot.pathfinder.movements.maxDropDown = 1;
+            bot.pathfinder.movements.maxDropDown = 2;
             bot.pathfinder.movements.canDig = false;
             (bot.pathfinder.movements as any).liquidCost = 10000;
             bot.pathfinder.movements.allowSprinting = true;
@@ -2530,7 +2529,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       bot.clearControlStates();
       bot.pathfinder.setGoal(null);
       if (bot.pathfinder.movements) {
-        bot.pathfinder.movements.maxDropDown = 1; // restore safe default (1-block max drop)
+        bot.pathfinder.movements.maxDropDown = 2; // restore safe default (2-block max drop)
         (bot.pathfinder.movements as any).liquidCost = 10000; // keep water avoidance
         bot.pathfinder.movements.allowSprinting = true; // restore default
         // Do NOT restore canDig=true — let the next moveTo decide based on time-of-day/HP.

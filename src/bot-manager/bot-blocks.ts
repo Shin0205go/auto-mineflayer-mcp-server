@@ -353,7 +353,7 @@ export async function digBlock(
       .map(block => block.id);
     bot.pathfinder.movements.allowParkour = false; // Disable parkour for more predictable movement
     bot.pathfinder.movements.allowSprinting = false; // Disable sprinting to be more careful
-    bot.pathfinder.movements.maxDropDown = 1; // Allow only 1-block drops (zero fall damage). Previously 2, but chained 2-block drops led to cliff edges.
+    bot.pathfinder.movements.maxDropDown = 2; // Allow 2-block drops for terrain navigation. Physics fall detector catches >3 block falls.
     bot.pathfinder.movements.infiniteLiquidDropdownDistance = false; // SAFETY: don't drop into water from height
 
     // First try: Get close with pathfinder
