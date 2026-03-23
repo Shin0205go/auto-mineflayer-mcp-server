@@ -268,24 +268,43 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         return;
       }
 
-      // SAFETY: Detect prolonged water submersion — abort if head is underwater for too long.
-      // Bot1 Session 44: pathfinder routed through underground water, bot drowned.
-      // liquidCost=10000 discourages water paths but doesn't prevent canDig from opening water caves.
-      // 4 consecutive checks = 2 seconds underwater — enough to confirm it's not a brief crossing.
+      // SAFETY: Detect water contact — abort if bot enters water (head OR feet).
+      // Bot1 Session 39,44: pathfinder routed through water, bot drowned.
+      // Bot1 [2026-03-23]: moveTo(0,72,80) routed bot into water at Y=114, drowned.
+      // liquidCost=10000 discourages water paths but doesn't prevent them when no
+      // land route is found. The pathfinder falls back to water routing silently.
+      //
+      // Two-tier detection:
+      //   Tier 1 (head underwater): 2 consecutive checks (1s) → immediate abort + swim up.
+      //     Reduced from 4 (2s) — at 4 checks the bot has already lost 2-3 air bubbles
+      //     and may be deep enough that swimming up takes longer than remaining air.
+      //   Tier 2 (feet in water, head dry): 3 consecutive checks (1.5s) → abort.
+      //     Catches wading-through-river routing where head stays above water but bot
+      //     is being led through a water body. 3 checks filters brief puddle crossings.
       const headBlock = bot.blockAt(currentPos.offset(0, 1.6, 0).floor());
-      if (headBlock && (headBlock.name === "water" || headBlock.name === "flowing_water")) {
+      const feetBlock = bot.blockAt(currentPos.floor());
+      const headInWater = headBlock && isWaterBlock(headBlock.name);
+      const feetInWater = feetBlock && isWaterBlock(feetBlock.name);
+
+      if (headInWater || feetInWater) {
         underwaterTicks++;
-        if (underwaterTicks >= 4) {
-          console.error(`[MoveTo] DROWNING RISK: Head underwater for ${underwaterTicks} checks at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Aborting navigation.`);
+        const abortThreshold = headInWater ? 2 : 3;
+        if (underwaterTicks >= abortThreshold) {
+          const waterLevel = headInWater ? "head underwater" : "feet in water";
+          console.error(`[MoveTo] DROWNING RISK: ${waterLevel} for ${underwaterTicks} checks at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Aborting navigation.`);
           bot.pathfinder.stop();
           finish({
             success: false,
-            message: `Navigation stopped: underwater at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Drowning risk. Swim up (jump) and navigate on the surface.`,
+            message: `Navigation stopped: ${waterLevel} at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Drowning risk. Use bot.navigate() to find land, or hold jump to swim up.`,
             stuckReason: "underwater"
           });
           // Try to swim up AFTER finish() — finish() clears all control states,
           // so setting jump=true must come after to persist.
-          try { bot.setControlState("jump", true); } catch (_) {}
+          // Auto-clear jump after 5s to prevent infinite jumping on land after escaping water.
+          try {
+            bot.setControlState("jump", true);
+            setTimeout(() => { try { bot.setControlState("jump", false); } catch (_) {} }, 5000);
+          } catch (_) {}
           return;
         }
       } else {
@@ -827,6 +846,19 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       // Bot1 Sessions 31-34,40b,44: 6+ deaths from pathfinder choosing water-level routes.
       (bot.pathfinder.movements as any).liquidCost = 10000;
 
+      // SAFETY: Add water blocks to blocksToAvoid — liquidCost alone is not sufficient.
+      // liquidCost=10000 penalizes water paths in cost calculations, but when the pathfinder
+      // cannot find ANY land route (e.g., river between bot and target), it still uses the
+      // water route as a fallback. blocksToAvoid makes the pathfinder treat water as impassable,
+      // forcing it to fail (and return to the caller) instead of routing through water.
+      // Bot1 [2026-03-23]: moveTo(0,72,80) routed through water at Y=114 despite liquidCost.
+      // The real-time water detector in the 500ms check loop catches it eventually, but
+      // blocksToAvoid prevents the pathfinder from even PLANNING a water route.
+      const waterBlock = bot.registry.blocksByName["water"];
+      const flowingWaterBlock = bot.registry.blocksByName["flowing_water"];
+      if (waterBlock) bot.pathfinder.movements.blocksToAvoid.add(waterBlock.id);
+      if (flowingWaterBlock) bot.pathfinder.movements.blocksToAvoid.add(flowingWaterBlock.id);
+
       // SAFETY: ALWAYS disable canDig to prevent cave routing.
       // Bot1 Sessions 42-44, Bot3 #17,#19: pathfinder with canDig=true digs through terrain,
       // opening cave systems where underground mobs surround the bot.
@@ -1181,8 +1213,45 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     }
   }
 
+  // PRE-CHECK: Detect if destination is in or surrounded by water.
+  // Bot1 [2026-03-23]: moveTo(0,72,80) led bot into water at Y=114 — drowned.
+  // If the destination block or blocks around it are water, warn the agent.
+  // Don't hard-block — the moveToBasic real-time water detector will abort if needed.
+  {
+    let destWaterCount = 0;
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const checkBlock = bot.blockAt(targetPos.offset(dx, dy, dz));
+          if (checkBlock && isWaterBlock(checkBlock.name)) destWaterCount++;
+        }
+      }
+    }
+    if (destWaterCount >= 3) {
+      console.error(`[Move] WARNING: Destination (${x}, ${y}, ${z}) has ${destWaterCount} water blocks nearby. Risk of drowning. moveToBasic will abort if bot enters water.`);
+    }
+  }
+
   // Use pathfinder directly - it handles digging and tower building automatically
   const result = await moveToBasic(managed, x, y, z);
+
+  // POST-MOVE: If aborted due to water, ensure bot swims up and report position.
+  // The moveToBasic water detector sets jump=true, but we also need to wait briefly
+  // for the bot to surface before returning control to the agent.
+  if (!result.success && result.stuckReason === "underwater") {
+    // Wait up to 3 seconds for bot to surface (jump is already held by moveToBasic)
+    for (let i = 0; i < 6; i++) {
+      await delay(500);
+      const surfaceCheck = bot.blockAt(bot.entity.position.offset(0, 1.6, 0).floor());
+      if (!surfaceCheck || !isWaterBlock(surfaceCheck.name)) {
+        // Head is above water — stop jumping
+        try { bot.setControlState("jump", false); } catch (_) {}
+        break;
+      }
+    }
+    const surfacePos = bot.entity.position;
+    return `${result.message} Surfaced at (${surfacePos.x.toFixed(1)}, ${surfacePos.y.toFixed(1)}, ${surfacePos.z.toFixed(1)}).` + getBriefStatus(managed);
+  }
 
   if (result.success) {
     return result.message + getBriefStatus(managed);
@@ -1339,6 +1408,40 @@ export async function emergencyDigUp(managed: ManagedBot, maxBlocks: number = 30
 export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky: boolean = false): Promise<string> {
   const bot = managed.bot;
   const startY = bot.entity.position.y;
+
+  // SAFETY: Detect if bot is currently IN water — pillarUp cannot work in water.
+  // Bot1 Session 38: pillarUp timed out at Y=44 underwater — jump-place doesn't work
+  // in water because the bot floats and can't get stable footing on the placed block.
+  // Instead of silently failing, detect water and attempt emergency swim-up.
+  {
+    const feetPos = bot.entity.position.floor();
+    const feetBlock = bot.blockAt(feetPos);
+    const headBlock = bot.blockAt(bot.entity.position.offset(0, 1, 0).floor());
+    const isInWater = (feetBlock && isWaterBlock(feetBlock.name)) ||
+                      (headBlock && isWaterBlock(headBlock.name));
+    if (isInWater) {
+      console.error(`[Pillar] Bot is IN WATER at (${bot.entity.position.x.toFixed(1)}, ${bot.entity.position.y.toFixed(1)}, ${bot.entity.position.z.toFixed(1)}). PillarUp won't work — attempting emergency swim-up.`);
+      // Hold jump to swim upward for up to 8 seconds
+      bot.setControlState("jump", true);
+      let surfaced = false;
+      for (let i = 0; i < 16; i++) {
+        await delay(500);
+        const checkFeet = bot.blockAt(bot.entity.position.floor());
+        const checkHead = bot.blockAt(bot.entity.position.offset(0, 1, 0).floor());
+        if ((!checkFeet || !isWaterBlock(checkFeet.name)) && (!checkHead || !isWaterBlock(checkHead.name))) {
+          surfaced = true;
+          break;
+        }
+      }
+      bot.setControlState("jump", false);
+      const newPos = bot.entity.position;
+      if (surfaced) {
+        return `Cannot pillarUp in water — swam up instead. Now at (${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}, ${newPos.z.toFixed(1)}) on surface. Retry pillarUp if needed.${getBriefStatus(managed)}`;
+      } else {
+        return `Cannot pillarUp in water. Attempted swim-up but still in water at (${newPos.x.toFixed(1)}, ${newPos.y.toFixed(1)}, ${newPos.z.toFixed(1)}). Try bot.navigate() to find land, or dig sideways to escape water.${getBriefStatus(managed)}`;
+      }
+    }
+  }
 
   // Check if we have scaffolding blocks - dynamically check if block is solid
   // Exclude ores, valuable blocks, and special blocks
