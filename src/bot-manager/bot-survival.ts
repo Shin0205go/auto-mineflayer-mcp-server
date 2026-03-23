@@ -287,6 +287,28 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       })[0];
   }
 
+  // Retry with delay if no target found — entities may still be loading after chunk changes.
+  if (!target && entityName) {
+    console.error(`[Attack] No ${entityName} found on first attempt — waiting 600ms for entity loading...`);
+    await delay(600);
+    // Re-scan entities
+    const retryEntities = Object.values(bot.entities);
+    const retryLower = entityName.toLowerCase();
+    const retryIsHostile = isHostileMob(bot, retryLower);
+    target = retryEntities.find(e => {
+      if (!e || e === bot.entity) return false;
+      const dist = e.position.distanceTo(bot.entity.position);
+      if (dist > 64) return false;
+      const name = (e.name || "").toLowerCase();
+      const displayName = ((e as any).displayName || "").toLowerCase();
+      if (name === retryLower || displayName === retryLower) return true;
+      const substringMatch = name.includes(retryLower) || displayName.includes(retryLower);
+      if (substringMatch && !retryIsHostile && isHostileMob(bot, name)) return false;
+      if (substringMatch && isNeutralMob(name)) return false;
+      return substringMatch;
+    }) || null;
+  }
+
   if (!target) {
     return entityName
       ? `No ${entityName} found within attack range`
@@ -1092,6 +1114,21 @@ export async function fight(
   };
 
   let target = findTarget();
+  // Retry with delay if no target found — entities may still be loading after navigation/chunk changes.
+  // Bot1/Bot2 [2026-03-23]: bot.navigate("cow") succeeded, then bot.combat("cow") returned
+  // "No cow found nearby" instantly. The cow entity was not yet in bot.entities because
+  // chunk entity loading has a 1-2 tick delay after pathfinder arrives at destination.
+  if (!target && entityName) {
+    console.error(`[Fight] No ${entityName} found on first attempt — waiting 600ms for entity loading...`);
+    await delay(600);
+    target = findTarget();
+    if (!target) {
+      // Second retry with wider entity scan — mob may have wandered during navigation
+      console.error(`[Fight] Still no ${entityName} after retry. Scanning loaded entities...`);
+      await delay(400);
+      target = findTarget();
+    }
+  }
   if (!target) {
     return entityName
       ? `No ${entityName} found nearby`
@@ -1099,12 +1136,97 @@ export async function fight(
   }
 
   const targetName = target.name || "entity";
-  const targetId = target.id;
+  let targetId = target.id;
   let attackCount = 0;
   const maxAttacks = 30; // Safety limit
   let lastKnownFightPos = target.position.clone();
 
-  console.error(`[BotManager] Starting fight with ${targetName}`);
+  console.error(`[BotManager] Starting fight with ${targetName} at ${target.position.distanceTo(bot.entity.position).toFixed(1)} blocks`);
+
+  // Passive mob chase phase: navigate closer before entering combat loop.
+  // Passive mobs (cow, pig, sheep, etc.) wander at ~1-2 blocks/s. The combat loop's
+  // 1.6s approach ticks are too short to close distance on a moving passive mob at 10+ blocks.
+  // Bot1/Bot2 [2026-03-23]: combat("cow") timed out because approach iterations couldn't
+  // close the gap on a wandering cow. Use proper pathfinder navigation (up to 10s) to get
+  // within 8 blocks before entering the melee combat loop.
+  // Only for passive/food animals — hostile mobs should use the existing cautious approach.
+  {
+    const chaseDistance = target.position.distanceTo(bot.entity.position);
+    const CHASE_PASSIVE_MOBS = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey",
+      "mule", "mooshroom", "llama", "goat", "salmon", "cod", "squid", "turtle", "fox"];
+    const isPassiveChase = entityName && CHASE_PASSIVE_MOBS.some(a => entityName.toLowerCase().includes(a));
+    if (isPassiveChase && chaseDistance > 8) {
+      console.error(`[Fight] Passive mob ${targetName} at ${chaseDistance.toFixed(1)} blocks — chasing with pathfinder (up to 10s)...`);
+      applySafePathfinderSettings(bot);
+      bot.pathfinder.movements.allowSprinting = true;
+      bot.setControlState("sprint", true);
+      const chaseGoal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 4);
+      const chaseHandle = safeSetGoal(bot, chaseGoal, {
+        intervalMs: 200,
+        onAbort: (yDescent) => {
+          console.error(`[Fight] CAVE DESCENT during passive chase: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
+        }
+      });
+      const chaseStart = Date.now();
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => { chaseHandle.cleanup(); bot.pathfinder.setGoal(null); bot.setControlState("sprint", false); resolve(); }, 10000);
+        const check = setInterval(() => {
+          if (chaseHandle.aborted) {
+            clearInterval(check); clearTimeout(timeout); bot.setControlState("sprint", false); resolve();
+            return;
+          }
+          // Re-find the target (it moves) and update goal
+          const curTarget = Object.values(bot.entities).find(e => e.id === targetId);
+          if (!curTarget) {
+            // Target disappeared — try to re-find by name
+            const refound = findTarget();
+            if (refound) {
+              targetId = refound.id;
+              target = refound;
+              bot.pathfinder.setGoal(new goals.GoalNear(refound.position.x, refound.position.y, refound.position.z, 4));
+            } else {
+              clearInterval(check); clearTimeout(timeout); chaseHandle.cleanup(); bot.pathfinder.setGoal(null); bot.setControlState("sprint", false); resolve();
+              return;
+            }
+          } else {
+            const curDist = curTarget.position.distanceTo(bot.entity.position);
+            if (curDist <= 6) {
+              clearInterval(check); clearTimeout(timeout); chaseHandle.cleanup(); bot.pathfinder.setGoal(null); bot.setControlState("sprint", false); resolve();
+              return;
+            }
+            // Update goal to track moving mob (every 1s)
+            if ((Date.now() - chaseStart) % 1000 < 200) {
+              bot.pathfinder.setGoal(new goals.GoalNear(curTarget.position.x, curTarget.position.y, curTarget.position.z, 4));
+            }
+            target = curTarget;
+          }
+          // HP safety during chase
+          const chaseHp = bot.health ?? 20;
+          const chaseFleeThreshold = isFoodDesperateFight ? 2 : fleeHealthThreshold;
+          if (chaseHp <= chaseFleeThreshold) {
+            console.error(`[Fight] HP dropped to ${chaseHp.toFixed(1)} during passive chase. Aborting.`);
+            clearInterval(check); clearTimeout(timeout); chaseHandle.cleanup(); bot.pathfinder.setGoal(null); bot.setControlState("sprint", false); resolve();
+          }
+        }, 200);
+      });
+      // Re-find target after chase
+      target = Object.values(bot.entities).find(e => e.id === targetId) || findTarget();
+      if (target) {
+        targetId = target.id;
+        lastKnownFightPos = target.position.clone();
+        console.error(`[Fight] After chase: ${targetName} now at ${target.position.distanceTo(bot.entity.position).toFixed(1)} blocks`);
+      } else {
+        return `No ${entityName || targetName} found after chase — target moved out of range` + getBriefStatus(bot);
+      }
+    }
+  }
+
+  // Null safety: target should always be non-null here, but TypeScript needs assurance
+  if (!target) {
+    return entityName
+      ? `No ${entityName} found nearby`
+      : "No hostile mobs nearby";
+  }
 
   // SAFETY: Cliff-edge check before combat — knockback from melee or ranged mobs can
   // push bot off cliff edges, causing fatal fall damage regardless of HP.
@@ -1572,7 +1694,10 @@ export async function fight(
       // Sprint toward ranged mobs to close distance faster — they back away and deal
       // continuous damage during approach. Bot1 [2026-03-22]: skeleton approach stall
       // at 10-15 blocks because bot walked while skeleton retreated at similar speed.
-      if (isRangedTarget && !isBlaze) {
+      // Also sprint toward passive mobs — they wander at ~1-2 blocks/s, walking can't close gap.
+      // Bot1/Bot2 [2026-03-23]: combat("cow") failed to close distance because bot walked.
+      const isPassiveApproachSprint = isFoodAnimalTarget || (entityName && !isHostileMob(bot, entityName.toLowerCase()));
+      if ((isRangedTarget && !isBlaze) || isPassiveApproachSprint) {
         bot.pathfinder.movements.allowSprinting = true;
         bot.setControlState("sprint", true);
       }
@@ -1587,11 +1712,22 @@ export async function fight(
       );
       {
         const approachHpStart = bot.health ?? 20;
-        for (let tick = 0; tick < 8; tick++) { // 8 * 200ms = 1.6s max
+        // Passive mobs (cow, pig, etc.) get longer approach (4s) — they wander away and don't
+        // fight back, so the bot needs more time to close the gap. Hostile/ranged mobs keep 1.6s
+        // because the bot takes damage during approach and must re-check safety frequently.
+        // Bot1/Bot2 [2026-03-23]: combat("cow") approach loop only ran 1.6s per iteration,
+        // insufficient to close on a wandering cow. Bot chased for 60s without ever attacking.
+        const isPassiveApproach = isFoodAnimalTarget || (entityName && !isHostileMob(bot, entityName.toLowerCase()));
+        const approachTicks = isPassiveApproach ? 20 : 8; // 4s vs 1.6s
+        for (let tick = 0; tick < approachTicks; tick++) { // passive: 20*200ms=4s, hostile: 8*200ms=1.6s
           await delay(200);
           if (fightApproachHandle.aborted) break;
           const curTarget = Object.values(bot.entities).find(e => e.id === targetId);
           if (!curTarget) break;
+          // Update pathfinder goal to track moving passive mob
+          if (isPassiveApproach && tick % 5 === 4) {
+            bot.pathfinder.setGoal(new goals.GoalNear(curTarget.position.x, curTarget.position.y, curTarget.position.z, 2));
+          }
           const curDist = curTarget.position.distanceTo(bot.entity.position);
           if (curDist <= attackRange) break;
           const approachHpNow = bot.health ?? 20;
@@ -1603,7 +1739,7 @@ export async function fight(
       }
       fightApproachHandle.cleanup();
       // Clean up sprint state after approach completes
-      if (isRangedTarget && !isBlaze) {
+      if ((isRangedTarget && !isBlaze) || isPassiveApproachSprint) {
         bot.setControlState("sprint", false);
       }
       continue;
