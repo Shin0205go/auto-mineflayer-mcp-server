@@ -234,15 +234,23 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
         // lower Y cause pathfinder to route underground instead of around.
         if (bot.pathfinder.movements) {
           bot.pathfinder.movements.canDig = false;
-          bot.pathfinder.movements.maxDropDown = 2;
+          // maxDropDown=3 for item collection: items can fall 1-2 blocks from kill position
+          // (mob killed on slope, items roll into depression). maxDropDown=2 was too restrictive
+          // and caused pathfinder to fail reaching items at slightly lower elevations.
+          // Still safe: 3-block drops are survivable (no fall damage under 4 blocks).
+          bot.pathfinder.movements.maxDropDown = 3;
           (bot.pathfinder.movements as any).liquidCost = 10000;
           bot.pathfinder.movements.allowFreeMotion = false;
         }
+        // Use Math.ceil for Y: items float at fractional Y (e.g., 107.125 above grass at Y=107).
+        // Math.round(107.125)=107 which is INSIDE the ground block — pathfinder can't route there.
+        // Math.ceil(107.125)=108 which is the surface level where the bot can stand and auto-pickup.
+        // For items at Y=107.8, Math.ceil=108 is still correct (bot stands on block 107, feet at 108).
         const goal = new goals.GoalNear(
           Math.round(itemPos.x),
-          Math.round(itemPos.y),
+          Math.ceil(itemPos.y),
           Math.round(itemPos.z),
-          1
+          2
         );
         bot.pathfinder.setGoal(goal);
 

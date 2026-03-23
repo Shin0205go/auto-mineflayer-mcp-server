@@ -773,6 +773,10 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         if (distToLastPos > 3) {
           console.error(`[Attack] Target died ${distToLastPos.toFixed(1)} blocks away, moving to last known pos to collect drops`);
           applySafePathfinderSettings(bot);
+          // Relax maxDropDown for item collection: drops can land 1-2 blocks below kill position.
+          if (bot.pathfinder.movements) {
+            bot.pathfinder.movements.maxDropDown = 3;
+          }
           const collectGoal = new goals.GoalNear(lastKnownTargetPos.x, lastKnownTargetPos.y, lastKnownTargetPos.z, 2);
           const collectHandle = safeSetGoal(bot, collectGoal, {
             onAbort: (yDescent) => {
@@ -1572,6 +1576,12 @@ export async function fight(
       if (distToLast > 3) {
         console.error(`[Fight] Target died ${distToLast.toFixed(1)} blocks away, moving to collect drops (timeout: ${collectMoveTimeout}ms)`);
         applySafePathfinderSettings(bot);
+        // Relax maxDropDown for item collection: drops can land 1-2 blocks below kill position
+        // (mob killed on slope, items fall into depression). maxDropDown=2 from applySafePathfinderSettings
+        // prevents reaching items at slightly lower elevations. 3 is safe (no fall damage under 4 blocks).
+        if (bot.pathfinder.movements) {
+          bot.pathfinder.movements.maxDropDown = 3;
+        }
         const collectGoal = new goals.GoalNear(lastKnownFightPos.x, lastKnownFightPos.y, lastKnownFightPos.z, 2);
         // Use safeSetGoal to prevent cave descent during item collection navigation.
         // Raw setGoal allowed the bot to descend into caves when collecting drops from
