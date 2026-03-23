@@ -808,9 +808,8 @@ export async function mc_farm(): Promise<string> {
   // Scan in a 5-block radius at ground level for tillable blocks
   const TILLABLE = new Set(["dirt", "grass_block", "coarse_dirt", "rooted_dirt", "farmland"]);
   const farmCoords: Array<{ x: number; y: number; z: number }> = [];
-  // Plant as many seeds as we have (up to what fits in the farm area).
-  // Previously capped at 4, which wasted seeds when the bot had 40+.
-  const seedCount = Math.min(seeds.count, 16);
+  // No artificial cap — plant as many seeds as we have tillable blocks for.
+  const seedCount = seeds.count;
 
   // Search a 9x9 area around the bot for dirt blocks on the surface
   outer:
