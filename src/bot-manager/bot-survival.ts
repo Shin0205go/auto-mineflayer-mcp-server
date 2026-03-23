@@ -967,6 +967,7 @@ export async function fight(
   fleeHealthThreshold: number = 12
 ): Promise<string> {
   const bot = managed.bot;
+  const fightFuncStartTime = Date.now();
 
   // Multi-hostile escalation: count nearby hostiles and raise flee threshold.
   // attack() already has this (line ~654), but fight() was missing it.
@@ -1142,6 +1143,8 @@ export async function fight(
     }
   }
   if (!target) {
+    const elapsed = ((Date.now() - fightFuncStartTime) / 1000).toFixed(1);
+    console.error(`[Fight] RESULT: No target found (${elapsed}s)`);
     return entityName
       ? `No ${entityName} found nearby`
       : "No hostile mobs nearby";
@@ -1167,12 +1170,17 @@ export async function fight(
     const CHASE_PASSIVE_MOBS = ["cow", "pig", "chicken", "sheep", "rabbit", "horse", "donkey",
       "mule", "mooshroom", "llama", "goat", "salmon", "cod", "squid", "turtle", "fox"];
     const isPassiveChase = entityName && CHASE_PASSIVE_MOBS.some(a => entityName.toLowerCase().includes(a));
-    if (isPassiveChase && chaseDistance > 8) {
+    // CRITICAL FIX [2026-03-23]: Lowered chase threshold from 8 to 4 blocks.
+    // At 5-8 blocks, the combat loop's approach phase (4s ticks) often couldn't close
+    // the gap on wandering passive mobs before they moved again. The chase phase uses
+    // proper pathfinder navigation (up to 10s) which reliably closes distance.
+    // Bot1/Bot2/Bot3: combat("cow") at 5-8 blocks entered approach-retreat cycle.
+    if (isPassiveChase && chaseDistance > 4) {
       console.error(`[Fight] Passive mob ${targetName} at ${chaseDistance.toFixed(1)} blocks — chasing with pathfinder (up to 10s)...`);
       applySafePathfinderSettings(bot);
       bot.pathfinder.movements.allowSprinting = true;
       bot.setControlState("sprint", true);
-      const chaseGoal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 4);
+      const chaseGoal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2);
       const chaseHandle = safeSetGoal(bot, chaseGoal, {
         intervalMs: 200,
         onAbort: (yDescent) => {
@@ -1195,20 +1203,21 @@ export async function fight(
             if (refound) {
               targetId = refound.id;
               target = refound;
-              bot.pathfinder.setGoal(new goals.GoalNear(refound.position.x, refound.position.y, refound.position.z, 4));
+              bot.pathfinder.setGoal(new goals.GoalNear(refound.position.x, refound.position.y, refound.position.z, 2));
             } else {
               clearInterval(check); clearTimeout(timeout); chaseHandle.cleanup(); bot.pathfinder.setGoal(null); bot.setControlState("sprint", false); resolve();
               return;
             }
           } else {
             const curDist = curTarget.position.distanceTo(bot.entity.position);
-            if (curDist <= 6) {
+            // Chase exits at 3.5 blocks (attack range) — guarantees immediate attack on next loop
+            if (curDist <= 3.5) {
               clearInterval(check); clearTimeout(timeout); chaseHandle.cleanup(); bot.pathfinder.setGoal(null); bot.setControlState("sprint", false); resolve();
               return;
             }
             // Update goal to track moving mob (every 1s)
             if ((Date.now() - chaseStart) % 1000 < 200) {
-              bot.pathfinder.setGoal(new goals.GoalNear(curTarget.position.x, curTarget.position.y, curTarget.position.z, 4));
+              bot.pathfinder.setGoal(new goals.GoalNear(curTarget.position.x, curTarget.position.y, curTarget.position.z, 2));
             }
             target = curTarget;
           }
@@ -1550,7 +1559,8 @@ export async function fight(
           lastKnownFightPos = refound.position.clone();
           continue; // restart combat loop with new target
         }
-        console.error(`[Fight] ${targetName} disappeared without any attacks landing — entity likely went out of render distance.`);
+        const disappearedElapsed = ((Date.now() - fightFuncStartTime) / 1000).toFixed(1);
+        console.error(`[Fight] RESULT(${disappearedElapsed}s): ${targetName} disappeared without any attacks landing — entity likely went out of render distance.`);
         return `${targetName} disappeared before any attack landed (wandered out of range or chunk unloaded). No items to collect. Try moving closer to ${entityName || "mobs"} first, or use bot.navigate("${entityName || targetName}") to find another.` + getBriefStatus(bot);
       }
       // Auto-collect dropped items after kill — with safety checks.
@@ -1712,6 +1722,8 @@ export async function fight(
         }
       }
 
+      const defeatedElapsed = ((Date.now() - fightFuncStartTime) / 1000).toFixed(1);
+      console.error(`[Fight] RESULT(${defeatedElapsed}s): ${targetName} defeated! Attacked ${attackCount} times. Items: ${collectionResult}`);
       return `${targetName} defeated! Attacked ${attackCount} times. Items: ${collectionResult}` + getBriefStatus(bot);
     }
     // Track last known position (important for teleporting mobs like endermen)
@@ -1829,7 +1841,43 @@ export async function fight(
       if ((isRangedTarget && !isBlaze) || isPassiveApproachSprint) {
         bot.setControlState("sprint", false);
       }
-      console.error(`[Fight] Approach phase complete, continuing loop. Target id=${targetId}, current distance=${target ? target.position.distanceTo(bot.entity.position).toFixed(1) : "unknown"}`);
+
+      // CRITICAL FIX [2026-03-23]: After approach, immediately attempt attack if within range.
+      // Previously, `continue;` restarted the loop which re-ran ALL safety checks (300-500ms).
+      // During that gap, passive mobs (cow/pig/sheep) walk out of attack range (~2 blocks/s),
+      // creating an infinite approach-retreat cycle where the bot never lands a hit.
+      // Bot1/Bot2/Bot3: combat("cow") completed with 0 attacks because approach got within
+      // 3.5 blocks, then `continue` + safety checks took 400ms, cow moved to 4.5 blocks,
+      // approach again, repeat until timeout or entity disappeared.
+      // Now: after approach, re-check target and distance, attack immediately if in range.
+      {
+        const postApproachTarget = Object.values(bot.entities).find(e => e.id === targetId) || null;
+        if (postApproachTarget) {
+          const postApproachDist = postApproachTarget.position.distanceTo(bot.entity.position);
+          console.error(`[Fight] Approach phase complete. Target id=${targetId}, distance=${postApproachDist.toFixed(1)}`);
+          if (postApproachDist <= attackRange) {
+            // Within range — attack immediately without restarting the loop
+            try {
+              bot.pathfinder.setGoal(null);
+              await bot.lookAt(postApproachTarget.position.offset(0, postApproachTarget.height * 0.8, 0));
+              bot.attack(postApproachTarget);
+              attackCount++;
+              approachStallCount = 0;
+              lastApproachDist = postApproachDist;
+              lastKnownFightPos = postApproachTarget.position.clone();
+              console.error(`[BotManager] Hit ${targetName} (#${attackCount}) at dist=${postApproachDist.toFixed(1)} [post-approach immediate]`);
+              await delay(650);
+            } catch (err) {
+              console.error(`[BotManager] Post-approach attack error: ${err}`);
+            }
+            continue; // Continue loop for next attack cycle
+          } else {
+            console.error(`[Fight] Post-approach: target still at ${postApproachDist.toFixed(1)} blocks (> ${attackRange}), re-approaching`);
+          }
+        } else {
+          console.error(`[Fight] Post-approach: target id=${targetId} disappeared during approach`);
+        }
+      }
       continue;
     }
     // Reset approach stall when within attack range
