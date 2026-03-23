@@ -903,6 +903,26 @@ export async function mc_farm(): Promise<string> {
         }
       }
       if (farWater) {
+        // SAFETY: Check for drowned mobs near the water target before navigating.
+        // Bot1 [2026-03-24]: drowned at (2,72,5) killed bot during mc_farm water navigation (Sessions 52-53).
+        // Drowned spawn in/near water and attack immediately when the bot approaches the water source.
+        {
+          const farWaterPos = farWater.position;
+          const drownedNearWater = Object.values(bot.entities).filter((e: any) => {
+            if (e.type !== 'mob' || e.name !== 'drowned') return false;
+            const dx = e.position.x - farWaterPos.x;
+            const dy = e.position.y - farWaterPos.y;
+            const dz = e.position.z - farWaterPos.z;
+            const distToWater = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            return distToWater < 30;
+          });
+          if (drownedNearWater.length > 0) {
+            logs.push(`[WARNING] Drowned mob(s) detected near water at (${farWaterPos.x}, ${farWaterPos.y}, ${farWaterPos.z}) — skipping this water source to avoid death. ${drownedNearWater.length} drowned within 30 blocks.`);
+            farWater = null;
+          }
+        }
+      }
+      if (farWater) {
         logs.push(`Found water at (${farWater.position.x}, ${farWater.position.y}, ${farWater.position.z}), moving close...`);
         try {
           // Navigate to a LAND block adjacent to water, NOT into the water itself (prevents drowning)
@@ -966,6 +986,25 @@ export async function mc_farm(): Promise<string> {
             logs.push(`[ABORTED] Bot descended ${(botFarmY - postMoveY).toFixed(0)} blocks (Y=${botFarmY.toFixed(0)}→${postMoveY.toFixed(0)}) during navigation to water — likely underground.`);
             const finalBot = botManager.getBot(username);
             return logs.join("\n") + `\nmc_farm aborted: bot fell underground during water navigation (Y=${botFarmY.toFixed(0)}→${postMoveY.toFixed(0)}). HP: ${finalBot?.health ?? '?'}. Use minecraft_pillar_up or mc_navigate to return to surface.`;
+          }
+          // HOSTILE-NEAR-WATER ABORT: After navigation, check for any hostile mobs within 20 blocks.
+          // Bot1 [2026-03-24]: drowned attacked immediately after arriving at water (Sessions 52-53).
+          // Even if no drowned was visible before nav started, one may have spawned during travel.
+          {
+            const postNavBot = botManager.getBot(username);
+            const hostileNearWater = postNavBot ? Object.values(postNavBot.entities).filter((e: any) => {
+              if (e.type !== 'mob') return false;
+              const hostileNames = ['drowned', 'zombie', 'skeleton', 'creeper', 'spider', 'witch', 'pillager', 'phantom', 'slime', 'magma_cube', 'blaze', 'ghast', 'enderman', 'husk', 'stray', 'drowned'];
+              if (!hostileNames.includes(e.name)) return false;
+              const distToBot = e.position.distanceTo(postNavBot.entity.position);
+              return distToBot < 20;
+            }) : [];
+            if (hostileNearWater.length > 0) {
+              const hostileNames = hostileNearWater.map((e: any) => `${e.name}@${e.position.distanceTo(postNavBot!.entity.position).toFixed(0)}m`).join(', ');
+              logs.push(`[ABORTED] Hostile mob(s) detected within 20 blocks after reaching water: ${hostileNames}. Aborting to avoid death.`);
+              const finalBot = botManager.getBot(username);
+              return logs.join("\n") + `\nmc_farm aborted: hostile mobs near water source (${hostileNames}). Flee and wait for daytime or clear threats before farming near water. HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}.`;
+            }
           }
           // POST-WATER-NAVIGATION SAFETY: Re-check HP and hostiles after reaching water.
           // Navigation to water can take 10-30s during which the bot may take damage from
