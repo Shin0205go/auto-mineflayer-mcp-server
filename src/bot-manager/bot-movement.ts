@@ -314,13 +314,16 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       // SAFETY: Track maximum height reached during pathfinding
       // If bot goes much higher than start or target, pathfinder may be taking unsafe route.
       // Bot3 Death #4: pathfinder routed to Y=112 when going from Y=9 to Y=64, then fell.
-      // Abort if bot climbs more than 15 blocks above BOTH start and target — this means
+      // Bot1 [2026-03-23]: fell from Y=85 during moveTo — pathfinder took an elevated route.
+      // Abort if bot climbs more than 10 blocks above BOTH start and target — this means
       // the pathfinder is taking a dangerous high-altitude route that risks a lethal fall.
+      // Reduced from 15 to 10: 15 blocks was too generous — by the time the bot is 15 blocks
+      // above target, a fall is almost certainly lethal (fall damage starts at 4 blocks).
       if (currentPos.y > maxHeightReached) {
         maxHeightReached = currentPos.y;
         const heightAboveStart = currentPos.y - start.y;
         const heightAboveTarget = currentPos.y - y;
-        if (heightAboveStart > 15 && heightAboveTarget > 15) {
+        if (heightAboveStart > 10 && heightAboveTarget > 10) {
           console.error(`[MoveTo] DANGEROUS HIGH ROUTE: Bot climbed ${heightAboveStart.toFixed(1)} blocks above start and ${heightAboveTarget.toFixed(1)} above target (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}, target Y=${y.toFixed(1)}). Aborting to prevent fall death.`);
           finish({
             success: false,
@@ -329,7 +332,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
           });
           return;
         }
-        if (heightAboveStart > 8) {
+        if (heightAboveStart > 6) {
           console.error(`[MoveTo] WARNING: Bot climbing too high (${heightAboveStart.toFixed(1)} blocks above start). May take dangerous falling route.`);
         }
       }
@@ -808,9 +811,10 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         }
         const totalFall = fallStartY - cy;
 
-        // Stop immediately if cumulative fall exceeds 3 blocks (fall damage starts at 4 blocks).
-        // Threshold raised from 2→3 to avoid false-positives on planned 2-block drops (maxDropDown=2).
-        if (totalFall > 3) {
+        // Stop immediately if cumulative fall exceeds 2.5 blocks (fall damage starts at 4 blocks).
+        // Threshold lowered from 3→2.5 now that maxDropDown=1 (planned drops are at most 1 block).
+        // Catches falls earlier, giving the bot more time to stop before taking damage.
+        if (totalFall > 2.5) {
           console.error(`[MoveTo] PHYSICS FALL: ${totalFall.toFixed(1)} blocks cumulative (started at Y=${fallStartY.toFixed(1)}, now Y=${cy.toFixed(1)}). Emergency stop!`);
           bot.pathfinder.stop();
           bot.clearControlStates();
@@ -837,7 +841,16 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
     // by mineflayer-pathfinder internals or dimension-change handlers between calls.
     // Setting them here guarantees they are always active for this navigation call.
     if (bot.pathfinder.movements) {
-      bot.pathfinder.movements.maxDropDown = 2; // Allow 2-block drops for rugged terrain (physics fall detector catches >3)
+      // maxDropDown=1: Allow only 1-block drops (zero fall damage).
+      // Previously maxDropDown=2, but pathfinder could chain multiple 2-block drops along
+      // cliff/hill terrain, each within the limit but collectively routing the bot to a cliff edge
+      // where a slight misstep causes a lethal fall. The physics fall detector only catches
+      // continuous falls >3 blocks — it can't prevent the bot from REACHING an unsafe edge.
+      // Bot1 [2026-03-23]: fell from Y=85 during moveTo — pathfinder routed along cliff edge.
+      // Bot3 #4: pathfinder routed to Y=112 then fell during navigation.
+      // maxDropDown=1 is safer: natural 1-block drops are common in all biomes, so navigation
+      // still works on hills. 2-block drops are rare in safe paths and often indicate cliff edges.
+      bot.pathfinder.movements.maxDropDown = 1;
       bot.pathfinder.movements.allowFreeMotion = false; // Prevent cliff falls from skipped path nodes
       bot.pathfinder.movements.allow1by1towers = true; // Allow pillar up to reach higher terrain
       // Re-apply liquidCost every call — bot-core.ts sets it at init, but pathfinder
@@ -2116,11 +2129,13 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       bot.setControlState("sprint", true);
     }
 
-    // Scale timeout with requested distance. Base 10s + 0.4s per block beyond 20.
+    // Scale timeout with requested distance. Base 10s + 0.5s per block beyond 20.
     // Bot3 #26: 8s timeout was too short for 30-50 block flee on rough terrain.
-    // Cap raised to 30s: even with maxDropDown=1 (improved from 0), pathfinder still
-    // takes longer on hilly terrain with direction retries. 20s was insufficient.
-    const fleeTimeoutMs = Math.min(Math.max(10000, 10000 + (distance - 20) * 400), 30000);
+    // Cap raised to 45s: with maxDropDown=1 on hilly terrain (birch_forest, mountains),
+    // pathfinder needs extra time for direction retries and constrained routing.
+    // Bot2 [2026-03-23]: flee(60) only moved 12-20m from Pillager — 30s cap was too short
+    // for the pathfinder to navigate complex terrain with multiple retries.
+    const fleeTimeoutMs = Math.min(Math.max(10000, 10000 + (distance - 20) * 500), 45000);
 
     // Wait for movement with proper completion check
     await new Promise<void>((resolve) => {
@@ -2237,13 +2252,11 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     currentFleeHandle.cleanup();
     if (bot.pathfinder.movements) {
       bot.pathfinder.movements.allowSprinting = prevAllowSprinting;
-      // Restore maxDropDown to safe default (2), NOT the previous value.
-      // prevMaxDropDown could be higher than 2 if set by other code or mineflayer defaults,
-      // which would undo the safe limit. moveToBasic always sets maxDropDown=2 (line 595),
-      // so restoring to 2 matches the expected safe state for subsequent navigation.
-      // The flee itself uses maxDropDown=1 (extra cautious); after flee, 2 is safe for
-      // normal pathfinding while still preventing lethal 3+ block falls.
-      bot.pathfinder.movements.maxDropDown = 2;
+      // Restore maxDropDown to safe default (1), NOT the previous value.
+      // prevMaxDropDown could be higher if set by other code or mineflayer defaults,
+      // which would undo the safe limit. moveToBasic always sets maxDropDown=1,
+      // so restoring to 1 matches the expected safe state for subsequent navigation.
+      bot.pathfinder.movements.maxDropDown = 1;
       // Keep liquidCost high to prevent water routing (drowning risk).
       // Don't restore prevLiquidCost — it may have been the low default value.
       // moveToBasic always sets liquidCost=10000, so maintain that safe state.
@@ -2416,7 +2429,26 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
         console.error(`[Flee] WARNING: Only fled ${distMoved.toFixed(1)} blocks (requested ${distance}). Terrain may be very constrained.`);
         fleeFailWarning = ` [WARNING] Only fled ${distMoved.toFixed(0)}/${distance} blocks. Terrain is constrained. Try: dig shelter, minecraft_pillar_up, or mc_navigate to specific coordinates.`;
       }
-      return `Fled from ${fleeFromName}! Now ${newDist.toFixed(1)} blocks away (was ${initialHostileDist.toFixed(1)}). Moved ${distMoved.toFixed(1)} blocks. HP: ${(bot.health ?? 0).toFixed(1)}/20` + fleeFailWarning + caveWarning;
+
+      // RANGED MOB WARNING: Pillagers, skeletons, strays can attack from 15+ blocks.
+      // Even after a "successful" flee, the bot may still be in attack range of ranged mobs.
+      // Bot2 [2026-03-23]: flee(40/50/60) against Pillager — distance stayed 12-20m,
+      // Pillager continuously shot bot during and after each flee. Bot died at HP 2.7.
+      // Warn the agent to use pillarUp or shelter instead of repeated flee against ranged mobs.
+      const RANGED_MOB_NAMES = ["skeleton", "stray", "pillager", "drowned", "witch", "blaze"];
+      let rangedWarning = "";
+      if (newDist < 20) {
+        const rangedNearby = allHostiles.filter(h =>
+          RANGED_MOB_NAMES.includes(h.name.toLowerCase()) && h.dist < 20
+        );
+        if (rangedNearby.length > 0) {
+          const rangedList = rangedNearby.map(h => `${h.name}(${bot.entity.position.distanceTo(h.entity.position).toFixed(0)}m)`).join(", ");
+          rangedWarning = ` [URGENT] Ranged mob(s) still in attack range: ${rangedList}. Flee is ineffective against ranged mobs — they shoot while chasing. Use bot.pillarUp(4) to block line-of-sight, or dig 1x1x2 shelter hole immediately.`;
+          console.error(`[Flee] RANGED MOB WARNING: ${rangedList} still within attack range after flee.`);
+        }
+      }
+
+      return `Fled from ${fleeFromName}! Now ${newDist.toFixed(1)} blocks away (was ${initialHostileDist.toFixed(1)}). Moved ${distMoved.toFixed(1)} blocks. HP: ${(bot.health ?? 0).toFixed(1)}/20` + fleeFailWarning + rangedWarning + caveWarning;
     }
     // Warn when flee barely moved or didn't move at all — even without a known hostile.
     // Bot2 [2026-03-23]: flee(32) returned with 0 distance moved and no explanation.
@@ -2479,7 +2511,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       bot.clearControlStates();
       bot.pathfinder.setGoal(null);
       if (bot.pathfinder.movements) {
-        bot.pathfinder.movements.maxDropDown = 2; // restore safe default (2-block max drop, physics fall detector catches >3)
+        bot.pathfinder.movements.maxDropDown = 1; // restore safe default (1-block max drop)
         (bot.pathfinder.movements as any).liquidCost = 10000; // keep water avoidance
         bot.pathfinder.movements.allowSprinting = true; // restore default
         // Do NOT restore canDig=true — let the next moveTo decide based on time-of-day/HP.

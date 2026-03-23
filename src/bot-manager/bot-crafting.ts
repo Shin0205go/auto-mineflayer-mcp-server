@@ -16,7 +16,7 @@ import type { Bot } from "mineflayer";
 function applySafeCraftingPathfinder(bot: Bot): void {
   if (!bot.pathfinder.movements) return;
   bot.pathfinder.movements.canDig = false;
-  bot.pathfinder.movements.maxDropDown = 2;
+  bot.pathfinder.movements.maxDropDown = 1;
   (bot.pathfinder.movements as any).liquidCost = 10000;
 }
 
