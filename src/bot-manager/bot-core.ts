@@ -4,7 +4,7 @@ import { EventEmitter } from "events";
 import pkg from "mineflayer-pathfinder";
 const { pathfinder, Movements, goals } = pkg;
 import type { BotConfig, ManagedBot, GameEvent } from "./types.js";
-import { isHostileMob, isPassiveMob, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
+import { isHostileMob, isPassiveMob, isWaterBlock, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
 import { equipArmor } from "./bot-items.js";
 import { safeSetGoal } from "./pathfinder-safety.js";
 import { lastSleepTick } from "./bot-survival.js";
@@ -442,12 +442,21 @@ export class BotCore extends EventEmitter {
           });
         });
 
-        // Oxygen level check — event notification only (agent decides how to respond)
+        // Oxygen level check — event notification only (agent decides how to respond).
+        // Bot2 [2026-03-23]: oxygenLevel returned 0 on land (Mineflayer version-dependent),
+        // causing false drowning events. Same pattern fixed in mc-execute.ts wait() and
+        // bot-info.ts status(). Only emit drowning events when bot is actually in water
+        // (block check at feet or head). The water block check is the reliable signal;
+        // oxygenLevel alone is unreliable on some Mineflayer versions.
         let lastOxygenLevel = 20;
         bot.on("breath", () => {
           const oxygenRaw = bot.oxygenLevel ?? 20;
           const oxygen = Math.min(20, Math.max(0, oxygenRaw));
-          if (oxygen < 5 && oxygen < lastOxygenLevel) {
+          // Only warn if bot is actually in water — oxygenLevel can be 0 on land
+          const feetBlock = bot.blockAt(bot.entity.position);
+          const headBlock = bot.blockAt(bot.entity.position.offset(0, 1, 0));
+          const inWater = isWaterBlock(feetBlock?.name) || isWaterBlock(headBlock?.name);
+          if (oxygen < 5 && oxygen < lastOxygenLevel && inWater) {
             addEvent("drowning", `LOW OXYGEN: ${oxygen}/20! Swim up immediately!`, {
               oxygenLevel: oxygen,
             });

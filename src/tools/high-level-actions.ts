@@ -388,6 +388,14 @@ export async function minecraft_build_structure(
   type: "shelter" | "wall" | "platform" | "tower",
   size: "small" | "medium" | "large" = "small"
 ): Promise<string> {
+  // Validate preset type — reject unknown types with clear error.
+  // Bot1 [2026-03-22]: bot.build("farm") silently completed with 0 blocks placed because
+  // "farm" didn't match any if/else branch. Agent thought build worked but nothing was built.
+  // Valid presets: shelter, wall, platform, tower. Use mc_farm() for farming.
+  const VALID_PRESETS = new Set(["shelter", "wall", "platform", "tower"]);
+  if (!VALID_PRESETS.has(type)) {
+    return `mc_build: Invalid preset "${type}". Valid presets: shelter, wall, platform, tower. For farming, use bot.farm() instead.`;
+  }
   console.error(`[BuildStructure] Type: ${type}, Size: ${size}`);
 
   const bot = botManager.getBot(username);
