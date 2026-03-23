@@ -2316,6 +2316,90 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       }, 200);
     });
 
+    // POST-FLEE POSITION CHECK: If the bot barely moved (< 5 blocks), the flee failed.
+    // Bot1 Session 52: flee(40) x3 all returned to same coordinates (x=2,y=70,z=5).
+    // Root cause: near water (drowned spawns), all 8 direction checks fail isWaterBlock,
+    // so distance collapses to 5 blocks and the bot barely moves. Drowned follows to the
+    // same spot each time, so repeated flee() calls produce the same position.
+    // Fix: try up to 2 additional angles (120° and 240° from the original direction) when
+    // the bot didn't move at least 5 blocks. Each retry uses a fresh direction and full distance.
+    {
+      const postMainPos = bot.entity.position;
+      const mainMoved = postMainPos.distanceTo(startPos);
+      if (mainMoved < 5) {
+        console.error(`[Flee] Position barely changed after flee (moved ${mainMoved.toFixed(1)} blocks). Attempting directional retries to escape.`);
+        const baseAngle = Math.atan2(direction.z, direction.x);
+        // Try 120° and 240° rotations — gives maximum angular spread (equilateral triangle)
+        for (let retryIdx = 1; retryIdx <= 2; retryIdx++) {
+          const curPos = bot.entity.position;
+          const totalMoved = curPos.distanceTo(startPos);
+          if (totalMoved >= 5) break; // Succeeded in a previous retry
+          const retryAngle = baseAngle + (retryIdx * 2 * Math.PI) / 3; // 120° * retryIdx
+          const retryDist = Math.max(distance, 20); // Use at least 20 blocks regardless of water reduction
+          const retryDir = new Vec3(Math.cos(retryAngle), 0, Math.sin(retryAngle));
+          const retryTarget = curPos.plus(retryDir.scaled(retryDist));
+          console.error(`[Flee] Directional retry #${retryIdx}: angle ${(retryIdx * 120)}° from original, target (${retryTarget.x.toFixed(0)}, ${retryTarget.y.toFixed(0)}, ${retryTarget.z.toFixed(0)})`);
+          if (bot.pathfinder.movements) {
+            bot.pathfinder.movements.maxDropDown = 2;
+            bot.pathfinder.movements.canDig = false;
+            (bot.pathfinder.movements as any).liquidCost = 100000;
+            bot.pathfinder.movements.allowSprinting = true;
+          }
+          if ((bot.food ?? 20) > 6) {
+            bot.setControlState("sprint", true);
+          }
+          const retryHandle = safeSetGoal(bot,
+            new goals.GoalNear(retryTarget.x, retryTarget.y, retryTarget.z, 3),
+            {
+              onAbort: (yDescent) => {
+                console.error(`[Flee] Directional retry #${retryIdx} CAVE DESCENT: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
+                try { bot.setControlState("sprint", false); } catch { /* ignore */ }
+              }
+            }
+          );
+          const retryTimeoutMs = Math.min(Math.max(8000, 8000 + (retryDist - 20) * 300), 20000);
+          const retryStartPos = bot.entity.position.clone();
+          await new Promise<void>((resolve) => {
+            const retryTimeout = setTimeout(() => {
+              retryHandle.cleanup();
+              try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+              resolve();
+            }, retryTimeoutMs);
+            const retryCheckStart = Date.now();
+            const retryCheck = setInterval(() => {
+              try {
+                if (retryHandle.aborted) {
+                  clearInterval(retryCheck); clearTimeout(retryTimeout);
+                  resolve(); return;
+                }
+                const retryMoved = bot.entity.position.distanceTo(retryStartPos);
+                if (retryMoved >= retryDist * 0.5) {
+                  clearInterval(retryCheck); clearTimeout(retryTimeout);
+                  retryHandle.cleanup();
+                  try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+                  resolve(); return;
+                }
+                const retryElapsed = Date.now() - retryCheckStart;
+                if (retryElapsed > 2000 && !bot.pathfinder.isMoving()) {
+                  clearInterval(retryCheck); clearTimeout(retryTimeout);
+                  retryHandle.cleanup();
+                  try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+                  resolve(); return;
+                }
+              } catch {
+                clearInterval(retryCheck); clearTimeout(retryTimeout);
+                resolve();
+              }
+            }, 200);
+          });
+          bot.setControlState("sprint", false);
+          const retryMovedFinal = bot.entity.position.distanceTo(retryStartPos);
+          console.error(`[Flee] Directional retry #${retryIdx} result: moved ${retryMovedFinal.toFixed(1)} blocks`);
+          retryHandle.cleanup();
+        }
+      }
+    }
+
     // Clear sprint control state after flee completes.
     // bot.setControlState("sprint", true) was set at line ~1695 but never cleared on
     // normal exit. Sprint persists into subsequent actions (eating, crafting, gathering),
