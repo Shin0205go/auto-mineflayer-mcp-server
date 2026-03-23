@@ -227,6 +227,17 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
         // Use Math.round (not Math.floor) for Y — items float at fractional Y values
         // (e.g. 107.125 above grass). Math.floor(107.125) = 107 which is inside the
         // ground block, causing pathfinder to fail. Math.round keeps us on the surface.
+        //
+        // Apply safe pathfinder settings to prevent cave descent during item collection.
+        // Bot2/Bot3 [2026-03-23]: post-kill item collection navigated into caves because
+        // pathfinder used canDig=true or maxDropDown too high. Items that land at slightly
+        // lower Y cause pathfinder to route underground instead of around.
+        if (bot.pathfinder.movements) {
+          bot.pathfinder.movements.canDig = false;
+          bot.pathfinder.movements.maxDropDown = 2;
+          (bot.pathfinder.movements as any).liquidCost = 10000;
+          bot.pathfinder.movements.allowFreeMotion = false;
+        }
         const goal = new goals.GoalNear(
           Math.round(itemPos.x),
           Math.round(itemPos.y),

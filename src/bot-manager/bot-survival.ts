@@ -1491,6 +1491,24 @@ export async function fight(
     // Re-find target (it might have moved or died)
     target = Object.values(bot.entities).find(e => e.id === targetId) || null;
     if (!target) {
+      // Bot2 [2026-03-23]: combat("cow") returned "defeated" with 0 attacks and no drops.
+      // Entity disappeared from bot.entities without being attacked — likely walked out of
+      // render distance (passive mobs wander away) or chunk was unloaded. With attackCount=0,
+      // nothing was killed, so skip the expensive item collection and report accurately.
+      // Re-attempt findTarget to catch a different entity of the same type nearby.
+      if (attackCount === 0) {
+        // Try to re-find another entity of the same type
+        const refound = findTarget();
+        if (refound) {
+          console.error(`[Fight] Original ${targetName} disappeared (0 attacks landed). Found another — retargeting.`);
+          target = refound;
+          targetId = refound.id;
+          lastKnownFightPos = refound.position.clone();
+          continue; // restart combat loop with new target
+        }
+        console.error(`[Fight] ${targetName} disappeared without any attacks landing — entity likely went out of render distance.`);
+        return `${targetName} disappeared before any attack landed (wandered out of range or chunk unloaded). No items to collect. Try moving closer to ${entityName || "mobs"} first, or use bot.navigate("${entityName || targetName}") to find another.` + getBriefStatus(bot);
+      }
       // Auto-collect dropped items after kill — with safety checks.
       // Bot2/Bot3 [2026-03-22]: died during post-kill item collection because other
       // hostiles were nearby and HP was low from the fight. Skip collection when unsafe.

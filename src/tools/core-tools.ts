@@ -1250,14 +1250,23 @@ export async function mc_farm(): Promise<string> {
       break;
     }
 
-    // Mid-farm hostile check: abort if enemies approach during farming
+    // Mid-farm hostile check: abort if enemies approach during farming.
     // Use 20-block radius to match skeleton shooting range (~20 blocks).
+    // Bot2 [2026-03-23]: killed by zombie during farm() — abort only broke the loop
+    // but did NOT flee, leaving bot stationary and exposed. Now auto-flees on abort.
     const midDanger = checkDangerNearby(bot, 20);
     if (midDanger.dangerous) {
       const threatDesc = midDanger.nearestHostile
         ? `${midDanger.nearestHostile.name} at ${midDanger.nearestHostile.distance.toFixed(1)} blocks`
         : `${midDanger.hostileCount} hostile(s)`;
-      logs.push(`[ABORTED] Hostile detected during farming: ${threatDesc}. Stopping to avoid death.`);
+      logs.push(`[ABORTED] Hostile detected during farming: ${threatDesc}. Auto-fleeing.`);
+      bot.setControlState("sneak", false);
+      try {
+        const fleeResult = await mc_flee(15);
+        logs.push(`[FLEE] ${fleeResult}`);
+      } catch (fleeErr) {
+        logs.push(`[FLEE FAILED] ${fleeErr}`);
+      }
       break;
     }
 
@@ -1266,9 +1275,18 @@ export async function mc_farm(): Promise<string> {
     // but Bot2 [2026-03-22] had HP drop from 20→1 during dirt placement from a skeleton
     // that wasn't detected (possibly behind terrain). The bone_meal and harvest phases
     // already have HP<10 checks, but the tilling/planting loop did NOT — fixed here.
+    // Bot2 [2026-03-23]: zombie killed bot during farm() at HP=9.5 because farm only
+    // broke the loop without fleeing. Now auto-flees when HP drops critically.
     const midFarmHp = bot.health ?? 20;
     if (midFarmHp < 10) {
-      logs.push(`[ABORTED] HP critically low during tilling (${midFarmHp.toFixed(1)}/20). Stopping farm to survive.`);
+      logs.push(`[ABORTED] HP critically low during tilling (${midFarmHp.toFixed(1)}/20). Auto-fleeing.`);
+      bot.setControlState("sneak", false);
+      try {
+        const fleeResult = await mc_flee(15);
+        logs.push(`[FLEE] ${fleeResult}`);
+      } catch (fleeErr) {
+        logs.push(`[FLEE FAILED] ${fleeErr}`);
+      }
       break;
     }
 
@@ -1405,13 +1423,17 @@ export async function mc_farm(): Promise<string> {
       // Previously used 16 — inconsistent with other mc_farm phases that use 20.
       const bmDanger = checkDangerNearby(bot, 20);
       if (bmDanger.dangerous) {
-        logs.push(`[ABORTED] Hostile detected during bone meal: ${bmDanger.nearestHostile?.name}. Stopping.`);
+        logs.push(`[ABORTED] Hostile detected during bone meal: ${bmDanger.nearestHostile?.name}. Auto-fleeing.`);
+        bot.setControlState("sneak", false);
+        try { const fr = await mc_flee(15); logs.push(`[FLEE] ${fr}`); } catch (fe) { logs.push(`[FLEE FAILED] ${fe}`); }
         break;
       }
       // HP monitoring: abort if bot is taking damage from any source
       const bmHp = bot.health ?? 20;
       if (bmHp < 10) {
-        logs.push(`[ABORTED] HP critically low during bone meal (${bmHp.toFixed(1)}/20). Stopping farm to survive.`);
+        logs.push(`[ABORTED] HP critically low during bone meal (${bmHp.toFixed(1)}/20). Auto-fleeing.`);
+        bot.setControlState("sneak", false);
+        try { const fr = await mc_flee(15); logs.push(`[FLEE] ${fr}`); } catch (fe) { logs.push(`[FLEE FAILED] ${fe}`); }
         break;
       }
       // Move close to crop before applying bone_meal
@@ -1473,12 +1495,16 @@ export async function mc_farm(): Promise<string> {
       const hd = harvestDanger.nearestHostile
         ? `${harvestDanger.nearestHostile.name} at ${harvestDanger.nearestHostile.distance.toFixed(1)} blocks`
         : `${harvestDanger.hostileCount} hostile(s)`;
-      logs.push(`[ABORTED] Hostile detected during harvest: ${hd}. Stopping.`);
+      logs.push(`[ABORTED] Hostile detected during harvest: ${hd}. Auto-fleeing.`);
+      bot.setControlState("sneak", false);
+      try { const fr = await mc_flee(15); logs.push(`[FLEE] ${fr}`); } catch (fe) { logs.push(`[FLEE FAILED] ${fe}`); }
       break;
     }
     const harvestHp = bot.health ?? 20;
     if (harvestHp < 10) {
-      logs.push(`[ABORTED] HP critically low during harvest (${harvestHp.toFixed(1)}/20). Stopping farm to survive.`);
+      logs.push(`[ABORTED] HP critically low during harvest (${harvestHp.toFixed(1)}/20). Auto-fleeing.`);
+      bot.setControlState("sneak", false);
+      try { const fr = await mc_flee(15); logs.push(`[FLEE] ${fr}`); } catch (fe) { logs.push(`[FLEE FAILED] ${fe}`); }
       break;
     }
     try {

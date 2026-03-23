@@ -246,6 +246,7 @@ export async function mc_execute(
         // The old check only aborted at HP<4 — by then the bot was already nearly dead.
         // Tracking HP delta detects ongoing attacks early (3+ HP drop in 1s = mob hit).
         let lastCheckHp = -1;
+        let waitStartHp = -1; // Track HP at wait start for stable-HP detection
         let monitorCount = 0;
         const safetyInterval = setInterval(async () => {
           monitorCount++;
@@ -254,17 +255,21 @@ export async function mc_execute(
             const waitBot = botManager.getBot(username);
             if (!waitBot) return;
             const hp = waitBot.health ?? 20;
-            // Initialize lastCheckHp on first check
+            // Initialize lastCheckHp and waitStartHp on first check
             if (lastCheckHp < 0) lastCheckHp = hp;
-            // Abort wait if HP critically low — bot is under attack or drowning.
-            // Raised from 4 to 6: at HP 4, a single skeleton shot (5 damage) or zombie
-            // hit (3-6 damage) is instantly lethal. At HP 6, the bot has one extra hit
-            // of buffer to survive until the agent can call mc_flee after wait resolves.
-            // Bot2 [2026-03-22]: HP dropped 20→0.5 during wait loops — the HP<4 threshold
-            // let the bot stay in wait while taking multiple hits from nearby mobs.
-            // The hpDrop >= 2 delta check is the primary defense, but this absolute floor
-            // catches slow damage (starvation: 1 HP per tick) that doesn't trigger the delta.
-            if (hp < 6) {
+            if (waitStartHp < 0) waitStartHp = hp;
+            // Abort wait if HP critically low AND actually dropping.
+            // Bot1 Session 47 [2026-03-23]: wait() aborted at HP=5.0 even though HP was
+            // stable (not dropping). The bot pillarUp'd for safety at HP=5, then wait()
+            // immediately aborted because `hp < 6` triggered on stable HP. This created
+            // an infinite abort loop — bot couldn't wait for morning.
+            // Fix: Only abort at low HP if HP has actually decreased since wait started.
+            // If HP started at 5.0 and is still 5.0, the bot is safe (just low).
+            // If HP started at 8.0 and dropped to 5.0, something is actively damaging it.
+            // Keep an absolute floor at HP < 3 regardless — at that level, any single hit
+            // is lethal and waiting is never safe.
+            const hpDroppedSinceStart = waitStartHp - hp;
+            if (hp < 3 || (hp < 6 && hpDroppedSinceStart >= 1)) {
               if (logs.length < MAX_LOG_LINES) {
                 logs.push(`[wait] ABORTED: HP dropped to ${hp.toFixed(1)} during wait — auto-fleeing from danger`);
               }
