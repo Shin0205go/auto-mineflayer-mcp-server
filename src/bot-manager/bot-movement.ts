@@ -457,14 +457,23 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         // Bot1/Bot2 [2026-03-22]: multiple daytime deaths from pillagers and zombies during
         // active pathfinding. The pre-nav check in core-tools.ts only fires once at start,
         // but mobs approach DURING the pathfinder movement. This 500ms check catches them.
-        const scanRadius = navIsNight ? 16 : 10;
+        // Scan radius and HP thresholds: food-aware.
+        // Without food, any damage is permanent — widen scan and raise HP threshold.
+        // Bot2 [2026-03-23]: killed during daytime nav with no food; old threshold (10)
+        // let bot keep navigating until HP was already critical. With food the bot can
+        // regenerate so lower thresholds are acceptable.
+        const b3HasFood = bot.inventory.items().some((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
+        const scanRadius = navIsNight ? 16 : (b3HasFood ? 10 : 16);
         // Night HP thresholds (high — mobs are everywhere):
         //   Unarmored: 14, Partial: 12, Full: 10
-        // Daytime HP thresholds (lower — fewer mobs, but still lethal when close):
-        //   Unarmored: 10, Partial: 8, Full: 6
+        // Daytime HP thresholds — tighter without food (damage is permanent):
+        //   With food:    Unarmored: 10, Partial: 8,  Full: 6
+        //   Without food: Unarmored: 14, Partial: 12, Full: 8
         const hpThreshold = navIsNight
           ? (armorCount <= 1 ? 14 : armorCount <= 3 ? 12 : 10)
-          : (armorCount <= 1 ? 10 : armorCount <= 3 ? 8 : 6);
+          : b3HasFood
+            ? (armorCount <= 1 ? 10 : armorCount <= 3 ? 8 : 6)
+            : (armorCount <= 1 ? 14 : armorCount <= 3 ? 12 : 8);
 
         // Check B1: Ranged mob proximity — skeletons/pillagers shoot from 16+ blocks.
         // This check fires regardless of HP because ranged mobs deal damage before

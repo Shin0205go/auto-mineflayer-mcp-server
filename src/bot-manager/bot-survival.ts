@@ -3,7 +3,7 @@ import { Vec3 } from "vec3";
 import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 import type { ManagedBot } from "./types.js";
-import { isHostileMob, isNeutralMob, isFoodItem, isBedBlock, isNearCliffEdge } from "./minecraft-utils.js";
+import { isHostileMob, isNeutralMob, isFoodItem, isBedBlock, isNearCliffEdge, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
 import { collectNearbyItems, equipArmor } from "./bot-items.js";
 import { safeSetGoal } from "./pathfinder-safety.js";
 
@@ -350,9 +350,10 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
   // Blaze strategy: approach quickly, eat aggressively during approach (they shoot fireballs)
   if (target.name === "blaze" && distance > 3.5) {
     console.error(`[Attack] Blaze at ${distance.toFixed(1)} blocks — rushing to melee range...`);
-    // Eat before approaching if not full HP (fireballs deal damage during approach)
+    // Eat before approaching if not full HP (fireballs deal damage during approach).
+    // Use EDIBLE_FOOD_NAMES to avoid spider_eye poison at low HP.
     if (bot.health < 18 && bot.food < 20) {
-      const food = bot.inventory.items().find(i => isFoodItem(bot, i.name));
+      const food = bot.inventory.items().find(i => EDIBLE_FOOD_NAMES.has(i.name));
       if (food) {
         try { await bot.equip(food, "hand"); await bot.consume(); } catch (_) {}
         // Re-equip weapon after eating
@@ -660,8 +661,8 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       if (bot.health <= 12) {
         console.error(`[Attack] HP low (${bot.health}), fleeing from ${target.name}!`);
         bot.pathfinder.setGoal(null);
-        // Try to eat food before fleeing
-        const food = bot.inventory.items().find(i => isFoodItem(bot, i.name));
+        // Try to eat food before fleeing. Use EDIBLE_FOOD_NAMES to avoid spider_eye poison.
+        const food = bot.inventory.items().find(i => EDIBLE_FOOD_NAMES.has(i.name));
         if (food) {
           try {
             await bot.equip(food, "hand");
@@ -685,7 +686,8 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       // timed out at 60s — skeleton dealt continuous ranged damage but bot never ate mid-combat.
       // fight() already has this for all mobs; attack() was missing it for non-blaze targets.
       if (bot.health < 14 && attacks > 0 && attacks % 3 === 0) {
-        const midAttackFood = bot.inventory.items().find(i => isFoodItem(bot, i.name));
+        // Use EDIBLE_FOOD_NAMES to avoid spider_eye poison mid-combat.
+        const midAttackFood = bot.inventory.items().find(i => EDIBLE_FOOD_NAMES.has(i.name));
         if (midAttackFood) {
           try {
             bot.pathfinder.setGoal(null); // Stop moving while eating
@@ -889,9 +891,12 @@ export async function fight(
 ): Promise<string> {
   const bot = managed.bot;
 
-  // Step 0: Auto-eat before combat if HP is not full and food is available
+  // Step 0: Auto-eat before combat if HP is not full and food is available.
+  // Use EDIBLE_FOOD_NAMES (not isFoodItem) to exclude spider_eye which causes 2 HP poison
+  // damage — eating it mid-combat at low HP is often lethal. isFoodItem includes spider_eye
+  // because it IS technically edible, but EDIBLE_FOOD_NAMES is the curated safe-to-eat list.
   if (bot.health < 16 && bot.food < 20) {
-    const foodItem = bot.inventory.items().find(i => isFoodItem(bot, i.name));
+    const foodItem = bot.inventory.items().find(i => EDIBLE_FOOD_NAMES.has(i.name));
     if (foodItem) {
       try {
         await bot.equip(foodItem, "hand");
@@ -1121,7 +1126,8 @@ export async function fight(
     // prolonged fight (30-60s) with ranged mobs drains HP faster than the flee threshold triggers.
     // Eating mid-combat costs ~1.5s but restores 6-8 HP, often the difference between survival and death.
     if (health < 14 && attackCount > 0) {
-      const midCombatFood = bot.inventory.items().find((item: any) => isFoodItem(bot, item.name));
+      // Use EDIBLE_FOOD_NAMES to avoid eating spider_eye (causes 2 HP poison at low HP).
+      const midCombatFood = bot.inventory.items().find((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
       if (midCombatFood) {
         try {
           bot.pathfinder.setGoal(null); // Stop moving while eating
@@ -1215,7 +1221,8 @@ export async function fight(
       // Determine if this was a food animal kill where drops are critical for survival
       const FOOD_ANIMALS = ["cow", "pig", "chicken", "sheep", "rabbit", "mooshroom", "goat", "salmon", "cod"];
       const isFoodAnimalKill = entityName && FOOD_ANIMALS.some(a => entityName.toLowerCase().includes(a));
-      const hasFood = bot.inventory.items().some(i => isFoodItem(bot, i.name));
+      // Use EDIBLE_FOOD_NAMES: spider_eye shouldn't count as "has food" for survival decisions.
+      const hasFood = bot.inventory.items().some(i => EDIBLE_FOOD_NAMES.has(i.name));
       const needsFoodDesperately = isFoodAnimalKill && !hasFood;
 
       // Safety: Skip item collection if HP is critically low (below flee threshold).

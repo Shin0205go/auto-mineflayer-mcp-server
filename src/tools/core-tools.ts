@@ -1683,7 +1683,8 @@ export async function mc_navigate(
         // despite the comment saying "BLOCK". The bot continued navigating and got killed.
         // Bot1 Sessions 20-42: 15+ deaths from night navigation with low HP + nearby mobs.
         // Bot2 [2026-03-23]: killed by zombie during night navigation.
-        // Now actually blocks: return early when HP is below threshold at night with hostiles.
+        // WARNING (not block): per user instruction, operations continue with warning.
+        // moveToBasic's mid-movement checks provide runtime safety during travel.
         const nightHpBlock = hasFood ? 10 : 14;
         if (hp <= nightHpBlock && closestDist <= 16) {
           console.error(`[Navigate] WARNING: HP=${hp} at night with ${nearbyHostiles.length} hostile(s) nearby (${threatList}). closestDist=${closestDist}.`);
@@ -1750,7 +1751,8 @@ export async function mc_navigate(
             // pass the scan but not the block check.
             const dayBlockDist = hasFood ? 10 : 24;
             if (closestDayDist <= dayBlockDist) {
-              // HARD BLOCK: return early instead of just warning.
+              // WARNING (not block): per user instruction, operations continue with warning.
+              // moveToBasic's mid-movement checks (B1/B2/B3) provide runtime safety during travel.
               // Bot2 [2026-03-23]: killed by zombie during daytime navigation at low HP.
               console.error(`[Navigate] WARNING: HP=${hp} daytime with ${dayHostiles.length} hostile(s) nearby (${dayThreatList}). closestDist=${closestDayDist}.`);
               nightWarning += `\n[WARNING] HP=${hp} with ${dayHostiles.length} hostile(s) within ${closestDayDist.toFixed(1)} blocks (${dayThreatList}). ${!hasFood ? "No food — HP cannot regenerate. " : ""}\n[推奨アクション]\n1. bot.flee(20) — 敵から逃走\n2. bot.combat() — 最も近い敵を倒す（引数なし=最近接敵）\n3. bot.eat() — 食料があればHP回復${!hasFood ? "\n4. bot.combat(\"cow\") — 食料動物を狩って食料確保" : ""}`;
