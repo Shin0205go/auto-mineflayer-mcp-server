@@ -1885,8 +1885,62 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     }
 
     if (!placed) {
-      console.error(`[Pillar] Failed to place block after 3 attempts at level ${i + 1}`);
-      break;
+      console.error(`[Pillar] Failed to place block after 3 attempts at level ${i + 1} — trying simple jump-and-place fallback`);
+      // Simple jump-and-place fallback: jump and immediately call bot.placeBlock at apex.
+      // Bot1 [2026-03-24] Session 55: _placeBlockWithOptions repeatedly failed with "placed 0/6"
+      // even after elevation gain. Fallback bypasses forceLook/options and uses raw placeBlock.
+      let fallbackPlaced = false;
+      try {
+        // Re-equip scaffold before fallback
+        const fbScaffold = bot.inventory.items().find(i => isScaffoldBlock(i.name));
+        if (fbScaffold) {
+          await bot.equip(fbScaffold, "hand");
+          console.error(`[Pillar] Fallback: equipped ${fbScaffold.name}`);
+
+          // Look down before jumping
+          const fbPos = bot.entity.position;
+          await bot.lookAt(new Vec3(fbPos.x, fbPos.y - 1, fbPos.z), true);
+
+          bot.setControlState("jump", true);
+          await delay(400); // wait for jump apex
+          bot.setControlState("jump", false);
+
+          // Place block below feet while at/near apex
+          const apexPos = bot.entity.position.offset(0, -1, 0);
+          const refBlock = bot.blockAt(apexPos);
+          console.error(`[Pillar] Fallback: blockAt offset(0,-1,0)=${refBlock?.name ?? 'null'} at (${apexPos.x.toFixed(1)},${apexPos.y.toFixed(1)},${apexPos.z.toFixed(1)})`);
+          if (refBlock && refBlock.name !== "air" && refBlock.name !== "cave_air" && refBlock.name !== "void_air") {
+            await bot.placeBlock(refBlock, new Vec3(0, 1, 0));
+            blocksPlaced++;
+            placed = true;
+            fallbackPlaced = true;
+            console.error(`[Pillar] Fallback placed block ${blocksPlaced}/${targetHeight}`);
+          } else {
+            // Try scanning below current apex position
+            const apexY = Math.floor(bot.entity.position.y);
+            for (let scanY = apexY; scanY >= apexY - 3; scanY--) {
+              const scanBlock = bot.blockAt(new Vec3(Math.floor(bot.entity.position.x), scanY, Math.floor(bot.entity.position.z)));
+              console.error(`[Pillar] Fallback scan Y=${scanY}: ${scanBlock?.name ?? 'null'}`);
+              if (scanBlock && scanBlock.name !== "air" && scanBlock.name !== "cave_air" && scanBlock.name !== "void_air") {
+                await bot.placeBlock(scanBlock, new Vec3(0, 1, 0));
+                blocksPlaced++;
+                placed = true;
+                fallbackPlaced = true;
+                console.error(`[Pillar] Fallback placed block (scan) ${blocksPlaced}/${targetHeight}`);
+                break;
+              }
+            }
+          }
+          await delay(200);
+        }
+      } catch (fbErr) {
+        console.error(`[Pillar] Fallback jump-place failed: ${fbErr}`);
+      }
+
+      if (!fallbackPlaced) {
+        console.error(`[Pillar] Fallback also failed at level ${i + 1}, breaking`);
+        break;
+      }
     }
   }
 
