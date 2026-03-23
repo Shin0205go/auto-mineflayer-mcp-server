@@ -1701,11 +1701,15 @@ export async function mc_navigate(
       // Bot2 [2026-03-23]: zombie at 22.8m closed in during navigate and killed bot.
       // HP threshold raised from 12 to 14 without food — permanent damage accumulates.
       {
-        // Without food: scan at ANY HP because damage is permanent and cannot regenerate.
-        // Bot2 [2026-03-23]: HP>14, no food, zombie at 22.8m — old check skipped entirely
-        // because hp (16+) > dayHpCheck (14), so no warning was shown. Bot navigated into
-        // the zombie and died. With food, limit to HP<=12 (can eat to recover).
-        const dayHpCheck = hasFood ? 12 : 20;
+        // Without food: scan at HP<=16 because damage is permanent and cannot regenerate.
+        // Bot2 [2026-03-23]: HP>14, no food, zombie at 22.8m — old check (14) skipped.
+        // However, dayHpCheck=20 (always true) was too aggressive: at full HP 20 with no
+        // food, the bot can survive 4-5 zombie hits (3-5 damage each), so warning at HP=20
+        // for ANY hostile within 24 blocks causes constant warning spam that the agent
+        // ignores. Threshold 16 catches bots that have taken at least one hit (HP 15-16),
+        // meaning they're in an active danger zone where further damage is permanent.
+        // With food, limit to HP<=12 (can eat to recover).
+        const dayHpCheck = hasFood ? 12 : 16;
         if (hp <= dayHpCheck) {
           // Scan radius: 16 blocks with food, 24 without food.
           // Bot2 [2026-03-23]: zombie at 22.8m was outside 16-block scan radius,
@@ -2323,6 +2327,15 @@ export async function mc_combat(
             const timeNote = combatIsNight ? "at night" : "";
             const armorNote = combatArmorCount <= 1 ? " NO ARMOR —" : "";
             hostileWarning = `\n[WARNING] Cannot safely hunt ${target}: ${nearbyHostiles.length} hostile(s) nearby (${threatList}).${armorNote} ${timeNote} Hostile within ${closestHostileDist}m.\n[推奨アクション]\n1. bot.combat() — 最も近い敵を先に倒す（引数なし=最近接敵）\n2. bot.flee(20) — 敵から離れてから狩りを再開\n3. bot.equipArmor() — 防具を装備してから狩り`;
+            // Raise fleeAtHp when hunting passive targets near hostiles.
+            // Bot2 [2026-03-23]: fleeAtHp=5, zombie attacked from behind during cow hunt,
+            // bot didn't flee until HP 5 — one more hit was lethal. With hostiles nearby,
+            // the bot needs to flee much earlier (HP 14) to survive the combined damage from
+            // the passive mob approach + hostile mob ambush. This doesn't block the operation
+            // (per user instruction) but makes the bot escape before taking lethal damage.
+            // Bot3 Deaths #1,#3,#5: similar pattern with low fleeAtHp during passive hunts.
+            fleeAtHp = Math.max(fleeAtHp, 14);
+            console.error(`[Combat] Raised fleeAtHp to ${fleeAtHp} for passive hunt near ${nearbyHostiles.length} hostile(s).`);
           } else {
             hostileWarning = `\n[WARNING] ${nearbyHostiles.length} hostile(s) nearby while hunting ${target}: ${threatList}. Be cautious.`;
           }
