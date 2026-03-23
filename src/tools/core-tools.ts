@@ -928,7 +928,29 @@ export async function mc_farm(): Promise<string> {
             landTarget = { x: wp.x + 2, y: wp.y + 1, z: wp.z };
           }
           logs.push(`Navigating to land near water at (${landTarget.x}, ${landTarget.y}, ${landTarget.z})`);
-          const moveToWaterResult = await botManager.moveTo(username, landTarget.x, landTarget.y, landTarget.z);
+          // TIMEOUT: Wrap water navigation in Promise.race to enforce global farm timeout.
+          // Bug Session 50: moveTo() hung indefinitely when pathfinder was stuck, causing
+          // mc_farm to hang for the full 180s MCP timeout while mobs attacked the bot.
+          // The FARM_TIMEOUT_MS constant existed but was only checked inside loops that
+          // are never reached if this blocking await never resolves.
+          {
+            const remainingMs = FARM_TIMEOUT_MS - (Date.now() - farmStartTime);
+            if (remainingMs <= 0) {
+              logs.push(`[ABORTED] mc_farm timed out before water navigation.`);
+              const finalBot = botManager.getBot(username);
+              return logs.join("\n") + `\nmc_farm: global timeout hit before water navigation. HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}.`;
+            }
+          }
+          const waterNavRemainingMs = FARM_TIMEOUT_MS - (Date.now() - farmStartTime);
+          const moveToWaterResult = await Promise.race([
+            botManager.moveTo(username, landTarget.x, landTarget.y, landTarget.z),
+            new Promise<string>(resolve => setTimeout(() => resolve("TIMEOUT"), waterNavRemainingMs))
+          ]);
+          if (moveToWaterResult === "TIMEOUT") {
+            logs.push(`[ABORTED] mc_farm water navigation timed out (${FARM_TIMEOUT_MS / 1000}s global limit). Pathfinder may be stuck.`);
+            const finalBot = botManager.getBot(username);
+            return logs.join("\n") + `\nmc_farm: timed out during water navigation (pathfinder stuck). HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}. Try moving to a different area first.`;
+          }
           // SAFETY: Abort if moveTo routed underground (cave routing).
           // Bot1/Bot2 [2026-03-22]: mc_farm navigated to water, pathfinder routed underground,
           // bot got trapped in cave with mobs. The moveTo result contains "underground" or
@@ -1074,7 +1096,14 @@ export async function mc_farm(): Promise<string> {
                           const dist3d = Math.sqrt((bpx - px) ** 2 + (bpy - (py + 1)) ** 2 + (bpz - pz) ** 2);
                           if (dist3d > 3.5) {
                             // Move to adjacent solid ground, not on the target itself
-                            await botManager.moveTo(username, px + 1, py + 1, pz);
+                            // Wrap in Promise.race to enforce global farm timeout (Session 50 fix).
+                            const dirtNavRemaining = FARM_TIMEOUT_MS - (Date.now() - farmStartTime);
+                            if (dirtNavRemaining > 0) {
+                              await Promise.race([
+                                botManager.moveTo(username, px + 1, py + 1, pz),
+                                new Promise<string>(resolve => setTimeout(() => resolve("TIMEOUT"), dirtNavRemaining))
+                              ]);
+                            }
                           }
                           await botManager.placeBlock(username, "dirt", px, placeY, pz);
                           const check = bot.blockAt(new (bot.entity.position.constructor as any)(px, placeY, pz));

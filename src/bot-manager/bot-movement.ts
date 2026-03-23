@@ -1936,6 +1936,31 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       await equipArmor(bot);
     } catch (_) { /* continue without armor */ }
 
+    // PRE-FLEE PILLAR UP when hostiles are in melee range (≤3 blocks).
+    // Bug Session 50: bot.flee(40) was called after farm() timed out, but zombie was
+    // already adjacent — bot died during the flee pathfinding startup (0.5-1s delay before
+    // movement begins). Pillaring 3 blocks up takes ~1.5s but gets the bot out of melee
+    // reach immediately, buying time for the pathfinder to plan a safe escape route.
+    // Only pillar when hostiles are in immediate melee range (≤3 blocks) AND the bot has
+    // blocks to place — we don't want to fail silently and waste time if no blocks available.
+    {
+      const meleeThreat = Object.values(bot.entities).find(e => {
+        if (!isHostileMob(bot, e.name?.toLowerCase() || "")) return false;
+        const dist = e.position.distanceTo(bot.entity.position);
+        return dist <= 3;
+      });
+      if (meleeThreat) {
+        const meleeDist = meleeThreat.position.distanceTo(bot.entity.position).toFixed(1);
+        console.error(`[Flee] Melee threat detected (${meleeThreat.name} at ${meleeDist}m). Pillaring up 3 blocks before fleeing.`);
+        try {
+          await pillarUp(managed, 3);
+          console.error(`[Flee] Pillar up complete — now at Y=${bot.entity.position.y.toFixed(0)}, continuing flee.`);
+        } catch (pillarErr) {
+          console.error(`[Flee] Pillar up failed (${pillarErr instanceof Error ? pillarErr.message : String(pillarErr)}), continuing flee anyway.`);
+        }
+      }
+    }
+
     // Find ALL nearby hostiles (using dynamic registry check), sorted by distance.
     // Bot2 bug: flee only considered nearest hostile, running into other mobs when surrounded.
     // Now we compute a weighted flee direction away from ALL hostiles within 24 blocks.
