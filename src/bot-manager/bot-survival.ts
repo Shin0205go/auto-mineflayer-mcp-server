@@ -790,6 +790,30 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[Attack] CRITICAL: Item collection failed after kill: ${errMsg}`);
         }
+
+        // AUTO-EAT after kill when HP/hunger is low and food is available.
+        // attack() targets the nearest hostile — after killing it, the bot may have food
+        // in inventory (from previous collections or this kill's drops). Eating immediately
+        // restores HP/hunger before the agent decides on the next action.
+        // Bot2 [2026-03-22]: killed zombie, had food in inventory, HP=5 — didn't eat.
+        {
+          const postAttackHp = bot.health ?? 20;
+          const postAttackHunger = (bot as any).food ?? 20;
+          if (postAttackHp < 16 || postAttackHunger < 14) {
+            const postAttackFood = bot.inventory.items().find((i: any) => EDIBLE_FOOD_NAMES.has(i.name));
+            if (postAttackFood) {
+              try {
+                await bot.equip(postAttackFood, "hand");
+                await bot.consume();
+                console.error(`[Attack] Auto-ate ${postAttackFood.name} after kill (HP: ${postAttackHp.toFixed(1)} → ${(bot.health ?? 0).toFixed(1)}, hunger: ${postAttackHunger} → ${(bot as any).food ?? "?"})`);
+                collectionResult += ` [Auto-ate ${postAttackFood.name}]`;
+              } catch (_) {
+                console.error(`[Attack] Auto-eat failed after kill`);
+              }
+            }
+          }
+        }
+
         return `Killed ${target.name} after ${attacks} attacks. Items: ${collectionResult}`;
       }
       // Track last known position (important for teleporting mobs like endermen)
@@ -1412,6 +1436,34 @@ export async function fight(
         const errMsg = err instanceof Error ? err.message : String(err);
         console.error(`[Fight] CRITICAL: Item collection failed after kill: ${errMsg}`);
       }
+
+      // AUTO-EAT after food-desperate kill: the bot just killed a food animal and collected
+      // drops — eat immediately to restore HP/hunger before the agent's next action.
+      // Bot1/Bot2/Bot3 [2026-03-22]: many deaths where bot killed cow, collected raw_beef,
+      // but returned to the agent without eating. The agent then called navigate/combat which
+      // triggered safety checks seeing low HP, creating delays. By the time bot.eat() was
+      // called, another mob had already attacked. Auto-eating here closes the gap.
+      // Also auto-eat after ANY kill when HP is low and food is available — not just food animals.
+      // Bot2 [2026-03-22]: killed zombie, had cooked_beef in inventory, HP=5 — didn't eat
+      // because auto-eat only triggered on needsFoodDesperately (food animal kills).
+      {
+        const postFightHp = bot.health ?? 20;
+        const postFightHunger = (bot as any).food ?? 20;
+        if (postFightHp < 16 || postFightHunger < 14) {
+          const postFightFood = bot.inventory.items().find(i => EDIBLE_FOOD_NAMES.has(i.name));
+          if (postFightFood) {
+            try {
+              await bot.equip(postFightFood, "hand");
+              await bot.consume();
+              console.error(`[Fight] Auto-ate ${postFightFood.name} after kill (HP: ${postFightHp.toFixed(1)} → ${(bot.health ?? 0).toFixed(1)}, hunger: ${postFightHunger} → ${(bot as any).food ?? "?"})`);
+              collectionResult += ` [Auto-ate ${postFightFood.name}]`;
+            } catch (_) {
+              console.error(`[Fight] Auto-eat failed after kill — agent should call bot.eat() manually`);
+            }
+          }
+        }
+      }
+
       return `${targetName} defeated! Attacked ${attackCount} times. Items: ${collectionResult}` + getBriefStatus(bot);
     }
     // Track last known position (important for teleporting mobs like endermen)

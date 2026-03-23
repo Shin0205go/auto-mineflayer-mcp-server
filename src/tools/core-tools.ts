@@ -2724,7 +2724,34 @@ export async function mc_connect(
 
 export async function mc_flee(distance: number = 20): Promise<string> {
   const username = botManager.requireSingleBot();
-  return await botManager.flee(username, distance);
+  const result = await botManager.flee(username, distance);
+
+  // POST-FLEE AUTO-EAT: After fleeing, the bot is in a safer position.
+  // If HP is low and food is available, eat immediately to start regeneration
+  // before the agent decides on the next action. This closes the gap between
+  // "fled to safety" and "agent calls bot.eat()".
+  // Bot1/Bot2/Bot3 [2026-03-22]: many deaths where bot fled with food in inventory
+  // but didn't eat. The agent then called wait/navigate which exposed the bot to
+  // further attacks at low HP. Auto-eating after flee maximizes survival time.
+  const fleeBot = botManager.getBot(username);
+  if (fleeBot) {
+    const fleeHp = fleeBot.health ?? 20;
+    const fleeHunger = (fleeBot as any).food ?? 20;
+    if (fleeHp < 16 || fleeHunger < 14) {
+      const fleeFood = fleeBot.inventory.items().find((i: any) => EDIBLE_FOOD_NAMES.has(i.name));
+      if (fleeFood) {
+        try {
+          await fleeBot.equip(fleeFood, "hand");
+          await fleeBot.consume();
+          console.error(`[Flee] Auto-ate ${fleeFood.name} after flee (HP: ${fleeHp.toFixed(1)} → ${(fleeBot.health ?? 0).toFixed(1)}, hunger: ${fleeHunger} → ${(fleeBot as any).food ?? "?"})`);
+        } catch (_) {
+          // Eat can fail if mob interrupted — not critical, agent can retry
+        }
+      }
+    }
+  }
+
+  return result;
 }
 
 // ─── minecraft_pillar_up ─────────────────────────────────────────────────────
