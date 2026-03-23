@@ -1199,6 +1199,44 @@ export async function fight(
       }
     }
 
+    // Multi-hostile escalation check: abort if multiple OTHER hostiles are closing in.
+    // Bot2 [2026-03-23]: fighting enderman with fleeAtHp=5, zombie attacked from behind,
+    // bot died before fleeAtHp triggered. When focused on one hostile, the bot can't defend
+    // against mobs approaching from other directions. 2+ other hostiles within 8 blocks
+    // means the bot is being surrounded — flee before taking multi-mob damage burst.
+    // Only check when fighting a hostile target (passive hunt already has its own abort).
+    // Skip if target itself is passive (already handled above).
+    {
+      const targetLower2 = (entityName || targetName || "").toLowerCase();
+      const targetIsHostile2 = isHostileMob(bot, targetLower2);
+      if (targetIsHostile2) {
+        const otherHostilesClose: Array<{ name: string; dist: number }> = [];
+        for (const entity of Object.values(bot.entities)) {
+          if (!entity || !entity.position || entity === bot.entity) continue;
+          if (entity.id === targetId) continue; // skip the current target
+          const eDist = entity.position.distanceTo(bot.entity.position);
+          if (eDist > 10) continue;
+          const eName = entity.name?.toLowerCase() ?? "";
+          if (isHostileMob(bot, eName)) {
+            otherHostilesClose.push({ name: eName, dist: Math.round(eDist * 10) / 10 });
+          }
+        }
+        // Flee when 2+ other hostiles within 10 blocks, OR 1 other hostile within 5 blocks.
+        // Single hostile at 5m closes melee gap in ~2s. Two hostiles at 10m converge in ~4s.
+        // Either scenario means the bot takes simultaneous hits from multiple mobs.
+        const immediateThreat = otherHostilesClose.some(h => h.dist <= 5);
+        if (otherHostilesClose.length >= 2 || (otherHostilesClose.length >= 1 && immediateThreat)) {
+          const threatList = otherHostilesClose.sort((a, b) => a.dist - b.dist)
+            .slice(0, 3).map(h => `${h.name}(${h.dist}m)`).join(", ");
+          console.error(`[Fight] MULTI-MOB ESCALATION: ${otherHostilesClose.length} other hostile(s) closing in (${threatList}) during ${targetName} combat. Fleeing to avoid multi-mob burst damage.`);
+          bot.pathfinder.setGoal(null);
+          try { bot.setControlState("sprint", false); } catch { /* ignore */ }
+          await flee(managed, 20);
+          return `[MULTI-MOB ABORT] Fled from ${otherHostilesClose.length} other hostile(s) (${threatList}) during ${targetName} combat. Attacked ${attackCount} times. Fight one mob at a time — lure target away first.` + getBriefStatus(bot);
+        }
+      }
+    }
+
     // Re-find target (it might have moved or died)
     target = Object.values(bot.entities).find(e => e.id === targetId) || null;
     if (!target) {

@@ -491,7 +491,16 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         // Bot1 [2026-03-22]: killed by pillager during daytime with iron_boots only.
         // Added "witch" to ranged list — witches throw potions at 10+ blocks.
         const RANGED_MOBS = ["skeleton", "stray", "pillager", "drowned", "witch"];
-        if (armorCount <= 2) {
+        // Extend ranged/melee checks to armorCount<=3 when no food: without food, ALL damage
+        // is permanent regardless of armor. A bot with 3 iron armor pieces still takes 2-3
+        // damage per skeleton shot, and after 5-6 hits during a 30s nav, HP drops from 20 to
+        // single digits with no way to recover. Previously only checked armorCount<=2, letting
+        // bots with 3 armor pieces navigate through ranged threats while foodless.
+        // Bot2 [2026-03-23]: killed during navigation with no food — damage accumulated
+        // permanently because the armor-gate skipped the check.
+        const b1HasFood = bot.inventory.items().some((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
+        const rangedArmorGate = b1HasFood ? 2 : 3;
+        if (armorCount <= rangedArmorGate) {
           for (const entity of Object.values(bot.entities)) {
             if (!entity || !entity.position || entity === bot.entity) continue;
             const eDist = entity.position.distanceTo(currentPos);
@@ -536,7 +545,11 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
         //   Bot2 [2026-03-23]: zombie at 22.8m closed to melee during navigation and killed bot.
         //   The old 6-block threshold didn't trigger until the zombie was already hitting.
         // Full iron armor (4/4) absorbs enough damage to survive multiple hits, so skip for those.
-        if (armorCount <= 2) {
+        // Extended to armorCount<=3 when no food: without food, damage is permanent.
+        // A bot with 3 armor pieces takes reduced damage per hit, but after 5-6 hits during
+        // a 30s navigation, HP drops irreversibly to critical levels.
+        const meleeArmorGate = b1HasFood ? 2 : 3;
+        if (armorCount <= meleeArmorGate) {
           // Night + unarmored: wider detection. Night + partial: moderate. Day: tight.
           // Bot2 [2026-03-23]: zombie at 22.8m closed to melee during daytime navigation
           // and killed bot before the abort triggered. Without food, any damage is permanent.
