@@ -771,13 +771,20 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
           });
           collectHandle.cleanup();
         }
-        // Endermen teleport before dying — use wider search and longer wait
-        // 800ms gives the server time to spawn drop item entities (was 500ms, too short)
+        // Wait for server to spawn drop item entities before collection.
+        // Endermen teleport — wider search. All mobs get 1s minimum to ensure entity spawn.
+        // Bot2/Bot3 [2026-03-22]: mob drops not collected because item entities hadn't
+        // spawned yet (800ms too short on busy server). Increased to 1s for all mobs.
         const isEnderman = target.name === "enderman";
-        await delay(isEnderman ? 1000 : 800);
+        await delay(isEnderman ? 1000 : 1000);
         let collectionResult = "Collection not attempted";
         try {
-          collectionResult = await collectNearbyItems(managed, isEnderman ? { searchRadius: 16, waitRetries: 12 } : undefined);
+          // Wider search for endermen (teleport, items scatter far).
+          // Default 10-block radius with waitRetries=10 for all mobs to catch delayed spawns.
+          const attackCollectOpts = isEnderman
+            ? { searchRadius: 16, waitRetries: 12 }
+            : { searchRadius: 12, waitRetries: 10 };
+          collectionResult = await collectNearbyItems(managed, attackCollectOpts);
           console.error(`[Attack] Item collection result: ${collectionResult}`);
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
@@ -1376,13 +1383,30 @@ export async function fight(
         });
         collectHandle.cleanup();
       }
-      // Endermen teleport before dying — use wider search and longer wait
-      // 800ms gives the server time to spawn drop item entities (was 500ms, too short)
+      // Wait for server to spawn drop item entities before attempting collection.
+      // Endermen teleport before dying — use wider search and longer wait.
+      // Food animals (cow, pig, etc.) use wider search + longer wait because:
+      //   - Knockback from sword attacks pushes the mob 1-3 blocks before death
+      //   - Items scatter on spawn (up to 2 blocks from death position)
+      //   - Total offset can be 3-5 blocks from where the bot stands after the kill
+      // Bot2 [2026-03-22]: combat(cow) x6 → 0 drops. Bot was at kill position but items
+      // spawned 4-5 blocks away (knockback + scatter), outside default 10-block search.
+      // Bot3 Bug #12: zombified_piglin drops not collected — item entities spawned with delay.
       const isEnderman = targetName === "enderman";
-      await delay(isEnderman ? 1000 : 800);
+      const isFoodAnimal = FOOD_ANIMALS.some(a => targetName.toLowerCase().includes(a));
+      const itemSpawnDelay = isEnderman ? 1000 : (isFoodAnimal ? 1000 : 800);
+      await delay(itemSpawnDelay);
       let collectionResult = "Collection not attempted";
       try {
-        collectionResult = await collectNearbyItems(managed, isEnderman ? { searchRadius: 16, waitRetries: 12 } : undefined);
+        // Wider search for endermen (teleport) and food animals (knockback scatter).
+        // Default 10 blocks often misses items at 4-5 block offset from bot position.
+        // Also increase waitRetries: server item entity spawn can take 1-2s on busy servers.
+        const collectOpts = isEnderman
+          ? { searchRadius: 16, waitRetries: 12 }
+          : isFoodAnimal
+            ? { searchRadius: 14, waitRetries: 10 }
+            : undefined;
+        collectionResult = await collectNearbyItems(managed, collectOpts);
         console.error(`[Fight] Item collection result: ${collectionResult}`);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);

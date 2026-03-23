@@ -2394,8 +2394,21 @@ export async function mc_combat(
             // the passive mob approach + hostile mob ambush. This doesn't block the operation
             // (per user instruction) but makes the bot escape before taking lethal damage.
             // Bot3 Deaths #1,#3,#5: similar pattern with low fleeAtHp during passive hunts.
-            fleeAtHp = Math.max(fleeAtHp, 14);
-            console.error(`[Combat] Raised fleeAtHp to ${fleeAtHp} for passive hunt near ${nearbyHostiles.length} hostile(s).`);
+            //
+            // EXCEPTION: food-desperate bots (no food + hunger <= 6). Raising fleeAtHp to 14
+            // creates a starvation deadlock: bot at HP 12, hunger 0, no food → starts cow hunt
+            // → immediately flees at HP 14 threshold → never gets food → dies from starvation.
+            // Bot1/Bot2 [2026-03-22]: starvation deadlocks from flee threshold preventing food hunts.
+            // For food-desperate bots, cap fleeAtHp at 8 to allow the kill + collection cycle.
+            // fight() internally has needsFoodDesperately logic that forces item collection even at low HP.
+            const isFoodDesperate = !combatHasFood && (combatBot!.food ?? 20) <= 6;
+            if (isFoodDesperate) {
+              fleeAtHp = Math.max(fleeAtHp, 8);
+              console.error(`[Combat] Food-desperate: capped fleeAtHp to ${fleeAtHp} for passive hunt (hunger=${combatBot!.food}, no food).`);
+            } else {
+              fleeAtHp = Math.max(fleeAtHp, 14);
+              console.error(`[Combat] Raised fleeAtHp to ${fleeAtHp} for passive hunt near ${nearbyHostiles.length} hostile(s).`);
+            }
           } else {
             hostileWarning = `\n[WARNING] ${nearbyHostiles.length} hostile(s) nearby while hunting ${target}: ${threatList}. Be cautious.`;
           }
