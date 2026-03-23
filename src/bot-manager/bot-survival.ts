@@ -646,6 +646,26 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
   const attackStartTime = Date.now();
   const ATTACK_TIMEOUT_MS = 60000; // 60s max — prevents infinite pathfinder loops
 
+  // Multi-hostile escalation: count nearby hostiles and raise flee threshold.
+  // Bot2 [2026-03-23]: killed by zombie while fighting enderman — fleeAtHp=12 was too low
+  // with 2+ mobs dealing simultaneous damage. Two zombies deal ~6 damage per hit cycle,
+  // meaning HP 12 → 6 in one tick — often lethal before flee completes.
+  // fight() has this via fleeAtHp parameter from mc_combat; attack() was missing it.
+  let attackFleeHp = 12;
+  const nearbyHostileCount = Object.values(bot.entities).filter(e => {
+    if (!e || e === bot.entity || !e.position) return false;
+    const eName = (e.name || "").toLowerCase();
+    if (!isHostileMob(bot, eName)) return false;
+    return e.position.distanceTo(bot.entity.position) < 16;
+  }).length;
+  if (nearbyHostileCount >= 3) {
+    attackFleeHp = 16;
+    console.error(`[Attack] ${nearbyHostileCount} hostiles nearby — raised fleeHp to ${attackFleeHp}`);
+  } else if (nearbyHostileCount >= 2) {
+    attackFleeHp = 14;
+    console.error(`[Attack] ${nearbyHostileCount} hostiles nearby — raised fleeHp to ${attackFleeHp}`);
+  }
+
   try {
     while (attacks < maxAttacks) {
       // Global timeout check
@@ -654,11 +674,11 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         bot.pathfinder.setGoal(null);
         return `Attack timed out after ${attacks} attacks. Target may be unreachable.`;
       }
-      // Check HP - flee if low (raised from 8 to 12 for better survival margin)
+      // Check HP - flee if low. Threshold is dynamic based on nearby hostile count.
       // Bug fix: previously this just returned "Fled" without actually fleeing — bot stayed
       // in place next to the hostile mob. Now actually moves away using pathfinder.
       // Bot1 [2026-03-22]: "Fled from skeleton" but skeleton kept shooting because bot didn't move.
-      if (bot.health <= 12) {
+      if (bot.health <= attackFleeHp) {
         console.error(`[Attack] HP low (${bot.health}), fleeing from ${target.name}!`);
         bot.pathfinder.setGoal(null);
         // Try to eat food before fleeing. Use EDIBLE_FOOD_NAMES to avoid spider_eye poison.

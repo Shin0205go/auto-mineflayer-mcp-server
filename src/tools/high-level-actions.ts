@@ -642,7 +642,7 @@ export async function minecraft_craft_chain(
       const chainBot = botManager.getBot(username);
       if (chainBot) {
         const chainHp = chainBot.health ?? 20;
-        if (chainHp < 6) {
+        if (chainHp < 8) {
           const abortMsg = `craft_chain ABORTED: HP critically low (${chainHp.toFixed(1)}/20) while crafting ${itemName}. Use mc_eat or mc_flee before retrying.`;
           console.error(`[CraftChain] ${abortMsg}`);
           results.push(abortMsg);
