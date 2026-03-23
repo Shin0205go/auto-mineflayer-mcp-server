@@ -982,10 +982,14 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
         return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20). HP too low even for food search.`;
       }
     } else {
-      // Nighttime or hostile nearby WITH food available: block movement when HP is dangerously low
-      // Bot can eat to recover, so blocking is safe — prevents fall death under mob pressure.
+      // Nighttime or hostile nearby WITH food available: warn but allow movement to continue.
+      // Blocking here causes deadlocks — bot has food and can eat mid-travel via auto-eat.
+      // Only hard-block at HP<2 (truly near-death) to prevent immediate fall death.
+      if (hpNow < 2 && distance > 30) {
+        return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20) at night/hostile nearby. Risk of immediate death. Eat food first, then retry movement.`;
+      }
       if (hpNow < 8 && distance > 30) {
-        return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20) at night/hostile nearby. Risk of fall death under mob pressure. Eat food or heal first, then retry movement.`;
+        console.error(`[Move] WARNING: HP=${hpNow.toFixed(1)} at night/hostile nearby with food. Proceeding with caution — auto-eat will trigger during travel.`);
       }
     }
     if (hpNow < 10 && distance > 30) {

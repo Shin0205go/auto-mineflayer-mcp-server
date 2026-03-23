@@ -1985,14 +1985,23 @@ export async function mc_navigate(
             // Check food availability mid-travel for smarter thresholds
             const segInv = botManager.getInventory(username);
             const segHasFood = segInv.some(item => EDIBLE_FOOD_NAMES.has(item.name));
-            // Abort at night with low HP — use higher threshold when no food since HP can't regen.
+            // Night HP check: abort without food (HP can't regen), warn-only with food (auto-eat handles it).
             // Bot1 Session 28: HP=14/hunger=1, died during multi-segment night navigation.
-            const nightHpThreshold = segHasFood ? 8 : 12;
-            if (segHp <= nightHpThreshold && segIsNight) {
-              const curPos2 = botManager.getPosition(username);
-              const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
-              const foodNote = segHasFood ? "" : " No food in inventory — HP cannot regenerate.";
-              return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10} at night.${foodNote} Current position: ${posStr}. Use mc_flee, build shelter (dig 1x1x2 + cover), or mc_eat before continuing.`;
+            // Bot2/Bot3: deadlocks from blocked movement when food was available.
+            if (segIsNight) {
+              if (!segHasFood && segHp <= 12) {
+                const curPos2 = botManager.getPosition(username);
+                const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
+                return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10} at night. No food in inventory — HP cannot regenerate. Current position: ${posStr}. Use mc_flee, build shelter (dig 1x1x2 + cover), or mc_eat before continuing.`;
+              }
+              if (segHasFood && segHp <= 4) {
+                const curPos2 = botManager.getPosition(username);
+                const posStr = curPos2 ? `(${Math.round(curPos2.x)}, ${Math.round(curPos2.y)}, ${Math.round(curPos2.z)})` : "unknown";
+                return `[ABORTED] Navigation stopped after ${i-1}/${steps} segments — HP=${Math.round(segHp*10)/10} at night (critical). Current position: ${posStr}. Eat food immediately, then continue.`;
+              }
+              if (segHasFood && segHp <= 8) {
+                console.error(`[Navigate] WARNING: HP=${Math.round(segHp*10)/10} at night during segment ${i}/${steps}. Has food — auto-eat will trigger. Continuing navigation.`);
+              }
             }
             // Abort if starving or near-starvation with low HP — starvation drains HP and mobs finish the job.
             // Bot1 Session 28: HP=14, hunger=1, died during multi-segment navigation because hunger
