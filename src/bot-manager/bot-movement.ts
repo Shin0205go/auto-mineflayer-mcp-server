@@ -1679,9 +1679,16 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     const feetY = Math.floor(bot.entity.position.y);
     const bx = Math.floor(bot.entity.position.x);
     const bz = Math.floor(bot.entity.position.z);
+    // Bot1 [2026-03-24]: pillarUp "No blocks placed" on birch forest at Y=78 with 81 dirt.
+    // Root cause: on uneven terrain, position.y may be exactly at an integer (e.g. 78.0),
+    // making feetY=78 and the block the bot stands ON is at Y=78, not Y=77.
+    // Old candidates only checked feetY-1 and feetY-2, missing feetY itself.
+    // Fix: also check feetY (the block at the exact feet position) as a higher-priority candidate.
     const candidates = [
       new Vec3(pillarX, feetY - 1, pillarZ),  // Pillar column (most reliable)
       new Vec3(bx, feetY - 1, bz),            // Actual position
+      new Vec3(pillarX, feetY, pillarZ),       // Pillar column at feet (sloped terrain fix)
+      new Vec3(bx, feetY, bz),                // Actual position at feet (sloped terrain fix)
       new Vec3(pillarX, feetY - 2, pillarZ),   // Pillar column -2
       new Vec3(bx, feetY - 2, bz),            // Actual position -2
     ];
@@ -1693,6 +1700,19 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
       if (b && b.name !== "air" && b.name !== "cave_air" && !isWaterBlock(b.name) && b.name !== "void_air") {
         blockBelow = b;
         break;
+      }
+    }
+    if (!blockBelow) {
+      // Last-resort fallback: if no block found via floor(), try raw Y scan from feet down.
+      // This handles sub-pixel positions like 78.01 where Math.floor gives 78 but bot stands on 77.
+      console.error(`[Pillar] No block below via candidates — scanning Y range [${feetY - 3}, ${feetY + 1}]...`);
+      for (let scanY = feetY + 1; scanY >= feetY - 3; scanY--) {
+        const b = bot.blockAt(new Vec3(pillarX, scanY, pillarZ));
+        if (b && b.name !== "air" && b.name !== "cave_air" && !isWaterBlock(b.name) && b.name !== "void_air") {
+          console.error(`[Pillar] Found block via scan: ${b.name} at Y=${scanY}`);
+          blockBelow = b;
+          break;
+        }
       }
     }
     if (!blockBelow) {
