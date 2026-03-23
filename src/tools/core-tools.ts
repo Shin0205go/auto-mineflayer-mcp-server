@@ -945,21 +945,26 @@ export async function mc_farm(): Promise<string> {
           // Bot1/Bot2 [2026-03-22]: navigated to water, took skeleton/mob damage during travel,
           // then started farming at HP<8 and died during tilling.
           // Bot2: skeleton appeared during navigation to water, no re-check before tilling.
+          // Bot2 [2026-03-23]: HP=9.5 ABORT here blocked farming entirely. When hunger=0,
+          // farming is the ONLY way to get food → deadlock. Convert to WARNING, continue.
           {
             const postNavHp = bot.health ?? 20;
-            if (postNavHp < 10) {
-              logs.push(`[ABORTED] HP dropped to ${postNavHp.toFixed(1)} during water navigation. Too low to start tilling (stationary for 60-120s).`);
+            if (postNavHp < 6) {
+              logs.push(`[ABORTED] HP dropped to ${postNavHp.toFixed(1)} during water navigation. Critically low — aborting.`);
               const finalBot = botManager.getBot(username);
-              return logs.join("\n") + `\nmc_farm aborted: HP critically low after reaching water (${postNavHp.toFixed(1)}/20). Heal first: mc_eat or mc_combat(target="cow"). HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}.`;
+              return logs.join("\n") + `\nmc_farm aborted: HP critically low after reaching water (${postNavHp.toFixed(1)}/20). Heal first: bot.eat() or bot.combat("cow"). HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}.`;
+            }
+            if (postNavHp < 10) {
+              logs.push(`[WARNING] HP dropped to ${postNavHp.toFixed(1)} during water navigation. Proceeding with caution — farming is needed for food production.`);
+              console.error(`[Farm] WARNING: HP=${postNavHp.toFixed(1)} after water navigation. Continuing anyway to avoid food deadlock.`);
             }
             const postNavDanger = checkDangerNearby(bot, 20);
             if (postNavDanger.dangerous) {
               const ptd = postNavDanger.nearestHostile
                 ? `${postNavDanger.nearestHostile.name} at ${postNavDanger.nearestHostile.distance.toFixed(1)} blocks`
                 : `${postNavDanger.hostileCount} hostile(s)`;
-              logs.push(`[ABORTED] Hostile detected after reaching water: ${ptd}. Too dangerous to start tilling.`);
-              const finalBot = botManager.getBot(username);
-              return logs.join("\n") + `\nmc_farm aborted: hostile mob appeared during water navigation (${ptd}). Use mc_flee or mc_combat to clear threats first. HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}.`;
+              logs.push(`[WARNING] Hostile detected after reaching water: ${ptd}. Proceeding with caution.`);
+              console.error(`[Farm] WARNING: ${ptd} nearby after water navigation. Continuing to avoid deadlock.`);
             }
           }
           // Re-scan for tillable blocks near water — MUST be within 4 blocks of water for irrigation
@@ -1178,21 +1183,25 @@ export async function mc_farm(): Promise<string> {
                 return logs.join("\n") + `\nmc_farm aborted: bot fell underground (Y=${botFarmY.toFixed(0)}→${vPostMoveY.toFixed(0)}). HP: ${finalBot?.health ?? '?'}. Return to surface first.`;
               }
               // POST-FAR-WATER-NAVIGATION SAFETY: same HP/hostile re-check as the near-water path.
+              // Bot2 [2026-03-23]: HP=9.5 ABORT blocked farming → food deadlock. Convert to WARNING.
               {
                 const postFarNavHp = bot.health ?? 20;
-                if (postFarNavHp < 10) {
-                  logs.push(`[ABORTED] HP dropped to ${postFarNavHp.toFixed(1)} during far water navigation. Too low to start tilling.`);
+                if (postFarNavHp < 6) {
+                  logs.push(`[ABORTED] HP dropped to ${postFarNavHp.toFixed(1)} during far water navigation. Critically low — aborting.`);
                   const finalBot = botManager.getBot(username);
                   return logs.join("\n") + `\nmc_farm aborted: HP critically low after reaching far water (${postFarNavHp.toFixed(1)}/20). Heal first. HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}.`;
+                }
+                if (postFarNavHp < 10) {
+                  logs.push(`[WARNING] HP dropped to ${postFarNavHp.toFixed(1)} during far water navigation. Proceeding with caution — farming is needed for food production.`);
+                  console.error(`[Farm] WARNING: HP=${postFarNavHp.toFixed(1)} after far water navigation. Continuing anyway to avoid food deadlock.`);
                 }
                 const postFarNavDanger = checkDangerNearby(bot, 20);
                 if (postFarNavDanger.dangerous) {
                   const fptd = postFarNavDanger.nearestHostile
                     ? `${postFarNavDanger.nearestHostile.name} at ${postFarNavDanger.nearestHostile.distance.toFixed(1)} blocks`
                     : `${postFarNavDanger.hostileCount} hostile(s)`;
-                  logs.push(`[ABORTED] Hostile detected after reaching far water: ${fptd}. Too dangerous to start tilling.`);
-                  const finalBot = botManager.getBot(username);
-                  return logs.join("\n") + `\nmc_farm aborted: hostile appeared during far water navigation (${fptd}). Use mc_flee or mc_combat first. HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}.`;
+                  logs.push(`[WARNING] Hostile detected after reaching far water: ${fptd}. Proceeding with caution.`);
+                  console.error(`[Farm] WARNING: ${fptd} nearby after far water navigation. Continuing to avoid deadlock.`);
                 }
               }
               // Re-scan for tillable blocks near water — MUST be within 4 blocks of water for irrigation.

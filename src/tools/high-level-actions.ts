@@ -188,6 +188,7 @@ export async function minecraft_gather_resources(
           }
           if (!foundSourceBlock) {
             console.error(`[GatherResources] No source blocks for '${item.name}' found within ${currentMaxDistance} blocks`);
+            results.push(`${item.name}: ${collected}/${targetCount} (no ${item.name} source blocks found within ${currentMaxDistance} blocks — try moving to a different area or mining deeper)`);
             break;
           }
         }
@@ -195,7 +196,12 @@ export async function minecraft_gather_resources(
         const findResult = botManager.findBlock(username, blockNameToMine, currentMaxDistance);
 
         if (findResult.includes("No") || findResult.includes("not found")) {
-          console.error(`[GatherResources] No more ${blockNameToMine} found within ${maxDistance} blocks`);
+          console.error(`[GatherResources] No more ${blockNameToMine} found within ${currentMaxDistance} blocks`);
+          if (collected === 0) {
+            const botPosInfo = botManager.getPosition(username);
+            const yInfo = botPosInfo ? ` (bot at Y=${botPosInfo.y.toFixed(0)})` : "";
+            results.push(`${item.name}: 0/${targetCount} (no ${blockNameToMine} found within ${currentMaxDistance} blocks${yInfo} — try moving to a different area, check Y-level for ore spawns, or mine deeper)`);
+          }
           break;
         }
 
@@ -299,10 +305,10 @@ export async function minecraft_gather_resources(
           moveResult = await botManager.moveTo(username, x, y, z);
         }
         if (!moveResult.includes("Reached") && !moveResult.includes("Moved")) {
-          console.error(`[GatherResources] Move failed: ${moveResult}`);
+          console.error(`[GatherResources] Move failed to (${x},${y},${z}): ${moveResult}`);
           failedPositions.add(pk);
           consecutiveFailures++;
-          continue; // Try finding another block
+          continue; // Try finding another block — reason logged for diagnosis
         }
 
         // Check if bot has the right tool for this block (prevents infinite loop on no-drop mining)
@@ -389,7 +395,8 @@ export async function minecraft_gather_resources(
           console.error(`[GatherResources] Collected ${gained} from ${item.name}${dropsStr}, total: ${collected}/${targetCount}`);
         } else {
           consecutiveFailures++;
-          console.error(`[GatherResources] No items gained (failures: ${consecutiveFailures}), may need correct tool`);
+          const heldTool = botManager.getBot(username)?.heldItem?.name ?? "empty hand";
+          console.error(`[GatherResources] No items gained from ${blockNameToMine} at (${x},${y},${z}) (failures: ${consecutiveFailures}, tool: ${heldTool}). Expected drops: ${dropNames.join("/")}`);
         }
 
         // Small delay between mining operations
@@ -401,7 +408,17 @@ export async function minecraft_gather_resources(
       }
     }
 
-    results.push(`${item.name}: ${collected}/${targetCount}`);
+    // Only push generic result if no explanatory result was already added for this item
+    const alreadyHasResult = results.some(r => r.startsWith(`${item.name}:`));
+    if (!alreadyHasResult) {
+      if (collected === 0 && failedPositions.size > 0) {
+        results.push(`${item.name}: 0/${targetCount} (found ${failedPositions.size} block(s) but all unreachable — pathfinder could not reach them. Try moving closer or to a different area)`);
+      } else if (collected === 0 && consecutiveFailures > 0) {
+        results.push(`${item.name}: 0/${targetCount} (mining attempts failed ${consecutiveFailures} time(s) — blocks may require a better pickaxe or are inaccessible)`);
+      } else {
+        results.push(`${item.name}: ${collected}/${targetCount}`);
+      }
+    }
   }
 
   const inventory = botManager.getInventory(username);
