@@ -911,6 +911,26 @@ export async function fight(
 ): Promise<string> {
   const bot = managed.bot;
 
+  // Multi-hostile escalation: count nearby hostiles and raise flee threshold.
+  // attack() already has this (line ~654), but fight() was missing it.
+  // Bot2 [2026-03-23]: fleeAtHp=5 during enderman fight, zombie attacked from behind,
+  // HP dropped below 5 in one tick from simultaneous hits — bot died before flee triggered.
+  // Two mobs deal ~6-10 damage per hit cycle, so fleeAtHp must account for burst damage.
+  // Bot1/Bot2/Bot3: many deaths where fight() used the raw caller fleeAtHp while surrounded.
+  const nearbyHostileCountFight = Object.values(bot.entities).filter(e => {
+    if (!e || e === bot.entity || !e.position) return false;
+    const eName = (e.name || "").toLowerCase();
+    if (!isHostileMob(bot, eName)) return false;
+    return e.position.distanceTo(bot.entity.position) < 16;
+  }).length;
+  if (nearbyHostileCountFight >= 3) {
+    fleeHealthThreshold = Math.max(fleeHealthThreshold, 16);
+    console.error(`[Fight] ${nearbyHostileCountFight} hostiles nearby — raised fleeHealthThreshold to ${fleeHealthThreshold}`);
+  } else if (nearbyHostileCountFight >= 2) {
+    fleeHealthThreshold = Math.max(fleeHealthThreshold, 14);
+    console.error(`[Fight] ${nearbyHostileCountFight} hostiles nearby — raised fleeHealthThreshold to ${fleeHealthThreshold}`);
+  }
+
   // Step 0: Auto-eat before combat if HP is not full and food is available.
   // Use EDIBLE_FOOD_NAMES (not isFoodItem) to exclude spider_eye which causes 2 HP poison
   // damage — eating it mid-combat at low HP is often lethal. isFoodItem includes spider_eye
