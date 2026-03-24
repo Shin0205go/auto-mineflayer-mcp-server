@@ -2831,15 +2831,16 @@ export async function mc_connect(
 
   await botManager.connect({ host, port, username, version });
 
-  // Start prismarine-viewer via persistent viewer server if VIEWER=1
-  if (process.env.VIEWER === "1") {
+  // Start viewer server on every mc_connect (no VIEWER=1 required)
+  {
     const viewerPort = parseInt(process.env.VIEWER_PORT || "3099");
     try {
-      const { onBotConnected } = await import("../viewer-server.js");
+      const { startViewerServer, onBotConnected } = await import("../viewer-server.js");
+      startViewerServer(viewerPort);
       const bot = botManager.getBot(username);
       if (bot) {
         await onBotConnected(bot, username, viewerPort);
-        console.error(`[Viewer] Started at http://localhost:${viewerPort}`);
+        console.error(`[Viewer] Dashboard at http://localhost:${viewerPort}/dashboard`);
       }
     } catch (e) {
       console.error(`[Viewer] Failed to start: ${e}`);
