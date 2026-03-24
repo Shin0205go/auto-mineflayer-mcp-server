@@ -2833,7 +2833,7 @@ export async function mc_connect(
 
   // Start prismarine-viewer via persistent viewer server if VIEWER=1
   if (process.env.VIEWER === "1") {
-    const viewerPort = parseInt(process.env.VIEWER_PORT || "3007");
+    const viewerPort = parseInt(process.env.VIEWER_PORT || "3099");
     try {
       const { onBotConnected } = await import("../viewer-server.js");
       const bot = botManager.getBot(username);
