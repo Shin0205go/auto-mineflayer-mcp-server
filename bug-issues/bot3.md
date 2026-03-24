@@ -96,6 +96,33 @@
 - **keepInventory**: false（loss risk minimal due to only having cobblestone + torches）
 - **Recovery**: Respawned voluntarily at (3, 97, 6) per Claude1 instruction
 
+---
+
+## [2026-03-22] バグ #13 — pathfinding完全停止・entity.position=undefined (Session 2026-03-22)
+
+- **状況**: 移動不能（死亡なし）
+- **座標**: (-32.5, 97, 13.3) old_growth_birch_forest
+- **発生経緯**:
+  1. 接続後、moveTo/navigate/combat が全て機能しない
+  2. entity.position = undefined（bot オブジェクトの状態が不正）
+  3. reconnect後も同じ位置・同じ症状
+  4. moveTo は "Moved near stone" と返すが実際の位置は変わらない
+- **状況**: HP=10/20、空腹=0/20、夜間、脅威5体以上が近接
+- **応急処置**: dirtブロックで自分を囲いシェルター構築（部分的に成功）
+- **根本原因**: 不明。pathfinder が現在地をゴールと誤認しているか、chunk読み込み遅延でブロック情報が正しくない可能性
+- **Status**: 調査中（コード修正禁止）
+
+---
+
+## [2026-03-22] 観察: Claude1 溺死 (Session 2026-03-22)
+
+- **発生**: Claude3 の接続セッション中にチャットで "Claude1 drowned" を確認
+- **状況**: 夜間、食料ゼロ、全員HP低下中のセッション
+- **claude3 状態**: HP=10, Hunger=0, 夜間、スケルトン3体/クリーパー1体が近接
+- **対応**: dirtブロックで簡易シェルター構築、夜明け待機中
+- **記録目的**: Claude1の溺死がbot1.mdに記録済みかどうか不明。夜間水場移動による溺死は繰り返しバグ
+- **Status**: 記録のみ。コード修正禁止。
+
 ## 死亡 #9 (Session 73+)
 
 - **死因**: Zombified Piglin に殺された（×2回連続）
@@ -621,6 +648,38 @@ Session 89 Timeline:
 - **影響**: Phase 2 の農場設立が完全にブロックされている
 - **Status**: 記録のみ（コード修正禁止）
 
+## バグ #22 — 完全デッドロック: 移動・戦闘・採掘・逃走が全てブロック (2026-03-23)
+
+- **状況**: HP 9.4/20, Hunger 0, 食料ゼロの状態で完全デッドロック。あらゆる行動が拒否される
+- **座標**: (-1.5, 74, -7.5) birch_forest
+- **時系列**:
+  1. 接続時: HP 9.4, hunger 0, 食料なし, 朝 (ticks 2013)
+  2. `bot.combat("chicken")` → 「No chicken found nearby」
+  3. `bot.combat("cow")` → 「No cow found nearby」
+  4. `bot.navigate("animal")` → [BLOCKED] 敵11体でナビゲーション拒否
+  5. `bot.flee(30)` → 「Moved 0.0 blocks. Terrain is constrained.」(地形が複雑で逃走不能)
+  6. `bot.moveTo(-1, 87, -2)` → [BLOCKED] 敵11体で移動拒否
+  7. 10秒待機後も敵11体が残存
+  8. `bot.pillarUp(5)` → 30秒タイムアウト
+  9. `bot.combat("skeleton")` → [REFUSED] 崖(S, W, NW方向)の近くでノックバック危険
+  10. `bot.combat("zombie")` → [REFUSED] 同様に崖の近くで拒否
+  11. `bot.gather("dirt")` → 「skeleton at 8.8 blocks」で採掘拒否
+- **デッドロック原因分析**:
+  - `bot.flee` が「地形に阻まれて0m移動」→ 移動系ツールが全てブロック
+  - `bot.combat` が「崖の近く」で全て拒否 → 戦闘系ツールがブロック
+  - `bot.gather` が「敵が近い」で拒否 → 採掘もブロック
+  - 食料ゼロで `bot.eat` も不能
+  - 結果: 完全に何もできない状態
+- **根本原因**:
+  1. `bot.flee` の地形回避ロジックの欠陥: 移動できない場合の代替手段がない
+  2. 安全チェックの競合: flee失敗 → combat拒否(崖) → gather拒否(敵) → navigate拒否(敵) のループ
+  3. 「崖の近くで戦闘禁止」「敵の近くで採掘禁止」「低HP+敵で移動禁止」が同時に発動すると脱出不能
+- **改善案**:
+  1. `bot.flee` が0m移動の場合: 垂直方向(上)への脱出を自動試行するべき
+  2. デッドロック検出機能: 全ての逃走・戦闘手段が失敗した場合の緊急脱出ルート
+  3. 崖判定と敵判定が競合した場合: 敵の方向と反対の崖でなければ戦闘を許可すべき
+- **Status**: デッドロック継続中。記録のみ（コード修正禁止）
+
 ## 死亡 #21 — 夜間モブ包囲・HP=0起動 (2026-03-22 セッション継続)
 
 - **死因**: 夜間・HP=0表示・食料ゼロでモブ多数に包囲。flee実行中に死亡と推定
@@ -710,6 +769,20 @@ Session 89 Timeline:
   3. flee 1回では包囲網を抜けられない（複数方向からモブが接近）
 - **Status**: リスポーン成功。現在 HP 20/20, Hunger 20/20。インベントリ完全空。Phase 2 継続中。
 
+## 死亡 #27 — エンダーマンに殺された (2026-03-22 現セッション)
+
+- **死因**: エンダーマンに攻撃された (HP 2→20はリスポーン)
+- **座標**: 死亡前 (-10, 85, 1) → リスポーン (-10, 116, -3)
+- **状況**:
+  - HP 2/20、Hunger 11/20
+  - 昼間(morning)だがエンダーマン(8.5m west), zombie(12.6m east), skeleton(13.4m south)が近接
+  - mc_farm 実行中に攻撃された
+  - 食料ゼロ
+- **根本原因**: mc_farm 実行中にエンダーマンに攻撃され、HP 2/20 から一撃死
+- **教訓**: mc_farm 実行前にモブ脅威を排除または安全距離確保すべき
+- **keepInventory**: 有効（インベントリ保持確認）
+- **Status**: リスポーン成功。HP 20/20, Hunger 20/20。農場作成継続中。
+
 ## 死亡 #26 — スケルトンに射殺 (2026-03-22 現セッション)
 
 - **死因**: "Claude3 was shot by Skeleton"
@@ -729,3 +802,396 @@ Session 89 Timeline:
   2. 接続時HP確認後、即座にflee→高所移動→待機が必要
 - **keepInventory**: 有効（インベントリ保持確認）
 - **Status**: 記録済み。現在 HP 7/20 → flee後継続中。
+
+## 死亡 #29 — 夜間モブ包囲・HP=5.8・食料ゼロ (2026-03-22 現セッション)
+
+- **死因**: 夜間(midnight)にHP=5.8/20、食料ゼロでcreeper/zombie/endermanに包囲され死亡
+- **座標**: 死亡前 (-4.5, 84, -2.3) → リスポーン (6.5, 100, -1.5)
+- **状況**:
+  - HP: 5.8/20、Hunger: 12/20、食料: ゼロ
+  - mc_flee x3 実行 → 毎回 "Now X blocks away" だが逃げ切れず
+  - mc_build(shelter) → HP < 10 で拒否
+  - リスポーン後: HP 20/20, Hunger 20/20 ✅
+  - リスポーン後インベントリ: wheat_seeds x29, stone_hoe x2, stone_sword, cobblestone x29, dirt x107 等（keepInventory有効）
+- **根本原因**: HP=5.8/20で夜間モブ多数包囲。逃げ続けるも消耗し死亡。
+- **教訓**: HP < 10 では建築ができず、逃げ続けることしかできない → 食料確保なしでは生存不可
+- **keepInventory**: 有効（インベントリ保持確認）
+- **Status**: リスポーン成功。HP 20/20, Hunger 20/20。夜間待機中。
+
+## 問題 #30 — 接続時 HP=4, hunger=4, 食料ゼロ, 夜間 (2026-03-22 現セッション)
+
+- **状況**: 接続時 HP=4/20、hunger=4/20、食料ゼロ、深夜(midnight)
+- **座標**: 初期 (-20.6, 101, 15.1) → チェスト(-37,97,8)付近で待機
+- **状況詳細**:
+  - HP: 4/20
+  - Hunger: 4→3→2→0/20（急速に低下）
+  - 食料: ゼロ
+  - チェスト確認: 食料なし（cobblestone, dirt等の建築資材のみ）
+  - 夜間: creeper が16-17m以内
+  - 128ブロック内に動物なし（cow/pig/chicken/sheep 全て不在）
+- **試みた対応**:
+  - mc_combat(cow) → 夜間・ノーアーマー・HP4で拒否（dawn後も拒否続く）
+  - mc_navigate(entity=cow, max_distance=128) → 不在
+  - mc_flee(creeper) → 成功、夜明け後のphase=dawnまで待機
+  - mc_navigate(hunger=0で) → "STARVATION" 警告で拒否
+- **Claude1の死亡**: "Claude1 was slain by Zombie" を確認。Claude1もHP/食料問題で死亡
+- **根本原因**: 前セッション終了時のHP=4引き継ぎバグ。食料なし、動物なし
+- **現状**: hunger=0, HP=4で朝になったが動物が見つからない。飢餓ループ中
+- **Status**: 記録済み。食料確保試行中。
+
+## 死亡 #31 — 接続時 HP=4/hunger=0 飢餓ループ → リスポーン (2026-03-22 現セッション)
+
+- **死因**: 接続時 HP=4/20, hunger=0/20、食料ゼロ。動物なし(cow/pig/chicken/sheep 128ブロック内不在)。飢餓ダメージでHP低下→死亡と推定。
+- **座標**: 接続時 (-8.7, 99, 5.7) → リスポーン後 (10.5, 109, 1.5)
+- **状況**:
+  - 接続時: HP 4/20, hunger 0/20, 食料ゼロ
+  - インベントリ: dirt x6, chest x1, gravel x3, cobblestone x7
+  - mc_combat(cow/pig/chicken/sheep) → 全て "No X found nearby"
+  - リスポーン後: HP 20/20, Hunger 20/20 ✅
+  - "[Server] Claude3 fell from a high place" — 落下ダメージも発生
+- **根本原因**: 前セッション終了時のHP=4引き継ぎバグ継続。食料ゼロ + 動物なし
+- **keepInventory**: 有効（インベントリ保持確認）
+- **Status**: リスポーン成功。HP 20/20, Hunger 20/20。朝(morning)。Phase 2 継続中。
+
+## 問題 #28 — 接続時 HP=5.8、夜間モブ包囲、食料ゼロ (2026-03-22 現セッション)
+
+- **状況**: 接続時 HP=5.8/20（前セッション引き継ぎ）。夜間(midnight)にcreeper x3, zombie x2が近接。食料ゼロ。
+- **座標**: 初期 (-4.3, 106, 12.7) → flee後 (-4.5, 84, -2.3) → flee後 (-4.6, 83, -12.1)
+- **状況詳細**:
+  - HP: 5.8/20
+  - Hunger: 15-16/20
+  - 食料: ゼロ（インベントリに wheat_seeds x29 等あり）
+  - 夜間midnight: creeper/zombie/enderman が13-24m
+  - インベントリ: cobblestone x29, birch_planks x7, stone_sword, stone_hoe x2, dirt x107, wheat_seeds x29 等
+- **試行した対応**:
+  - mc_flee x2 → 成功（敵から距離確保）
+  - mc_build(shelter) → HP低すぎて拒否（HP<10では建築不可）
+  - mc_combat(cow) → 夜間・ノーアーマー・HP5.8で拒否
+  - mc_craft(chest) → 接続切断（Bot not found エラー）
+- **根本原因**: 前セッション終了時にHPが回復されていない。keepInventory有効だがHP引き継ぎバグ継続。
+- **現状**: 夜明け（ticks ~23000）まで待機中。夜明け後 birch_log 収集 → chest 追加作成 → Phase 1 完了目標。
+- **Status**: 記録済み。夜明け待機中。
+
+## 死亡 #31 — 夜間モブ包囲・高所落下 (2026-03-22 現セッション)
+
+- **死因**: 夜間(midnight)に creeper/zombie/enderman 複数が近接。mc_build(shelter)が300秒タイムアウトし、その間に死亡（チャットで "Claude3 fell from a high place" 確認）
+- **座標**: 死亡前 (0, 63, 4) 付近 → リスポーン (45.5, 96, 18.5)
+- **状況**:
+  - HP: 13/20（flee中に低下）、食料ゼロ
+  - mc_flee x2 実行後、mc_build(shelter)を試みたが 300秒タイムアウト
+  - タイムアウト中にモブか落下で死亡
+  - リスポーン後: HP 19.8/20, Hunger 13/20 ✅
+  - keepInventory有効: stone_sword, stone_axe, iron_axe, cobblestone多数、wheat x2等を保持
+- **根本原因**: mc_build(shelter)が夜間に300秒タイムアウト。安全でない場所でのシェルター建設試行
+- **教訓**: mc_build(shelter)は長時間タイムアウトするリスクがある。夜間はシェルターより pillar_up + cobblestone でスポットシェルターを即時作る方が安全
+- **keepInventory**: 有効（ツール類保持確認）
+- **Status**: リスポーン成功。現在朝(morning)、HP 19.8, Hunger 13。Phase継続中。
+
+## 問題 #32 — HP=3/hunger=0 全行動ロック・夜間待機 (2026-03-22 現セッション)
+
+- **状況**: HP=3/20、hunger=0/20、食料ゼロ、夜間で全行動が拒否され完全ロック
+- **座標**: (113.7, 99, 122.1) — old_growth_birch_forest バイオーム
+- **状況詳細**:
+  - HP: 3/20
+  - Hunger: 0/20
+  - 食料: ゼロ
+  - 夜間(ticks 17733)
+  - 脅威: 周囲にモブなし（直前に mc_flee x2 で離脱成功）
+  - インベントリ: stone_pickaxe, stone_sword, cobblestone x2, dirt x11, stick x9, birch_planks x6, chest x1, gravel x3, birch_log x2
+- **拒否されたアクション**:
+  - mc_combat(cow) → 夜間・ノーアーマー・HP3で拒否
+  - mc_combat(chicken) → 夜間・ノーアーマー・HP3で拒否
+  - mc_build(shelter) → HP < 10 で拒否
+  - mc_eat() → 食料ゼロで実行不可
+- **根本原因**: HP=3での全行動拒否ルールが全回復手段もブロックしている。夜明けまで待機以外に手段なし
+- **発生経緯**: 接続時すでに HP=13/hunger=1。前セッション引き継ぎのHP低下バグ継続
+- **対処**: 夜明け(ticks ~24000/0)まで待機。その後 chicken 狩りで食料確保予定
+- **Status**: 記録済み。夜明け待機中。
+
+## 死亡 #33 — HP=0.5 ゾンビに殺された (2026-03-22 現セッション)
+
+- **死因**: "Claude3 was slain by Zombie" — flee中にHP0.5からゾンビに撃破
+- **座標**: 死亡前 (103, 103, 116) 付近 → リスポーン後 (7.5, 105.2, -2.9)
+- **状況**:
+  - HP: 3→0.5（flee中にダメージを受け限界）
+  - Hunger: 0/20
+  - 食料: ゼロ
+  - 夜間midnight: zombie x3, spider が近接
+  - mc_flee(distance=40)実行中に死亡
+  - リスポーン後: HP 20/20, Hunger 20/20 ✅ keepInventory有効
+- **根本原因**: HP=3/hunger=0で全行動拒否状態が続き、逃げ続けながらHPが削られた
+- **教訓**: HP=3まで削られると flee を繰り返してもHPが回復しないため、モブが増えると生存不可。食料なしでの夜間サバイバルは根本的に解決不能。
+- **keepInventory**: 有効（インベントリ保持確認）
+- **Status**: リスポーン成功。HP 20/20, Hunger 20/20。拠点付近(7,105,-3)。夜間継続中。
+
+## 死亡 #35 — 飢餓ダメージ HP=1→死亡 (2026-03-22)
+
+- **死因**: 飢餓ダメージ。Hunger=0 でナビゲーション拒否中にHP=10→1→死亡
+- **座標**: (6.6, 100, 25.8) → リスポーン後 (5.5, 67, 2.3)
+- **状況**:
+  - Hunger=0、食料ゼロ、100m内に動物なし
+  - ナビゲーションが STARVATION で拒否
+  - wheat x1 所持だが食べられない（パンに加工必要）
+  - stone_pickaxe 消失（keepInventory バグ?）
+  - リスポーン後: HP 16/20, Hunger 11/20
+- **根本原因**: 食料源なし + ナビゲーション制限 + 飢餓ダメージ
+- **keepInventory**: 有効だが stone_pickaxe と多数のツールが消失
+- **Status**: リスポーン成功。夜間モブ多数。待機中。
+
+## 死亡 #36 — 高所落下 (2026-03-22 現セッション)
+
+- **死因**: "Claude3 fell from a high place" — チェストへのアクセス試行中に落下死
+- **座標**: 死亡前 (-2.3, 101, 32.9) → リスポーン後 (11.7, 86.2, 2.3)
+- **状況**:
+  - HP: 10/20（前セッション引き継ぎ）
+  - Hunger: 0/20
+  - チェスト (5,101,29) が 26.6m 離れていてアクセス不可のエラー中に死亡
+  - リスポーン後: HP 20/20, Hunger 17/20 ✅ keepInventory有効
+  - インベントリ保持: stone_sword, stone_pickaxe, birch_log, cobblestone等
+- **根本原因**: Hunger=0・HP=10で高所にいた状態で落下
+- **keepInventory**: 有効（インベントリ保持確認）
+- **Status**: リスポーン成功。HP 20/20, Hunger 17/20。夜間待機中。
+
+## 死亡 #34 — 昼間 HP=1 クリーパー+骸骨包囲 (2026-03-22 現セッション)
+
+- **死因**: 朝(morning)にHP=1/20、食料ゼロ。クリーパー13m、前のセッションから低HP引き継ぎ。
+- **座標**: 死亡前 (-2.3, 98, 17.5) → リスポーン後 (3.5, 93, 10.5) → 最終 (11.3, 90.2, 6.3)
+- **状況**:
+  - 接続時: HP 13/20, 空腹 12/20, 食料ゼロ
+  - 夜間待機中に HP が 13→10→1 まで低下（モブダメージ or 飢餓）
+  - リスポーン後: HP 20/20, Hunger 20/20 ✅ keepInventory有効
+  - ツール保持: stone_hoe, stone_axe, stone_sword, iron_axe
+- **根本原因**: 食料ゼロ + 夜間モブ包囲パターン継続。mc_flee 後のHP回復手段がない。
+- **keepInventory**: 有効（ツール類保持確認）
+- **Status**: リスポーン成功。HP 20/20, Hunger 19/20。朝(morning)。Phase 3 石ツール完了目標継続中。
+
+## 死亡 #37 — 飢餓+ゾンビに殺された (2026-03-22 現セッション)
+
+- **死因**: "Claude3 was slain by Zombie" — HP=1、Hunger=0で移動制限中にゾンビに接近される
+- **座標**: 死亡前 (12.7, 97, 115) 付近、old_growth_birch_forest バイオーム
+- **状況**:
+  - 接続時: HP 1/20, Hunger 0/20, 食料ゼロ
+  - インベントリ: stone_pickaxe, stone_sword, stone_axe, stone_hoe x2, wheat x1, wheat_seeds x31, cobblestone x30, dirt x122, 等
+  - 動物: 32ブロック内に cow/pig/chicken なし
+  - navigate(animal) → "No animal found within 32 blocks"
+  - navigate(wheat) → "No wheat found within 32 blocks"
+  - 移動制限: Hunger=0 で "[REFUSED] Cannot navigate while starving"
+  - ゾンビに接近され、HP=1 から死亡
+  - リスポーン後: HP 11.8/20, Hunger 15/20（完全回復ではない）
+- **根本原因**: 前セッション終了時の HP=1 引き継ぎバグ継続。Hunger=0 で移動が完全にブロックされ、逃げられない状態でゾンビに殺される
+- **keepInventory**: 有効（インベントリ大部分保持）
+- **Status**: リスポーン成功。HP 11.8/20, Hunger 15/20。朝(morning)。Phase 2/3 継続中。
+
+## 問題 #38 — 接続時 HP=1.8/Hunger=0、飢餓ループ継続 (2026-03-22 現セッション)
+
+- **状況**: 接続後すぐに HP=1.8/20、Hunger=0/20 を確認。脅威なし(threats=0)だが飢餓ダメージで死亡寸前。
+- **座標**: (2.3, 70.1, 5.8) — birch_forest バイオーム
+- **インベントリ**: wheat_seeds x169, iron_axe, bucket, stone_sword, stone_axe 等多数（食料ゼロ）
+- **Infrastructure**: crafting_table (157,61,-104) — 遠い。furnace なし。chest なし（範囲外）
+- **根本原因**: 前セッション終了時の HP=1.8/Hunger=0 引き継ぎバグ継続。
+- **対処**: flee 実行後リスポーン待ち（keepInventory=true）
+- **Status**: 記録済み。リスポーン後 Phase 2 農場設立継続予定。
+
+## バグ #39 — HP=1.8/Hunger=0 完全デッドロック（2026-03-22 現セッション）
+
+- **状況**: Hunger=0 + HP=1.8 で全移動・戦闘・農場アクションがブロック。自然死もしない（Easyモード？）
+- **座標**: (167.4, 64.2, -14.9) — birch_forest バイオーム
+- **時系列**:
+  1. 接続時: HP=1.8/Hunger=0（前セッション引き継ぎバグ継続）
+  2. bot.farm() → "[REFUSED] Cannot farm while starving"
+  3. bot.combat() → "[REFUSED] Too dangerous ... HP=1.8"
+  4. bot.moveTo(遠距離) → 移動失敗（Hunger=0 ブロック）
+  5. 10m 近距離移動は成功したが 50m+ は失敗
+  6. Hunger=0 で30分以上待機しても飢餓ダメージなし（Easy難易度？）
+- **根本原因**: 前セッション終了時の HP=1.8 引き継ぎバグ + Hunger=0 移動ブロック = 完全デッドロック
+- **ブロックされるアクション**: farm, combat, moveTo(遠距離), navigate(動物)
+- **唯一の解決策**: 管理者による `/give Claude3 bread 10` または難易度変更（Normal/Hard で飢餓死可能）
+- **Status**: CRITICAL - 管理者介入必須
+
+## 死亡 #42 — zombie(1.8m)に殺された + 食料ドロップバグ (2026-03-22 現セッション)
+
+- **死因**: zombie(1.8m north)に殺された。HP=2.8→0
+- **座標**: 不明（flee後リスポーン）
+- **状況**:
+  - HP=2.8/20、Hunger=0/20
+  - インベントリ: food ゼロ（ドロップ未回収バグ継続）
+  - 동물 5体以上撃破したが raw meat 入手できず
+  - インベントリ満杯問題 → cobblestone drop後も food 入らず
+  - リスポーン後: HP 20/20, Hunger 20/20 ✅
+- **根本原因**: 動物ドロップが回収されない（combat後 raw meat がインベントリに入らない）+ Hunger=0 で飢餓ループ
+- **keepInventory**: 有効（リスポーン確認）
+- **Status**: リスポーン成功。HP 20/20, Hunger 20/20。ドロップバグ調査継続。
+
+## バグ #40 — 動物ドロップ未回収（combat後 raw meat が入手できない）(2026-03-22 現セッション)
+
+- **状況**: cow/pig/chicken/sheep を combat で撃破してもインベントリに raw meat/feather 等が入らない
+- **座標**: (6.6, 100, 25.5) 付近
+- **時系列**:
+  1. bot.combat("chicken") → "chicken 撃破" ログ
+  2. インベントリ確認 → food: [] (raw_chicken なし)
+  3. bot.combat("cow"), bot.combat("pig") でも同様
+  4. 合計 cow/pig/chicken を5体以上撃破 → 食料ゼロ
+- **影響**: 食料確保手段が農場のみになる。飢餓ループ継続
+- **根本原因**: mc_combat のドロップ回収コードが機能していない可能性 (コード修正禁止)
+- **Status**: 記録のみ（コード修正禁止）
+
+## バグ #41 — flee()が移動しない (2026-03-22 現セッション)
+
+- **状況**: mc_flee() 実行後も位置が変化しない
+- **座標**: (-36.7, 97.9, 8.7) → flee後も同座標
+- **証拠**: flee(20)実行 → "Now X blocks away" ログだが座標変化なし
+- **影響**: モブから逃げられない状態
+- **Status**: 記録のみ（コード修正禁止）
+
+## バグ #43 — navigate(water/animal)が移動せず誤報 (2026-03-22 現セッション)
+
+- **状況**: navigate("water"), navigate("cow") が "見つけた" と報告するが実際には移動していない
+- **証拠**: navigate("water") 実行前後で座標同一 (-36.7, 97.9, 8.7)
+- **影響**: 水源探索・動物探索が機能しない
+- **Status**: 記録のみ（コード修正禁止）
+
+## 問題 #44 — Phase 2 完全デッドロック (2026-03-22 現セッション)
+
+- **状況**: 食料確保手段が全て機能不全。HP=10/Hunger=0で停滞中
+- **機能不全リスト**:
+  1. 動物ドロップ未回収（バグ #40）
+  2. flee()移動なし（バグ #41）
+  3. farm()小麦収穫・種植え不可（バグ #20）
+  4. navigate()移動誤報（バグ #43）
+- **現在の状況**: Easy難易度のため飢餓死せず生存中。石ツールは保有。
+- **必要な管理者介入**: `/give Claude3 bread 20` または `/give Claude3 cooked_beef 20`
+- **Status**: 管理者介入待ち
+
+## 問題 #45 — 現セッション起動時 HP=10/Hunger=0・食料ゼロ継続 (2026-03-22 最新セッション)
+
+- **状況**: 接続後 HP=10/20、Hunger=0/20、食料ゼロ。前セッションから引き継ぎ。
+- **座標**: (-33.7, 97, 12.3) — old_growth_birch_forest バイオーム
+- **状況詳細**:
+  - HP: 10/20
+  - Hunger: 0/20
+  - 食料: ゼロ
+  - インベントリ: stone_axe, stone_sword, stone_hoe, stone_pickaxe, coal x1, bone_meal x2, egg x4, stick x5, chest x2, cobblestone x22, dirt x64, gravel x3, birch_log x6, birch_planks x1, wheat_seeds x10
+  - 朝(morning, ticks 1853)
+  - 脅威: creeper(22.4m west), skeleton(24m north)
+  - 付近: crafting_table(-36,97,8), furnace(-35,98,9), chest(-37,97,8)
+  - 128ブロック内に動物不在（cow/pig/chicken/sheep 全て不在）
+- **試みた対応**:
+  - mc_combat(cow) → creeper 14.9m以内で拒否
+  - mc_flee(20) → 1.2ブロックのみ移動（不十分）
+  - mc_combat(creeper) → 到達不可能で中止
+  - mc_combat(pig/chicken/sheep) → 全て "No X found nearby"
+  - mc_navigate("cow") → "No cow found within 64 blocks"
+  - mc_navigate({x:-36,y:97,z:8}) → 30秒タイムアウト (navigate timeout バグ継続)
+  - mc_store(list) → チェスト6.8m離れで到達不可
+- **根本原因**: 問題 #44 継続。navigate タイムアウト + 動物不在 + Hunger=0 移動制限
+- **Status**: チェスト内容確認とfarm試行予定。管理者介入がなければデッドロック継続
+
+## 死亡 #46 — pillarUp中に落下か夜間モブ死亡 (2026-03-22 現セッション)
+
+- **死因**: 推定 — 夜間(midnight)にpillarUp後、夜明け待機中に落下またはモブ死亡
+- **座標**: 死亡前 (−0.4, 103-106, 23) → リスポーン後 (3.3, 62, 15.7)
+- **状況**:
+  - HP: 7.2/20, Hunger: 0/20, 食料ゼロ
+  - 夜間待機のためpillarUp(3)実施 → 脅威ゼロを確認
+  - 夜明けを待ちながら待機中（約5分30秒）
+  - 朝になり HP 11.2→8.2 に低下（飢餓ダメージ）
+  - その後接続が切れ、リスポーン後 HP 20/20, Hunger 20/20
+  - リスポーン地点: (3.3, 62, 15.7) — Y=62は元の地面高さ
+- **根本原因**: pillarUp後の高所での待機中に落下した可能性。またはMCP接続切断後に死亡。
+- **keepInventory**: 有効（インベントリ保持確認: iron_axe, stone_hoe, stone_axe, wheat_seeds x64+, cobblestone x61, dirt x55 等）
+- **Status**: リスポーン成功。HP 20/20, Hunger 20/20。Phase 2 食料確保継続中。
+
+## バグ #47 — MCP接続切断によるリスポーン (2026-03-22 現セッション)
+
+- **状況**: mc_store(list) 呼び出し中に MCP接続が切断（"Connection closed"エラー）。再接続後 HP=10/Hunger=0 で位置が変化
+- **座標**: 切断前 (-32, 97, 12) 付近 → 再接続後 (-32.3, 97, 12.7)
+- **エラー**: `MCP error -32000: Connection closed`
+- **発生条件**: bot.store("list") で遠距離チェスト(5,65,49)にアクセス試行中
+- **影響**: セッション中断。HP=10/Hunger=0で再接続。前セッションの作業が中断
+- **根本原因**: チェストへのアクセス時に接続が切断。タイムアウトまたはbot側のエラー
+- **Status**: 記録済み。再接続後継続中。
+
+## 死亡 #49 — Zombie に殺された (2026-03-23 現セッション)
+
+- **死因**: "Claude3 was slain by Zombie"
+- **座標**: 死亡前 (-32.5, 98, 13) → リスポーン後 (3.5, 107, -4.5)
+- **状況**:
+  - HP: 2.5/20, Hunger: 0/20, 食料ゼロ
+  - 朝(morning, ticks 2653)
+  - zombie が 2.5m west に接近
+  - flee(30) → 移動なし（バグ #41 継続）
+  - pillarUp(6) → 失敗（cobblestone x35, dirt x53 所持だが置けない）
+  - moveTo(+20, pos.y, +20) → 座標変化なし（バグ #48 継続）
+  - combat("zombie") 試行 → 死亡
+  - リスポーン後: HP 20/20, Hunger 20/20 ✅ keepInventory有効
+- **根本原因**: flee/moveTo移動不全バグ継続 + HP=2.5 で逃げも戦闘も不可能
+- **keepInventory**: 有効（石ツール保持確認: stone_pickaxe, stone_axe, stone_sword, stone_hoe）
+- **Status**: リスポーン成功。HP 20/20, Hunger 20/20。Phase 2/3 継続。
+
+## バグ #48 — moveTo/navigate が機能しない + 食料ゼロ継続 (2026-03-22 現セッション)
+
+- **状況**: moveTo / navigate が目標座標に到達できず座標が変わらない。HP=10/Hunger=0 継続。
+- **座標**: (-32.3, 97, 12.7) から全く動けない
+- **時系列**:
+  1. 接続時: HP=10/Hunger=0、食料ゼロ、石ツール保有
+  2. 夜明け待機完了（ticks 253、morning）
+  3. bot.combat(cow/pig/sheep/chicken) → 全て "No X found nearby"
+  4. bot.moveTo(-6,98,4) → 到着報告するが座標は (-33, 97, 12) のまま変化なし
+  5. bot.navigate({x:-6,y:98,z:4}) → 到着報告するが座標は (-33, 97, 12) のまま
+  6. 5回のmoveTo試行 → 全て同じ座標に留まる
+- **影響**: チェストへのアクセス不可。動物探索不可。Phase 2 完全ブロック。
+- **根本原因**: navigateが「到達した」と嘘の報告をしているが実際には移動していない。前回バグ#43と同じパターン。
+- **Status**: 記録済み。動物探索中。
+
+## バグ #49 — bot.entity undefined + moveTo タイムアウト (2026-03-22 現セッション)
+
+- **状況**: mc_connect後 bot.entity が undefined になり、moveTo/navigate が全てタイムアウト（30秒）
+- **座標**: 接続後 (15.5, 102, 8.5) で確認。ただし bot.status() は正常動作する
+- **エラー**: `TypeError: Cannot read properties of undefined (reading 'position')`
+- **発生条件**: mc_connect直後、または接続切断後の再接続時
+- **影響**: bot.entity に依存する全メソッドが失敗（ブロック設置、位置取得、移動判定）。moveTo/navigate も内部的にentityを使うため全てタイムアウト
+- **暫定対処**: bot.status() は動作するため、status経由でHP/hunger/positionを確認。navigateはentityが必要なため使用不可
+- **根本原因**: 接続後にSpawnEventが来る前にコードが実行されている可能性。または bot._client が内部的にはconnected=false になっている
+- **Status**: 記録のみ（コード修正禁止）
+
+## 死亡 #51 — 高所落下 (2026-03-23 現セッション)
+
+- **死因**: "Claude3 fell from a high place"
+- **座標**: 死亡前 (6, 43, -12) 付近（地下Y=43洞窟） → moveTo(6.3, 65, -1.9)実行中に高所経由 → 落下
+- **状況**:
+  - HP: 10.8/20（low）
+  - Hunger: 13/20
+  - 直前の行動: 地下Y=43の洞窟に閉じ込められ、表面へ出ようとmoveTo(x, 65, z+10)呼び出し
+  - パスファインダーが高い場所を経由してY=74まで上昇後、高所から落下した模様
+  - pillarUpが失敗したため（"No blocks placed"エラー）、moveTo複数方向試行に切り替えた
+  - Claude2が死亡を確認
+- **根本原因**:
+  1. 地下洞窟からの脱出でmoveTo(高Y座標)を使用 → パスファインダーが急な崖/高所を経由する
+  2. pillarUpが65 dirt + 55 cobblestone所持でも"No blocks placed"失敗 → 回避策としてmoveToを使った
+  3. HP 10.8の低HP状態で高所移動は危険だった
+- **教訓**: 地下から地表へ出る際はY=65へのmoveToは危険。gather(stone)で上方向を掘って段階的に上昇すべき
+- **keepInventory**: 有効（推定）
+- **Status**: リスポーン。継続中。
+
+## 死亡 #50 — 溺死 (2026-03-23 現セッション)
+
+- **死因**: "Claude3 drowned" — 溺死
+- **座標**: 死亡前 推定 (5-12, 82-95, 0-10) 付近 → リスポーン後 (-1.5, 97, -4.5)
+- **状況**:
+  - HP: 20→1（突然の低下）。水中に落ちた模様
+  - Hunger: 13/20（十分あり）
+  - 食料: ゼロ（hunger=13だが食料アイテムなし）
+  - 脅威: enderman(8.4m north), zombie(17.4m west)が近接
+  - 直前の行動: bot.flee(25)でendermanから逃走後、bot.navigate("birch_log")でbirch_log収集試行
+  - navigate後 navigate タイムアウト → bot.moveTo(-4, 67, -9)呼び出し → 移動不可
+  - flee結果: "Now 6.1 blocks away (was 11.6). Moved 12.8 blocks." → 実際には enderman に近づいていた
+  - その後 status確認でHP=1 → 水か落下ダメージと推定
+  - 食料なし → eat() 失敗 → 死亡
+  - リスポーン後: HP 20/20, Hunger 20/20 ✅ keepInventory有効
+  - インベントリ保持: stone_tools全て, cobblestone x45, dirt x60, wheat_seeds x12等
+- **根本原因**:
+  1. flee()がendermanに近づくバグ（逆方向に移動）
+  2. navigate後の高所から水に落下したと推定
+  3. 食料なし + hp=1で死亡不可避
+- **keepInventory**: 有効（インベントリ保持確認: stone_pickaxe, stone_axe, stone_sword, stone_hoe, cobblestone x45等）
+- **Status**: リスポーン成功。HP 20/20, Hunger 20/20。Phase 1/3 継続中。

@@ -4,6 +4,306 @@
 
 ---
 
+### [2026-03-23] bot.combat()がドロップを取得しない - 即時完了バグ
+
+- **Cause**: `bot.combat("cow")` が成功を返すが、インベントリに肉(beef/raw_beef)が追加されない。5回連続で同症状。実行時間が1ループ約1.6秒と極端に短く、実際には牛を見つけて倒していない可能性が高い。
+- **Location**: `src/tools/core-tools.ts` または `src/bot-manager/combat.ts` のcombat実装
+- **Coordinates**: (21, 87, 2) 付近
+- **Last Actions**: combat("cow") x5 → 毎回"success"返却 → インベントリ変化なし → ドロップ0
+- **Symptoms**:
+  1. `bot.combat("cow")` が1秒以内に完了する（牛を実際に倒せば数秒かかるはず）
+  2. 倒したはずの牛からbeefやleatherがドロップしない
+  3. bone（骨）は1個インベントリにあるが、これはゾンビからの可能性あり
+- **Root Cause推定**: combatがターゲットを見つけられずに即時returnしているが、エラーではなく成功を返している。または牛を倒した後のアイテム回収が機能していない。
+- **Fix Applied**: 未修正 (コードレビュアーエージェントに委任)
+- **Status**: Confirmed Bug
+
+---
+
+### [2026-03-23] ゾンビによる死亡 - farm()中に無防備
+
+- **Cause**: HP=9.5 Hunger=0の緊急状態でfarm()を実行中、ゾンビに攻撃されて死亡。farm()がHP低下時に戦闘/逃走を行わずに農作業を続けたため。
+- **Location**: `src/tools/high-level-actions.ts` (farm実装) - 戦闘/敵検出が欠如
+- **Coordinates**: 水辺付近 (-9, 92, 34) 周辺
+- **Last Actions**: navigate("water") -> farm() x2 -> zombie attack -> death
+- **Fix Applied**: 未修正 (コードレビュアーエージェントに委任)
+- **Status**: Investigating
+- **Notes**: farm()はHP9.5で実行できた（ABORTしなかった）が、夜間or敵敵対時に無防備状態になる。farm()実行前に周囲の敵を排除するか、逃走ロジックを組み込む必要あり。
+
+---
+
+### [2026-03-23] pillarUp失敗 + 繰り返し転落ダメージ (Phase 4地下探索中)
+
+- **Cause**: cobblestone 230+個所持しているにもかかわらず `bot.pillarUp(20)` が "No blocks placed" で失敗。地下Y=70付近で転落を繰り返しHP=2.4まで低下。
+- **Location**: `src/tools/core-tools.ts` (pillarUp実装) またはmc_execute sandbox
+- **Coordinates**: x=5.5, y=69.2, z=-5.8
+- **Last Actions**: gather(stone) → navigate(iron_ore) → pillarUp(20) → 転落 x2 → HP=2.4
+- **Symptoms**:
+  1. `bot.pillarUp()` がcobblestone大量所持でも "Failed to pillar up. No blocks placed." を返す
+  2. moveTo(Y=117)がY=71で停止し地上に出られない
+  3. `[Server] Claude2 fell from a high place` が2回記録された
+- **Root Cause推定**: pillarUpの実装がスタック名を正しく認識していない可能性（cobblestoneが複数スタックに分割されている: 58+51+64+64=237個）。または砂利/土のような非固体ブロックをスキャフォールドに使えない判定の問題。
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査依頼
+
+---
+
+### [2026-03-23] 高所から落下死 (3回目)
+
+- **Cause**: 夜間に高所から落下して死亡 "Claude2 fell from a high place" (同日3回目)
+- **Location**: 不明
+- **Coordinates**: 不明
+- **Last Actions**: 夜間、装備なし状態で移動中
+- **Evidence**: Chat "Claude2 fell from a high place", 直後に "装備なし+夜間"
+- **Fix Applied**: コード修正禁止のため記録のみ。夜間移動禁止ロジックが実装されていない可能性。
+- **Status**: 記録済。
+
+---
+
+### [2026-03-23] 高所から落下死 (2回目)
+
+- **Cause**: 高所から落下して死亡 "Claude2 fell from a high place"
+- **Location**: 不明 (夜間)
+- **Coordinates**: 不明
+- **Last Actions**: 夜間に移動中、高所から落下
+- **Evidence**: Chat "Claude2 fell from a high place", 装備なし+夜間
+- **Fix Applied**: コード修正禁止のため記録のみ。pillarUp()後の降下、または夜間移動中の崖からの転落の可能性。
+- **Status**: 記録済。
+
+---
+
+### [2026-03-23] Zombie に殺された (死亡バグ)
+
+- **Cause**: 農場付近にいたZombieに攻撃されてHP0で死亡
+- **Location**: birch_forest バイオーム (農場付近)
+- **Coordinates**: 不明 (死亡時のチャットから推定: 農場近辺)
+- **Last Actions**: 農場作業中にzombie1体出現 → 排除を試みたが撃破されて死亡
+- **Chat Evidence**: "Claude2 was slain by Zombie", HP=9でzombie接触
+- **Fix Applied**: コード修正禁止のため記録のみ。combat()でfleeAtHp閾値が低すぎる可能性、またはzombieとの戦闘判断に問題がある。
+- **Status**: 記録済。コードレビューアーが調査予定。
+
+---
+
+### [2026-03-23] bot.moveTo() が機能しない - 位置が変わらない
+
+- **Cause**: `bot.moveTo(-67, 63, 100)` を実行したが位置が全く変わらない (-67.7, 105, 4.5 のまま)
+- **Location**: old_growth_birch_forest
+- **Coordinates**: x=-67.7, y=105, z=4.5
+- **Last Actions**: bot.moveTo(-67, 63, 100) → 即座に終了、位置変化なし
+- **Possible Cause**: pathfinderが起動しない、または移動先が到達不可能と判断している
+- **Status**: 調査中。bot.navigateで回避できるか試みる。
+- **Fix Applied**: コード修正禁止のため記録のみ。
+
+---
+
+### [2026-03-23] bot.combat() が動物に対して即終了する
+
+- **Cause**: `bot.combat("pig")` や `bot.combat("cow")` を実行すると即座に終了し、食料ゼロのまま
+- **Location**: old_growth_birch_forest
+- **Coordinates**: x=-67.7, y=105, z=4.5
+- **Last Actions**: bot.navigate("pig") → 成功ログ → bot.combat("pig", 5) → 即終了 → food=[]
+- **Possible Cause**: fleeAtHp=5が低すぎてHP=10で逃げている。または動物を倒せていない。
+- **Status**: 調査中。fleeAtHpを下げて再試行が必要。
+- **Fix Applied**: コード修正禁止のため記録のみ。
+
+---
+
+### [2026-03-23] 緊急: hunger=0, HP=10, 敵に包囲される危機的状況
+
+- **Cause**: hunger=0で食料ゼロ。HP=10。周囲にcreeper×5, skeleton×5, enderman, spider（距離15-23）
+- **Location**: old_growth_birch_forest
+- **Coordinates**: x=-67.7, y=105, z=4.5
+- **Last Actions**: 朝に接続。敵が多数残存。食料が完全に尽きている。
+- **Status**: 調査中。動物を探して狩猟で食料確保が急務。
+
+---
+
+### [2026-03-23] bot.gather("iron_ore") でraw_ironがドロップしない（再現確認）
+
+- **Cause**: `bot.gather("iron_ore", 8)` を実行後、インベントリにraw_ironが追加されない。cobblestoneが増える（採掘はしているが鉄ドロップが無効）。
+- **Location**: birch_forest
+- **Coordinates**: x=-22, y=95, z=-7 付近
+- **Last Actions**: bot.gather("coal_ore", 8) → 成功(coal +8) → bot.gather("iron_ore", 8) → raw_iron=0, cobblestone +2
+- **Root Cause**: gather() が iron_ore ブロックを採掘しているが、raw_iron アイテムを収集していない。考えられる原因:
+  1. bot.gather() が "iron_ore" をブロック名として検索せず、鉄鉱石が見つからない可能性
+  2. gather() のドロップ収集ロジックがraw_ironを認識していない
+  3. 石ピッケルで掘った iron_ore が deepslate_iron_ore 等の別名になっている
+  4. gather() が iron_ore を探して見つからず、代わりにstoneを掘っている
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: 調査中。workaround: `bot.craft("iron_pickaxe", 1, true)` でautoGatherを試みるか、チェスト確認で既存の鉄インゴットを探す。
+- **Note**: coal_ore は正常にgather()できる（coal +8確認）。iron_ore だけ失敗している。
+
+---
+
+### [2026-03-23] ゾンビによる死亡 - 飢餓状態+低HP+moveTo中断ループ
+
+- **Cause**: hunger=0, HP=7.3の状態でmoveTo()がアボートし続け、flee()で同じエリアを循環。脱出できない間にゾンビに殺される。
+- **Location**: old_growth_birch_forest
+- **Coordinates**: (-6, 107, 5) 付近
+- **Last Actions**: bot.moveTo(5,101,28) → "Cannot reach, path blocked" → 46秒待機後にゾンビに倒される
+- **Root Bug**:
+  1. moveTo()がhunger=0+低HPで長距離移動をABORTするが、短距離でも地形理由でCANNOT REACHになる
+  2. flee()は安全チェックがないが、毎回25-30ブロックしか動かず同じバイオームに留まる
+  3. old_growth_birch_forestは動物スポーン率が低く、半径64内に一切の食料動物が見つからなかった
+  4. moveTo実行中(46秒)に脅威チェックがなく、zombieに接近されて死亡
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Prevention**: hunger=0+低HPではmoveTo禁止。flee()で少しずつ移動しながらcombatを試みるしかないが、それでも動物がいない場合は詰む。動物探索の検索範囲を64ブロック以上に拡張すべき。
+- **Status**: 死亡確認 (keepInventoryでアイテム保持)
+
+---
+
+### [2026-03-23] HP2.0から回復不能→死亡 (クラフト中のHP critical check)
+
+- **Cause**: bot.craft("stone_sword")実行中に "HP critically low (2.0/20) while crafting crafting_table" でクラフト中断。その後bot.eat("rotten_flesh")を実行したがHPが回復せず(status shows hp=undefined)接続切断→死亡。
+- **Location**: birch_forest, base area
+- **Coordinates**: (0, 87, 0) 付近
+- **Last Actions**: bot.craft("stone_sword") → HP critical abort → bot.eat("rotten_flesh") → Connection closed → 死亡
+- **Root Cause**: (1) hp=undefined バグ: bot.status()がhpをundefinedで返すため、HP管理が機能していない。(2) bot.craft内のHP criticalチェックがundefinedをcriticalと誤判定している可能性。(3) 実際のHP値が低い場合にeat()が効かない、または接続が切れた。
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 死亡確認 (keepInventoryでアイテム保持)。現在地: (54, 62, 7)
+
+---
+
+### [2026-03-23] ゾンビによる死亡 - 食料不足で低HP時に移動中
+
+- **Cause**: 食料がなく hunger=4 の状態で、動物を探して長距離移動中にゾンビに倒される。moveTo実行中は戦闘ロジックなし。低HP+低hungerで移動することで死亡リスクが高まった。
+- **Location**: old_growth_birch_forest
+- **Coordinates**: (65, 75, -12) 付近
+- **Last Actions**: bot.flee() → bot.combat("cow/sheep/chicken") 全て "not found" → bot.moveTo(80, 69, -13) で東に移動中 → "Claude2 was slain by Zombie"
+- **Root Bug**: 食料がない状態で長距離移動する際に、途中で湧いたゾンビに対して無防備。bot.moveToは脅威チェックなし。
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Prevention**: 食料なし状態では長距離移動を避け、近距離で動物を探す。または日中に行動する。
+- **Status**: keepInventoryでアイテム保持。HP/hunger全回復。
+
+---
+
+### [2026-03-23] ゾンビによる死亡 - bot.navigate中に無防備
+
+- **Cause**: bot.navigate("birch_log") 実行中に周囲のゾンビから攻撃を受けて死亡。navigate実行前にthreatsに zombie(22.8m west) が確認されており、移動中に接近された。navigateは脅威チェック・逃走ロジックを持たないため、敵が多数いる状況で長時間移動すると死亡する。
+- **Location**: birch_forest
+- **Coordinates**: x=-10.5, y=79, z=-28.7 → 移動中 → x=0, y=87, z=-2 付近で死亡
+- **Last Actions**: bot.gather("birch_log", 6) 失敗(instant return) → bot.navigate("birch_log") → ゾンビに殺される
+- **Root Bug**: bot.gather が即リターンするのは敵が20ブロック以内にいるため(設計通り)。しかし bot.navigate は脅威チェックなしで移動するため、gather失敗 → navigate → 死亡 というパターンになった。
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: 脅威多数環境でnavigateを使うのは危険。gather前に脅威をクリアすべき。
+
+---
+
+### [2026-03-23] pathfinderが全方向blocked - 地形掘削後に移動不能
+
+- **Cause**: 以前の洞窟探索・地形掘削によりpathfinderが全方向で "path blocked" になり、移動が完全に不可能になった。bot.moveTo()・bot.navigate() が全て "Cannot reach" または "Navigation stopped" で失敗する。
+- **Location**: birch_forest
+- **Coordinates**: x=20, y=82, z=14
+- **Last Actions**: 夜間サバイバル → 朝になったが周囲の掘り穴でpathfinder完全blocked → 全方向 "path blocked" → 食料確保のための移動不能
+- **Root Cause**: 掘った穴が埋め戻されていない(feedback_terrain_management.md に既記録)。pathfinderが掘り穴を通れない地形と判断している。
+- **Fix Applied**: コード修正禁止のため記録のみ。bot.gather()でブロックを採掘してパスを開けることを試みる。
+- **Status**: 調査中。HP=12.3, Hunger=9, threats nearby.
+
+---
+
+### [2026-03-22] 飢餓+逃走失敗による死亡 (2回目)
+
+- **Cause**: hunger=0 HP=10 の状態で farm() 実行中に HP が 4.5 まで低下。その後 flee(30) を実行したが逃走中に HP=0 になり死亡。hunger=0 では自然回復がないため、戦闘ダメージを受けながら逃走するとすぐに致死HPになる。
+- **Location**: old_growth_birch_forest
+- **Coordinates**: x=6.9, y=86, z=0.3 → 死亡
+- **Last Actions**: farm() 実行(HP 4.5に低下) → flee(30)(逃走中に死亡)
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: 調査中 — hunger=0 で food が一切ない状態での逃走は自殺行為。食料確保前に敵と戦闘状態にしてはいけない。mc_farm が hunger=0 状態を事前チェックして中断すべき。
+
+---
+
+### [2026-03-23] 溺死 - 水中での死亡
+
+- **Cause**: "Claude2 drowned" チャットメッセージを確認。水中での死亡。水に入った経路不明。
+- **Location**: 不明
+- **Coordinates**: 不明
+- **Last Actions**: セッション開始後の行動中に溺死
+- **Root Bug**: bot.moveTo/bot.navigateが水中経路を選択する可能性がある。水中移動中に酸素切れで死亡。
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: keepInventoryでアイテム保持。調査が必要 - navigateが水中経路を避けるべき。
+
+---
+
+### [2026-03-23] mc_flee が逃げるどころか敵に近づいて死亡
+
+- **Cause**: mc_flee(distance=30) を2回連続で呼んだところ、敵との距離が 9.6m → 10.5m → 7.6m と縮まり、HP 0.5 まで低下して死亡。flee の逃走方向ロジックが誤った方向を計算している可能性。
+- **Location**: birch_forest
+- **Coordinates**: x=113, y=97, z=110 → 死亡
+- **Last Actions**: mc_flee(20) → 9.6m, mc_flee(30) → 10.5m, mc_flee(30) → 7.6m (HP 0.5) → 死亡
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: 調査中 — flee実行後に敵との距離が減少する。逃走ベクトル計算のバグと推測。
+
+---
+
+### [2026-03-22] 夜間飢餓デッドロック: HP 3/hunger 0 で食料確保不可能
+
+- **Cause**: 夜間に食料が尽きた状態でHP3まで低下。mc_combatは夜間HP3/装備なしで拒否、mc_eatは食料なしで不可、mc_navigateは夜間移動危険で拒否。食料確保手段が全て封じられる。
+- **Location**: old_growth_birch_forest
+- **Coordinates**: x=113.7, y=99, z=122.1
+- **Last Actions**: mc_flee(creeper逃避) → mc_combat(cow, 拒否) → mc_status確認 → 夜明け待機
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: 調査中 — mc_combatの夜間拒否ロジックが飢餓状態でも適用されるため脱出不可。HP1を下回らない仕様で生存はできるが食料確保手段なし。
+
+---
+
+### [2026-03-23] bot.navigate("birch_log") タイムアウト - Y=115高地で木到達不可
+
+- **Cause**: Y=115の高地にいる状態で bot.navigate("birch_log") を呼んだが60秒でタイムアウト。移動後も位置が変わらない (x=6, y=115, z=7 のまま)。gather("birch_log", 5) も "all 2 nearby blocks unreachable" で0本採取。
+- **Location**: birch_forest biome, Y=115 高地
+- **Coordinates**: x=6, y=115, z=7
+- **Last Actions**: gather("birch_log", 5) → unreachable → navigate("birch_log") → 60sタイムアウト
+- **Possible Cause**: Y=115の高地から地面レベルの木への経路をpathfinderが計算できない。高低差が大きすぎる場合のfallback戦略がない。
+- **Fix Applied**: コード修正禁止のため記録のみ。cobblestoneでシェルターを建設する代替策を採用。
+- **Status**: 木材採取断念。cobblestone採取に切り替え。
+
+---
+
+### [2026-03-23] mc_chat/mc_navigate で "Not connected" エラー (接続直後)
+
+- **Cause**: mc_connect で接続成功後、次のツール呼び出しで "Not connected to any server" エラーが発生する。接続後に内部状態が即座に有効にならない可能性。
+- **Location**: `src/tools/core-tools.ts` または `src/index.ts` (接続状態管理)
+- **Coordinates**: x=6, y=90, z=0
+- **Last Actions**: mc_connect(username=Claude2) → mc_status(成功) → mc_chat(message=...) → "Not connected" エラー
+- **Fix Applied**: コード修正禁止のため記録のみ。再接続で対処。
+- **Status**: 調査中 — mc_statusは成功するがその後のツールで切断される
+
+---
+
+### [2026-03-23] ゾンビによる死亡 - navigate中に脅威エリアを通過
+
+- **Cause**: bot.navigate("furnace") 実行中に脅威エリア(ゾンビが複数いるエリア)を通過し、"Claude2 was slain by Zombie" で死亡。navigateは脅威チェックなしで経路を選択するため、敵が多い夕方/夜のエリアに突入する。
+- **Location**: birch_forest, base area
+- **Coordinates**: x=-10.5, y=104, z=-8 付近（移動中に死亡）
+- **Last Actions**: bot.store("list") → chest unreachable → bot.navigate("furnace") → ゾンビに殺される
+- **Root Bug**: bot.navigate が脅威チェックなしで長距離経路を選択する。夕方(ticks=7693)で視野内に敵が多数存在する状況での navigate は危険。
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Prevention**: navigate実行前に必ずthreats確認。脅威がある場合はflee優先。夕方/夜のnavigateは最小限に。
+- **Status**: keepInventoryでアイテム保持。HP/hunger全回復。
+
+---
+
+### [2026-03-22] Creeper爆死 #2 (夜間待機中)
+
+- **Cause**: 夜間待機中にCreeper18.6mから接近し爆発死。navigate/gather は夜間拒否されるため、接近する mob への対応手段がなかった。
+- **Location**: old_growth_birch_forest
+- **Coordinates**: x=-15.5, y=98.8, z=11.7 (死亡時)
+- **Last Actions**: mc_status (脅威 creeper 18.6m確認) → mc_chat → 死亡
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: 調査中 — 夜間待機時に creeper が爆発距離に近づいても逃げられない設計が根本問題
+
+---
+
+### [2026-03-22] mc_craft が "Bot Claude1 not found" を返すバグ (Phase 2中)
+
+- **Cause**: Claude2として接続中に `mc_craft(item="white_bed", autoGather=true)` を呼ぶと "Bot Claude1 not found" というエラーが返る。Claude2ではなくClaude1を参照しているバグと推測。ボット名の解決ロジックに問題がある可能性。
+- **Location**: `src/tools/core-tools.ts` または `src/index.ts` (ボット名解決部分)
+- **Coordinates**: x=-2.3, y=95, z=-4.4 (birch_forest)
+- **Last Actions**: mc_connect(username=Claude2) → mc_status → mc_craft(white_bed, autoGather=true)
+- **Fix Applied**: コード修正禁止のため記録のみ。白いベッドのクラフト不可。夜間は待機で対処。
+- **Status**: 調査中
+
+---
+
 ### [2026-03-22] white_bed craft が bone クラフト失敗で止まるバグ (Phase 2中)
 
 - **Cause**: `mc_craft(item="white_bed")` の依存解決ロジックが white_wool x3 + planks の代わりに bone をクラフトしようとして失敗する。white_bed に bone は不要なはずで、依存グラフ解決のバグと推測。
@@ -12,6 +312,41 @@
 - **Last Actions**: mc_craft("white_bed", autoGather=false) → "Failed to craft bone: No recipe found for bone"、mc_craft("white_bed", autoGather=true) でも同様
 - **Fix Applied**: コード修正禁止のため記録のみ。白いベッドのクラフト不可のため夜間は土ブロックシェルターで対処
 - **Status**: 調査中
+
+---
+
+### [2026-03-22] クリーパー爆破による死亡 (Phase 1中)
+
+- **Cause**: 夜間にHP 5.8の状態でmc_fleeを繰り返すも、クリーパーに爆破されて死亡。食料ゼロで回復不可能な状態が続き、逃げ続けるしかなかった。
+- **Location**: birch_forest, -25付近の old_growth_birch_forest
+- **Coordinates**: 死亡前の座標 x=-25.5, y=96, z=-4.3
+- **Last Actions**: mc_flee × 4 → クリーパー9.9ブロック接近 → flee中に爆破死
+- **Root Cause**: 夜間に食料なし・鎧なし・HP低下状態でフィールドにいたこと。シェルターやベッドがなく、mc_buildがHP低下で拒否された。
+- **Fix Applied**: 記録のみ。keepInventoryでアイテム保持・HP/食料リセット。
+- **Status**: 死亡確認 (死亡1回目 この会話)
+
+---
+
+### [2026-03-22] 夜間HP低下・食料ゼロによる生存危機 (Phase 1中)
+
+- **Cause**: 夜間にmobから攻撃を受けHP 3.8まで低下。インベントリに食料ゼロのため回復不可。鎧なし。
+- **Location**: birch_forest, 座標 (2, 81, -9) 付近
+- **Coordinates**: x=2.4, y=81.2, z=-9.3
+- **Last Actions**: mc_status → HP 3.8確認 → mc_flee × 2 → 安全距離確保(HP 5.8)
+- **Fix Applied**: 記録のみ。夜明け後すぐに動物を倒して食料確保が必要。
+- **Status**: 調査中
+
+---
+
+### [2026-03-22] ゾンビ死亡 - 地下Y=63で接近ゾンビに殺される (この会話)
+
+- **Cause**: 地下Y=63に移動中にゾンビが2.4m内に入りHP 2.5まで低下して死亡。flee発動したが間に合わなかった。
+- **Location**: forest, underground cave Y=63
+- **Coordinates**: x=177, y=63, z=-15 (死亡時)
+- **Last Actions**: bot.moveTo(179,53,-9) → 移動中にゾンビと遭遇 → flee → 死亡
+- **Root Cause**: moveTo中に脅威チェックがなく、ゾンビの接近を検知できなかった。夜間地下での移動が危険。
+- **Fix Applied**: 記録のみ (コード修正禁止)。
+- **Status**: 死亡確認
 
 ---
 
@@ -72,6 +407,22 @@
 
 ---
 
+### [2026-03-23] スケルトンに射殺 - HP2でnavigate中
+
+- **Cause**: HP=2, Hunger=0の状態でbot.navigate("wheat")を実行中、スケルトンに射殺。navigateが地下Y=73に誘導（高低差あり）し、夜間/敵のいる空間を通過した。
+- **Location**: birch_forest
+- **Coordinates**: (-8, 73, -1) 付近
+- **Last Actions**: bot.navigate("wheat") → pos=(-8,73,-1) → bot.gather("wheat",5) → bot.navigate("wheat") x2 → farm() x2 → "Claude2 was shot by Skeleton"
+- **Root Bug**:
+  1. HP=2 / Hunger=0の極低HP状態でnavigateが危険なエリア（地下/夜間）を通過
+  2. navigate実行中に脅威チェックがない
+  3. combat()が動物に対して即完了するためfoodが全く取れない（既存バグ継続）
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: 死亡確認 (keepInventoryでアイテム保持)
+- **Notes**: bot.combat()のphantom kill/no drop問題が修正されたとのことだが、今回も5種の動物全てでドロップなし。修正が反映されていない可能性あり。
+
+---
+
 ### [2026-03-22] エンダーマン死亡 (Phase 2中) - セッション最新
 
 - **症状**: サーバーメッセージ "Claude2 was slain by Enderman" で死亡
@@ -129,6 +480,18 @@
 - **Last Actions**: Phase 2食料収集タスク中
 - **Fix Applied**: コード修正禁止のため記録のみ
 - **Status**: 調査中
+
+---
+
+### [2026-03-22] 地下y=53で完全スタック + mob落下ドロップ不取得バグ (この会話)
+
+- **症状**: y=53の地下で moveTo/navigate/flee が全て失敗または位置変化なし。同時に mc_combat で cow/pig を倒してもドロップ(raw_beef等)がインベントリに入らない。
+- **原因**: (1) pathfinderが地下構造物内でルート計算できずスタック。(2) mob loot ドロップ取得ロジックが機能していない（gamerule doMobLoot=true に設定後も同様）
+- **Location**: birch_forest underground
+- **Coordinates**: x=-2.4, y=53.2, z=-3.3
+- **Last Actions**: combat(cow) x6回 → ドロップなし → pillarUp失敗 → place(dirt)で柱作成 → moveTo各方向 全失敗 → 完全スタック
+- **Fix Applied**: コード修正禁止のため記録のみ。再接続で脱出を試みる。
+- **Status**: 調査中 — 地下スタック + mob loot未取得の複合バグ
 
 ## 報告形式
 
@@ -200,6 +563,32 @@
 
 ---
 
+### [2026-03-22] ゾンビ死亡 - 夜間食料ゼロ・チェスト到達不能 (この会話)
+
+- **症状**: サーバーメッセージ "Claude2 was slain by Zombie" で死亡
+- **原因**: 夜間にHP10・食料ゼロの状態でチェストへ向かった。チェストが27.7ブロック離れていて"unreachable"エラー。移動中にゾンビに攻撃され死亡。
+- **Location**: old_growth_birch_forest
+- **Coordinates**: x=-6, y=98, z=4 (チェスト座標)、リスポーン後座標未確認
+- **Last Actions**: mc_connect → mc_status(HP10 hunger0 夜間) → navigate(furnace) → navigate(chest) → store("list") unreachableエラー → ゾンビ死亡
+- **Root Cause**: (1) 夜間にHP低下・食料ゼロの危険状態のまま移動を継続した。(2) store("list")でチェストが"unreachable"エラーになるにもかかわらずnavigateでそこまで向かっていた。シェルター構築や土ブロック封鎖などの安全確保を優先すべきだった。
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 死亡確認 (keepInventoryでアイテム保持)
+
+---
+
+### [2026-03-23] 溺死 - 夜間水中転落・bot.wait水没中断が間に合わず
+
+- **症状**: 夜間待機中にHP 15.8 → 3.8 → 死亡（溺死）。サーバーログに記録なし（keepInventoryでアイテム保持）
+- **原因**: 夜間hostileから逃れるため高所で待機中、移動してY=80付近の水辺に転落。bot.wait内部の水没検知（"In water with HP=X — drowning risk"メッセージ）でABORTされたが、HP=9.8→3.8に急落し逃走間に合わず死亡
+- **Location**: birch_forest
+- **Coordinates**: x=5, y=80, z=9 付近（水辺）
+- **Last Actions**: 夜間待機(bot.wait×4) → "In water with HP=9.8 — drowning risk" ABORT → 次waitでHP=3.8 ABORT → flee呼び出し前に死亡
+- **Root Cause**: (1) bot.wait が水没を検知してABORTするが、ABORTからfleeを呼ぶまでの間にさらにHP低下して死亡。(2) 夜間、移動指示なしなのにbotが水辺に移動した原因が不明（hostile回避の自動移動？）
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中。bot.wait中の水没検知後の緊急flee処理の自動化が必要か検討。
+
+---
+
 ### [2026-02-15] minecraft_move_to が目標座標に到達しない
 - **症状**: `minecraft_move_to(x, y, z)`を呼んでも、実際の位置が変わらない、または目標と異なる座標に移動する
 - **例**: `move_to(-71, 89, -49)` → 実際はY=90に移動。`move_to(-69, 62, -52)` → 実際はY=63に移動し、その後同じコマンドで位置が変わらない
@@ -219,6 +608,18 @@
 - **ファイル**: `src/bot-manager/bot-storage.ts`
 
 **修正済み**
+
+---
+
+### [2026-03-22] 夜間待機中にHP 0.5まで低下 - セッション最新
+
+- **症状**: 夜間シェルター待機中にHP 20 → 0.5まで低下。食料ゼロ。
+- **原因**: 夜間待機ループ中に敵mobに攻撃された可能性。装備なし（鎧なし）で4体のmobが周囲20ブロック以内に存在。hunger=5で自然回復不可。
+- **Location**: birch_forest
+- **Coordinates**: x:0.3, y:86, z:3.7
+- **Last Actions**: 夜間（midnight）にwhile loopでwait(5000)x繰り返し待機中 → dawn到達後にmc_gatherをコールしてHP不足で拒否される
+- **Fix Applied**: コード修正禁止のため記録のみ。食料確保→HP回復の対処が必要
+- **Status**: 調査中
 
 ### [2026-02-15] minecraft_use_item_on_block で水・溶岩バケツ取得失敗（未解決）
 - **症状**: `use_item_on_block(bucket, x, y, z)`で水源・溶岩源に対して使用しても、water_bucket/lava_bucketがインベントリに反映されない
@@ -254,6 +655,70 @@
   - stick/crafting_table の場合は `needsPlanks && !needsSticks` の条件を追加
   - planks の数だけチェックするように修正
 - **ファイル**: `src/bot-manager/bot-crafting.ts`
+
+---
+
+### [2026-03-22] bot.craft が "Cannot read properties of undefined (reading 'minecraft_craft_chain')" エラー (Phase 3中)
+
+- **症状**: `bot.craft("stone_sword", 1, false)` を呼ぶと `"Cannot read properties of undefined (reading 'minecraft_craft_chain')"` が即時返る
+- **原因**: bot.craftの内部でundefinedオブジェクトの`minecraft_craft_chain`プロパティを参照している。mc_execute経由のbot APIに存在するcraftメソッドが正しく初期化されていない可能性
+- **Location**: `src/tools/core-tools.ts` または bot APIラッパー
+- **Coordinates**: x=34, y=60, z=46 (作業台前)
+- **Last Actions**: mc_connect(Claude2) → bot.status() → bot.inventory() → bot.moveTo(34,60,46) → bot.craft("stone_sword",1,false) → エラー
+- **Fix Applied**: コード修正禁止のため記録のみ。別の方法でクラフトを試みる
+- **Status**: 調査中
+
+---
+
+### [2026-03-23] 地下洞窟閉じ込め - Y=48~53でpathfinder脱出不可
+
+- **症状**: lush_caves biome Y=48~53に閉じ込められ、hunger=0、食料ゼロ。pillarUp/moveTo/navigateで地上に出られない
+- **原因**: 洞窟内でpathfinderが地上への経路を見つけられない。pillarUpは足場ブロックなしで失敗。bot.place(cobblestone)で足元に置いてY=53まで上昇したが、それ以上は進めない。
+- **Location**: lush_caves
+- **Coordinates**: x=-70, y=53, z=6 (最高到達点)
+- **Last Actions**: navigate(grass_block) → Y=53到着(地上未到達) → moveTo各方向 → Y=53で停止 → gather(stone) タイムアウト
+- **Root Cause**: (1) bot.pillarUpは足場ブロック（cobblestone等）が必要だが、コードがbot.placeを使わずに失敗する。(2) lush_cavesは地下バイオームで、pathfinderが天井のある空間しか経路として認識しない可能性。(3) gather(stone)が天井掘削ではなく水平方向に採掘するため上昇できない。
+- **Fix Applied**: コード修正禁止のため記録のみ。飢餓死によるリスポーンで脱出を試みる
+- **Status**: 調査中
+
+---
+
+### [2026-03-23] ゾンビによる死亡 - HP10・食料ゼロ・夜間エンダーマン戦闘中
+
+- **症状**: "Claude2 was slain by Zombie" — エンダーマン戦闘中にゾンビに背後から攻撃されHP0になり死亡
+- **原因**: HP=10、hunger=0の危機状態で夜間にエンダーマンと戦闘。bot.combat("enderman", 5)でfleeAtHp=5を設定したが、エンダーマン戦闘中にゾンビが接近して背後から攻撃。複数mobが同時に攻撃すると逃走できない。
+- **Location**: birch_forest（水辺付近）
+- **Coordinates**: x=34, y=95, z=3 付近（water source近く）
+- **Last Actions**: bot.flee(enderman) → bot.farm()でendermanブロック → bot.flee(40) → bot.combat("enderman", 5) → ゾンビに殺される
+- **Root Cause**: (1) HP10・hunger0で夜間戦闘は致命的。食料確保前にmobと戦ってはいけない。(2) fleeAtHp=5の設定では、複数mob同時攻撃時に生き残れない。(3) 夜間に農場設置のために水辺へ移動するのは危険—敵が多い夜間は室内で待機すべき。
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 死亡確認 (keepInventoryでアイテム保持)
+
+---
+
+### [2026-03-23] スケルトンによる死亡 - 地下洞窟から地上への脱出中
+
+- **症状**: "Claude2 was shot by Skeleton" — Y=68地点でスケルトンに撃たれてHP0死亡
+- **Cause**: 地下Y=51から地上脱出中、moveTo()でY=68まで上昇したがスケルトン(距離6.3)に遭遇。flee()で逃げようとしたが間に合わず死亡。
+- **Location**: old_growth_birch_forest、地下洞窟
+- **Coordinates**: x=-158, y=68, z=2
+- **Last Actions**: bot.status()(スケルトン2体確認) → bot.navigate("furnace") → Y=68でHP5に → bot.flee(20) → 死亡
+- **Root Cause**: (1) navigate()はthreatsチェックなしで敵方向へ移動してしまう。(2) HP=8の危機状態で地下移動は危険。(3) flee()呼び出しタイミングが遅すぎた（HP=5になってから逃走）。hunger=0でHP回復できない状態での移動が問題。
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 死亡確認 (keepInventoryでアイテム保持)
+
+---
+
+### [2026-03-23] 溺死 - flee()が水中に誘導
+
+- **症状**: "Claude2 drowned" — flee()実行後に溺死
+- **Cause**: 地下Y=35に閉じ込められた状態でflee(50)を実行。flee()が水中エリアに移動させ溺死。
+- **Location**: birch_forest地下 Y=35
+- **Coordinates**: x=-3, y=35, z=11
+- **Last Actions**: pillarUp失敗 → navigate各種失敗 → flee(50) → 溺死
+- **Root Cause**: (1) flee()は脅威がない場合にランダム方向へ移動するが、水中を経由するパスを選択することがある。(2) Y=35という深い地下では地上への経路を見つけられず、flee()も水中に誘導する危険がある。(3) navigate("oak_leaves")がY=36に移動させた - oak_leavesブロックが地下洞窟内にあった可能性。
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 死亡確認 (keepInventoryでアイテム保持)
 
 ---
 
@@ -388,6 +853,30 @@
 - **ファイル**: `src/bot-manager/bot-crafting.ts`
 - **ステータス**: ✅ **改善済み (既存コード)**: `src/bot-manager/bot-crafting.ts` がほとんどのレシピで手動レシピ (manual recipe) を使用するよう実装済み。`bot.openCraftingTable()` を使わず直接 `bot.craft()` に手動レシピを渡すため、`windowOpen` タイムアウトエラーが発生しなくなった。stick/crafting_table/wooden_tools/armor 等すべて対応済み。
 
+---
+
+### [2026-03-23] bot.flee() が水中ルートを選択して溺死
+
+- **Cause**: HP=7、夜間に敵対モブ多数の状況で `bot.flee(30)` を呼び出したところ、逃走経路が水中を通過し Claude2 が溺死した。
+- **Location**: `src/bot-manager/bot-movement.ts` (flee/pathfinder経路選択)
+- **Coordinates**: (8, 79, 13) 付近
+- **Last Actions**: 夜間、creeper x7・zombie x2・skeleton x6 に囲まれHP=7→食料0で bot.flee(30) 実行→溺死
+- **Fix Applied**: なし（コードレビュアーエージェントに委任）
+- **Status**: Confirmed Bug
+- **Note**: 同様のバグが過去にも報告されており (2026-02-16 minecraft_move_to 溺死バグ) 完全修正されていない可能性。bot.flee() 実装でも liquidCost を高く設定する必要あり。
+
+---
+
+### [2026-03-23] bot.craft("chest") がワールド上の作業台を認識しない
+
+- **Cause**: `bot.moveTo(12, 93, 9)` でワールド上に設置済みの作業台に移動後 `bot.craft("chest", 2)` を実行したが "No recipe found for chest. Try placing a crafting_table nearby" エラー。ワールド上の作業台ブロックを検出できていない。
+- **Location**: `src/bot-manager/bot-crafting.ts` (作業台検索ロジック)
+- **Coordinates**: x=12, y=93, z=9 (crafting_table位置)
+- **Last Actions**: moveTo crafting_table → craft chest × 2 → "No recipe found" エラー
+- **Workaround**: インベントリの crafting_table を bot.place() で設置してから craft すると成功する
+- **Fix Applied**: なし（記録のみ）
+- **Status**: Investigating
+
 **修正済み**
 
 ---
@@ -481,6 +970,28 @@
   3. 代替案: Claude5 が diamond を保管していないか確認（Claude5 は ender_pearl を持っている）
 - **ファイル**: `src/bot-manager/bot-blocks.ts` または `src/bot-manager/index.ts`
 
+---
+
+### [2026-03-22] combat後にアイテムがインベントリに入らない
+
+- **Cause**: bot.combat("cow"/"chicken"/"pig"/"sheep") で動物を倒しているが、raw_beef/raw_chicken等の食料アイテムがインベントリに反映されない
+- **Location**: birch_forest
+- **Coordinates**: x=12.5, y=91, z=-1.7
+- **Last Actions**: navigate("chicken") → combat("chicken") → inventory() → 食料0個 (chicken/cow/pig/sheep全てで同様)
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中 — combat自体は成功しているが、ドロップアイテムの自動収集が機能していない。bot-combat.tsのアイテム収集ロジック（collectDroppedItems等）のバグと推測。
+
+---
+
+### [2026-03-23] bot.craft(autoGather=true) 実行中に溺死
+
+- **Cause**: `bot.craft("chest", 2, true)` (autoGather=true) を呼んだところ、内部で木材を探して移動している途中に水域に落ちて溺死した。autoGather処理中の地形チェックが不十分で、水への落下を防げなかった。
+- **Location**: birch_forest
+- **Coordinates**: x=2.7, y=77.4, z=5.4 付近（craft実行直前の位置）
+- **Last Actions**: flee(30) で脅威から逃走 → craft("chest", 2, true) で180秒後タイムアウト → 溺死 → リスポーン (x=-2.2, y=94, z=-4.3)
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中 — autoGather=trueでcraft呼び出し中に水域に落ちた。`src/tools/mc-execute.ts` または `src/bot-manager/bot-crafting.ts` のautoGather処理でwaterfall/落下回避が実装されていない可能性。craft実行中の移動にpathfinderが使われているが、水域を避ける設定が欠如しているか、gather呼び出し中の移動チェックが不十分。
+
 
 ### [2026-02-17] Crafting_table disappearance bug CONFIRMED AGAIN - diamond_pickaxe vanished
 - **症状**: `minecraft_craft(item_name="diamond_pickaxe")` 実行時に以下を確認
@@ -504,6 +1015,44 @@
   4. 回避策: 他のボットが持つ diamond_pickaxe を共有してもらう
 - **ファイル**: `src/bot-manager/bot-crafting.ts` (critical)
 
+
+---
+
+### [2026-03-23] HP2.5・Hunger0・flee失敗・zombie接近による死亡
+
+- **Cause**: 接続時点でHP=2.5、Hunger=0。周囲にzombie(2m)、creeper(6m)、skeleton(19m)が存在。bot.flee()を呼んだが位置が変わらず（flee logicが機能しない or pathfinderが地形でブロック）。bot.pillarUp()もブロックなし判定で失敗。bot.moveTo()も同一座標に戻るだけで逃走不可。bot.combat("zombie")で戦闘試行後に死亡（HP2.5 + Hunger0 = 1撃で死亡）。
+- **Location**: old_growth_birch_forest
+- **Coordinates**: x=-32.3, y=98, z=13.7（死亡地点）
+- **Last Actions**: bot.flee(32) → bot.pillarUp(8) → bot.moveTo() x3 → bot.navigate('furnace') timeout → bot.combat('zombie') → 死亡
+- **Root Cause**: HP2.5 + Hunger0 の組み合わせで flee/pillarUp/moveTo が全て機能しない状態になる。flee() が呼ばれても位置が全く変わらない（同じ座標 -32.3, 98, 13.7 に留まり続ける）。フリーズしているか pathfinder がブロックされている。
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: 調査中 — bot.flee() が極低HP時に位置変化なしで完了を返すバグ。pillarUp() がcobblestone/dirt所持でも「No blocks placed」失敗。moveTo() が目標座標に到達せず起点に戻る。これら複合的な緊急脱出手段の失敗が根本原因。
+
+---
+
+### [2026-03-23] bot.craft() 実行中に溺死（stone_pickaxe クラフト中）
+
+- **Cause**: `bot.craft('stone_pickaxe', 1)` を呼んだところ、クラフト処理中に水域に落ちて溺死した。クラフト自体は成功（stone_pickaxe が取得できた）だが、処理中に移動制御が失われて溺死。
+- **Location**: birch_forest
+- **Coordinates**: x=5.3, y=79, z=5.3（クラフト開始位置）
+- **Last Actions**: mc_status() 確認 → bot.craft('stone_pickaxe', 1) 実行中（36秒かかった）→ 溺死 → リスポーン (x=3.9, y=93, z=-5.5) HP=20 Hunger=20
+- **Fix Applied**: コード修正禁止のため記録のみ
+- **Status**: 調査中 — クラフト実行中（36秒）に何らかの移動が発生して水域に落下した可能性。`bot.craft()` 内部でのautoGatherや移動制御中に水域回避が機能していない。keepInventoryによりアイテムは保持。
+
+---
+
+### [2026-03-22] HP1・Hunger0飢餓デッドロック - 移動・食料確保が全手段封鎖
+- **Cause**: 接続直後からHP=1、Hunger=3の状態。夜間に食料確保できずHunger=0まで低下。夜明け後も周囲100m以内に動物が存在しない（birch_forest特有の動物スポーン不足）。
+  - mc_combat: "No cow/chicken/pig/sheep found nearby" (全動物未発見)
+  - mc_navigate: "[REFUSED] Cannot navigate while starving" (飢餓中は長距離移動拒否)
+  - mc_navigate to chest: チェストは127ブロック離れており"nearby"判定されず拒否
+  - mc_eat: 食料なし
+  - 完全なデッドロック状態
+- **Location**: old_growth_birch_forest
+- **Coordinates**: x=1.7, y=94, z=123.4
+- **Last Actions**: mc_connect → mc_flee(enderman) → 夜間待機 → mc_combat(全動物タイプ、全て未発見) → mc_navigate(拒否: 飢餓中)
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: 進行中 — 他ボットからの食料配達を要請。근本的な問題：飢餓時のnavigateブロックが"nearby chest"移動も妨げる（127ブロックが"nearby"と判定されない）。
 
 ---
 
@@ -874,6 +1423,37 @@
 
 ---
 
+## [2026-03-22] Death: Zombie attack at HP=0.8 (夜明け直後)
+
+- **Cause**: 深夜中にHP=17.3→0.8まで低下。食料がインベントリに存在しなかったため回復不能。flee(30)を試みたが遅延中にゾンビ(距離4.2m)の攻撃を受け死亡。
+- **Location**: birch_forest, (16.7, 105.2, 1.7)
+- **Coordinates**: x=16.7, y=105.2, z=1.7
+- **Last Actions**:
+  1. 深夜(midnight)にゾンビ3体が接近
+  2. mc_flee(20)で一時回避 → HP=17.3維持
+  3. 夜明け待機ループ中に ticks=23773 で脅威3体に囲まれHP=5.3に低下
+  4. 夜明け(ticks=113)後にHP=0.8まで低下を検出
+  5. flee(30)実行 → 処理中にゾンビ(距離4.2m)に倒された
+- **Root Cause**:
+  - インベントリに食料ゼロ(wheat x1のみ、パン作成不可)
+  - 夜明け待機ループが10秒間隔で粗く、HP低下の検出が遅れた
+  - flee()の非同期処理中にダメージを受けて死亡
+- **Status**: 記録のみ（コード修正なし）
+- **Post-Death State**: keepInventory=true により HP=20, Hunger=20 でリスポーン。インベントリ保持確認済み。
+
+---
+
+### [2026-03-22] bot.craft() 実行時 "Cannot read properties of undefined (reading 'minecraft_craft_chain')" エラー
+
+- **Cause**: `bot.craft("white_bed", 1, false)` および `bot.craft("white_bed", 1, true)` 呼び出しで `Cannot read properties of undefined (reading 'minecraft_craft_chain')` が発生。
+- **Location**: `src/tools/core-tools.ts` (bot.craft実装内部)
+- **Coordinates**: (7, 112, 9) 作業台付近
+- **Last Actions**: 作業台に移動後、white_bed クラフト試行 (autoGather=false/true 両方とも失敗)
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: 調査中 — `minecraft_craft_chain` への参照がundefinedになっている。スキルコンテキストが渡されていない可能性。
+
+---
+
 ### [2026-02-23] Session 83+ - CRITICAL LOOP: Respawn Mechanism Broken Again
 
 **🚨 CRITICAL: Claude2 Still in Unrecoverable State (Session 83+)**
@@ -1173,4 +1753,127 @@
 - **原因**: mc_gatherのパスファインダーが安全でないルートを選択し、洞窟/峡谷に落下。pillar_upが正常動作せず脱出不能
 - **影響**: keepInventory=trueのためアイテムは保持。HPとhunger全回復でリスポーン。iron_swordを紛失（原因不明）
 - **教訓**: 拠点付近の地下に大きな空洞がある。gather時にmax_distanceを制限すべき
+
+---
+
+### [2026-03-22] 死亡 #32 - スケルトンに射殺（食料なし採掘中）
+- **Cause**: 食料なし（空腹13）でcoal_ore採掘中、スケルトン（east方向23m）に射られてHP 5.3まで低下。mc_gatherが"HP dropped to 5.3"でabort、mc_fleeで脱出試みたが既に致命傷。サーバーログ: "Claude2 was shot by Skeleton"
+- **Location**: birch_forest
+- **Coordinates**: x=-2.3, y=75, z=-11.1
+- **Last Actions**: mc_navigate(cow→pig→chicken→sheep→rabbit 全て失敗) → mc_gather(coal_ore) → HP5.3でabort → mc_flee → 死亡
+- **Root Cause**: 食料なし状態でHP未回復のまま採掘開始。周囲64ブロックに動物がゼロで食料確保手段なし。スケルトンの存在を認知していたが採掘を優先してしまった。
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: リスポーン済み（HP20/20に回復）。次回は動物狩りか食料確保を採掘より優先する。
+
+---
+
+### [2026-03-22] 死亡 #33 - ゾンビに殺害（食料なし・夜間・HP0.5）
+- **Cause**: 夜間にbirch_log採掘でmc_gatherが120sタイムアウト。その後HP 0.5まで低下（原因はゾンビ攻撃と推定）。mc_fleeの直前にゾンビ（1.5m）が隣接、flee呼び出し中に死亡。keepInventoryでアイテム保持・HP/Hunger全回復でリスポーン。
+- **Location**: old_growth_birch_forest
+- **Coordinates**: x=-37.4, y=65.4, z=-25
+- **Last Actions**: mc_flee(逃走) → mc_gather(birch_log, 120sタイムアウト) → mc_status(HP0.5, zombie 1.5m) → mc_flee呼び出し → 接続切断（死亡）
+- **Root Cause**: 夜間に食料なし状態でmc_gatherを呼び出し、ゾンビが近接距離（1.5m）まで接近したにもかかわらずmc_fleeが間に合わなかった。mc_flee呼び出し前にHP 0.5まで下がっており、fleeのレイテンシで致命傷。
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: リスポーン済み（HP/Hunger全回復）。夜間はmc_gatherを呼び出すな。食料確保→昼間に活動するサイクルを維持すべき。
+
+---
+
+### [2026-03-22] HP朝方13→1激減 - 夜明け後に原因不明ダメージ
+
+- **Cause**: 深夜22633tick(midnight)から朝1233tick(morning)の間にHP 13 → 1 まで低下。スケルトン（西12m）が夜間に攻撃を継続した可能性。待機中（bot.wait(10000) x12回ループ）のためbot.fleeが呼び出されなかった。
+- **Location**: old_growth_birch_forest
+- **Coordinates**: x=-4.4, y=90, z=41.8（morning時点）
+- **Last Actions**: 夜明け待機ループ（bot.wait 10秒 x12回）→ HP 13→10→1
+- **Root Cause**: 夜間待機中にmob攻撃チェックがなかった。スケルトンが12.8mから近づき射撃ダメージを蓄積した疑い。mc_fleeを事前に呼ぶべきだった。
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: 調査中。HP=1で食料ゼロの緊急状態。動物狩りで食料確保が必要。
+
+---
+
+### [2026-03-22] 死亡 #34 - 食料ゼロ・mob包囲で HP 0.2 → リスポーン
+
+- **Cause**: 接続時インベントリに食料なし。daytime(8453 tick)だが周囲にskeleton x3, zombie x2, creeper x2が密集。mc_flee を2回実行しても距離が縮まり、HP 17→14→8→4→0.2 まで低下。pillarUp タイムアウト中に死亡＋リスポーン。
+- **Location**: birch_forest
+- **Coordinates**: x=8.3, y=92, z=9.9（死亡直前）
+- **Last Actions**: mc_connect → インベントリ整理(dirt/cobblestone/gravel drop) → mc_flee(20) → mc_flee(30) → combat拒否(崖エッジ) → moveTo タイムアウト → pillarUp タイムアウト → HP 0.2 → リスポーン(x=0, y=81, z=6)
+- **Root Cause**:
+  1. mc_flee が敵から遠ざかれない（前回セッションと同パターン: flee実行後も敵距離が縮まる）
+  2. combat が崖エッジ判定で拒否され脅威を排除できない
+  3. 食料ゼロのため自然回復不可
+  4. moveTo / pillarUp がタイムアウト(30s)して身動き不能
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: リスポーン後 HP=18.7。mc_flee の逃走方向ロジックに根本的なバグあり。
+
+---
+
+### [2026-03-22] 死亡 #35 - 夜間飢餓・HP2.2まで低下後にMCP切断→リスポーン
+
+- **Cause**: 夜間に空腹0、HP7.2の状態で夜明けを待機中。HP2.2まで低下した直後に HP20/Hunger20に回復（リスポーン確認）。MCP接続が切断されたタイミングで死亡したと推測。
+- **Location**: birch_forest
+- **Coordinates**: x=17, y=101, z=18.5（最後確認位置）
+- **Last Actions**: mc_flee(threats) × 複数回 → 夜明け待機ループ → Tick 23813でHP2.2 → Tick 23933でHP20（リスポーン）→ MCP接続エラー
+- **Root Cause**:
+  1. 夜間に食料ゼロ状態で長時間待機
+  2. 飢餓によるHP継続ダメージ (Hunger=0でHP2まで低下)
+  3. bot.flee がタイムアウト(30s)してリトライ不能
+  4. 食料確保手段なし（周囲に動物なし）
+- **Fix Applied**: コード修正禁止のため記録のみ。
+- **Status**: リスポーン後 HP=20, Hunger=20, 位置=(3.3, 62, 15.7)。Drownedが北15ブロックに接近。
+
+---
+
+### [2026-03-23] bot.wait() oxygenLevel 誤検知で無限中断
+
+- **Cause**: bot.wait() 内の oxygenLevel チェックが陸上（y=69、水なし）でも `< 250` を返し続け、5秒毎に "[wait] ABORTED: oxygen depleting" が発生。wait() が実質機能しない。
+- **Location**: `src/tools/mc-execute.ts` 行241 `const oxygenLow = ((waitBot as any).oxygenLevel ?? 300) < 250;`
+- **Coordinates**: x=37.7, y=69, z=-2.5（birch_forest、完全な陸上）
+- **Last Actions**: 夜明け待機ループ → bot.wait(10000) → "[wait] ABORTED: oxygen depleting" 繰り返し → HP変化なし(15.5固定)
+- **Root Cause**: Mineflayer の `oxygenLevel` プロパティはバージョンによっては 0~10 スケール（水中0=窒息、空気10=満タン）、もしくは未定義の場合 undefined を返す。`?? 300` フォールバックが機能する場合は 300 と解釈されるが、実際に `0` が返る場合 `0 < 250` = true となり誤検知が発生する。陸上でも oxygenLevel=0 が返る Mineflayer バージョンではこのバグが再現する。
+- **Impact**: 夜間の待機が完全に機能しない。1フレームごとに緊急回避ルーチンが実行され、ボットが常にコントロール状態を変更し、mob から逃げられない。
+- **Workaround**: bot.wait() を使わず別の待機方法（await new Promise(r => setTimeout(r, ms)) を直接コードに書く）で夜明けを待つ。ただし mc_execute サンドボックス外の Promise は使用不可。
+- **Fix Needed**: `oxygenLow` 判定を `((waitBot as any).oxygenLevel ?? 300) < 250` から `inWater && ((waitBot as any).oxygenLevel ?? 300) < 250` に変更するか、oxygenLevel を無効化すべき。水ブロックチェック（inWater）で十分。
+- **Status**: 記録のみ（コード修正禁止）。
+
+---
+
+### [2026-03-23] 溺死 - bot.pillarUp タイムアウト中に水中死亡
+
+- **Cause**: Y=73 の低い位置（洞窟/水中）で bot.pillarUp(10) を実行したところ 30秒タイムアウト。その間に水中で溺死。チャットに "Claude2 drowned" メッセージ確認。
+- **Location**: (11.7, 73, 3.2) 付近、birch_forest バイオーム
+- **Coordinates**: x=11.7, y=73, z=3.2
+- **Last Actions**: bot.moveTo() でpathfinder blocked → bot.flee(25) → bot.moveTo() 再度blocked → bot.pillarUp(10) → タイムアウト中に溺死
+- **Root Cause**: pathfinderが経路をブロックされた状態で低Y座標（Y=73）に移動してしまった。bot.pillarUp が水中で機能せずタイムアウト。bot.status() は溺死を防ぐ警告を出さなかった。
+- **Bug in Code**: bot.pillarUp() は水中環境を考慮していない。また bot.moveTo() が水中ルートを選択してY=73まで連れて行ってしまった。
+- **Related Bugs**: [2026-02-16] minecraft_move_to が水中ルートを選択して溺死（同種のバグ、再発）, [2026-03-23] 溺死 - flee()が水中に誘導
+- **Fix Needed**: bot.moveTo()/bot.flee() が水中ルートを避けるか、水中に入った場合は即座に地上を目指すロジックが必要。bot.pillarUp() は水中で動作しない旨のエラーを返すべき。
+- **Status**: 記録のみ（コード修正禁止）。
+
+---
+
+## [2026-03-23] Bug: Pillagerに追われて死亡 - flee()が安全な場所に誘導しない
+
+- **Cause**: 夜間にPillagerに追われてflee()を繰り返したが、逃走中も継続してダメージを受けHP2.7まで減少。最終的に "Claude2 was shot by Pillager" で死亡。
+- **Location**: birch_forest バイオーム, (18.2, 108, 88.7) 付近
+- **Coordinates**: 死亡時 x=18.2, y=108, z=88.7
+- **Last Actions**:
+  1. 夜間にgather("birch_log")中にPillager接近で採掘中断
+  2. bot.flee(40) → HP11.2、Pillager距離12m
+  3. bot.flee(50) → HP5.2、Pillager+Endermanに挟まれる
+  4. bot.flee(60) → HP2.7、Pillager距離20m
+  5. bot.pillarUp(10) → 死亡後リスポーン、HP20に戻る（リスポーン確認）
+- **Root Cause**:
+  1. flee() がPillagerから十分に離れられない（60ブロック逃げても12-20mの距離に留まる）
+  2. flee() 中に継続してダメージを受けるが回避できない
+  3. 夜間の複数hostile（Pillager + Enderman + Skeleton + Zombie）への対処が不十分
+  4. 食料がなく（hunger=14, food=[]）、自然回復できない状態で夜間戦闘
+- **Bug in Code**:
+  1. bot.flee() が障害物回避できておらず、同じ敵に追われ続ける
+  2. HP<5 の緊急時に shelter（屋内）への誘導ロジックがない
+  3. 夜間gathering中断後の安全な退避先提案がない
+- **Related Bugs**: flee() による死亡は複数回報告済み
+- **Fix Needed**:
+  1. flee() はPillagerから確実に50m以上離れるまで継続すべき
+  2. HP<5かつ夜間の場合、pillarUp()で地面から離れて安全を確保するか、近くの建物に避難するロジックが必要
+  3. gather() 中断時に安全な退避先（作業台やチェスト付近）を案内すべき
+- **Status**: 記録のみ（コード修正禁止）。
 

@@ -172,7 +172,7 @@ src/
 
 .claude/
 ├── agents/                 # ゲームエージェント定義
-├── skills-compact/         # スキルファイル（bot.* API形式）
+├── skills/                 # スキルファイル（必要時にRead、目次はCLAUDE.md）
 └── hooks/                  # エージェント用フック
 
 bug-issues/                 # 死亡バグ記録

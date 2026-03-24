@@ -398,12 +398,17 @@ export class BotManager extends EventEmitter {
 
     console.error(`[Move] From (${start.x.toFixed(1)}, ${start.y.toFixed(1)}, ${start.z.toFixed(1)}) to (${x}, ${y}, ${z}), distance: ${distance.toFixed(1)}`);
 
+    // Bug [2026-03-23]: moveTo during combat & cliff fall
+    // dontCareAboutFallDamage will be controlled by pathfinder's default safety
+    // (pathfinder avoids fall damage by default; we won't override this)
+
     const goal = new goals.GoalNear(x, y, z, 2);
 
     return new Promise((resolve) => {
       let resolved = false;
       let noProgressCount = 0;
       let lastPos = start.clone();
+      let lastHostileCheck = Date.now();
 
       const cleanup = () => {
         bot.pathfinder.setGoal(null);
@@ -433,6 +438,61 @@ export class BotManager extends EventEmitter {
 
         const currentPos = bot.entity.position;
         const currentDist = currentPos.distanceTo(targetPos);
+        const currentHp = bot.health;
+        const currentHunger = bot.food;
+
+        // Bug [2026-03-23] Zombie kill during moveTo: Monitor hostile entities
+        const now = Date.now();
+        if (now - lastHostileCheck > 300) {
+          lastHostileCheck = now;
+          const allEntities = Object.values(bot.entities);
+          const hostile = [
+            "zombie", "skeleton", "creeper", "enderman", "witch",
+            "pillager", "ravager", "phantom", "drowned", "spider"
+          ];
+          const threats = allEntities.filter((e: any) => {
+            if (!e || !e.living) return false;
+            const type = (e.name || "").toLowerCase();
+            const dist = e.position.distanceTo(currentPos);
+            return hostile.includes(type) && dist < 15;
+          });
+
+          if (threats.length > 0) {
+            const threat = threats[0];
+            const threatDist = threat.position.distanceTo(currentPos);
+            console.error(`[Move] Hostile detected: ${threat.name} at ${threatDist.toFixed(1)}m. Aborting moveTo for safety.`);
+            clearInterval(checkInterval);
+            if (!resolved) {
+              resolved = true;
+              cleanup();
+              resolve(`[ABORT] Hostile '${threat.name}' at ${threatDist.toFixed(1)}m during moveTo. Stopped at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}).`);
+            }
+            return;
+          }
+        }
+
+        // Check HP/Hunger safety
+        if (currentHp < 4) {
+          console.error(`[Move] HP too low (${currentHp.toFixed(1)}) during moveTo. Aborting for safety.`);
+          clearInterval(checkInterval);
+          if (!resolved) {
+            resolved = true;
+            cleanup();
+            resolve(`[ABORT] HP too low (${currentHp.toFixed(1)}) during moveTo. Stopped at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Seek food/shelter.`);
+          }
+          return;
+        }
+
+        if (currentHunger < 3) {
+          console.error(`[Move] Hunger too low (${currentHunger.toFixed(1)}) during moveTo. Aborting for safety.`);
+          clearInterval(checkInterval);
+          if (!resolved) {
+            resolved = true;
+            cleanup();
+            resolve(`[ABORT] Hunger too low (${currentHunger.toFixed(1)}) during moveTo. Stopped at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}). Need to eat.`);
+          }
+          return;
+        }
 
         // Check if reached goal
         if (currentDist < 3) {
@@ -445,7 +505,7 @@ export class BotManager extends EventEmitter {
           return;
         }
 
-        // Check if stuck (no progress for 3 checks = 1.5 seconds)
+        // Check if stuck (no progress for 5 checks = 1.5 seconds)
         const moved = currentPos.distanceTo(lastPos);
         if (moved < 0.1) {
           noProgressCount++;
