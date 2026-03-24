@@ -1430,6 +1430,55 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
   const PILLAR_TIMEOUT_MS = 45000;
   const pillarStartTime = Date.now();
 
+  // THREAT DETECTION: Bot1 Session 55 - zombie approached during pillarUp, leaving bot vulnerable.
+  // Check for nearby melee threats at start. If zombie/spider within 4 blocks, abort and suggest
+  // flee first before pillaring. Also check during placement loop to abort if threat gets closer.
+  const checkThreatsForPillar = (): { threat: any; distance: number } | null => {
+    const hostiles = Object.values(bot.entities).filter((e: any) => {
+      if (!e || !e.name) return false;
+      const name = e.name.toLowerCase();
+      return ["zombie", "zombie_villager", "drowned", "husk", "spider", "cave_spider", "warden"]
+        .some(m => name.includes(m));
+    });
+    if (hostiles.length === 0) return null;
+    const closest = hostiles.reduce((prev: any, curr: any) => {
+      const prevDist = bot.entity.position.distanceTo(prev.position);
+      const currDist = bot.entity.position.distanceTo(curr.position);
+      return currDist < prevDist ? curr : prev;
+    });
+    const dist = bot.entity.position.distanceTo(closest.position);
+    if (dist < 4.0) {
+      return { threat: closest, distance: dist };
+    }
+    return null;
+  };
+
+  // Quick scaffold count check for threat message
+  const quickScaffoldCount = bot.inventory.items()
+    .filter(i => {
+      const cleanName = i.name.replace("minecraft:", "");
+      const blockInfo = bot.registry.blocksByName[cleanName];
+      return blockInfo && blockInfo.boundingBox === "block" &&
+             !["_ore", "spawner", "bedrock", "obsidian", "portal", "diamond_block",
+               "emerald_block", "gold_block", "iron_block", "netherite_block",
+               "ancient_debris", "crying_obsidian", "reinforced_deepslate"]
+               .some(p => cleanName.includes(p));
+    })
+    .reduce((sum, i) => sum + i.count, 0);
+
+  const estimatedTime = Math.ceil((untilSky ? Math.min(quickScaffoldCount, 50) : Math.min(height, 15)) * 4.2 / 1000);
+
+  // THREAT CHECK: Abort if melee threats within 4 blocks
+  // Bot1 Session 55: Zombie at 14.9 blocks approached to melee range during pillarUp
+  // execution (19s window), killing bot while placement was failing. Early abort prevents
+  // prolonged exposure to enemies.
+  const initialThreat = checkThreatsForPillar();
+  if (initialThreat) {
+    const msg = `Melee threat (${initialThreat.threat.name}) detected ${initialThreat.distance.toFixed(1)} blocks away. pillarUp will expose bot for ~${estimatedTime}s. Use mc_flee first, then pillarUp. Current HP=${bot.health?.toFixed(1) ?? '?'}${getBriefStatus(managed)}`;
+    console.error(`[Pillar] ${msg}`);
+    return msg;
+  }
+
   // SAFETY: Detect if bot is currently IN water — pillarUp cannot work in water.
   // Bot1 Session 38: pillarUp timed out at Y=44 underwater — jump-place doesn't work
   // in water because the bot floats and can't get stable footing on the placed block.
@@ -1555,6 +1604,7 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
   }
 
   let blocksPlaced = 0;
+  let consecutiveFailures = 0; // Track failed placement attempts — if 3 in a row, abort
 
   // Keep sneak ON throughout the entire pillar to prevent drifting off the edge.
   // Bug #17: releasing sneak between placements caused the bot to walk off the 1-block pillar
@@ -1570,6 +1620,18 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
   const pillarZ = Math.floor(bot.entity.position.z);
 
   for (let i = 0; i < targetHeight; i++) {
+    // Periodic threat check during pillarUp loop (every iteration after first few)
+    // Bot1 Session 55: Threat detection should happen during placement, not just at start
+    if (i > 0 && i % 2 === 0) {
+      const runtimeThreat = checkThreatsForPillar();
+      if (runtimeThreat) {
+        const gained = bot.entity.position.y - startY;
+        bot.setControlState("sneak", false);
+        console.error(`[Pillar] THREAT ABORT: ${runtimeThreat.threat.name} at ${runtimeThreat.distance.toFixed(1)}m during placement (level ${i + 1}/${targetHeight})`);
+        return `Pillared up ${gained.toFixed(1)} blocks (Y:${startY.toFixed(0)}→${bot.entity.position.y.toFixed(0)}, placed ${blocksPlaced}/${targetHeight}). ABORTED: Melee threat (${runtimeThreat.threat.name} at ${runtimeThreat.distance.toFixed(1)}m) detected — flee or combat first.${getBriefStatus(managed)}`;
+      }
+    }
+
     // Global timeout check: abort if pillarUp has been running too long.
     // Bot1/Bot2 [2026-03-23]: pillarUp exceeded 60s when placement repeatedly failed,
     // leaving bot stationary and exposed to mobs for the entire duration.
@@ -1624,13 +1686,32 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
 
     // SAFETY: Abort if water is at or above head level — drowning risk.
     // Bot3 Death #6: drowned during pillar_up because water blocks flooded the column.
+    // Bot1 Session [2026-03-24]: reached water surface (Y=56) and continued pillaring,
+    // got pushed into the water body by the placed blocks and drowned.
     // Check Y+1 (head) and Y+2 (above head) for water. If either is water, stop.
-    for (const yOff of [1, 2]) {
-      const waterCheck = bot.blockAt(new Vec3(curX, currentY + yOff, curZ));
-      if (waterCheck && (waterCheck.name === "water" || waterCheck.name === "flowing_water")) {
-        console.error(`[Pillar] WATER at Y=${currentY + yOff} (${waterCheck.name}). Aborting to prevent drowning.`);
+    // ALSO check Y (feet) and Y-1 (below) — if we're in water, abort immediately.
+    // This catches the case where pillarUp places blocks that push the bot into water.
+    {
+      let inWater = false;
+      const feetBlock = bot.blockAt(new Vec3(curX, currentY, curZ));
+      if (feetBlock && isWaterBlock(feetBlock.name)) {
+        inWater = true;
+        console.error(`[Pillar] BOT IS IN WATER at Y=${currentY} (${feetBlock.name}). Drowning risk — aborting.`);
+      }
+
+      for (const yOff of [1, 2]) {
+        const waterCheck = bot.blockAt(new Vec3(curX, currentY + yOff, curZ));
+        if (waterCheck && isWaterBlock(waterCheck.name)) {
+          inWater = true;
+          console.error(`[Pillar] WATER detected at Y=${currentY + yOff} (${waterCheck.name}). Drowning risk — aborting.`);
+          break;
+        }
+      }
+
+      if (inWater) {
         bot.setControlState("sneak", false);
-        return `Pillared up ${(bot.entity.position.y - startY).toFixed(1)} blocks (placed ${blocksPlaced}/${targetHeight}). STOPPED: Water detected at Y=${currentY + yOff} — drowning risk. Move away from water first.${getBriefStatus(managed)}`;
+        const gained = bot.entity.position.y - startY;
+        return `Pillared up ${gained.toFixed(1)} blocks (placed ${blocksPlaced}/${targetHeight}). STOPPED: Water detected — drowning risk. Current Y=${currentY}. Move away from water and try again, or use bot.mc_navigate() to reach land.${getBriefStatus(managed)}`;
       }
     }
 
@@ -1666,23 +1747,38 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     }
 
     // 2. Equip scaffold block
-    const scaffold = bot.inventory.items().find(i => isScaffoldBlock(i.name));
-    if (!scaffold) {
+    // Bot1 Session 54-55: equip() sometimes fails silently, leaving non-scaffold item in hand.
+    // Fix: loop through ALL scaffold blocks until one is successfully held.
+    const scaffolds = bot.inventory.items().filter(i => isScaffoldBlock(i.name));
+    if (scaffolds.length === 0) {
       console.error(`[Pillar] Out of blocks after ${blocksPlaced} placed`);
       break;
     }
-    console.error(`[Pillar] Equipping scaffold: ${scaffold.name} x${scaffold.count} (slot ${scaffold.slot})`);
-    try {
-      await bot.equip(scaffold, "hand");
-    } catch (equipErr) {
-      console.error(`[Pillar] equip(${scaffold.name}) failed: ${equipErr} — trying next scaffold block`);
-      // Try to find another scaffold block and equip it
-      const altScaffold = bot.inventory.items().find(i => isScaffoldBlock(i.name) && i.slot !== scaffold.slot);
-      if (altScaffold) {
-        try { await bot.equip(altScaffold, "hand"); } catch { /* ignore */ }
+
+    let equipSuccess = false;
+    for (const candidateScaffold of scaffolds) {
+      try {
+        console.error(`[Pillar] Attempting to equip: ${candidateScaffold.name} x${candidateScaffold.count} (slot ${candidateScaffold.slot})`);
+        await bot.equip(candidateScaffold, "hand");
+
+        // Verify the held item after equip
+        const held = bot.heldItem;
+        if (held && isScaffoldBlock(held.name)) {
+          console.error(`[Pillar] Successfully equipped ${held.name}`);
+          equipSuccess = true;
+          break;
+        } else {
+          console.error(`[Pillar] Equip failed verification: held=${held?.name ?? 'null'}, expected scaffold block`);
+        }
+      } catch (equipErr) {
+        console.error(`[Pillar] equip(${candidateScaffold.name}) threw: ${equipErr}`);
       }
     }
-    console.error(`[Pillar] Held after equip: ${bot.heldItem?.name ?? 'null'}`);
+
+    if (!equipSuccess) {
+      console.error(`[Pillar] Failed to equip any scaffold block at level ${i + 1}, breaking`);
+      break;
+    }
 
     // 3. Get block below feet to place against
     // Use the locked pillar column as primary candidate — this is where we've been
@@ -1914,6 +2010,7 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
             blocksPlaced++;
             placed = true;
             fallbackPlaced = true;
+            consecutiveFailures = 0; // Reset failure counter on success
             console.error(`[Pillar] Fallback placed block ${blocksPlaced}/${targetHeight}`);
           } else {
             // Try scanning below current apex position
@@ -1926,6 +2023,7 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
                 blocksPlaced++;
                 placed = true;
                 fallbackPlaced = true;
+                consecutiveFailures = 0; // Reset failure counter on success
                 console.error(`[Pillar] Fallback placed block (scan) ${blocksPlaced}/${targetHeight}`);
                 break;
               }
@@ -1938,9 +2036,20 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
       }
 
       if (!fallbackPlaced) {
-        console.error(`[Pillar] Fallback also failed at level ${i + 1}, breaking`);
-        break;
+        consecutiveFailures++;
+        console.error(`[Pillar] Fallback failed at level ${i + 1} (${consecutiveFailures}/3 consecutive failures)`);
+        // After 3 consecutive placement failures (both primary and fallback), abort
+        // Bot1 Session 54-55: pillarUp gained elevation but placed 0 blocks because loop
+        // continued after placement failures. Now abort after 3 failures to prevent
+        // untracked elevation gain that confuses the bot's survival state.
+        if (consecutiveFailures >= 3) {
+          console.error(`[Pillar] Aborting: 3 consecutive placement failures`);
+          break;
+        }
       }
+    } else {
+      // Reset failure counter on successful placement
+      consecutiveFailures = 0;
     }
   }
 
