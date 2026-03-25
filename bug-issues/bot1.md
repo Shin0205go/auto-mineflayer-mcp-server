@@ -1,3 +1,10 @@
+## [2026-03-25] Bug: Session 69d - Death while waiting for night to pass (HP=1 mob attack)
+- **Cause**: Bot waited with wait(25000) at night with skeleton+creeper x3 nearby. During the 25s interval, mobs attacked bringing HP from 9 to 1. flee() triggered but death occurred before it could escape.
+- **Coordinates**: (~134, 80, 88) old_growth_birch_forest
+- **Last Actions**: craft(furnace) → wait(25000) → HP 9→1 during wait → flee too late → death
+- **Error Message**: Death not caught in chat, confirmed by HP=20 Hunger=20 after reconnect
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Death at (132,83,90) - furnace placement near mobs - Session current
 
 - **Cause**: HP was 9 on reconnect. Placed furnace+crafting_table with zombie×2 and skeleton×1 nearby. HP dropped to 1 immediately. flee(50) didn't save. Respawned after 5s.
