@@ -601,6 +601,49 @@ export async function mc_craft(
     // Not enough raw material in inventory — fall through to craft_chain for auto-gather
   }
 
+  // ── Pre-flight checks (fast-fail before entering the 180s timeout) ──────────
+  // Problem: calling bot.craft() with a 3×3 recipe when no crafting_table is
+  // present causes Mineflayer to hang indefinitely waiting for a window event
+  // that never fires, resulting in a 120-180 s timeout every time.
+  // Fix: detect the missing-table condition synchronously and return an
+  // actionable error in < 1 ms, before any async work begins.
+  {
+    const bot = botManager.getBot(username);
+    if (bot) {
+      // Items that are always 2×2 (player inventory) — never need a crafting table.
+      const SIMPLE_2X2 = new Set([
+        "stick", "crafting_table",
+        "oak_planks", "spruce_planks", "birch_planks", "jungle_planks",
+        "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks",
+        "pale_oak_planks", "torch",
+      ]);
+      const isSimple = SIMPLE_2X2.has(item) || item.endsWith("_planks");
+
+      if (!isSimple) {
+        // Check inventory first (bot has a crafting_table item it can place)
+        const inv = botManager.getInventory(username);
+        const hasTableInInv = inv.some(i => i.name === "crafting_table");
+
+        if (!hasTableInInv) {
+          // Check for a placed crafting_table within 5 blocks
+          const mcData = (await import("minecraft-data")).default(bot.version);
+          const tableId = mcData.blocksByName.crafting_table?.id;
+          const nearbyTable = tableId
+            ? bot.findBlock({ matching: tableId, maxDistance: 5 })
+            : null;
+
+          if (!nearbyTable) {
+            // Check ingredients as well so error is maximally useful
+            const invStr = inv.map(i => `${i.name}(${i.count})`).join(", ") || "empty";
+            return `Cannot craft ${item}: crafting_table not found nearby (within 5 blocks). Place one first, then retry. Inventory: ${invStr}`;
+          }
+        }
+        // Note: if bot has crafting_table in inventory, craft_chain will auto-place it — skip check.
+      }
+    }
+  }
+  // ── End pre-flight ──────────────────────────────────────────────────────────
+
   // Wrap entire craft operation in 180s timeout to prevent hangs (autoGather can trigger long gather loops)
   const CRAFT_TIMEOUT_MS = 180000;
   const craftPromise = async () => {
