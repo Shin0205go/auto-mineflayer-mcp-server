@@ -1,3 +1,14 @@
+## [2026-03-25] Bug: Session 68 - Bot permanently stuck at Y=72, moveTo/navigate/flee all return with zero displacement
+
+- **Cause**: After reload (commit ea6cf7d + b0eddfc applied), bot spawned at Y=74-75 on a pillar. flee(80) doesn't move the bot at all (X stays at ~12, Y stays at 72). moveTo() with targets at Y=64-68 (even 100+ blocks away) all return with Y=72. Placed 10-step staircase (X=13-22, Y=71-62) but walking the staircase steps also returns Y=72 every time. The bot is completely frozen in horizontal movement - X doesn't change either (12.6 throughout).
+- **Coordinates**: (12.6, 72, -6.3)
+- **Last Actions**: mc_reload → mc_connect → flee(80) → moveTo() x6 far positions → place() staircase x10 → moveTo() staircase steps x10 → navigate() x3 → gather() x5 → all return without position change
+- **Error Message**: No errors thrown. All navigation APIs succeed instantly with no movement. X coordinate stays at 12.6 entire session.
+- **State**: HP=9.3, Hunger=0, entities: enderman:2, zombie:3, creeper:2, skeleton:5, drowned:1, bat:5
+- **Root Cause Hypothesis**: Bot may be surrounded by placed cobblestone blocks forming a cage (from previous session's pillar + this session's staircase attempts). Or pathfinder is in a deadlock state after the reload. Or flee() is being blocked because creeper/skeleton are within safety threshold in all directions.
+- **Impact**: Bot permanently immobile. Hunger=0 with no food means starvation death imminent.
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Session 67 - Bot stuck on pillar at Y=75 surrounded by mobs, all movement blocked, Hunger=0 starvation
 
 - **Cause**: Bot pillarUp'd to Y=75 (birch_forest) to escape night mobs, but mobs persisted into daytime. drowned kept triggering wait() abort, preventing movement. moveTo() returns instantly without movement when mobs nearby.
