@@ -1,3 +1,15 @@
+## [2026-03-25] Bug: Death by zombie during bot.build("shelter") - Session 64 death #2
+
+- **Cause**: Bot at (1.9, 92, -7.9) HP=15.2 Hunger=20 (admin feed active). bot.build("shelter") call timed out after 60s. During timeout, zombie attacked and killed bot. Bot had no armor equipped.
+- **Coordinates**: (1.9, 92, -7.9)
+- **Last Actions**: build("shelter") → timeout 60s → slain by zombie
+- **Error**: "[Server] Claude1 was slain by Zombie"
+- **Root Cause**: build() timed out (60s limit), leaving bot vulnerable in place. No armor = full damage from zombie. This is the back near the spawn cliff area where hostiles are constantly present.
+- **Fix Needed**: build() should have shorter timeout, or bot should flee before building if hostiles nearby.
+- **Status**: Reported. Session 64 death #2.
+
+---
+
 ## [2026-03-25] Bug: bot.combat() NEVER drops food - All sessions - CRITICAL
 
 - **Cause**: bot.combat() against cow/pig/chicken/sheep/zombie returns 0 food drops in ALL sessions. bot.navigate({type:'entity',name:'cow'}) confirms it finds and reaches the animal (position changes), but after combat(), inventory has no new food items. This is not related to gamerule (doMobLoot is TRUE per earlier confirmation). The combat() API kills mobs but doesn't collect drops.
