@@ -1,3 +1,15 @@
+## [2026-03-25] Bug: bot.combat() kills animals but NO food drops collected - Session 58
+
+- **Cause**: bot.combat("cow"), bot.combat("chicken"), bot.combat("pig") all return success, but no food items (raw_beef, raw_chicken, raw_porkchop, etc.) appear in inventory after repeated kills.
+- **Coordinates**: (28, 92, -10) in birch_forest biome
+- **Last Actions**: Session 58. /tp脱出後にbot.combat("cow"), combat("chicken"), combat("pig")を各1回実行。全て即座にリターンするが食料ドロップなし。インベントリ変化なし。
+- **Error Message**: No error thrown, just no items dropped/collected
+- **Evidence**: Inventory before/after combat identical (21 item types, 0 food). wheat_seeds:54, cobblestone:114 unchanged.
+- **Previous Session Note**: Session56バグ報告にも "bot.combat returns immediately without finding/killing animals" との記述あり。動物を本当に殺せているかも疑わしい。
+- **Status**: Reported. Workaround: use bot.farm() with wheat_seeds instead.
+
+---
+
 ## [2026-03-25] Bug: ALL movement/action tools non-functional - Session 57 (CRITICAL継続)
 
 - **Cause**: Session56のバグが継続。Bot完全スタック at (29.7, 91, -6.5). pillarUp/gather("stone")/flee全てタイムアウト/失敗。
@@ -2179,3 +2191,19 @@ Bot needs to explore further (200+ blocks) to find animals.
 - **防具**: なし（0/4スロット）
 - **反省**: 夜間にnavigateを使ったことで敵エリアに誘導された可能性
 - **対策**: 夜間はpillarUpのみ。navigateは昼間のみ使用すること
+
+## [2026-03-25] Bug: Complete movement freeze at cliff edge - Session 57
+
+- **Cause**: ボットが崖端(29.7, 91, -6.5)に位置し、東西北がstoneブロック、南がY=90空洞の崖。pathfinderが全方向で落下リスクと判定し経路なし→全movement API失敗。
+- **Root Pattern**: 高地(Y=91)の崖端でpathfinderが完全にブロック。pillarUp/flee/moveTo/navigate全てタイムアウト。
+- **Location**: src/bot-manager/bot-movement.ts (pathfinder cliff detection)
+- **Coordinates**: スタック地点 (29.7, 91, -6.5) birch_forest biome
+- **Working APIs**: status(), inventory(), place(), chat(), wait()
+- **Failed APIs**: moveTo(), navigate(), gather(), craft(), smelt(), build(), pillarUp(), flee()
+- **Last Actions**:
+  1. 高地(Y=91)の崖端に移動
+  2. 東西北: stoneブロック、南: 崖(Y=90が空洞)
+  3. pathfinder経路なし→全movement失敗
+  4. place()で南側に土ブロック足場作成を試みたが解決せず
+- **Fix Needed**: 崖端スタック時の脱出ルーティン。pillarUpが確実に動作するよう崖端判定を修正。
+- **Status**: Phase 1-3完了(stone_sword, stone_pickaxe所持)。Phase 4完全停止中。
