@@ -2252,6 +2252,17 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       const bx = Math.floor(botPos.x);
       const by = Math.floor(botPos.y);
       const bz = Math.floor(botPos.z);
+      // Elevated terrain (Y>75): cliff edges are normal terrain — the bot is on a hilltop
+      // or birch forest cliff where ALL surrounding squares are cliff edges dropping 5-20 blocks.
+      // Bot1 Sessions 56-59: bot at Y=91 in birch_forest — every direction has a cliff drop
+      // greater than dy=3, so all 8 directions fail the safety check → distance collapses to 5
+      // → pathfinder finds no path at 5 blocks → flee completely fails → bot frozen.
+      // Fix: at elevated starts (Y>75), allow ground to be up to 8 blocks below check position.
+      // This lets the safety check accept "ground 6 blocks below" as reachable terrain, which
+      // the pathfinder can navigate to via stair-stepping or small drops.
+      // Normal surface (Y<=75): keep dy=3 to prevent fleeing toward cave holes.
+      const elevatedFlee = by > 75;
+      const maxDyCheck = elevatedFlee ? 8 : 3;
       let bestDirection = direction;
       let foundSafe = false;
       // Try 8 directions: 0°, 45°, 90°, 135°, 180°, 225°, 270°, 315° from original
@@ -2265,9 +2276,9 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
         for (const checkDist of [1, 2, 3, 5]) {
           const checkX = bx + Math.round(Math.cos(angle) * checkDist);
           const checkZ = bz + Math.round(Math.sin(angle) * checkDist);
-          // Check for ground within 3 blocks below — also reject lava.
+          // Check for ground within maxDyCheck blocks below — also reject lava.
           let hasSafeGround = false;
-          for (let dy = 0; dy <= 3; dy++) {
+          for (let dy = 0; dy <= maxDyCheck; dy++) {
             const block = bot.blockAt(new Vec3(checkX, by - dy, checkZ));
             if (!block) continue;
             // Lava is NOT safe ground — Bot3 #8: fell into lava while fleeing.
@@ -2306,22 +2317,36 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
         }
       }
       if (!foundSafe) {
-        // All 8 directions are unsafe (cliff/hole/lava/water). Reduce flee distance to 5 blocks
-        // to minimize exposure to the hazard while still creating some distance from hostiles.
+        // All 8 directions are unsafe (cliff/hole/lava/water).
+        // Normal terrain: reduce flee distance to 5 blocks to minimize exposure.
         // Bot1/Bot2/Bot3 [2026-03-22]: full-distance flee into unsafe terrain caused falls
         // (Y=80→56, Y=116→86) because maxDropDown=1 doesn't prevent the bot from CHOOSING
-        // a path toward a cliff — it only limits per-step drops. Short distance means the bot
-        // stops before reaching the hazard in most cases.
+        // a path toward a cliff — it only limits per-step drops.
+        //
+        // Elevated terrain exception (Bot1 Sessions 56-59):
+        // At Y>75 all 8 directions may be cliff edges (expected for hilltop/birch_forest),
+        // but that does NOT mean the terrain is impassable — it means the bot needs to descend.
+        // At elevated positions, do NOT collapse distance to 5; keep original distance so
+        // pathfinder can plan a real escape route down the cliff.
         // Also try fleeing perpendicular to the nearest hostile (likely less obstructed).
         if (allHostiles.length > 0) {
           const nearestAway = bot.entity.position.minus(allHostiles[0].entity.position);
           const perpAngle = Math.atan2(nearestAway.z, nearestAway.x) + Math.PI / 2;
           bestDirection = new (bot.entity.position as any).constructor(Math.cos(perpAngle), 0, Math.sin(perpAngle));
-          console.error(`[Flee] WARNING: All 8 flee directions unsafe. Using perpendicular direction with reduced distance (${Math.min(distance, 5)} blocks).`);
+          if (elevatedFlee) {
+            console.error(`[Flee] WARNING: All 8 flee directions have cliffs/drops (elevated terrain Y=${by}). Using perpendicular direction — pathfinder will find descent route.`);
+          } else {
+            console.error(`[Flee] WARNING: All 8 flee directions unsafe. Using perpendicular direction with reduced distance (${Math.min(distance, 5)} blocks).`);
+            distance = Math.min(distance, 5);
+          }
         } else {
-          console.error(`[Flee] WARNING: All 8 flee directions unsafe. Using original direction with reduced distance (${Math.min(distance, 5)} blocks).`);
+          if (elevatedFlee) {
+            console.error(`[Flee] WARNING: All 8 flee directions have cliffs/drops (elevated terrain Y=${by}). Using original direction — pathfinder will find descent route.`);
+          } else {
+            console.error(`[Flee] WARNING: All 8 flee directions unsafe. Using original direction with reduced distance (${Math.min(distance, 5)} blocks).`);
+            distance = Math.min(distance, 5);
+          }
         }
-        distance = Math.min(distance, 5);
       }
       direction = bestDirection;
     }
@@ -2331,17 +2356,26 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     const startPos = bot.entity.position.clone();
 
     // SAFETY: Limit drop-downs and penalize liquid during flee.
-    // maxDropDown=1 allows safe 1-block drops (no fall damage) while preventing cliff falls.
+    // maxDropDown=2 allows 1-2 block drops (no fall damage) while preventing cliff falls.
     // Previous maxDropDown=0 was TOO restrictive: on hilly terrain (old_growth_birch_forest),
     // the pathfinder couldn't navigate at all because nearly every path involves a 1-block drop.
     // Bot3 #26: fled only 7.2 blocks because maxDropDown=0 blocked all downhill movement.
     // liquidCost=10000 prevents water routing (drowning).
+    //
+    // Elevated terrain exception (Bot1 Sessions 56-59):
+    // At Y>75, the bot is on a cliff/hill — descending IS the escape route.
+    // maxDropDown=2 blocks the pathfinder from descending cliffs (5-15 block drops),
+    // making flee completely ineffective on elevated terrain.
+    // Allow maxDropDown=5 at Y>75 so pathfinder can navigate cliff descents during flee.
+    // The safeSetGoal Y-descent monitor (fleeMaxYDescent=15) provides an independent
+    // cap on total descent, preventing runaway cave routing even with maxDropDown=5.
+    const fleeStartElevated = bot.entity.position.y > 75;
     const prevMaxDropDown = bot.pathfinder.movements?.maxDropDown ?? 2;
     const prevLiquidCost = (bot.pathfinder.movements as any)?.liquidCost ?? 100;
     const prevAllowSprinting = bot.pathfinder.movements?.allowSprinting ?? true;
     const prevCanDig = bot.pathfinder.movements?.canDig ?? true;
     if (bot.pathfinder.movements) {
-      bot.pathfinder.movements.maxDropDown = 2;
+      bot.pathfinder.movements.maxDropDown = fleeStartElevated ? 5 : 2;
       (bot.pathfinder.movements as any).liquidCost = 100000;
       // Disable water walking entirely — liquidCost alone is sometimes insufficient.
       // Bot2 [2026-03-23]: flee routed into water despite liquidCost=10000 because
@@ -2724,6 +2758,10 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
             const retryBx = Math.floor(retryBotPos.x);
             const retryBy = Math.floor(retryBotPos.y);
             const retryBz = Math.floor(retryBotPos.z);
+            // Same elevated terrain exception as main flee direction check:
+            // at Y>75 all squares may be cliff edges, use deeper dy scan.
+            const retryElevated = retryBy > 75;
+            const retryMaxDy = retryElevated ? 8 : 3;
             let retryDirSafe = false;
             for (const angleOffset of [0, Math.PI]) { // Try +90° first, then -90°
               const testAngle = perpAngle + angleOffset;
@@ -2732,7 +2770,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
                 const checkX = retryBx + Math.round(Math.cos(testAngle) * checkDist);
                 const checkZ = retryBz + Math.round(Math.sin(testAngle) * checkDist);
                 let hasSafeGround = false;
-                for (let dy = 0; dy <= 3; dy++) {
+                for (let dy = 0; dy <= retryMaxDy; dy++) {
                   const block = bot.blockAt(new Vec3(checkX, retryBy - dy, checkZ));
                   if (!block) continue;
                   // Check both source and flowing lava — flowing_lava was missed by
@@ -2758,8 +2796,12 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
               }
             }
             if (!retryDirSafe) {
-              console.error(`[Flee] Perpendicular retry: BOTH perpendicular directions unsafe (cliff/hole/lava). Reducing distance to 5 blocks.`);
-              distance = Math.min(distance, 5);
+              if (retryElevated) {
+                console.error(`[Flee] Perpendicular retry: both directions have cliff drops (elevated Y=${retryBy}) — proceeding with pathfinder descent.`);
+              } else {
+                console.error(`[Flee] Perpendicular retry: BOTH perpendicular directions unsafe (cliff/hole/lava). Reducing distance to 5 blocks.`);
+                distance = Math.min(distance, 5);
+              }
             }
           }
 
@@ -2768,7 +2810,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
           );
           const retryGoal = new goals.GoalNear(perpTarget.x, perpTarget.y, perpTarget.z, 3);
           if (bot.pathfinder.movements) {
-            bot.pathfinder.movements.maxDropDown = 2;
+            bot.pathfinder.movements.maxDropDown = fleeStartElevated ? 5 : 2;
             bot.pathfinder.movements.canDig = false;
             (bot.pathfinder.movements as any).liquidCost = 10000;
             bot.pathfinder.movements.allowSprinting = true;

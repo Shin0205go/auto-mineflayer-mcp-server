@@ -24,6 +24,7 @@ import {
   mc_flee,
   minecraft_pillar_up,
   mc_smelt,
+  mc_tunnel,
 } from "./core-tools.js";
 import { botManager } from "../bot-manager/index.js";
 import { isHostileMob } from "../bot-manager/minecraft-utils.js";
@@ -95,6 +96,9 @@ export async function mc_execute(
     pillarUp: async (height?: number) => {
       return await minecraft_pillar_up(height ?? 1);
     },
+    tunnel: async (direction: string, length?: number) => {
+      return await mc_tunnel(direction, length ?? 10);
+    },
 
     // Resources
     gather: async (block: string, count?: number, maxDistance?: number) => {
@@ -133,6 +137,15 @@ export async function mc_execute(
     farm: async () => {
       return await mc_farm();
     },
+    // Level ground: dig/fill/both around an area
+    levelGround: async (centerX: number, targetY: number, centerZ: number, radius: number = 8, mode: "dig" | "fill" | "both" = "dig") => {
+      const username = botManager.requireSingleBot();
+      return await botManager.levelGround(username, {
+        centerX, centerZ, radius,
+        targetY,
+        mode,
+      });
+    },
 
     // Storage
     store: async (action: string, itemName?: string, count?: number, chestX?: number, chestY?: number, chestZ?: number, keepItems?: string[]) => {
@@ -155,6 +168,31 @@ export async function mc_execute(
       if (logs.length < MAX_LOG_LINES) {
         logs.push(String(message));
       }
+    },
+    // Direct control state access — used for raw movement when pathfinder is stuck.
+    // Bot1 Session 59: bot completely stuck at cliff edge Y=90; admin suggested
+    // bot.setControlState('forward', true) as escape but it threw TypeError because
+    // the method was not exposed in the sandbox.
+    // This API bypasses pathfinder entirely — the bot physically moves based on
+    // control state + look direction. Useful as last resort when pathfinder cannot
+    // find any path (cliff-edge stuck, pathfinder state corruption).
+    setControlState: (control: string, state: boolean) => {
+      const username = botManager.requireSingleBot();
+      const rawBot = botManager.getBot(username);
+      if (!rawBot) throw new Error("Bot not connected");
+      rawBot.setControlState(control as any, state);
+    },
+    clearControlStates: () => {
+      const username = botManager.requireSingleBot();
+      const rawBot = botManager.getBot(username);
+      if (!rawBot) throw new Error("Bot not connected");
+      rawBot.clearControlStates();
+    },
+    lookAt: async (yaw: number, pitch: number) => {
+      const username = botManager.requireSingleBot();
+      const rawBot = botManager.getBot(username);
+      if (!rawBot) throw new Error("Bot not connected");
+      await rawBot.look(yaw, pitch, true);
     },
     wait: async (ms: number) => {
       // Bot1 [2026-03-22]: drowned during bot.wait() at y=86 with hunger=0.
@@ -624,6 +662,7 @@ ${code}
     }
 
     parts.push(`Executed in ${elapsed}ms`);
+
 
     return parts.join("\n\n");
   } catch (error) {
