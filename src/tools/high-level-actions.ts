@@ -66,13 +66,40 @@ function getDropNames(blockName: string): string[] {
 }
 
 /**
+ * Ore fallback map: when one ore variant fails (all unreachable/embedded),
+ * try the alternative form. iron_ore → deepslate_iron_ore etc.
+ * This handles the common case where surface ore is exhausted but deepslate
+ * variant exists in caves, and vice versa.
+ * Session 71b: gather("iron_ore") found ore but all embedded in stone at Y=74-95.
+ * Adding deepslate fallback lets the gather try the other Y-distribution ore.
+ */
+const ORE_FALLBACK_MAP: Record<string, string> = {
+  iron_ore: "deepslate_iron_ore",
+  deepslate_iron_ore: "iron_ore",
+  gold_ore: "deepslate_gold_ore",
+  deepslate_gold_ore: "gold_ore",
+  copper_ore: "deepslate_copper_ore",
+  deepslate_copper_ore: "copper_ore",
+  coal_ore: "deepslate_coal_ore",
+  deepslate_coal_ore: "coal_ore",
+  diamond_ore: "deepslate_diamond_ore",
+  deepslate_diamond_ore: "diamond_ore",
+  lapis_ore: "deepslate_lapis_ore",
+  deepslate_lapis_ore: "lapis_ore",
+  redstone_ore: "deepslate_redstone_ore",
+  deepslate_redstone_ore: "redstone_ore",
+};
+
+/**
  * Gather specific resources by finding, mining, and collecting blocks
  * Loops until target count is reached or no more blocks are found
+ * @param _noOreFallback Internal flag: when true, skip the ore fallback recursion to prevent iron_ore→deepslate_iron_ore→iron_ore infinite loop
  */
 export async function minecraft_gather_resources(
   username: string,
   items: Array<{ name: string; count: number }>,
-  maxDistance: number = 32
+  maxDistance: number = 32,
+  _noOreFallback: boolean = false
 ): Promise<string> {
   const results: string[] = [];
 
@@ -252,9 +279,13 @@ export async function minecraft_gather_resources(
         // Safety check: Skip only if target is far above bot (floating island / sky structure)
         // Y=80 threshold was too low and broke surface gathering when base is at high altitude (e.g. Y=96+)
         // Now only skip if target is more than 40 blocks above the bot (unlikely to be a reachable surface resource)
+        // IMPORTANT: Add to failedPositions so we don't spin in the loop with the same block forever.
+        // Session 71b: Without failedPositions.add here, the Y-check loop consumed all maxAttempts
+        // without incrementing failedPositions, so the "all unreachable" early exit never fired.
         const botPos = botManager.getPosition(username);
         if (botPos && y - botPos.y > 40) {
           console.error(`[GatherResources] Skipping block at Y=${y} - target is ${(y - botPos.y).toFixed(0)} blocks above bot (Y:${botPos.y.toFixed(0)}), likely floating/sky structure.`);
+          failedPositions.add(pk);
           continue; // Skip this block, try finding another reachable one
         }
 
@@ -382,6 +413,16 @@ export async function minecraft_gather_resources(
           continue;
         }
 
+        // If digBlock noted items dropped but weren't auto-collected, do an extra aggressive collect.
+        // This handles cases like "Items dropped at (x,y,z) (Xm away) but weren't auto-collected".
+        // Session 71b [2026-03-26]: raw_iron spawned but bot was just outside 1-block auto-pickup range.
+        if (digResult.includes("weren't auto-collected") || digResult.includes("NOTE: Items dropped")) {
+          console.error(`[GatherResources] digBlock noted items not auto-collected — doing targeted re-collect at mined block position`);
+          // Move to exact mined position to ensure auto-pickup range
+          await botManager.moveTo(username, Math.floor(x), Math.floor(y), Math.floor(z));
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
         // Collect nearby items
         await botManager.collectNearbyItems(username);
 
@@ -416,11 +457,61 @@ export async function minecraft_gather_resources(
     const alreadyHasResult = results.some(r => r.startsWith(`${item.name}:`));
     if (!alreadyHasResult) {
       if (collected === 0 && failedPositions.size > 0) {
-        results.push(`${item.name}: 0/${targetCount} (found ${failedPositions.size} block(s) but all unreachable — pathfinder could not reach them. Try moving closer or to a different area)`);
+        // For ore blocks, add specific guidance about the underground navigation requirement.
+        // Session 71b [2026-03-26]: gather("iron_ore") found ore but all embedded in stone (no adjacent air).
+        // The generic "unreachable" message was unclear — agents kept retrying without changing approach.
+        const isOreBlock = item.name.includes("_ore");
+        const oreFallback = ORE_FALLBACK_MAP[item.name];
+        let oreHint = "";
+        if (isOreBlock) {
+          oreHint = ` For ores: most veins are fully embedded in stone with no adjacent air — the bot cannot path to them with canDig=false.`;
+          if (oreFallback) {
+            oreHint += ` Try bot.gather("${oreFallback}") for the alternate form, or use bot.navigate("${item.name}") to find an accessible vein, then retry bot.gather("${item.name}").`;
+          } else {
+            oreHint += ` Use bot.navigate("${item.name}") to find an accessible vein first, then retry bot.gather().`;
+          }
+        }
+        results.push(`${item.name}: 0/${targetCount} (found ${failedPositions.size} block(s) but all unreachable — pathfinder could not reach them. Try moving closer or to a different area.${oreHint})`);
       } else if (collected === 0 && consecutiveFailures > 0) {
         results.push(`${item.name}: 0/${targetCount} (mining attempts failed ${consecutiveFailures} time(s) — blocks may require a better pickaxe or are inaccessible)`);
       } else {
         results.push(`${item.name}: ${collected}/${targetCount}`);
+      }
+    }
+
+    // Ore fallback: if primary ore block collected 0 items and a fallback variant exists,
+    // automatically try the alternate ore form in the same gather pass.
+    // Session 71b [2026-03-26]: gather("iron_ore") returned 0 (all embedded in stone at Y=74-95).
+    // Deepslate ore at deeper Y-levels may have accessible cave-face exposure.
+    // This avoids forcing the agent to manually call gather("deepslate_iron_ore") as a follow-up.
+    // _noOreFallback guard: prevents infinite recursion (iron_ore→deepslate_iron_ore→iron_ore).
+    if (!_noOreFallback && collected === 0 && ORE_FALLBACK_MAP[item.name]) {
+      const fallbackName = ORE_FALLBACK_MAP[item.name];
+      console.error(`[GatherResources] ${item.name} collected 0 — trying fallback ore: ${fallbackName}`);
+      const fallbackResult = await minecraft_gather_resources(username, [{ name: fallbackName, count: targetCount }], maxDistance, true /* _noOreFallback */);
+      // Extract how many the fallback collected (format: "fallbackName: N/count")
+      const fallbackMatch = fallbackResult.match(new RegExp(`${fallbackName}:\\s*(\\d+)/${targetCount}`));
+      const fallbackCollected = fallbackMatch ? parseInt(fallbackMatch[1]) : 0;
+      if (fallbackCollected > 0) {
+        // Replace the failure result with a note about the successful fallback
+        const existingIdx = results.findIndex(r => r.startsWith(`${item.name}:`));
+        const note = `${item.name}: ${fallbackCollected}/${targetCount} via ${fallbackName} (primary ore unreachable, collected from deepslate/alternate variant)`;
+        if (existingIdx >= 0) {
+          results[existingIdx] = note;
+        } else {
+          results.push(note);
+        }
+        console.error(`[GatherResources] Fallback successful: collected ${fallbackCollected} from ${fallbackName}`);
+      } else {
+        // Both primary and fallback failed — update message to mention both
+        console.error(`[GatherResources] Fallback ${fallbackName} also returned 0. Both ore variants unreachable.`);
+        const existingIdx = results.findIndex(r => r.startsWith(`${item.name}:`));
+        const bothFailedNote = `${item.name}: 0/${targetCount} (both ${item.name} and ${fallbackName} unreachable — ore is fully embedded in stone. Use bot.navigate("${item.name}") to reach a cave/mine entrance first, then retry)`;
+        if (existingIdx >= 0) {
+          results[existingIdx] = bothFailedNote;
+        } else {
+          results.push(bothFailedNote);
+        }
       }
     }
   }
@@ -504,16 +595,7 @@ export async function minecraft_build_structure(
 
   const dim = dimensions[size];
 
-  // Level ground first
-  const levelResult = await botManager.levelGround(username, {
-    centerX: baseX,
-    centerZ: baseZ,
-    radius: Math.floor(dim.width / 2),
-    mode: "both",
-  });
-  console.error(`[BuildStructure] Level ground: ${levelResult}`);
-
-  // Check inventory for building materials
+  // Check inventory for building materials BEFORE levelGround (avoid wasting time if no blocks)
   const inventory = botManager.getInventory(username);
   const buildingMaterials = ["cobblestone", "oak_planks", "birch_planks", "spruce_planks", "stone", "dirt"];
   const material = inventory.find(item => buildingMaterials.includes(item.name) && item.count >= 20);
@@ -526,9 +608,29 @@ export async function minecraft_build_structure(
 
   const results: string[] = [];
   let blocksPlaced = 0;
+  // Session 71c [2026-03-26]: build("shelter") timed out at 120s because levelGround +
+  // per-block navigation consumed all available time. Reduced to 60s so the caller
+  // gets an error fast enough to try a fallback (e.g. pillarUp for night safety).
+  const BUILD_TIMEOUT_MS = 60000; // 60s max build time
   const buildStartTime = Date.now();
-  const BUILD_TIMEOUT_MS = 120000; // 120s max build time
   let buildAborted = false;
+
+  // Level ground only if daytime — skip at night for speed.
+  // levelGround can take 30-60s on rough terrain, consuming the entire build budget.
+  // At night the priority is rapid shelter construction; leveling can wait until day.
+  const buildTimeOfDay2 = bot?.time?.timeOfDay ?? 0;
+  const buildIsNight2 = buildTimeOfDay2 > 12541 || buildTimeOfDay2 < 100;
+  if (!buildIsNight2) {
+    const levelResult = await botManager.levelGround(username, {
+      centerX: baseX,
+      centerZ: baseZ,
+      radius: Math.floor(dim.width / 2),
+      mode: "both",
+    });
+    console.error(`[BuildStructure] Level ground: ${levelResult}`);
+  } else {
+    console.error(`[BuildStructure] Night build — skipping levelGround for speed`);
+  }
 
   // Mid-build safety check: HP monitoring + hostile detection during construction.
   // Bot1 [2026-03-22]: killed by skeleton during mc_build(shelter) at Y=38 — no HP/hostile
@@ -545,10 +647,20 @@ export async function minecraft_build_structure(
     if (hp < 8) {
       return `[ABORTED] HP critically low during build (${hp.toFixed(1)}/20). Stopping to survive. Use mc_eat or mc_flee.`;
     }
-    // Hostile check — scan 16 blocks during build
-    const danger = checkDangerNearby(bot, 16);
-    if (danger.dangerous && danger.nearestHostile && danger.nearestHostile.distance <= 12) {
-      return `[ABORTED] Hostile detected during build: ${danger.nearestHostile.name} at ${danger.nearestHostile.distance.toFixed(1)} blocks (HP=${(bot.health ?? 20).toFixed(1)}). Use mc_flee or mc_combat first.`;
+    // Hostile check — scan 20 blocks during build
+    // Session 71c [2026-03-26]: skeleton at >12 blocks kept shooting the stationary bot.
+    // Expand abort range: ranged mobs (skeleton/stray/phantom) abort at 16 blocks,
+    // melee mobs abort at 8 blocks.
+    const danger = checkDangerNearby(bot, 20);
+    if (danger.dangerous && danger.nearestHostile) {
+      const hostileName = danger.nearestHostile.name.toLowerCase();
+      const isRanged = ["skeleton", "stray", "phantom", "pillager", "witch"].some(
+        m => hostileName.includes(m)
+      );
+      const abortDist = isRanged ? 16 : 8;
+      if (danger.nearestHostile.distance <= abortDist) {
+        return `[ABORTED] Hostile detected during build: ${danger.nearestHostile.name} at ${danger.nearestHostile.distance.toFixed(1)} blocks (HP=${(bot.health ?? 20).toFixed(1)}). Use mc_flee or mc_combat first.`;
+      }
     }
     return null;
   };
@@ -1961,11 +2073,48 @@ export async function minecraft_night_routine(username: string): Promise<string>
   const isIndoors = surroundings.includes("ceiling") || surroundings.includes("Blocked above");
 
   if (!isIndoors) {
+    // Check for ranged threats before attempting shelter build
+    // Session 71c [2026-03-26]: skeleton nearby while build(shelter) ran caused deaths.
+    // build(shelter) timed out at 120s while bot was stationary under fire.
+    // Emergency: if ranged mob is within 16 blocks, pillarUp first to escape arrow range.
+    const preBuildDanger = checkDangerNearby(bot, 20);
+    const hasRangedThreat = preBuildDanger.dangerous && preBuildDanger.nearestHostile &&
+      ["skeleton", "stray", "phantom", "pillager", "witch"].some(
+        m => preBuildDanger.nearestHostile!.name.toLowerCase().includes(m)
+      ) && preBuildDanger.nearestHostile.distance <= 16;
+
+    if (hasRangedThreat) {
+      // pillarUp 10 blocks to escape ranged damage
+      steps.push(`Ranged threat (${preBuildDanger.nearestHostile!.name} at ${preBuildDanger.nearestHostile!.distance.toFixed(1)}m) — pillaring up first`);
+      try {
+        const pillarResult = await botManager.pillarUp(username, 10);
+        steps.push(`Emergency pillarUp: ${pillarResult.substring(0, 80)}`);
+      } catch (pillarErr) {
+        steps.push(`PillarUp failed: ${pillarErr}`);
+      }
+    }
+
+    let shelterBuilt = false;
     try {
       const shelterResult = await minecraft_build_structure(username, "shelter", "small");
-      steps.push(`Built emergency shelter: ${shelterResult.includes("Built") ? "OK" : shelterResult.substring(0, 50)}`);
+      shelterBuilt = shelterResult.includes("Built");
+      steps.push(`Built emergency shelter: ${shelterBuilt ? "OK" : shelterResult.substring(0, 80)}`);
     } catch (e) {
       steps.push(`Shelter failed: ${e}`);
+    }
+
+    // Fallback: if shelter failed AND hostiles still nearby, pillarUp as last resort survival
+    if (!shelterBuilt) {
+      const postDanger = checkDangerNearby(bot, 20);
+      if (postDanger.dangerous && postDanger.nearestHostile && postDanger.nearestHostile.distance <= 20) {
+        steps.push("Shelter failed + hostiles nearby — emergency pillarUp for night survival");
+        try {
+          const pillarResult2 = await botManager.pillarUp(username, 12);
+          steps.push(`Emergency pillarUp fallback: ${pillarResult2.substring(0, 80)}`);
+        } catch (pillarErr2) {
+          steps.push(`PillarUp fallback failed: ${pillarErr2}`);
+        }
+      }
     }
   } else {
     steps.push("Already indoors — staying put");
