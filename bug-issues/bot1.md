@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 71b - gather("iron_ore") always returns success but raw_iron never added to inventory
+- **Cause**: bot.gather("iron_ore") returns immediately with no displacement and no items collected. Navigate to iron_ore works (moves bot to ore location), but gather() after navigation also collects nothing.
+- **Coordinates**: (37, 77, 31) → moved to (46, 74, 29) after navigate
+- **Last Actions**: gather("coal_ore", 8) succeeded and gave coal. gather("iron_ore", 8) at Y=74-95 returns success but raw_iron=0 every time. Tried 3 times.
+- **Error Message**: No error thrown, just 0 iron in inventory after gather()
+- **Contributing Factors**: Same as previous sessions - gather() drops collection bug for iron_ore specifically. coal_ore worked fine.
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 71 - Death by Skeleton (shot)
 - **Cause**: Bot shot by Skeleton. Likely exposed outdoors with no armor equipped.
 - **Coordinates**: Approximately (6, 100, -3) - birch_forest biome
