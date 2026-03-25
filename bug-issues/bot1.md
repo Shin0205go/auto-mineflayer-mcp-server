@@ -1,3 +1,15 @@
+## [2026-03-25] Bug: bot.flee() navigated through lava - Session 65
+
+- **Cause**: bot.flee() was called when HP=2.3 at y=37 (underground). Bot tried to swim in lava during escape. Server message: "Claude1 tried to swim in lava". Bot survived (HP went to 20 after escape to y=90), but lava navigation is dangerous.
+- **Coordinates**: (-9.7, 37.0, 12.0)
+- **Last Actions**: flee(30) → lava contact → escaped to y=90
+- **Error**: "[Server] Claude1 tried to swim in lava"
+- **Root Cause**: bot.flee() pathfinding does not avoid lava blocks. When underground with hostiles, flee may route through dangerous terrain.
+- **Fix Needed**: flee() should treat lava as impassable/high-cost terrain during pathfinding.
+- **Status**: Reported. Session 65.
+
+---
+
 ## [2026-03-25] Bug: Death by zombie during bot.build("shelter") - Session 64 death #2
 
 - **Cause**: Bot at (1.9, 92, -7.9) HP=15.2 Hunger=20 (admin feed active). bot.build("shelter") call timed out after 60s. During timeout, zombie attacked and killed bot. Bot had no armor equipped.
