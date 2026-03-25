@@ -1,3 +1,15 @@
+## [2026-03-25] Bug: Bot drowned at Y=46 underground (water pocket) - Session 65 death
+
+- **Cause**: Bot was stuck at Y=46 underground. dig(px, py+10, pz) failed with "Digging aborted" (hit water block). Bot was in or near an underground water pocket. Server: "Claude1 drowned".
+- **Coordinates**: (6, 46, 3)
+- **Last Actions**: Sequential bot.dig from Y+1 to Y+9 succeeded, then Y+10 failed with "Digging aborted" (water). Bot drowned in water pocket.
+- **Error**: "[Server] Claude1 drowned"
+- **Root Cause**: Underground water pocket at Y=56 area. bot.dig hit water block, water flowed into bot's location. No way to detect water before digging.
+- **Fix Needed**: bot.dig should check for water blocks before digging adjacent to them. Or, provide a way to check block type before digging.
+- **Status**: Reported. Session 65. Death.
+
+---
+
 ## [2026-03-25] Bug: pillarUp() always times out underground - Session 65 CRITICAL
 
 - **Cause**: bot.pillarUp(30) called at Y=57-66 underground. Cobblestone available (135 blocks). Method either times out (120s) or completes but bot Y doesn't change. Even after placing cobblestone at feet first, pillarUp still times out.
