@@ -28,7 +28,7 @@ import {
   mc_reconnect,
 } from "./core-tools.js";
 import { botManager } from "../bot-manager/index.js";
-import { isHostileMob } from "../bot-manager/minecraft-utils.js";
+import { isHostileMob, EDIBLE_FOOD_NAMES } from "../bot-manager/minecraft-utils.js";
 import { equipArmor } from "../bot-manager/bot-items.js";
 
 const MAX_TIMEOUT = 600_000;  // 10 minutes max for gameplay loops
@@ -69,8 +69,33 @@ export async function mc_execute(
     // safety pre-checks (hunger/HP/night/hostile/starvation) that could return early
     // with WARNING strings without actually moving the bot. Agents calling bot.moveTo()
     // expect direct movement; bot.navigate() provides the full safety-checked path.
+    //
+    // [2026-03-26] STARVATION SAFEGUARD: Pre-move check for long-distance travel when
+    // food=0 and no food in inventory. Bot1 Session 70b: HP=5.5, Hunger=0, navigated
+    // 200+ blocks to find sheep — killed by zombies mid-travel. The bot cannot regenerate
+    // HP without food, so any mob encounter during a long journey is lethal.
+    // Block moveTo > 30 blocks when hunger<=3 AND no food in inventory, with clear guidance.
+    // Short moves (<=30 blocks) are allowed for emergency chest/crafting_table access.
     moveTo: async (x: number, y: number, z: number) => {
       const username = botManager.requireSingleBot();
+      const moveBot = botManager.getBot(username);
+      if (moveBot) {
+        const moveHunger = (moveBot as any).food ?? 20;
+        const moveHp = moveBot.health ?? 20;
+        if (moveHunger <= 3) {
+          const moveInv = botManager.getInventory(username);
+          const moveHasFood = moveInv.some((i: any) => EDIBLE_FOOD_NAMES.has(i.name));
+          if (!moveHasFood) {
+            const movePos = moveBot.entity.position;
+            const moveDist = Math.sqrt((x - movePos.x) ** 2 + (y - movePos.y) ** 2 + (z - movePos.z) ** 2);
+            if (moveDist > 30) {
+              // Long-distance travel with starvation is lethal — HP drains and mobs finish the job.
+              // Bot1 Session 70b: HP=5.5, Hunger=0, 200-block journey killed by zombies.
+              return `[WARNING] moveTo blocked: Hunger=${moveHunger}, HP=${moveHp.toFixed(1)}, no food, distance=${moveDist.toFixed(0)} blocks. Long travel while starving is lethal — HP cannot regenerate and mobs attack during the journey.\n[推奨アクション]\n1. bot.combat("cow") または bot.combat("pig") — 近くの動物を狩る（まず bot.status() で nearbyEntities を確認）\n2. bot.navigate("cow") — 64ブロック以内の動物を探す\n3. bot.craft("bread") — 小麦がインベントリにあればパンをクラフト\n4. bot.store("withdraw", "food") — 近くのチェスト（<30ブロック）から食料取得`;
+            }
+          }
+        }
+      }
       return await botManager.moveTo(username, x, y, z);
     },
     navigate: async (target: string | { x?: number; y?: number; z?: number; target_block?: string; target_entity?: string; type?: string; name?: string; max_distance?: number }) => {

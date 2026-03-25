@@ -228,7 +228,15 @@ export async function mc_status(): Promise<string> {
     }
   }
   if (food <= 0 && health < 10) {
-    warnings.push(`STARVATION: Hunger=${food}, HP=${Math.round(health*10)/10}. Find food IMMEDIATELY — mc_combat(cow/pig/chicken) or mc_eat. Do NOT navigate long distances.`);
+    warnings.push(`STARVATION: Hunger=${food}, HP=${Math.round(health*10)/10}. Find food IMMEDIATELY — mc_combat(cow/pig/chicken) or mc_eat. Do NOT navigate long distances (moveTo > 30 blocks is blocked when starving with no food).`);
+  }
+  // Early starvation warning: hunger<=3 with no food is a pre-death state.
+  // Bot1 Session 70b: hunger=0, HP=5.5, no food — navigated 200+ blocks to find sheep, killed.
+  // The existing warning (food<=0 && hp<10) fires too late — at that point the bot is already
+  // close to death. Warn earlier at hunger<=3 with no food in inventory so the agent acts
+  // BEFORE HP drops from starvation damage. Also remind that moveTo > 30 blocks is blocked.
+  if (food <= 3 && foodItems.length === 0 && health >= 10) {
+    warnings.push(`NEAR-STARVATION: Hunger=${food}, no food in inventory. HP will start draining soon. Prioritize food BEFORE doing other tasks. bot.combat("cow"/"pig"/"chicken") — check nearbyEntities first. bot.navigate("cow") searches 64 blocks. DO NOT moveTo far coordinates while starving (>30 blocks is blocked with no food).`);
   }
   if (foodItems.length === 0 && food < 10) {
     warnings.push("NO FOOD in inventory. Hunger will deplete. Hunt animals (mc_combat cow/pig) or harvest crops before it's critical.");
@@ -1656,46 +1664,74 @@ export async function mc_farm(): Promise<string> {
     }
   }
 
-  // Also check for any mature wheat within 16 blocks (from older plantings)
-  if (!wheatGathered) {
-    try {
-      const freshBot = botManager.getBot(username);
-      const { Vec3: Vec3Cls } = await import("vec3");
-      if (freshBot) {
-        const wheatBlocks = freshBot.findBlocks({ matching: (block: any) => {
-          if (block.name !== "wheat") return false;
-          const p = block.getProperties ? block.getProperties() : null;
-          return (p?.age ?? block.metadata) >= 7;
-        }, maxDistance: 16, count: 10 });
-        if (wheatBlocks.length > 0) {
-          logs.push(`Found ${wheatBlocks.length} mature wheat nearby — harvesting`);
-          for (const pos of wheatBlocks) {
-            // Safety: hostile + HP check per block during nearby wheat harvest
-            const scanDanger = checkDangerNearby(freshBot, 20);
-            if (scanDanger.dangerous) {
-              logs.push(`[WARNING] Hostile detected during nearby wheat harvest. Consider fleeing.`);
-              console.error(`[Farm] WARNING: hostile during nearby wheat harvest. Continuing.`);
-            }
-            if ((freshBot.health ?? 20) < 10) {
-              logs.push(`[WARNING] HP low during nearby wheat harvest (${(freshBot.health ?? 20).toFixed(1)}). Consider eating/fleeing.`);
-              console.error(`[Farm] WARNING: HP=${(freshBot.health ?? 20).toFixed(1)} during nearby wheat harvest. Continuing.`);
-            }
-            try {
-              await botManager.moveTo(username, pos.x, pos.y, pos.z);
-              const wb = freshBot.blockAt(pos);
-              if (wb) {
-                await freshBot.dig(wb);
-                await new Promise(r => setTimeout(r, 300));
-                await botManager.collectNearbyItems(username);
-                wheatGathered = true;
-              }
-            } catch { /* skip */ }
+  // Always scan for any mature wheat/crop within 20 blocks (from older plantings) —
+  // Bug fix [2026-03-25]: previously guarded by `!wheatGathered`, so if even one crop was
+  // harvested from plantedCoords, the entire 16-block scan was skipped and older mature
+  // crops (e.g., 51 planted seeds from previous sessions) were left unharvested.
+  // Now runs unconditionally, with 20-block radius (matches other mc_farm scan radii),
+  // and replants harvested spots to keep farm productive for next session.
+  try {
+    const freshBot = botManager.getBot(username);
+    const { Vec3: Vec3Cls } = await import("vec3");
+    if (freshBot) {
+      const MATURE_CROP_NAMES = new Set(["wheat", "carrots", "potatoes", "beetroots"]);
+      const matureCropBlocks = freshBot.findBlocks({ matching: (block: any) => {
+        if (!MATURE_CROP_NAMES.has(block.name)) return false;
+        const p = block.getProperties ? block.getProperties() : null;
+        const age = p?.age ?? block.metadata;
+        // wheat/beetroots max age=7, carrots/potatoes max age=7
+        return age >= 7;
+      }, maxDistance: 20, count: 20 });
+      if (matureCropBlocks.length > 0) {
+        logs.push(`Found ${matureCropBlocks.length} mature crops nearby (20-block scan) — harvesting`);
+        for (const pos of matureCropBlocks) {
+          // Timeout check
+          if (Date.now() - farmStartTime > FARM_TIMEOUT_MS) {
+            logs.push(`[ABORTED] mc_farm timed out during full-field harvest.`);
+            break;
           }
+          // Safety: hostile + HP check per block during nearby crop harvest
+          const scanDanger = checkDangerNearby(freshBot, 20);
+          if (scanDanger.dangerous) {
+            logs.push(`[WARNING] Hostile detected during full-field harvest. Consider fleeing.`);
+            console.error(`[Farm] WARNING: hostile during full-field harvest. Continuing.`);
+          }
+          if ((freshBot.health ?? 20) < 10) {
+            logs.push(`[WARNING] HP low during full-field harvest (${(freshBot.health ?? 20).toFixed(1)}). Consider eating/fleeing.`);
+            console.error(`[Farm] WARNING: HP=${(freshBot.health ?? 20).toFixed(1)} during full-field harvest. Continuing.`);
+          }
+          try {
+            await botManager.moveTo(username, pos.x + 1, pos.y, pos.z);
+            const wb = freshBot.blockAt(pos);
+            if (wb && MATURE_CROP_NAMES.has(wb.name)) {
+              await freshBot.dig(wb);
+              await new Promise(r => setTimeout(r, 300));
+              await botManager.collectNearbyItems(username);
+              wheatGathered = true;
+              logs.push(`Harvested ${wb.name} at (${pos.x},${pos.y},${pos.z})`);
+              // Replant: if we have seeds and the block below is now farmland, replant immediately
+              // This keeps the farm productive for subsequent sessions.
+              const currentSeeds = botManager.getInventory(username).find((i: any) => i.name.includes("_seeds"));
+              if (currentSeeds) {
+                const farmlandBelow = freshBot.blockAt(new Vec3Cls(pos.x, pos.y - 1, pos.z));
+                if (farmlandBelow && farmlandBelow.name === "farmland") {
+                  try {
+                    await botManager.useItemOnBlock(username, currentSeeds.name, pos.x, pos.y - 1, pos.z);
+                    logs.push(`Replanted ${currentSeeds.name} at (${pos.x},${pos.y - 1},${pos.z})`);
+                  } catch (replantErr) {
+                    logs.push(`Replant failed at (${pos.x},${pos.y - 1},${pos.z}): ${replantErr}`);
+                  }
+                }
+              }
+            }
+          } catch { /* skip */ }
         }
+      } else {
+        logs.push("No mature crops found in 20-block scan.");
       }
-    } catch (e) {
-      logs.push(`Nearby wheat scan failed: ${e}`);
     }
+  } catch (e) {
+    logs.push(`Full-field harvest scan failed: ${e}`);
   }
 
   // Step 6: Craft bread (3 wheat = 1 bread)
@@ -2036,6 +2072,24 @@ export async function mc_navigate(
     // the same passive/hostile filtering as fight() (e.g., "pig" won't match "zombified_piglin").
     const entityInfo = botManager.findEntities(username, args.target_entity, args.max_distance ?? 64);
     if (entityInfo.includes("No ") || entityInfo.includes("not found")) {
+      // When searching for a food animal and none are found, check bot's hunger state.
+      // Bot1 Session 70b: navigate("sheep") → not found → agent did moveTo(-133,75,188)
+      // (200+ blocks away) with HP=5.5 Hunger=0 — killed by zombies mid-travel.
+      // Provide clear guidance about safe alternatives instead of letting the agent
+      // wander long distances while starving.
+      const foodAnimals = new Set(["cow", "pig", "chicken", "sheep", "rabbit", "salmon", "cod"]);
+      const targetIsFood = foodAnimals.has((args.target_entity ?? "").toLowerCase());
+      const noFoodBot = botManager.getBot(username);
+      if (targetIsFood && noFoodBot) {
+        const noFoodHunger = (noFoodBot as any).food ?? 20;
+        const noFoodHp = noFoodBot.health ?? 20;
+        const noFoodInv = botManager.getInventory(username);
+        const noFoodHasFood = noFoodInv.some((i: any) => EDIBLE_FOOD_NAMES.has(i.name));
+        if (noFoodHunger <= 6 && !noFoodHasFood) {
+          // Starvation danger: agent should NOT do long-distance moveTo to search for animals
+          return `No ${args.target_entity} found within ${args.max_distance ?? 64} blocks.\n[WARNING] Hunger=${noFoodHunger}, HP=${noFoodHp.toFixed(1)}, no food. DO NOT use moveTo to search far away — long travel while starving is lethal (HP cannot regenerate, mobs will kill you mid-journey).\n[推奨アクション（優先順）]\n1. bot.navigate("pig") または bot.navigate("chicken") — 別の食料動物を探す（64ブロック以内）\n2. bot.navigate("chest") — チェストに食料があるか確認\n3. bot.craft("bread") — 小麦があれば（bot.inventory()で確認）パンをクラフト\n4. bot.farm() — 農場がある場合は収穫\n5. bot.combat("zombie") — 腐肉は食べられる（空腹度回復+10）、ゾンビが近くにいる場合のみ`;
+        }
+      }
       return `No ${args.target_entity} found within ${args.max_distance ?? 64} blocks`;
     }
 
