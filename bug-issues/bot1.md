@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 78 - Death: 高所からの落下死亡 (navigate("item")後)
+
+- **Cause**: navigate("item")を実行後、Y=114の高い場所にテレポートまたは移動し、そこから落下死亡
+- **Coordinates**: x=-8.5, y=114, z=7.5 (リスポーン後の位置)
+- **Last Actions**: navigate("item") → "fell from a high place" メッセージ
+- **Error Message**: Server: "Claude1 fell from a high place"
+- **Status**: keepInventory ON でアイテム保持。HP/Hunger全回復。Reported 2026-03-26 Session 78.
+
 ## [2026-03-26] Bug: Session 78 - gather/combat が実行完了してもアイテムがインベントリに追加されない
 
 - **Cause**: bot.gather("iron_ore", 16) および bot.combat("cow"), bot.combat("chicken") が "完了" と返るがインベントリにアイテムが追加されない
