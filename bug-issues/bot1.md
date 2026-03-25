@@ -1,3 +1,14 @@
+## [2026-03-25] Bug: Death by Skeleton (HP=2 from Hunger=0 starvation) - Session 65 death #2
+
+- **Cause**: HP=2 from hunger damage (Hunger=0 for extended period). While moving (Z-direction exploration), skeleton shot bot. "Claude1 was shot by Skeleton". HP too low to survive one arrow.
+- **Coordinates**: (-3, 50, 20) approx
+- **Last Actions**: moveTo() Z-direction exploration → skeleton attack at HP=2
+- **Root Cause**: Hunger=0 reduced HP to dangerous level. Combined with hostile mob encounter, resulted in death. No food available to recover.
+- **Contributing factors**: moveTo non-functional prevented escape from spawn area; gather() timeouts prevented wood/food collection; no animals near spawn.
+- **Status**: Reported. Session 65. Death #2.
+
+---
+
 ## [2026-03-25] Bug: moveTo() non-functional near spawn (-10,82,13) - Session 65 CRITICAL
 
 - **Cause**: bot.moveTo(x, y, z) called with coordinates far away (200m+). Bot stays at (-10, 82, 13). moveTo(200,82,0), moveTo(0,82,0), moveTo(-100,82,-100) all leave bot at same position. Short moves (< 5 blocks) show tiny movement.
