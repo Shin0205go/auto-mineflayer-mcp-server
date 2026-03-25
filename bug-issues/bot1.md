@@ -1,3 +1,11 @@
+## [2026-03-25] Bug: Session 74 - HP dropped to 1 during night crafting despite flee at hostiles detection
+- **Cause**: During night crafting session, zombies attacked and HP dropped from ~9 to 1. The flee logic in mc_execute code ran but was too slow - by the time flee() completed HP was already 1. craft_chain also detected HP=1 and aborted. Bot nearly died.
+- **Coordinates**: ~(131, 80, 86) old_growth_birch_forest
+- **Last Actions**: Fled from skeleton+zombie x2 during night → placed crafting_table → craft(stone_pickaxe,2) → HP dropped to 1 mid-craft → flee(80) x2 → HP recovered to 20
+- **Error Message**: "craft_chain ABORTED: HP critically low (1.0/20) while crafting stone_sword"
+- **Root Cause**: Night crafting with hostiles nearby is dangerous. Flee was triggered but damage came in between flee and crafting. Need: abort crafting if night + hostile within N blocks, or ensure flee is called MORE aggressively during night operations.
+- **Status**: Reported - survived but near death
+
 ## [2026-03-26] Bug: Session 73 - mc_connect returns "Connected" but mc_execute still fails with "Not connected"
 - **Cause**: mc_connect returns "Connected to localhost:25565 as Claude1" but subsequent mc_execute and mc_chat calls return "Not connected" error. mc_reload auto-reconnect also reports "Connected" but mc_execute still fails. The connection state is inconsistent between mc_connect and bot-core.
 - **Coordinates**: N/A (cannot get position)
