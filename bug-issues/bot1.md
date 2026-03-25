@@ -1,3 +1,23 @@
+## [2026-03-25] Bug: Bot STILL stuck at (26,84,-4) - moveTo always returns to same location - Session 62
+
+- **Cause**: Bot at (26.5, 84, -3.7), HP=1, Hunger=0. mc_reload + reconnect performed (commit 5d42734 fix). moveTo(35,85,5), moveTo(26,84,0), moveTo(26,84,10) ALL return bot to (26,84,-4). Bot is stuck in pathfinder loop despite cobblestone placed at (25-29,84,-3), (26,84,-2 to 0). flee(20) also returns to same location.
+- **Coordinates**: (26.5, 84.0, -3.7)
+- **Last Actions**:
+  1. mc_reload (build + hot-reload after 5d42734 fix)
+  2. moveTo(35,85,5) → returns to (26,85,-4)
+  3. Placed cobblestone at multiple locations around bot
+  4. moveTo(26,84,0) → returns to (26,84,-4)
+  5. moveTo(26,84,10) → returns to (26,84,-4)
+  6. flee(20) → no movement
+- **Error Message**: No error thrown but position never changes from (26,84,-4) regardless of target
+- **Critical Issues**:
+  1. moveTo always returns bot to same location (26,84,-4) — pathfinder may be using this as a "safe" spot
+  2. HP=1 with no food, cannot recover
+  3. Bot has been stuck at this cliff area for Sessions 58-62
+- **Status**: Reported. Admin intervention likely needed (/tp, /feed, or bed placement at safe location).
+
+---
+
 ## [2026-03-25] Bug: Bot STILL stuck at cliff edge Y=86 - HP1 Hunger0 - pillarUp not working - Session 61
 
 - **Cause**: Bot starts at (26.5, 86, -3.5) same birch_forest cliff area. HP=1, Hunger=0, no food in inventory. pillarUp(8) logs "executed" but Y stays at 86.0. bot.eat() returns but hunger stays 0 (no food items). bot.combat("cow") returns immediately with no food. wait() ABORTS immediately due to "HP dropped to 1.0". Night phase "midnight" persists for 1300+ ticks. Creeper x6-7, skeleton x3, zombie x2, drowned x1, spider x1 nearby.
