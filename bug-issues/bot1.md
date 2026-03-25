@@ -1,3 +1,40 @@
+## [2026-03-25] Bug: ALL movement/action tools non-functional - Session 57 (CRITICAL継続)
+
+- **Cause**: Session56のバグが継続。Bot完全スタック at (29.7, 91, -6.5). pillarUp/gather("stone")/flee全てタイムアウト/失敗。
+  - bot.moveTo(50, 92, -7): x方向移動0（29のまま）
+  - bot.navigate({target_block:"iron_ore", max_distance:128}): "Path blocked" 到達不能
+  - bot.gather("iron_ore", 16): 120sタイムアウト
+  - bot.gather("stone", 10): 120sタイムアウト
+  - bot.pillarUp(4): 60sタイムアウト
+  - bot.flee(30): 位置変化なし
+  - bot.build("shelter"): 120sタイムアウト
+- **Coordinates**: Bot stuck at (29.7, 91, -6.5) in birch_forest biome. iron_ore最近距離: (68, 54, -14) at 54 blocks
+- **Last Actions**: 夜間待機→朝に鉄採掘試みるも全失敗。前回置いたcobblestone壁が閉じ込めを悪化させた可能性あり。
+- **Navigation Error**: "Navigation stopped after 2/2 segments: Cannot reach (18.15, 92, -52.87). Path blocked."
+- **周囲の状況**: grass_blockがY=93-98に分布（丘の上）。石と土に完全に囲まれた地形。
+- **Status**: Critical. Phase4鉄採掘完全停止。code-reviewerによる pathfinder根本修正が必要。
+
+---
+
+## [2026-03-25] Bug: ALL movement/action tools non-functional - Session 56 (CRITICAL)
+
+- **Cause**: Bot is completely stuck at position (29-30, 92-95, -4 to -7). ALL action tools fail:
+  - bot.moveTo(): Returns without moving (5-38s, no error). Tried 5+ different coordinates with 40-100 block offsets.
+  - bot.navigate(): Returns immediately without moving (pos unchanged).
+  - bot.gather(): Timeouts after 30-120s even for count=1.
+  - bot.farm(): Timeouts after 60-120s.
+  - bot.build("shelter"): Timeouts after 60s.
+  - bot.pillarUp(): Timeouts after 60s.
+  - bot.combat("cow"/"pig"/"chicken"/"sheep"): Returns immediately without finding/killing animals (no animals exist nearby).
+- **Coordinates**: Bot stuck at (29-30, 92-95, -5) in birch_forest biome.
+- **Last Actions**: All the above tools attempted multiple times, all fail silently or timeout.
+- **Working Tools**: bot.status(), bot.inventory(), bot.craft(), bot.place(), bot.wait(), bot.eat() — stationary/inventory operations work fine.
+- **Root Cause Hypothesis**: Pathfinder may be completely broken at current position. Possible terrain issue, stuck in/near a structure, or pathfinder state corruption.
+- **Impact**: Cannot progress at all. Food=1 bread. Phase 4 iron mining blocked. Bot cannot move.
+- **Status**: Reported. Critical bug — code reviewer must investigate pathfinder state at (29, 92, -5) in birch_forest.
+
+---
+
 ## [2026-03-24] Bug: Death by zombie - pillarUp placement failure during night - Session 55
 
 - **Cause**: bot.pillarUp(6) returned "Pillared up 17.0 blocks (Y:97→114, placed 0/6). PARTIAL: Stopped early (6 blocks short). Reason: Placement failed" — zombie at 14.9 blocks south killed bot during the 19s pillarUp execution. pillarUp already elevated Y:97→114 (17 blocks) but then failed to place the final 6. Bot was exposed to zombie during the process.
@@ -2077,3 +2114,59 @@ Bot needs to explore further (200+ blocks) to find animals.
 - **Fix Applied**: None
 - **Status**: Open. pathfinderが安全でないルートを選択する根本的な問題。
 
+
+## [2026-03-24] Bug: Claude1 slain by Zombie during food search - Session current
+
+- **Cause**: bot.combat("zombie")でクリーパー接近中断→逃走→別のゾンビに接触して死亡。食料探索中に複数のhostileに囲まれた。
+- **Location**: src/tools/core-tools.ts (combat/flee)
+- **Coordinates**: 死亡位置不明（(24, 72, -35)付近→農場方面に移動中）, リスポーン: (4, 94, 6)
+- **Last Actions**:
+  1. 夜間待機 → 夜明け後に食料探索開始
+  2. bot.flee() → bot.combat("zombie") → CREEPER ABORT
+  3. navigate({x:2, y:72, z:5}) → 移動中にゾンビに殺された
+- **Fix Applied**: None
+- **Status**: Open. keepInventoryで持ち物保持。HP/Hunger全快でリスポーン。
+
+
+## [2026-03-24] Bug: Claude1 trapped underground by pathfinder navigation - Critical
+
+- **Cause**: bot.navigate()が地下洞窟(Y=55)へのルートを選択し、地上に戻れなくなった。navigate()は「Path blocked」を返し続け、flee()も「Terrain blocking escape routes」で失敗。飢餓ダメージで死亡。
+- **Root Pattern**: navigateのpathfinderが地表(Y=86)への上昇ルートを見つけられない。洞窟に入ると完全にトラップされる。
+- **Location**: src/bot-manager/ (pathfinder configuration)
+- **Coordinates**: トラップ地点 (-8, 55, 6), リスポーン先: 拠点付近
+- **Last Actions**:
+  1. navigate({x:2, y:72, z:5}) → 地下洞窟へ誘導
+  2. navigate系コマンドを20回以上試みるも全て「Path blocked」
+  3. pillarUp失敗（ceiling blockingか、scaffoldブロック配置失敗）
+  4. flee()失敗（terrain blocking, 1m以下しか移動できず）
+  5. combat全て拒否（cliff edge or creeper nearby）
+  6. gather("stone"), gather("dirt") → timeout（gather関数が地下では動作しない可能性）
+  7. 空腹度0で飢餓死
+- **Fix Needed**: 
+  - navigateがY座標の低い目標を選ぶ際に地下洞窟を避けるようにすること
+  - または地下に入ったときの脱出ルーティン（掘り上がる）を追加
+- **Status**: Critical recurring bug. keepInventoryで持物保持。
+
+
+
+## [2026-03-24] Bug: Claude1 drowned during cave escape attempt
+
+- **Cause**: pillarUp→water surface (Y=56 lake/river)→溺死。洞窟脱出中に水域に出てしまい溺れた。
+- **Location**: src/bot-manager/bot-movement.js (pillarUp/navigation near water)
+- **Coordinates**: 溺死地点 (~0, 56, 3) 水域, リスポーン: (2.4, 82, 6.5) 拠点
+- **Context**: Y=55地下洞窟からpillarUpで脱出中（石ピッケルなし→gather失敗→pillarUp繰り返し）
+- **Last Actions**:
+  1. pillarUp (Y=56→59→62→64→66→68→71) 複数回呼び出し
+  2. moveTo(3,80,6) → 途中で水に落ちてY=68.1に
+  3. pillarUp → "swam up to Y=56.0 surface" (水面)
+  4. 移動中に溺死
+- **Fix Needed**: pillarUpが水域に出た場合の処理。水中での移動安全チェック。
+- **Status**: keepInventoryで持物保持。死亡後HP/Hunger全快。stone_pickaxeクラフト済み。
+
+## 2026-03-24 Session - Skeleton Death
+- **死因**: Skeleton に矢で撃たれて死亡（"Claude1 was shot by Skeleton"）
+- **状況**: 真夜中、HP=14で逃走中、Y=72付近（地下？）
+- **近くの敵**: pillager x2 (11-13m north), skeleton x4, creeper x5, zombie x4, witch x1
+- **防具**: なし（0/4スロット）
+- **反省**: 夜間にnavigateを使ったことで敵エリアに誘導された可能性
+- **対策**: 夜間はpillarUpのみ。navigateは昼間のみ使用すること
