@@ -12,7 +12,7 @@ import { coreTools, handleCoreTool } from "./tools/core-tools-mcp.js";
 
 import { VISIBLE_TOOLS } from "./tool-filters.js";
 import { getAgentType } from "./agent-state.js";
-import { botManager } from "./bot-manager/index.js";
+import { botManager, bumpBotManagerVersion } from "./bot-manager/index.js";
 import { registry } from "./tool-handler-registry.js";
 
 // Eagerly import high-level-actions to populate registry.highLevel at startup.
@@ -92,7 +92,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (name in coreTools) {
         const toolResult = await handleCoreTool(name, toolArgs);
         // After mc_connect, refresh tools/list
-        if (name === "mc_connect" && toolArgs.action !== "disconnect") {
+        if ((name === "mc_connect" && toolArgs.action !== "disconnect") || name === "mc_reconnect") {
           try {
             await server.sendToolListChanged();
           } catch (_) { /* ignore */ }
@@ -168,6 +168,14 @@ async function reloadModules(): Promise<string> {
   const modules = [
     { name: 'high-level-actions', path: 'tools/high-level-actions.js' },
     { name: 'core-tools', path: 'tools/core-tools.js' },
+    // bot-manager sub-modules: these contain fight/attack/collectNearbyItems.
+    // Static ESM imports cache the startup version; cache-busting here loads fresh code.
+    // BotManager.fight() and .attack() use _importBotSurvival() with the version stamp
+    // set by bumpBotManagerVersion() below to pick up the newly loaded code.
+    // Bot1 Session 70: 627a514 fixed inventoryBefore timing but mc_reload x3 still showed
+    // 0 drops because bot-survival.ts was never part of the reload list.
+    { name: 'bot-survival', path: 'bot-manager/bot-survival.js' },
+    { name: 'bot-items', path: 'bot-manager/bot-items.js' },
   ];
 
   for (const mod of modules) {
@@ -179,6 +187,45 @@ async function reloadModules(): Promise<string> {
       errors.push(`${mod.name}: ${msg}`);
       console.error(`[mc_reload] Failed to reload ${mod.name}:`, err);
     }
+  }
+
+  // Bump the bot-manager version so BotManager.fight()/.attack() pick up the
+  // freshly loaded bot-survival.js and bot-items.js via _importBotSurvival().
+  bumpBotManagerVersion();
+  console.error(`[mc_reload] bumpBotManagerVersion() called — fight/attack now use v=${v}`);
+
+  // Reload viewer-server: stop the old HTTP server, import fresh code, restart.
+  // viewer-server now reads botManager directly on each request, so no re-attach needed.
+  try {
+    const viewerPort = parseInt(process.env.VIEWER_PORT || '3099');
+
+    // Step 1: Force-close any active HTTP server on the viewer port via _getActiveHandles().
+    // This handles the case where the cached module's stopViewerServer() cannot reach
+    // the running server (e.g., module-level `server` var vs. global.__viewerServer mismatch).
+    const handles: any[] = (process as any)._getActiveHandles?.() ?? [];
+    for (const h of handles) {
+      try {
+        const addr = typeof h.address === 'function' ? h.address() : null;
+        if (addr && addr.port === viewerPort) {
+          console.error(`[mc_reload] Force-closing handle on port ${viewerPort}`);
+          if (typeof (h as any).closeAllConnections === 'function') (h as any).closeAllConnections();
+          if (typeof h.close === 'function') h.close(() => {});
+        }
+      } catch {}
+    }
+    // Give the OS time to release the port
+    await new Promise(r => setTimeout(r, 300));
+
+    // Step 2: Also call the module's stopViewerServer() as a belt-and-suspenders cleanup
+    const oldViewer = await import(base + 'viewer-server.js');
+    try { await oldViewer.stopViewerServer(); } catch {}
+
+    // Step 3: Load fresh viewer-server and start it
+    const newViewer = await import(base + 'viewer-server.js?v=' + v);
+    await newViewer.startViewerServer(viewerPort);
+    reloaded.push('viewer-server');
+  } catch (e) {
+    errors.push(`viewer-server: ${e}`);
   }
 
   try {
@@ -201,11 +248,12 @@ async function reloadModules(): Promise<string> {
 
 // Start the server
 async function main() {
-  if (process.env.VIEWER === "1") {
-    const viewerPort = parseInt(process.env.VIEWER_PORT || "3007");
+  // Always start the viewer/dashboard server (VIEWER_PORT env var, default 3099)
+  {
+    const viewerPort = parseInt(process.env.VIEWER_PORT || "3099");
     try {
       const { startViewerServer } = await import("./viewer-server.js");
-      startViewerServer(viewerPort);
+      await startViewerServer(viewerPort);
     } catch (e) {
       console.error(`[Main] Failed to start viewer server: ${e}`);
     }

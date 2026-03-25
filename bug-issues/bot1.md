@@ -7,7 +7,15 @@
 - **Status at report**: HP=5.5, Hunger=0, starvation imminent. Underground Y=41-58 for most of session, finally reached surface Y=83-84
 - **Critical**: The 627a514 fix applied to inventoryBefore timing + stationary bot + raw_* names is NOT working in runtime. Items are still not being collected after mob kills.
 - **Pattern**: Zero drops is consistent across all mobs, suggesting a deeper issue - possibly the item pickup is still broken (stationary bot issue still present), OR the items are dropping in a place the bot can't reach, OR mc_reload is not properly applying the fix
-- **Status**: Reported
+- **Root Cause Analysis** (code review - Session 70):
+  1. **ESM module caching**: Node.js caches ES Modules by URL. `mc_reload` called `import(url + '?v=' + timestamp)` for `core-tools.js` and `high-level-actions.js` but NOT for `bot-manager/bot-survival.js` or `bot-manager/bot-items.js`. `BotManager.fight()` and `.attack()` used static import bindings (`fightBasic`, `attackBasic`) that point to the original startup-cached `bot-survival.js`. No matter how many times `mc_reload` was called, `fight/attack` executed the OLD (pre-627a514) code.
+  2. **Cascade via bot-survival.ts static import**: Even if `bot-survival.js?v=XXX` were loaded fresh, its own `import { collectNearbyItems } from './bot-items.js'` would still resolve to the cached (pre-627a514) `bot-items.js` — meaning the `inventoryBefore` parameter support added in 627a514 would be absent.
+- **Fix Applied**:
+  1. `mc_reload` (`src/index.ts`): added `bot-manager/bot-survival.js` and `bot-manager/bot-items.js` to the reload module list. Also calls `bumpBotManagerVersion()` after reloading.
+  2. `BotManager.fight()`/`.attack()` (`src/bot-manager/index.ts`): changed from static binding to dynamic import via `_importBotSurvival()`. After `bumpBotManagerVersion()`, these methods import the freshly loaded `bot-survival.js?v=XXX`.
+  3. `bot-survival.ts`: replaced static `import { collectNearbyItems, equipArmor } from './bot-items.js'` with dynamic wrapper functions that call `_getBotItems()`. `_getBotItems()` uses `bot-items.js?v=XXX` after `_setBotItemsVersion(v)` is called. `_setBotItemsVersion` is exported and called from `bumpBotManagerVersion()` in index.ts.
+  4. Result: after `mc_reload`, the entire `fight() → collectNearbyItems()` chain uses the freshly loaded code, not the startup-cached version.
+- **Status**: Fixed (commit pending).
 
 ## [2026-03-25] Bug: Session 69c - Bot drowned at Y=58 underground
 

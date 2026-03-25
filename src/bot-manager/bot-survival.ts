@@ -4,7 +4,35 @@ import pkg from "mineflayer-pathfinder";
 const { goals } = pkg;
 import type { ManagedBot } from "./types.js";
 import { isHostileMob, isNeutralMob, isFoodItem, isBedBlock, isNearCliffEdge, EDIBLE_FOOD_NAMES } from "./minecraft-utils.js";
-import { collectNearbyItems, equipArmor } from "./bot-items.js";
+// bot-items functions are imported dynamically so that mc_reload cache-busting
+// picks up the latest collectNearbyItems (inventoryBefore fix, sprint-through-item fix).
+// Static import would keep the startup-version binding even after mc_reload.
+// Bot1 Session 70: 627a514 fixed bot-items.ts but mc_reload x3 still 0 drops because
+// collectNearbyItems was resolved from the cached static import, not the reloaded module.
+import type { collectNearbyItems as CollectNearbyItemsFn, equipArmor as EquipArmorFn } from "./bot-items.js";
+
+// Lazy accessor: returns bot-items module. Uses import() without query string on first call
+// (module already loaded). After mc_reload bumps _botItemsVersion, import() returns the
+// freshly loaded cache-busted version.
+let _botItemsVersion = 0;
+export function _setBotItemsVersion(v: number): void { _botItemsVersion = v; }
+async function _getBotItems(): Promise<{ collectNearbyItems: typeof CollectNearbyItemsFn; equipArmor: typeof EquipArmorFn }> {
+  if (_botItemsVersion > 0) {
+    const base = new URL("./", import.meta.url).href;
+    return await import(base + "bot-items.js?v=" + _botItemsVersion);
+  }
+  return await import("./bot-items.js");
+}
+
+// Convenience wrappers used throughout this file
+async function collectNearbyItems(managed: Parameters<typeof CollectNearbyItemsFn>[0], options?: Parameters<typeof CollectNearbyItemsFn>[1]): Promise<string> {
+  const { collectNearbyItems: fn } = await _getBotItems();
+  return fn(managed, options);
+}
+async function equipArmor(bot: Parameters<typeof EquipArmorFn>[0]): Promise<string> {
+  const { equipArmor: fn } = await _getBotItems();
+  return fn(bot);
+}
 import { safeSetGoal } from "./pathfinder-safety.js";
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）

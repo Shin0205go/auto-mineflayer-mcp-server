@@ -69,11 +69,14 @@ import {
 } from "./bot-storage.js";
 
 // Import bot-survival functions
+// NOTE: fight and attack use dynamic imports via _importBotSurvival() so that mc_reload
+// cache-busting can update them without restarting the MCP server process.
+// Static imports are cached by Node.js ESM loader and cannot be updated at runtime.
+// Bot1 Session 70: 627a514 fixed inventoryBefore timing in bot-survival.ts, but
+// mc_reload x3 still returned 0 drops because fight/attack used stale static bindings.
 import {
   chat as chatBasic,
   sleep as sleepBasic,
-  attack as attackBasic,
-  fight as fightBasic,
   eat as eatBasic,
   fish as fishBasic,
   tradeWithVillager as tradeWithVillagerBasic,
@@ -82,6 +85,47 @@ import {
   elytraFly as elytraFlyBasic,
   updateSign as updateSignBasic,
 } from "./bot-survival.js";
+
+// Timestamp used for cache-busting bot-survival and bot-items on mc_reload.
+// Incremented by bumpBotManagerVersion() called from mc_reload.
+let _botManagerVersion = 0;
+export function bumpBotManagerVersion(): void {
+  _botManagerVersion = Date.now();
+  // Also update bot-survival.ts's internal bot-items version so that collectNearbyItems
+  // and equipArmor calls inside fight/attack use the freshly loaded bot-items.js.
+  // bot-survival.ts exports _setBotItemsVersion for this cross-module coordination.
+  // We import it dynamically to avoid circular dependency.
+  import("./bot-survival.js").then(m => {
+    if (typeof m._setBotItemsVersion === "function") {
+      m._setBotItemsVersion(_botManagerVersion);
+    }
+  }).catch(() => {/* ignore */});
+}
+// Returns the current cache-bust URL fragment.
+function _versionSuffix(): string {
+  return _botManagerVersion > 0 ? `?v=${_botManagerVersion}` : "";
+}
+
+// Dynamic importer for bot-survival to pick up hot-reloaded code.
+async function _importBotSurvival() {
+  const base = new URL("./", import.meta.url).href;
+  const suffix = _versionSuffix();
+  // When no version set yet, fall back to the already-loaded static module.
+  if (!suffix) {
+    return await import("./bot-survival.js");
+  }
+  return await import(base + "bot-survival.js" + suffix);
+}
+
+// Dynamic importer for bot-items to pick up hot-reloaded collectNearbyItems.
+async function _importBotItems() {
+  const base = new URL("./", import.meta.url).href;
+  const suffix = _versionSuffix();
+  if (!suffix) {
+    return await import("./bot-items.js");
+  }
+  return await import(base + "bot-items.js" + suffix);
+}
 
 /**
  * Unified BotManager class that extends BotCore
@@ -473,7 +517,10 @@ export class BotManager extends BotCore {
   async attack(username: string, entityName?: string): Promise<string> {
     const managed = this.getBotByUsername(username);
     if (!managed) throw new Error(`Bot ${username} not found`);
-    return await attackBasic(managed, entityName);
+    // Use dynamic import so mc_reload cache-busting picks up bot-survival.ts fixes.
+    // Static binding (attackBasic) would stay on the startup version even after mc_reload.
+    const { attack: attackDynamic } = await _importBotSurvival();
+    return await attackDynamic(managed, entityName);
   }
 
   async fight(username: string, entityName?: string, fleeHealthThreshold: number = 10): Promise<string> {
@@ -485,7 +532,10 @@ export class BotManager extends BotCore {
       return await fleeBasic(m, distance);
     };
 
-    return await fightBasic(managed, fleeCallback, entityName, fleeHealthThreshold);
+    // Use dynamic import so mc_reload cache-busting picks up bot-survival.ts fixes.
+    // Static binding (fightBasic) would stay on the startup version even after mc_reload.
+    const { fight: fightDynamic } = await _importBotSurvival();
+    return await fightDynamic(managed, fleeCallback, entityName, fleeHealthThreshold);
   }
 
   async eat(username: string, foodName?: string): Promise<string> {
