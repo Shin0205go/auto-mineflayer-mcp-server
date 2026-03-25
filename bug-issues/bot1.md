@@ -1128,6 +1128,19 @@
 
 ---
 
+## [2026-03-25] Bug: moveTo() completely fails - bot stuck at same position - Session (current)
+
+- **Cause**: bot.moveTo() called with various targets (nearby 5-100 blocks) but bot never moves. Position stays at (-10, 81, 13) regardless of target. creeper×4, zombie×2, enderman×1 nearby. Hunger=0, HP=10.
+- **Coordinates**: (-10, 81, 13)
+- **Last Actions**: moveTo(px+20, py, pz+20) → stayed at same pos. moveTo(px+100, py, pz+100) → same. moveTo(south -Z 50) → same. All 5 step-moves (5 blocks each) failed.
+- **Error**: No error thrown, but position unchanged after moveTo completes.
+- **Root Cause**: Unknown. Possibly pathfinder blocked by terrain/mob density. Bot is in old_growth_birch_forest at Y=81 with creepers surrounding. flee() also fails to move bot.
+- **Impact**: Bot completely immobile. Cannot hunt food, gather logs, or escape enemies.
+- **Fix Needed**: moveTo/flee should detect when bot is truly stuck (position unchanged after timeout) and try alternative strategies (pillarUp, dig path, teleport-style movement).
+- **Status**: Reported. Session current. Hunger=0 HP=10. BLOCKING.
+
+---
+
 ## [2026-03-22] Bug: mc_reload triggers full process restart instead of hot module reload
 
 - **Cause**: mc_reload always responds with "Full hot-reload complete (process restart)" instead of performing a module-level hot reload. This means the bot disconnects and reconnects on every call, causing disruption to gameplay.
