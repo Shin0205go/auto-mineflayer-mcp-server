@@ -1530,14 +1530,32 @@ export async function emergencyDigUp(managed: ManagedBot, maxBlocks: number = 30
     if (anyPickaxe) { await bot.equip(anyPickaxe, "hand"); equippedPickaxe = anyPickaxe.name; }
   }
 
+  const EMERGENCYDIG_SCAFFOLD_NAMES = new Set([
+    "dirt", "coarse_dirt", "gravel", "sand", "red_sand",
+    "cobblestone", "cobbled_deepslate", "stone", "granite", "diorite", "andesite",
+    "deepslate", "tuff", "calcite",
+    "netherrack", "basalt", "blackstone", "nether_bricks",
+    "oak_planks", "spruce_planks", "birch_planks", "jungle_planks",
+    "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks",
+    "bamboo_planks", "crimson_planks", "warped_planks",
+    "smooth_stone", "stone_bricks", "mossy_stone_bricks", "cracked_stone_bricks",
+    "bricks", "mud_bricks",
+  ]);
+  const EMERGENCYDIG_EXCLUDE = ["_ore", "spawner", "bedrock", "obsidian", "portal",
+    "diamond_block", "emerald_block", "gold_block", "iron_block", "netherite_block",
+    "ancient_debris", "crying_obsidian", "reinforced_deepslate"];
   const isScaffoldItem = (name: string) => {
     const cleanName = name.replace("minecraft:", "");
-    const excludePatterns = ["_ore", "spawner", "bedrock", "obsidian", "portal",
-      "diamond_block", "emerald_block", "gold_block", "iron_block", "netherite_block",
-      "ancient_debris", "crying_obsidian", "reinforced_deepslate"];
-    if (excludePatterns.some(p => cleanName.includes(p))) return false;
-    const blockInfo = bot.registry.blocksByName[cleanName];
-    return !!(blockInfo && blockInfo.boundingBox === "block");
+    if (EMERGENCYDIG_EXCLUDE.some(p => cleanName.includes(p))) return false;
+    // Fast path: explicit allowlist (avoids registry lookup failures)
+    if (EMERGENCYDIG_SCAFFOLD_NAMES.has(cleanName)) return true;
+    // Fallback: registry check
+    try {
+      const blockInfo = bot.registry?.blocksByName?.[cleanName];
+      return !!(blockInfo && blockInfo.boundingBox === "block");
+    } catch {
+      return false;
+    }
   };
 
   const digBlock = async (pos: Vec3): Promise<boolean> => {
@@ -1728,17 +1746,18 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     return null;
   };
 
-  // Quick scaffold count check for threat message
+  // Quick scaffold count check for threat message (uses explicit allowlist for reliability)
+  const QUICK_SCAFFOLD_NAMES = new Set([
+    "dirt", "coarse_dirt", "gravel", "sand", "red_sand",
+    "cobblestone", "cobbled_deepslate", "stone", "granite", "diorite", "andesite",
+    "deepslate", "tuff", "calcite", "netherrack", "basalt", "blackstone",
+    "oak_planks", "spruce_planks", "birch_planks", "jungle_planks",
+    "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks",
+    "bamboo_planks", "crimson_planks", "warped_planks",
+    "smooth_stone", "stone_bricks", "bricks", "nether_bricks", "mud_bricks",
+  ]);
   const quickScaffoldCount = bot.inventory.items()
-    .filter(i => {
-      const cleanName = i.name.replace("minecraft:", "");
-      const blockInfo = bot.registry.blocksByName[cleanName];
-      return blockInfo && blockInfo.boundingBox === "block" &&
-             !["_ore", "spawner", "bedrock", "obsidian", "portal", "diamond_block",
-               "emerald_block", "gold_block", "iron_block", "netherite_block",
-               "ancient_debris", "crying_obsidian", "reinforced_deepslate"]
-               .some(p => cleanName.includes(p));
-    })
+    .filter(i => QUICK_SCAFFOLD_NAMES.has(i.name.replace("minecraft:", "")))
     .reduce((sum, i) => sum + i.count, 0);
 
   const estimatedTime = Math.ceil((untilSky ? Math.min(quickScaffoldCount, 50) : Math.min(height, 15)) * 4.2 / 1000);
@@ -1794,9 +1813,25 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     }
   }
 
-  // Check if we have scaffolding blocks - dynamically check if block is solid
-  // Exclude ores, valuable blocks, and special blocks
-  const excludePatterns = ["_ore", "spawner", "bedrock", "obsidian", "portal",
+  // Check if we have scaffolding blocks.
+  // IMPORTANT: Use an explicit allowlist as primary check to avoid registry lookup failures.
+  // Previous approach relied solely on bot.registry.blocksByName[name].boundingBox === 'block',
+  // which can silently fail if the registry entry is missing or the version mapping differs.
+  // Session report: bot had dirt:99 but isScaffoldBlock returned false — registry-only check
+  // missed items that are definitively valid scaffold blocks.
+  // Fix: explicit allowlist for common scaffold blocks (never fails), registry as fallback.
+  const KNOWN_SCAFFOLD_NAMES = new Set([
+    "dirt", "coarse_dirt", "gravel", "sand", "red_sand",
+    "cobblestone", "cobbled_deepslate", "stone", "granite", "diorite", "andesite",
+    "deepslate", "tuff", "calcite",
+    "netherrack", "basalt", "blackstone", "nether_bricks",
+    "oak_planks", "spruce_planks", "birch_planks", "jungle_planks",
+    "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks",
+    "bamboo_planks", "crimson_planks", "warped_planks",
+    "smooth_stone", "stone_bricks", "mossy_stone_bricks", "cracked_stone_bricks",
+    "bricks", "mud_bricks",
+  ]);
+  const SCAFFOLD_EXCLUDE_PATTERNS = ["_ore", "spawner", "bedrock", "obsidian", "portal",
     "diamond_block", "emerald_block", "gold_block", "iron_block", "netherite_block",
     "ancient_debris", "crying_obsidian", "reinforced_deepslate"];
 
@@ -1804,12 +1839,17 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     // Remove minecraft: prefix if present
     const cleanName = itemName.replace("minecraft:", "");
     // Exclude valuable/special blocks
-    if (excludePatterns.some(p => cleanName.includes(p))) return false;
-    // Check if block exists in registry
-    const blockInfo = bot.registry.blocksByName[cleanName];
-    if (!blockInfo) return false;
-    // Must be solid block (boundingBox === 'block')
-    return blockInfo.boundingBox === "block";
+    if (SCAFFOLD_EXCLUDE_PATTERNS.some(p => cleanName.includes(p))) return false;
+    // Fast path: known scaffold block names (always valid, no registry lookup needed)
+    if (KNOWN_SCAFFOLD_NAMES.has(cleanName)) return true;
+    // Fallback: registry lookup for other solid blocks
+    try {
+      const blockInfo = bot.registry?.blocksByName?.[cleanName];
+      if (!blockInfo) return false;
+      return blockInfo.boundingBox === "block";
+    } catch {
+      return false;
+    }
   };
 
   const countScaffold = () => bot.inventory.items()
@@ -2086,14 +2126,19 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
         console.error(`[Pillar] Attempting to equip: ${candidateScaffold.name} x${candidateScaffold.count} (slot ${candidateScaffold.slot})`);
         await bot.equip(candidateScaffold, "hand");
 
-        // Verify the held item after equip
+        // Verify the held item after equip.
+        // Primary check: isScaffoldBlock on held item name.
+        // Fallback: if equip() didn't throw and held item type matches what we equipped, trust it.
+        // (bot.heldItem can be null or stale in rare race conditions, but equip() success is authoritative.)
         const held = bot.heldItem;
-        if (held && isScaffoldBlock(held.name)) {
-          console.error(`[Pillar] Successfully equipped ${held.name}`);
+        const heldIsScaffold = held && isScaffoldBlock(held.name);
+        const heldMatchesEquipped = held && held.type === candidateScaffold.type;
+        if (heldIsScaffold || heldMatchesEquipped) {
+          console.error(`[Pillar] Successfully equipped ${held?.name ?? candidateScaffold.name} (verified: scaffold=${heldIsScaffold}, typeMatch=${heldMatchesEquipped})`);
           equipSuccess = true;
           break;
         } else {
-          console.error(`[Pillar] Equip failed verification: held=${held?.name ?? 'null'}, expected scaffold block`);
+          console.error(`[Pillar] Equip failed verification: held=${held?.name ?? 'null'} (type=${held?.type ?? 'null'}), expected ${candidateScaffold.name} (type=${candidateScaffold.type})`);
         }
       } catch (equipErr) {
         console.error(`[Pillar] equip(${candidateScaffold.name}) threw: ${equipErr}`);
