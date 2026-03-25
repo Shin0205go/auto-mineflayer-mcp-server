@@ -18,6 +18,22 @@
 
 ---
 
+## [2026-03-26] Bug: mc_connect reports "Connected" but mc_execute immediately fails (Session 2026-03-26 - CRITICAL BLOCKING)
+
+- **Cause**: mc_connect reports "Connected to localhost:25565 as Claude1" but subsequent mc_execute calls fail in 1-2ms with "Not connected to any server". This happens almost every call. Occasionally 1 mc_execute succeeds right after mc_connect (non-deterministic), but then next mc_execute immediately fails.
+- **Pattern**:
+  - mc_connect → mc_execute (FAIL 1ms) - most common
+  - mc_connect → mc_chat → mc_execute (FAIL) - mc_chat may trigger disconnect
+  - mc_reload (auto-reconnect) → mc_execute (FAIL) - reload's auto-connect not recognized
+  - mc_connect → mc_execute (SUCCESS - rare) → mc_execute (FAIL) - 2nd always fails
+- **Coordinates**: x=-5, y=61, z=9 (birch_forest biome)
+- **Bot state**: HP=6 (danger), food=0, wheat_seeds=103
+- **Error**: "Not connected to any server. Use minecraft_connect(...) first."
+- **Impact**: COMPLETELY BLOCKS ALL GAMEPLAY. Bot cannot eat, move, or survive.
+- **Status**: Reported 2026-03-26. CRITICAL BLOCKING. Needs immediate code reviewer fix.
+
+---
+
 ## [2026-03-26] Bug: mc_execute disconnects after every single call (Session current - CRITICAL BLOCKING)
 
 - **Cause**: mc_execute succeeds exactly once after mc_connect or mc_reload, then ALL subsequent mc_execute calls immediately fail with "Not connected to any server". Pattern: mc_reload → mc_execute (success) → mc_execute (FAIL). mc_connect → mc_execute (FAIL). This makes any multi-step gameplay impossible.
