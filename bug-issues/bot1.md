@@ -1,3 +1,19 @@
+## [2026-03-25] Bug: Bot completely stuck at cliff edge Y=90 - all actions timeout - Session 59
+
+- **Cause**: Bot is stuck at cliff edge at Y=90-91. ALL navigation actions (moveTo, navigate, flee, gather, combat) timeout after 60-120 seconds without moving more than 1-2 blocks. cobblestone place() succeeded but subsequent moveTo fails.
+- **Coordinates**: (27.5, 91.0, -10.1) - cliff edge in birch forest biome
+- **Last Actions**:
+  1. All moveTo attempts in 6 directions → position unchanged
+  2. bot.pillarUp(4) → "success" but Y unchanged
+  3. bot.navigate("chest") → position unchanged
+  4. bot.flee(30) → timeout
+  5. bot.gather("stone", 3) → timeout
+  6. bot.gather("iron_ore", 8) → timeout
+- **Error Message**: Execution timed out after 60000ms / 120000ms
+- **Status**: Reported. Bot is completely unable to navigate from cliff edge. Likely pathfinder cannot find valid path. Need admin /tp or code fix to handle cliff-edge stuck state.
+
+---
+
 ## [2026-03-25] Bug: bot.setControlState is not a function - Session 59
 
 - **Cause**: `bot.setControlState('forward', true)` throws `TypeError: bot.setControlState is not a function` inside mc_execute sandbox. Admin instructed using setControlState to escape cliff, but the method is not exposed in the bot API object.
