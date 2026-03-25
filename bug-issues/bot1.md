@@ -1,3 +1,20 @@
+## [2026-03-25] Bug: Session 75 - Death: Zombie climbed pillar, no food to recover
+
+- **Cause**: Bot pillarUp to Y=79-81 at night. Zombie pathfound up cobblestone pillar and attacked. HP=1. eat() failed (no food). flee() moved but HP remained at 1. Died.
+- **Coordinates**: (123, 88, 93)
+- **Last Actions**: pillarUp(10) → wait(30000) → zombie attacked → HP=1 → eat() failed → fled → died
+- **Pattern**: Zombies CAN climb cobblestone pillars. Pillar alone is NOT a safe night strategy.
+- **Root Cause**: No food + zombie pillar climbing = death. Need enclosed shelter with roof.
+- **Status**: Reported
+
+## [2026-03-25] Bug: Session 75 - combat() returning no drops from animals or hostile mobs
+
+- **Cause**: bot.combat() for cow/pig/chicken/sheep AND zombie/skeleton yields no drops. navigate() finds animals but combat() leaves inventory unchanged.
+- **Coordinates**: (12, 72, -7) and (134, 83, 94)
+- **Error Message**: No error, but zero drops after multiple animal combat attempts.
+- **Impact**: Cannot get food via hunting. Primary cause of starvation deaths this session.
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Session 69d - Death while waiting for night to pass (HP=1 mob attack)
 - **Cause**: Bot waited with wait(25000) at night with skeleton+creeper x3 nearby. During the 25s interval, mobs attacked bringing HP from 9 to 1. flee() triggered but death occurred before it could escape.
 - **Coordinates**: (~134, 80, 88) old_growth_birch_forest
