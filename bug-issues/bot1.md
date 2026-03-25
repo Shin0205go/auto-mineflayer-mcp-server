@@ -1,3 +1,24 @@
+## [2026-03-25] Bug: Session 70 - combat() zero drops STILL broken after 627a514 fix
+
+- **Cause**: After mc_reload applying commits 627a514 (food drop fix) and f04fb2a (moveTo fix), combat() still produces ZERO drops for ALL mob types. Tested: cow x4, pig x2, sheep x1, chicken x1, zombie x2, drowned x1, skeleton x1 - total drops = 0 items. Only exception: skeleton previously gave arrows (pre-existing count), but all drops still broken.
+- **Coordinates**: (-19, 83, 43)
+- **Last Actions**: Session start → mc_reload x3 → connect → combat(cow/pig/sheep/chicken/zombie/drowned/skeleton) → zero drops every time
+- **Error Message**: No errors - combat() silently succeeds with no items
+- **Status at report**: HP=5.5, Hunger=0, starvation imminent. Underground Y=41-58 for most of session, finally reached surface Y=83-84
+- **Critical**: The 627a514 fix applied to inventoryBefore timing + stationary bot + raw_* names is NOT working in runtime. Items are still not being collected after mob kills.
+- **Pattern**: Zero drops is consistent across all mobs, suggesting a deeper issue - possibly the item pickup is still broken (stationary bot issue still present), OR the items are dropping in a place the bot can't reach, OR mc_reload is not properly applying the fix
+- **Status**: Reported
+
+## [2026-03-25] Bug: Session 69c - Bot drowned at Y=58 underground
+
+- **Cause**: Bot was repeatedly navigating underground to Y=58 area near water. moveTo() consistently failed to navigate to far coordinates (100,73,100), instead moving the bot TOWARD the same underground water area each time. Eventually the bot ended up submerged in water at Y=58 with HP=4.5. forceEscape detected 4/4 solid sides (underwater), dug through, but bot respawned after drowning.
+- **Coordinates**: (48, 58, 22)
+- **Last Actions**: moveTo() x5 large targets all failed → navigate("item") → reconnect → flee → forceEscape → [Server] Claude1 drowned
+- **Error Message**: "Claude1 drowned" + "[wait] ABORTED: oxygen depleting underwater with HP=4.5"
+- **Contributing Factors**: Items lost from inventory (iron_axe, crafting_table disappeared), combat drops still broken pre-reload
+- **Pattern**: moveTo() consistently moves bot TO THE SAME UNDERGROUND WATER LOCATION regardless of target coordinates. This suggests the water area is near spawn point and pathfinder routes through it.
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Session 69b - Total food system failure, bot starving to death
 
 - **Cause**: ALL food acquisition APIs are completely broken: (1) bot.combat() for all mob types (cow/sheep/pig/chicken/zombie/spider/skeleton) returns success but ZERO drops in inventory. (2) bot.gather("wheat") finds wheat crops but returns no wheat item - only adds to wheat_seeds. (3) bot.gather("sugar_cane") finds sugar cane but returns nothing. (4) bot.craft("bread") silently fails with no wheat. (5) bot.farm() times out at 120s. No food can be acquired through any API.
