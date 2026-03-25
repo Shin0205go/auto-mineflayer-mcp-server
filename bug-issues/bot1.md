@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 72b - Death by drowning during farm() loop at night.
+- **Cause**: farm() loop navigated bot into water body at night. HP dropped to 4.7 from drowning. No escape triggered during farm() execution.
+- **Coordinates**: (~101, 63, -3) old_growth_birch_forest
+- **Last Actions**: farm() loop (5x) → Loop 2 showed HP:4.7 → "Claude1 drowned"
+- **Error Message**: "Claude1 drowned"
+- **Contributing Factors**: farm() navigation can lead bot into water. wait() already has drowning protection (ABORTED messages seen) but farm() itself has no drowning check. Loop continued even after HP dropped to 4.7.
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 72 - Death by Zombie during food exploration. HP/Hunger not managed.
 - **Cause**: bot.eat() called but Hunger=0 → no food in inventory → starvation + zombie attack. HP was 10 when moving, hunger hit 0, zombie killed.
 - **Coordinates**: (~250, 103, -235) old_growth_birch_forest
