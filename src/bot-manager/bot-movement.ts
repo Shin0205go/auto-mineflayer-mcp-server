@@ -1792,6 +1792,35 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     throw new Error(`Cannot pillar up - no scaffold blocks! Need: cobblestone, dirt, stone. Have: ${inv}`);
   }
 
+  // UNDERGROUND THICK CEILING DETECTION: Session 66 [2026-03-25]
+  // At Y=56 underground surrounded by mobs, pillarUp burned 45s on repeated 5s dig timeouts
+  // against a thick stone ceiling without making any Y progress.
+  // If the bot is underground (Y<65) and there are 4+ consecutive solid blocks directly
+  // above (thick ceiling), skip the jump-place loop entirely and use emergencyDigUp().
+  // emergencyDigUp() is faster in this scenario because it focuses exclusively on
+  // digging upward block-by-block without the jump/place overhead.
+  {
+    const botYForCheck = Math.floor(bot.entity.position.y);
+    const botXForCheck = Math.floor(bot.entity.position.x);
+    const botZForCheck = Math.floor(bot.entity.position.z);
+    if (botYForCheck < 65) {
+      let consecutiveSolidAbove = 0;
+      for (let checkDy = 1; checkDy <= 6; checkDy++) {
+        const b = bot.blockAt(new Vec3(botXForCheck, botYForCheck + checkDy, botZForCheck));
+        if (b && b.name !== "air" && b.name !== "cave_air" && b.name !== "void_air" && !isWaterBlock(b.name)) {
+          consecutiveSolidAbove++;
+        } else {
+          break;
+        }
+      }
+      if (consecutiveSolidAbove >= 4) {
+        console.error(`[Pillar] Underground (Y=${botYForCheck}) with ${consecutiveSolidAbove} solid blocks above. Thick ceiling — using emergencyDigUp() for faster escape.`);
+        bot.setControlState("sneak", false);
+        return emergencyDigUp(managed, 30);
+      }
+    }
+  }
+
   // If untilSky is true, use scaffoldCount as max (will stop when sky is reached)
   // Otherwise use the specified height
   const targetHeight = untilSky ? Math.min(scaffoldCount, 50) : Math.min(height, 15); // Safety limit
@@ -2728,12 +2757,19 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       // Enable sprinting during flee — this is an emergency escape, speed is critical.
       // Bot3 #26: fled only 7.2 blocks in 8s without sprint. Sprinting doubles speed.
       bot.pathfinder.movements.allowSprinting = true;
-      // SAFETY: Disable canDig during flee — fleeing should NEVER dig into terrain.
+      // SAFETY: Disable canDig during flee — surface flee should NEVER dig into terrain.
       // Bot2 [2026-03-22]: mc_flee with canDig=true dug through surface, bot fell from
       // Y=80 to Y=56 into a cave system and was trapped underground with 9 mobs.
       // Flee uses setGoal() directly (bypasses moveToBasic safety checks), so canDig
       // cave prevention from moveToBasic doesn't apply. Must disable explicitly here.
-      bot.pathfinder.movements.canDig = false;
+      //
+      // UNDERGROUND EXCEPTION: Session 66 [2026-03-25]: at Y=56 in a cave with
+      // canDig=false, the pathfinder cannot route at ALL — every direction is blocked by
+      // stone cave walls. Bot cannot flee even 1 block. When already underground (Y<65),
+      // the bot is already in a cave, so canDig=true is required to dig through walls.
+      // The safeSetGoal Y-descent monitor (fleeMaxYDescent=4) prevents runaway descent.
+      const fleeIsUnderground = bot.entity.position.y < 65;
+      bot.pathfinder.movements.canDig = fleeIsUnderground ? true : false;
       // SAFETY: Add water and lava to blocksToAvoid for flee pathfinding.
       // liquidCost=100000 penalizes fluids but pathfinder may still route through them
       // when no pure-land route exists (underground caves, enclosed spaces).
@@ -2947,7 +2983,12 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
           console.error(`[Flee] Directional retry #${retryIdx}: angle ${(retryIdx * 120)}° from original, target (${retryTarget.x.toFixed(0)}, ${retryTarget.y.toFixed(0)}, ${retryTarget.z.toFixed(0)})`);
           if (bot.pathfinder.movements) {
             bot.pathfinder.movements.maxDropDown = 2;
-            bot.pathfinder.movements.canDig = false;
+            // Underground (Y<65): enable canDig for directional retries.
+            // Session 66 [2026-03-25]: at Y=56 in a cave, canDig=false means pathfinder
+            // cannot route through stone cave walls — all retry directions fail immediately.
+            // At surface (Y>=65), canDig=false prevents cave routing. Underground, the bot
+            // IS already in a cave, so digging through walls is the only escape option.
+            bot.pathfinder.movements.canDig = bot.entity.position.y < 65 ? true : false;
             (bot.pathfinder.movements as any).liquidCost = 100000;
             bot.pathfinder.movements.allowSprinting = true;
           }
@@ -3003,6 +3044,26 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
           const retryMovedFinal = bot.entity.position.distanceTo(retryStartPos);
           console.error(`[Flee] Directional retry #${retryIdx} result: moved ${retryMovedFinal.toFixed(1)} blocks`);
           retryHandle.cleanup();
+        }
+
+        // UNDERGROUND LAST RESORT: Session 66 [2026-03-25]
+        // If bot is underground (Y<65) and all horizontal flee attempts failed (moved <5 blocks),
+        // the bot is completely enclosed by cave walls. The only escape is VERTICAL: dig up.
+        // emergencyDigUp() digs straight up block by block, ascending the cave ceiling.
+        // This is a last resort — it's slow (~3s/block) but the only remaining option
+        // when pathfinder cannot find ANY horizontal route even with canDig=true.
+        const finalPos = bot.entity.position;
+        const finalMoved = finalPos.distanceTo(startPos);
+        if (finalMoved < 5 && finalPos.y < 65) {
+          console.error(`[Flee] Underground (Y=${finalPos.y.toFixed(0)}) and horizontal flee completely failed (moved ${finalMoved.toFixed(1)} blocks). Using emergencyDigUp() as last resort.`);
+          try {
+            bot.pathfinder.setGoal(null);
+            bot.clearControlStates();
+            const digUpResult = await emergencyDigUp(managed, 30);
+            console.error(`[Flee] emergencyDigUp result: ${digUpResult}`);
+          } catch (digErr) {
+            console.error(`[Flee] emergencyDigUp failed: ${digErr instanceof Error ? digErr.message : String(digErr)}`);
+          }
         }
       }
     }

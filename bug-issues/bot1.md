@@ -14,11 +14,16 @@
 - **HP**: 15.5, Hunger: 14
 - **Impact**: Bot cannot escape, cannot fight, cannot farm. Completely immobilized.
 - **Root Cause Hypothesis**: Bot may be in a cave/enclosed space blocking pathfinder. Skeletons preventing all wait() calls. Possible pathfinder deadlock similar to Session 65 bug.
-- **Fix Needed**:
-  1. moveTo should try jumping/breaking blocks to escape enclosed spaces
-  2. combat() should actually fight nearby enemies, not return instantly
-  3. flee() should work even in enclosed spaces (break blocks or jump)
-- **Status**: Reported. Session 66. CRITICAL BLOCKING.
+- **Root Cause Analysis** (code review):
+  - `combat()`: Hard REFUSED because `creeper x4` within 8 blocks (per-spec REFUSED, intentional)
+  - `moveTo()`: ranged_mob_danger fires at 500ms for skeleton at 0.4 blocks (armorCount<=2, skeleton within 16 blocks). Aborts every call.
+  - `flee()`: `canDig=false` means pathfinder cannot route through stone cave walls at Y=56. Pathfinder finds no path. All direction retries also fail (canDig=false).
+  - `pillarUp()`: Hits 5s dig timeouts on thick cave ceiling (4+ solid blocks above). Burns the 45s global timeout without any Y gain.
+- **Fix Applied** (commit after 0ccb7e4):
+  1. `pillarUp()`: Underground (Y<65) + 4+ solid blocks above → immediately delegate to `emergencyDigUp()` instead of slow jump-place loop
+  2. `flee()`: Underground (Y<65) → enable `canDig=true` for initial pathfinding AND directional retries, so pathfinder can dig through cave walls
+  3. `flee()`: After all retries fail (moved <5 blocks) AND underground → call `emergencyDigUp()` as last resort
+- **Status**: Fixed.
 
 ---
 
