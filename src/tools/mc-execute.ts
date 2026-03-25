@@ -72,7 +72,7 @@ export async function mc_execute(
       const username = botManager.requireSingleBot();
       return await botManager.moveTo(username, x, y, z);
     },
-    navigate: async (target: string | { x?: number; y?: number; z?: number; target_block?: string; target_entity?: string; max_distance?: number }) => {
+    navigate: async (target: string | { x?: number; y?: number; z?: number; target_block?: string; target_entity?: string; type?: string; name?: string; max_distance?: number }) => {
       if (typeof target === "string") {
         // Guess if it's a block or entity name
         // Common entity names
@@ -88,7 +88,20 @@ export async function mc_execute(
         }
         return await mc_navigate({ target_block: target });
       }
-      return await mc_navigate(target);
+      // Support {type:'entity', name:'cow'} and {type:'block', name:'iron_ore'} formats.
+      // Bug [2026-03-25]: agents calling navigate({type:'entity',name:'cow'}) passed the
+      // object directly to mc_navigate which only recognizes target_entity/target_block keys.
+      // The {type,name} keys were silently ignored → navigate did nothing → 0 distance moved.
+      if (typeof target === "object" && "type" in target && "name" in target && target.name) {
+        const { type, name, max_distance } = target as { type: string; name: string; max_distance?: number };
+        if (type === "entity") {
+          return await mc_navigate({ target_entity: name, max_distance });
+        }
+        if (type === "block") {
+          return await mc_navigate({ target_block: name, max_distance });
+        }
+      }
+      return await mc_navigate(target as { x?: number; y?: number; z?: number; target_block?: string; target_entity?: string; max_distance?: number });
     },
     flee: async (distance?: number) => {
       return await mc_flee(distance ?? 20);

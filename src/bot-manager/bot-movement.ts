@@ -2241,26 +2241,35 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     let fleeFromName: string;
 
     if (allHostiles.length > 0) {
-      // Flee away from ALL hostiles — weighted by inverse distance (closer = stronger repulsion).
-      // Bot2 [2026-03-22]: 7 mobs surrounded bot, flee from nearest ran into others.
-      // Using weighted centroid ensures flee direction avoids the densest cluster of hostiles.
-      let sumX = 0, sumZ = 0, totalWeight = 0;
+      // Flee away from the weighted center of mass of ALL hostiles.
+      // Bug [2026-03-25]: previous implementation accumulated "away" vectors (bot-hostile)
+      // with inverse-square weights. This is mathematically equivalent to center-of-mass
+      // but only when the direction from bot → center-of-mass happens to dominate. When
+      // hostiles are arranged asymmetrically relative to the bot (e.g., 2 mobs at 5 blocks
+      // behind, 1 mob at 8 blocks ahead) the weighted-away sum could point in a misleading
+      // direction. Using explicit center-of-mass is simpler, more predictable, and easier
+      // to debug. flee(250) from (-15,72,-4) with 3 threats → ended at (2,72,-4) with 6
+      // threats (toward spawn), suggesting the previous direction calculation was wrong.
+      //
+      // New approach:
+      //   1. Compute weighted center-of-mass of all hostile positions (closer = higher weight).
+      //   2. direction = bot.position - centerOfMass (flee AWAY from the hostile cluster).
+      let comX = 0, comZ = 0, totalWeight = 0;
       for (const h of allHostiles) {
-        // Weight: closer mobs have much more influence (inverse square distance)
+        // Closer mobs have much more influence (inverse square of distance)
         const weight = 1 / Math.max(h.dist * h.dist, 1);
-        const away = bot.entity.position.minus(h.entity.position);
-        sumX += away.x * weight;
-        sumZ += away.z * weight;
+        comX += h.entity.position.x * weight;
+        comZ += h.entity.position.z * weight;
         totalWeight += weight;
       }
-      // Normalize to get average flee direction — HORIZONTAL ONLY.
-      // Bot2 bug: hostile at Y=100, bot at Y=80 → direction.y was negative → flee target
-      // pointed underground → pathfinder routed into cave at Y=56.
+      const centerX = totalWeight > 0 ? comX / totalWeight : bot.entity.position.x;
+      const centerZ = totalWeight > 0 ? comZ / totalWeight : bot.entity.position.z;
+      // Flee direction = bot position minus center of mass (horizontal only).
       // Zeroing Y ensures flee stays on the same elevation, preventing cave/hole routing.
-      const avgX = totalWeight > 0 ? sumX / totalWeight : 0;
-      const avgZ = totalWeight > 0 ? sumZ / totalWeight : 0;
-      const horizontal = new (bot.entity.position as any).constructor(avgX, 0, avgZ);
-      // If horizontal distance is zero (all hostiles directly above/below), pick random horizontal direction
+      const awayX = bot.entity.position.x - centerX;
+      const awayZ = bot.entity.position.z - centerZ;
+      const horizontal = new (bot.entity.position as any).constructor(awayX, 0, awayZ);
+      // If center of mass is directly under the bot (all hostiles vertically offset), pick random horizontal direction
       if (horizontal.norm() < 0.1) {
         const angle = Math.random() * 2 * Math.PI;
         direction = new (bot.entity.position as any).constructor(Math.cos(angle), 0, Math.sin(angle));
@@ -2270,7 +2279,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       fleeFromName = allHostiles.length === 1
         ? allHostiles[0].name
         : `${allHostiles.length} hostiles (${allHostiles.slice(0, 3).map(h => h.name).join(", ")})`;
-      console.error(`[Flee] Fleeing from ${fleeFromName} — weighted direction from ${allHostiles.length} hostile(s)`);
+      console.error(`[Flee] Fleeing from ${fleeFromName} — center-of-mass at (${centerX.toFixed(1)}, ${centerZ.toFixed(1)}), direction (${direction.x.toFixed(2)}, ${direction.z.toFixed(2)})`);
     } else {
       // No hostile found - flee in a random direction
       const angle = Math.random() * 2 * Math.PI;
