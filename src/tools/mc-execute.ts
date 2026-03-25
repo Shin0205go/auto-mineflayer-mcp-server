@@ -302,7 +302,7 @@ export async function mc_execute(
             // Initialize lastCheckHp and waitStartHp on first check
             if (lastCheckHp < 0) lastCheckHp = hp;
             if (waitStartHp < 0) waitStartHp = hp;
-            // Abort wait if HP critically low AND actually dropping.
+            // Abort wait if HP is actively dropping (not just low).
             // Bot1 Session 47 [2026-03-23]: wait() aborted at HP=5.0 even though HP was
             // stable (not dropping). The bot pillarUp'd for safety at HP=5, then wait()
             // immediately aborted because `hp < 6` triggered on stable HP. This created
@@ -310,10 +310,16 @@ export async function mc_execute(
             // Fix: Only abort at low HP if HP has actually decreased since wait started.
             // If HP started at 5.0 and is still 5.0, the bot is safe (just low).
             // If HP started at 8.0 and dropped to 5.0, something is actively damaging it.
-            // Keep an absolute floor at HP < 3 regardless — at that level, any single hit
-            // is lethal and waiting is never safe.
+            // Sessions 58-63 [2026-03-25]: bot survived at HP=1 stable after pillarUp but
+            // wait() kept aborting every check due to `hp < 3`. This made ALL subsequent
+            // movement impossible — moveTo/navigate/flee all aborted before completing.
+            // Root cause: `hp < 3` is an unconditional floor that fires even when HP is
+            // stable and not changing. At HP=1 on top of a pillar, the bot is not in
+            // active danger — no mob can reach it. Removing the unconditional floor and
+            // requiring hpDroppedSinceStart >= 1 allows the bot to wait even at HP=1
+            // as long as HP is not actively decreasing.
             const hpDroppedSinceStart = waitStartHp - hp;
-            if (hp < 3 || (hp < 6 && hpDroppedSinceStart >= 1)) {
+            if (hp < 6 && hpDroppedSinceStart >= 1) {
               if (logs.length < MAX_LOG_LINES) {
                 logs.push(`[wait] ABORTED: HP dropped to ${hp.toFixed(1)} during wait — auto-fleeing from danger`);
               }
