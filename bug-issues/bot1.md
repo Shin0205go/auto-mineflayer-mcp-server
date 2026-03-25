@@ -1,3 +1,13 @@
+## [2026-03-25] Bug: Session 69b - Total food system failure, bot starving to death
+
+- **Cause**: ALL food acquisition APIs are completely broken: (1) bot.combat() for all mob types (cow/sheep/pig/chicken/zombie/spider/skeleton) returns success but ZERO drops in inventory. (2) bot.gather("wheat") finds wheat crops but returns no wheat item - only adds to wheat_seeds. (3) bot.gather("sugar_cane") finds sugar cane but returns nothing. (4) bot.craft("bread") silently fails with no wheat. (5) bot.farm() times out at 120s. No food can be acquired through any API.
+- **Coordinates**: (66, 74, 35)
+- **Last Actions**: Session started with HP=20 Hunger=20 (post-respawn). combat() x7 mob types = 0 drops. navigate(wheat) → gather(wheat,10) = 0 wheat items. farm() = timeout. craft(bread) = silent fail. reconnect() = no hunger reset. Bot starved from Hunger=20 → Hunger=0 over ~30 minutes.
+- **Error Message**: "Claude1 starved to death" (anticipated - Hunger=0, HP=8.5 and falling)
+- **Root Cause Hypothesis**: keepInventory gamerule or some server config may have caused item collection to stop working entirely. Or the bot's item pickup/collection code has a regression that prevents any item from being added to inventory via drop pickup or harvest.
+- **Critical Note**: gather() correctly navigates to blocks and mines them (cobblestone count changed: was 60, gained some from gather) BUT food items don't appear. Stone/cobblestone from gather() DO appear in inventory. ONLY food/mob drops are affected.
+- **Status**: Reported - starvation death imminent
+
 ## [2026-03-25] Bug: Session 69 - Bot killed by Zombie during farm() timeout + combat() drops broken
 
 - **Cause**: Two compounding bugs caused death: (1) bot.farm() timed out after 120s without returning, leaving bot exposed to mobs. (2) bot.combat() for cow/sheep/pig/chicken all find the animals successfully but ZERO food drops appear in inventory after kills. All 4 animal types affected - navigate() finds them, combat() succeeds, but no raw_beef/raw_chicken/etc in inventory afterward. Bot died from Zombie at Y=60 while farm() was blocking.
