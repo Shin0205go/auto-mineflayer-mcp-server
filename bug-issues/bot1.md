@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 76 - Death loop with no food: HP drops during wait → dies → respawns → repeat
+- **Cause**: Bot is in a death loop: HP:6-10, no food (food=0), night time, hostiles everywhere. bot.wait() aborts after 10-15s because HP drops from mob attacks. Bot dies, respawns (keepInventory), then botManager.bots Map is cleared (respawn triggers bot.on("end")). mc_reload needed each cycle. Net result: bot cannot recover food or HP.
+- **Death count this session**: 3+
+- **Root Cause**: 1) combat() does not produce food drops (known bug), 2) No food in chests, 3) wheat_seeds in inventory but no farmland/time to grow, 4) Night time prevents safe navigation
+- **Fix Needed**: One of: a) Make bot.wait() detect low HP + no food and immediately go to bed/chest instead of waiting, b) Fix combat() to reliably return food drops, c) Add emergency food provision if HP<5 and food=0 (nav to chest, kill mob for rotten flesh)
+- **Coordinates**: (~5, 68, 0) birch_forest
+- **Status**: Reported - ongoing death loop
+
 ## [2026-03-26] Bug: Session 74c - Death underground at Y=47, HP=1.5 no food (3rd death this session)
 - **Cause**: Bot was at Y=47 underground with HP=1.5 and no food. Took damage from enderman/creeper hits while trying to wait for dawn and climb to surface. Died.
 - **Coordinates**: ~(-6, 47, 2) underground cave
