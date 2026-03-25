@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 76 - bot.status() fails mid-session, botManager.bots Map empties after mc_execute
+- **Cause**: After mc_connect succeeds, bot.log() (no botManager call) succeeds, but bot.status() (calls botManager.requireSingleBot()) fails immediately with "Not connected". botManager.bots Map is getting emptied between mc_execute calls or during async execution.
+- **Pattern**: mc_connect → success; mc_execute{bot.log("A")} → success; mc_execute{await bot.status()} → FAILS at 1ms
+- **Coordinates**: N/A (cannot get position)
+- **Root Cause Hypothesis**: bot.on("end") fires during/after mc_execute async execution, deleting bot from botManager.bots. The Minecraft server may be disconnecting the bot immediately, or mc_execute's async operations trigger a disconnect. Since bot.log() is sync and bot.status() is async, the disconnect happens asynchronously between them.
+- **Evidence**: mc_connect returns "Connected to localhost:25565 as Claude1" but bot.status() fails 1-2ms later. Only the very first await call in mc_execute sometimes works (HP:9.9 once), subsequent calls always fail.
+- **Impact**: CRITICAL - Cannot play game at all. Cannot check HP, inventory, or perform any gameplay actions.
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Session 75 - Death: Zombie climbed pillar, no food to recover
 
 - **Cause**: Bot pillarUp to Y=79-81 at night. Zombie pathfound up cobblestone pillar and attacked. HP=1. eat() failed (no food). flee() moved but HP remained at 1. Died.
