@@ -1361,16 +1361,28 @@ export async function fight(
     }
 
     // Check health - flee if low
-    // EXCEPTION: food-desperate hunts use HP <= 2 threshold (absolute minimum).
-    // At HP 1.8 with no food, fleeing just delays death — the only survival path is
-    // killing a food animal and eating its drops. The food-desperate item collection
-    // logic (needsFoodDesperately) already handles low-HP drop pickup.
+    // EXCEPTION: food-desperate hunts use HP <= 0.5 threshold (Minecraft minimum HP is 0.5,
+    // so this is effectively "never flee during food-desperate hunt").
+    // At HP 1.0-1.8 with no food, fleeing just delays starvation death — the only survival
+    // path is killing a food animal and eating its drops. Previous threshold of 2.0 caused
+    // HP=1.5 to trigger immediate flee before any attack (1.5 <= 2.0), making combat("cow")
+    // return instantly with 0 attacks and 0 drops — same as the HP 1.8 bug it was meant to fix.
+    // Bot1 Sessions 61-64: combat("cow") returned immediately, no food collected, bot died.
     // Bot1 [2026-03-23]: HP=1.8, hunger=0, combat("cow") fled immediately because
     // HP 1.8 < fleeAtHp 8. Bot never got food, died from starvation.
     const health = bot.health;
-    const effectiveFleeThreshold = isFoodDesperateFight ? 2 : fleeHealthThreshold;
+    // When hunting a food animal with no food in inventory, use threshold=0.5 (Minecraft minimum HP)
+    // regardless of hunger level. Without food drops, starvation death is certain — fleeing now
+    // just delays the inevitable and leaves the bot with nothing to eat.
+    // isFoodDesperateFight already covers hunger<=6, but hunger can be 7-20 while having NO food
+    // (e.g., bot used up all food regen from prior hunger, now hunger=7 and inventory empty).
+    // Bot1 Sessions 61-64: HP=1.5, no food, combat("cow") fled at threshold=10 before landing
+    // any attack. isFoodAnimalTarget && hasNoFood covers this case regardless of hunger level.
+    const isNoFoodAnimalHunt = isFoodAnimalTarget && hasNoFood;
+    const effectiveFleeThreshold = (isFoodDesperateFight || isNoFoodAnimalHunt) ? 0.5 : fleeHealthThreshold;
     if (health <= effectiveFleeThreshold) {
-      console.error(`[BotManager] Health low (${health}), fleeing!${isFoodDesperateFight ? " (food-desperate threshold: 2)" : ""}`);
+      const thresholdNote = isFoodDesperateFight ? " (food-desperate threshold: 0.5)" : isNoFoodAnimalHunt ? " (no-food animal hunt threshold: 0.5)" : "";
+      console.error(`[BotManager] Health low (${health}), fleeing!${thresholdNote}`);
       bot.pathfinder.setGoal(null);
       // Clean up sprint state before flee — flee sets its own sprint control.
       try { bot.setControlState("sprint", false); } catch { /* ignore */ }
