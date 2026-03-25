@@ -1,3 +1,14 @@
+## [2026-03-26] Bug: mc_execute disconnects after every single call (Session current - CRITICAL BLOCKING)
+
+- **Cause**: mc_execute succeeds exactly once after mc_connect or mc_reload, then ALL subsequent mc_execute calls immediately fail with "Not connected to any server". Pattern: mc_reload → mc_execute (success) → mc_execute (FAIL). mc_connect → mc_execute (FAIL). This makes any multi-step gameplay impossible.
+- **Coordinates**: x=-5, y=61, z=9 (birch_forest biome)
+- **Last Actions**: mc_reload → mc_execute status check (success) → mc_execute second call (immediate fail 1ms)
+- **Error Message**: "Not connected to any server. Use minecraft_connect(host="localhost", port=25565, username="Claude1", agentType="game") first."
+- **Impact**: Cannot perform any sequential operations. Even simple 2-step workflows break. Bot stuck with 0 food items, HP=9, wheat_seeds=103.
+- **Status**: Reported. Session 2026-03-26. CRITICAL BLOCKING.
+
+---
+
 ## [2026-03-25] Bug: Session 66 - Multiple deaths + Critical API failures (BLOCKING)
 
 - **Deaths this session**: 5+ deaths. Starvation, fall from extreme height via flee(), mob attacks.
