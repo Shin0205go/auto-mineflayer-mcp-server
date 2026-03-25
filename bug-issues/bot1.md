@@ -1,3 +1,21 @@
+## [2026-03-26] Bug: Session 77 - bot.log() のみ動作、他の全API (inventory/navigate/chat/gather等) が即時 "Not connected" エラー
+
+- **Cause**: mc_connect後、bot.log()は動作するが、他の全てのbot.*APIが即時(1-2ms)に "Not connected to any server" エラーになる。
+- **Reproduction**:
+  1. mc_connect → mc_execute `{ bot.log("test"); "ok"; }` → SUCCESS (1ms)
+  2. mc_connect → mc_execute `{ await bot.chat("msg"); }` → FAIL 2ms
+  3. mc_connect → mc_execute `{ await bot.inventory(); }` → FAIL after 2000ms (wait completed but inventory failed)
+  4. mc_connect → mc_execute `{ await bot.gather("oak_log", 3); }` → TIMEOUT 60s
+  5. mc_connect → mc_execute `{ await bot.navigate("birch_log"); }` → FAIL 2ms
+- **Pattern**: bot.log()はサンドボックス内で完結するためOK。botManagerを使うAPIは全てbotsMapが空になっているためFAIL。
+- **Root Cause**: botsMapがmc_execute実行完了後にクリアされる既知バグ (Session 76報告済み)。今セッションでも完全再現。
+- **Coordinates**: x=-6, y=55, z=16 (old_growth_birch_forest biome)
+- **Bot state**: HP=20, Hunger=16 (接続直後の確認値)
+- **Impact**: GAME COMPLETELY UNPLAYABLE. No bot.* API works except bot.log().
+- **Status**: Reported 2026-03-26 Session 77. CRITICAL BLOCKING. Code reviewer fix needed.
+
+---
+
 ## [2026-03-25] Bug: Session 68 - farm() and build("shelter") fail with "Bot Claude1 not found"
 
 - **Cause**: bot.farm() and bot.build("shelter") both throw "Bot Claude1 not found". This matches the Session 76 bug: botManager.bots Map gets cleared after bot death (respawn), so when farm/build try to look up the bot by username, it's gone.
