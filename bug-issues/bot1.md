@@ -13,6 +13,15 @@
 - **Navigation Error**: "Navigation stopped after 2/2 segments: Cannot reach (18.15, 92, -52.87). Path blocked."
 - **周囲の状況**: grass_blockがY=93-98に分布（丘の上）。石と土に完全に囲まれた地形。
 - **Status**: Critical. Phase4鉄採掘完全停止。code-reviewerによる pathfinder根本修正が必要。
+- **追加調査 (Session57)**:
+  - 周囲地形: 東西南北のY=91は石(stone)。南(z=-4〜-6)は空気→dirtを設置可能。
+  - 足元の南側(z=-6, y=90)は空洞(崖になっている)。
+  - bot.craft()もタイムアウト(crafting_tableが近くにない)。
+  - 再接続しても状況変わらず。
+  - place()は南方向のみ機能。他は全てタイムアウトか即リターン。
+  - bot.moveTo()は即座にリターン(965ms)、位置変化なし = pathfinder がパスなしと即判定。
+  - **根本原因仮説**: ボットが石の塊(Y=90足元が石、東西北が石)に囲まれており、南方向には崖(y=90が空洞)があるため、pathfinderが有効な経路を見つけられない。落下を避けるためにどの方向にも動けないと判定している可能性。
+  - **解決策候補**: pathfinderに落下許可オプションを渡す、またはforce-teleportでスタック位置から脱出させるリセット機能の追加。
 
 ---
 
