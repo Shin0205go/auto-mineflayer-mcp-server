@@ -1,3 +1,15 @@
+## [2026-03-25] Bug: Session 66 - Multiple deaths + Critical API failures (BLOCKING)
+
+- **Deaths this session**: 5+ deaths. Starvation, fall from extreme height via flee(), mob attacks.
+- **Critical Bug 1 - combat() drops not collected**: All animal/mob combat returns immediately without drops. raw_beef/rotten_flesh never obtained via combat(). Confirmed: navigate("cow")→combat("cow") → no raw_beef in inventory.
+- **Critical Bug 2 - gather() timeout**: gather("oak_log", 4) times out at 90-120 seconds without collecting any wood. Pathfinder fails silently.
+- **Critical Bug 3 - farm() no output**: farm() runs for 40-50 seconds but produces no wheat or bread, despite wheat_seeds x100 in inventory and stone_hoe equipped.
+- **Critical Bug 4 - flee() extreme altitude**: flee() sent bot to Y=117 causing fatal fall damage ("hit the ground too hard"). flee() must not use pillarUp to extreme heights.
+- **Coordinates**: Spawn area (-3, 65, 9) and surrounding area
+- **Status**: Reported. Session 66. CRITICAL - bot cannot obtain food through any mechanism.
+
+---
+
 ## [2026-03-25] Bug: MCP Connection drops every ~10s causing repeated reconnects - Session current
 
 - **Cause**: MCP server connection drops every 5-15 seconds requiring repeated mc_connect calls. Any mc_execute call longer than ~5s results in "MCP error -32000: Connection closed" or "Bot Claude1 not found". This makes any meaningful gameplay loop impossible.
