@@ -246,19 +246,32 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
         // Math.round(107.125)=107 which is INSIDE the ground block — pathfinder can't route there.
         // Math.ceil(107.125)=108 which is the surface level where the bot can stand and auto-pickup.
         // For items at Y=107.8, Math.ceil=108 is still correct (bot stands on block 107, feet at 108).
+        //
+        // CRITICAL FIX [2026-03-25]: Use GoalNear range=1 (not 2).
+        // GoalNear range=2 stopped the pathfinder at 2 blocks from the item, which is outside
+        // Minecraft's ~1-block auto-pickup range. The pathfinder reported isMoving()=false,
+        // the while loop exited with reachedItem=false, then the sprint fallback was the only
+        // collection mechanism — unreliable on uneven terrain where items fall into depressions.
+        // Range=1 ensures the bot gets within 1 block, inside auto-pickup range.
+        // Bot1 Sessions 58-65: combat(cow/pig/chicken/zombie) killed mob but 0 drops collected
+        // despite items spawning at the kill location. Root cause: GoalNear(2) left bot 2 blocks
+        // from item, auto-pickup never triggered, sprint fallback failed on cliff/slope terrain.
         const goal = new goals.GoalNear(
           Math.round(itemPos.x),
           Math.ceil(itemPos.y),
           Math.round(itemPos.z),
-          2
+          1
         );
         bot.pathfinder.setGoal(goal);
 
         // Wait for pathfinding with timeout
+        // Extended to 6000ms: item can land at knockback scatter distance (3-5 blocks).
+        // At 4000ms, pathfinder sometimes couldn't close the full distance to the item on
+        // uneven terrain (cliff, slope, stairs), leaving bot 1.5-2 blocks away.
         const startTime = Date.now();
         let reachedItem = false;
 
-        while (Date.now() - startTime < 4000) {
+        while (Date.now() - startTime < 6000) {
           await delay(200);
 
           // Check if item still exists
@@ -268,8 +281,10 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
           }
 
           // Check if we're close enough for auto-pickup (Minecraft auto-pickup range is ~1 block)
+          // Threshold raised to 1.5: items at fractional positions (Y=107.125) can be within
+          // 1.5 blocks of bot feet even when GoalNear(1) is used.
           const currentDist = bot.entity.position.distanceTo(itemPos);
-          if (currentDist < 1.2) { // Slightly increased threshold
+          if (currentDist < 1.5) {
             reachedItem = true;
             break;
           }
@@ -283,18 +298,20 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
         bot.pathfinder.setGoal(null);
 
         // If close but not quite there, make final approach
+        // Extended distance threshold from 3 to 5: items from knockback scatter can land
+        // 3-5 blocks from bot, and GoalNear(1) guarantees we're within ~1-2 blocks at most.
         if (!reachedItem && bot.entities[item.id]) {
           const finalDist = bot.entity.position.distanceTo(itemPos);
-          if (finalDist < 3) {
+          if (finalDist < 5) {
             await bot.lookAt(itemPos);
             bot.setControlState("forward", true);
             bot.setControlState("jump", true);
-            await delay(1200); // Increased from 1000 to get even closer
+            await delay(1500); // Extended from 1200ms: more time to walk through item on uneven terrain
             bot.setControlState("forward", false);
             bot.setControlState("jump", false);
 
-            // Extra wait for auto-pickup to trigger
-            await delay(500); // Increased from 200
+            // Extra wait for auto-pickup to trigger after sprint
+            await delay(600); // Extended from 500ms
           }
         }
       }

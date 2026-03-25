@@ -1317,7 +1317,19 @@ export async function fight(
   {
     const postApproachHp = bot.health ?? 20;
     const foodDesperateAbortThreshold = isFoodDesperateFight ? 2 : fleeHealthThreshold;
-    if (postApproachHp <= foodDesperateAbortThreshold) {
+    // CRITICAL FIX [2026-03-25]: Use strict < (not <=) for the food-desperate threshold.
+    // Minecraft's minimum HP is exactly 0.5 (death at 0). When the bot has HP=2.0 exactly
+    // (from starvation: hunger=0 reduces HP to half-heart = 1.0 in 1.21, or ~2 in older versions),
+    // using <= 2 triggered this flee immediately — the bot could NEVER fight a food animal at HP=2.
+    // This was the root cause of "combat(cow) returns immediately" at low HP in Sessions 58-65.
+    // Fix: use < 2 (strictly below 2) for food-desperate case. At HP=2.0 the bot is still alive
+    // and must fight — fleeing just delays the inevitable starvation death.
+    // For the normal case (non-food-desperate), keep <= fleeHealthThreshold to maintain the
+    // original safety behavior.
+    const shouldFlee = isFoodDesperateFight
+      ? postApproachHp < foodDesperateAbortThreshold  // strict < for food-desperate: HP must be BELOW 2
+      : postApproachHp <= foodDesperateAbortThreshold; // <= for normal case
+    if (shouldFlee) {
       const reason = isFoodDesperateFight
         ? `HP dropped to ${postApproachHp.toFixed(1)} — even food-desperate hunt too risky below HP 2.`
         : `HP dropped to ${postApproachHp.toFixed(1)} during approach (flee threshold: ${fleeHealthThreshold}).`;
