@@ -10,6 +10,17 @@
 
 ---
 
+## [2026-03-25] Bug: Bot drowned - moveTo navigated into water - Session 64 death #3
+
+- **Cause**: moveTo(4,82,14) sent bot to (1,95,18) instead. Bot drowned. The pathfinder navigated through/into water while trying to reach chest.
+- **Coordinates**: (1, 95, 18) — water location near spawn
+- **Last Actions**: moveTo(4,82,14) → arrived (1,95,18) → drowned
+- **Error**: "[Server] Claude1 drowned"
+- **Root Cause**: moveTo() is pathfinding through water. Bot cannot swim. Pathfinder should avoid water blocks when bot has no water breathing potion.
+- **Status**: Reported. Session 64 death #3.
+
+---
+
 ## [2026-03-25] Bug: bot.combat() NEVER drops food - All sessions - CRITICAL
 
 - **Cause**: bot.combat() against cow/pig/chicken/sheep/zombie returns 0 food drops in ALL sessions. bot.navigate({type:'entity',name:'cow'}) confirms it finds and reaches the animal (position changes), but after combat(), inventory has no new food items. This is not related to gamerule (doMobLoot is TRUE per earlier confirmation). The combat() API kills mobs but doesn't collect drops.
