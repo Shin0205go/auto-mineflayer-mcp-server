@@ -1,3 +1,23 @@
+## [2026-03-25] Bug: Complete movement failure - bot stuck underground Y=55-68 (Session 65 SUMMARY)
+
+- **Cause**: Multiple compounding failures in Session 65:
+  1. pillarUp() - always times out or Y stays same
+  2. tunnel("up") - times out or completes instantly with no Y change ("No pickaxe" despite having stone_pickaxe)
+  3. moveTo(x, HIGH_Y, z) - bot moves to wrong Y (downward), pathfinder finds path at lower Y
+  4. gather() - timeouts when target block exists (navigate returns success but gather does nothing)
+  5. Connection drops every few operations requiring constant reconnect
+- **Coordinates**: (-36, 59-68, 0) to (-4, 60, 2)
+- **Root Cause Analysis**: The area around spawn (0, 60-82, 0) appears to have massive terrain destruction (previous dig operations) creating disconnected cave systems. Pathfinder cannot route upward through the destroyed terrain. moveTo to high Y coordinates routes through lower passages instead.
+- **Pattern**: Bot was at Y=37 (Session 64), died→respawned at Y=90, fell back underground multiple times across Session 65. Each death causes respawn at Y=90-115, but bot always returns to Y=55-70 range due to flee/movement pushing it down.
+- **Fix Needed**:
+  1. pillarUp: Fix upward movement to actually use jump+place cobblestone loop
+  2. moveTo: Should climb up when Y target > current Y, even if no direct path
+  3. tunnel("up"): Should not fail silently when pickaxe is in inventory
+  4. Connection stability: bot disconnects during long operations
+- **Status**: Reported. Session 65. ALL movement tools broken underground. 3 deaths this session.
+
+---
+
 ## [2026-03-26] Bug: bot.status() call causes immediate disconnect from Minecraft server (CRITICAL)
 
 - **Cause**: Calling `await bot.status()` inside mc_execute causes the bot to immediately disconnect. `bot.log()` and `await bot.wait()` work fine. `bot.status()` specifically triggers the disconnect.
