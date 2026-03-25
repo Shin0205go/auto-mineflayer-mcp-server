@@ -1,3 +1,11 @@
+## [2026-03-25] Bug: Session 68 continued - Death 2 at Y=21 underground, Death 1 at Y=47 underground
+
+- **Cause**: 1) HP=1.5 at Y=47 underground, mob attack → death. 2) HP=6 at Y=21, gather("oak_log") sent bot underground during dawn → died. Both deaths from same pattern: no food + underground + mobs.
+- **Key Bugs**: combat() not killing entities (entity count unchanged after 5+ rounds), flee() times out with 4+ skeletons (ranged_mob_danger blocks all directions), gather() finds underground resources → bot goes underground even during daytime
+- **Coordinates**: Death1: (-7, 47, 3), Death2: (~5, 21, -5)
+- **Fix Needed**: gather() should filter to surface blocks only (Y > 62) when game phase is day/morning/evening. flee() should have fallback when all directions blocked by ranged mobs.
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 76 - Death loop with no food: HP drops during wait → dies → respawns → repeat
 - **Cause**: Bot is in a death loop: HP:6-10, no food (food=0), night time, hostiles everywhere. bot.wait() aborts after 10-15s because HP drops from mob attacks. Bot dies, respawns (keepInventory), then botManager.bots Map is cleared (respawn triggers bot.on("end")). mc_reload needed each cycle. Net result: bot cannot recover food or HP.
 - **Death count this session**: 3+
