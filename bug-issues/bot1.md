@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 72 - Death by Zombie during food exploration. HP/Hunger not managed.
+- **Cause**: bot.eat() called but Hunger=0 → no food in inventory → starvation + zombie attack. HP was 10 when moving, hunger hit 0, zombie killed.
+- **Coordinates**: (~250, 103, -235) old_growth_birch_forest
+- **Last Actions**: moveTo(-200,70,0) → navigate("cow") → combat animals → status showed HP:10 Hunger:0 → zombie slain Claude1
+- **Error Message**: "Claude1 was slain by Zombie"
+- **Contributing Factors**: bot.eat() cannot recover if no food in inventory. No flee triggered when hunger=0+hp=10. Safety check only checked hp<8 not hunger=0 combined with low hp.
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 71e - Death by drowning during gather(oak_log). 4th death in session.
 - **Cause**: gather("oak_log", 8) triggered navigation that led bot into water, causing drowning death.
 - **Coordinates**: (-9, 112, 7) at death attempt, birch_forest Y=112
