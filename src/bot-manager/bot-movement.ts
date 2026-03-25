@@ -337,6 +337,29 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
         }
       }
 
+      // SAFETY: Absolute Y floor check — if start Y >= 62 and target Y >= 62 (surface navigation),
+      // abort immediately if bot goes below Y=62. This catches cave routing faster than the
+      // descent-from-start check (which fires every 500ms and may be too slow if the bot
+      // walks quickly into a cave opening).
+      // Bot1 Session 69c [2026-03-25]: pathfinder routed bot from spawn (Y~70) to underground
+      // water pocket at Y=58, X=48, Z=22. The 3-block descent limit fires too late because
+      // the bot crosses the cave entrance quickly. An absolute Y<62 floor prevents this
+      // regardless of descent speed.
+      // Sea level in Minecraft is Y=63. Y<62 is always underground in the overworld.
+      // Exception: don't apply if start or target is already underground (both < 62).
+      {
+        const surfaceNavigation = start.y >= 62 && y >= 62;
+        if (surfaceNavigation && currentPos.y < 62) {
+          console.error(`[MoveTo] ABSOLUTE Y FLOOR: Bot dropped to Y=${currentPos.y.toFixed(1)} during surface navigation (start Y=${start.y.toFixed(1)}, target Y=${y}). Y<62 = underground. Aborting immediately.`);
+          finish({
+            success: false,
+            message: `Navigation stopped: bot went underground (Y=${currentPos.y.toFixed(0)}) during surface navigation (start Y=${start.y.toFixed(0)}, target Y=${y}). Pathfinder routed through cave. Try navigating in shorter segments or to a different waypoint.`,
+            stuckReason: "underground_routing",
+          });
+          return;
+        }
+      }
+
       // SAFETY: Detect underground cave routing — abort if bot descends far below expected path.
       // Case 1: Target is at/above start — bot should NOT descend more than N blocks below start.
       //   Normal surface (Y<=75): limit = 3 blocks. Strict limit prevents cave routing.
@@ -1386,12 +1409,20 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     return result.message + getBriefStatus(managed);
   }
 
-  // When aborted due to hostile danger checks, skip emergency dig — digging into terrain
-  // while surrounded by creeperss/skeletons/zombies is extremely dangerous and unhelpful.
-  // Return immediately with the abort message and advice to use flee().
+  // When aborted due to hostile danger checks OR underground/fall safety checks, skip
+  // emergency dig — digging into terrain while surrounded by mobs or while underground
+  // makes the situation worse, not better.
   // Bot1 [2026-03-25]: creeper_danger/ranged_mob_danger fallthrough caused 10+ consecutive
   // emergency-dig attempts that never moved the bot but wasted time while under attack.
-  const DANGER_ABORT_REASONS = ["creeper_danger", "ranged_mob_danger", "melee_mob_danger", "cliff_knockback_danger", "hp_drop"];
+  // Bot1 Session 69c [2026-03-25]: underground_routing abort fell through to emergency dig,
+  // which dug in the direction of the target (100,73,100) from the underground position,
+  // opening the path deeper into the cave system and the Y=58 water pocket.
+  // underground_routing/fall_detected/high_route are safety aborts — the bot should
+  // return to the caller immediately so the agent can choose a different strategy.
+  const DANGER_ABORT_REASONS = [
+    "creeper_danger", "ranged_mob_danger", "melee_mob_danger", "cliff_knockback_danger", "hp_drop",
+    "underground_routing", "fall_detected", "high_route", "lava_detected",
+  ];
   if (result.stuckReason && DANGER_ABORT_REASONS.includes(result.stuckReason)) {
     return result.message + getBriefStatus(managed);
   }
