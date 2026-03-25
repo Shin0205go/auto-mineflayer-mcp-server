@@ -1,3 +1,14 @@
+## [2026-03-25] Bug: Session 70d - Repeated deaths from creepers/zombies at night near spawn (Y=73-109)
+
+- **Cause**: Bot kept dying to creepers/zombies near spawn (0,0) at night. Pattern: respawn → HP=20 → night mob attacks → die again → repeat x4-5 times. Spawn point Y=95-117 is on high mountain with dense mob spawns. flee() couldn't escape creeper clusters (4 creepers tracked bot). bot.build("shelter") failed with "Bot Claude1 not found" error. Frequent disconnects during wait().
+- **Coordinates**: (3, 95, 4) → (-5, 61, 1) → various
+- **Last Actions**: Repeated flee attempts → shelter build fails → night mob swarms → creeper explosions
+- **Error Message**: "Bot Claude1 not found" (shelter build) + MCP connection closed errors
+- **Pattern**: Spawn point Y=100+ on mountain has no natural shelter, bot exposed to infinite mob respawns at night
+- **Contributing Factors**: (1) bot.build("shelter") crashes with "Bot Claude1 not found", (2) bot disconnects during long wait() calls, (3) flee() not moving away from mob cluster effectively
+- **Item losses**: coal x8, torch x2, crafting_table, chest x2 lost across multiple deaths
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 76 - bot.status() fails mid-session, botManager.bots Map empties after mc_execute
 - **Cause**: After mc_connect succeeds, bot.log() (no botManager call) succeeds, but bot.status() (calls botManager.requireSingleBot()) fails immediately with "Not connected". botManager.bots Map is getting emptied between mc_execute calls or during async execution.
 - **Pattern**: mc_connect → success; mc_execute{bot.log("A")} → success; mc_execute{await bot.status()} → FAILS at 1ms
