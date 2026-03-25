@@ -325,7 +325,9 @@ export async function mc_execute(
                 logs.push(`[wait] Pre-wait: ${closestHostileName} at ${closestHostileDist.toFixed(1)} blocks — auto-fleeing before wait`);
               }
               try {
-                await mc_flee(15);
+                // Increased from 15 to 25 for consistency with mid-wait flee distance.
+                // flee(15) was insufficient for persistent followers (Session 65 zombie loop).
+                await mc_flee(25);
                 if (logs.length < MAX_LOG_LINES) {
                   logs.push(`[wait] Pre-wait flee complete (HP: ${(waitBot.health ?? 0).toFixed(1)})`);
                 }
@@ -358,6 +360,12 @@ export async function mc_execute(
         let lastCheckHp = -1;
         let waitStartHp = -1; // Track HP at wait start for stable-HP detection
         let monitorCount = 0;
+        // FLEE COOLDOWN: After auto-fleeing, suppress hostile proximity checks for 30s.
+        // Session 65: zombie at 7-8 blocks triggered flee(15), but zombie immediately
+        // followed and was still within 8 blocks at the NEXT wait() call, causing 50+
+        // consecutive flee→wait→flee loops. A 30s cooldown after each flee gives the bot
+        // time to establish distance before re-evaluating hostile proximity.
+        let lastAutoFleeTimestamp = 0;
         const safetyInterval = setInterval(async () => {
           monitorCount++;
           try {
@@ -397,7 +405,8 @@ export async function mc_execute(
               // Auto-fleeing before resolving creates distance from the attacker, giving the
               // agent time to eat/heal. Same pattern as the water auto-flee (line ~344).
               try {
-                await mc_flee(15);
+                lastAutoFleeTimestamp = Date.now();
+                await mc_flee(25);
                 if (logs.length < MAX_LOG_LINES) {
                   logs.push(`[wait] Auto-fled from danger (HP now: ${(waitBot.health ?? 0).toFixed(1)})`);
                 }
@@ -428,7 +437,8 @@ export async function mc_execute(
               // Bot2 [2026-03-22]: HP 20→0.5 across repeated wait() calls, no auto-flee.
               // Bot2 [2026-03-23]: HP 10→death during wait, zombie attacked from behind.
               try {
-                await mc_flee(15);
+                lastAutoFleeTimestamp = Date.now();
+                await mc_flee(25);
                 if (logs.length < MAX_LOG_LINES) {
                   logs.push(`[wait] Auto-fled from attacker (HP now: ${(waitBot.health ?? 0).toFixed(1)})`);
                 }
@@ -473,12 +483,25 @@ export async function mc_execute(
               // At 8 blocks, there are 3-4 checks before melee, giving reliable abort time.
               // Skeletons shoot from 16 blocks but deal less damage per hit (2-5 vs 3-6);
               // the HP-drop check catches ranged damage. This check focuses on melee approach.
-              if (midWaitClosestDist <= 8) {
+              //
+              // FLEE COOLDOWN: Skip hostile proximity check for 30s after each auto-flee.
+              // Session 65: zombie at 7-8 blocks triggered 50+ consecutive flee loops because
+              // flee(15) was not enough to escape — zombie immediately re-approached and the
+              // next wait() call re-triggered the check. The cooldown prevents rapid cycling
+              // while still catching NEW hostile approaches after the cooldown expires.
+              const fleeCooldownMs = 30000;
+              const msSinceLastFlee = Date.now() - lastAutoFleeTimestamp;
+              if (midWaitClosestDist <= 8 && msSinceLastFlee > fleeCooldownMs) {
                 if (logs.length < MAX_LOG_LINES) {
                   logs.push(`[wait] ABORTED: ${midWaitClosestName} approaching (${midWaitClosestDist.toFixed(1)} blocks) — auto-fleeing before attack`);
                 }
                 try {
-                  await mc_flee(15);
+                  // Flee distance increased from 15 to 25: flee(15) was insufficient against
+                  // zombies that follow persistently — bot only gained ~12 blocks then zombie
+                  // closed back within 8 blocks before the next wait() call.
+                  // flee(25) creates enough distance to survive a full 30s wait cycle.
+                  lastAutoFleeTimestamp = Date.now();
+                  await mc_flee(25);
                   if (logs.length < MAX_LOG_LINES) {
                     logs.push(`[wait] Auto-fled from approaching ${midWaitClosestName} (HP now: ${(waitBot.health ?? 0).toFixed(1)})`);
                   }
@@ -489,6 +512,10 @@ export async function mc_execute(
                 }
                 doResolve();
                 return;
+              } else if (midWaitClosestDist <= 8 && msSinceLastFlee <= fleeCooldownMs) {
+                if (logs.length < MAX_LOG_LINES) {
+                  logs.push(`[wait] ${midWaitClosestName} at ${midWaitClosestDist.toFixed(1)} blocks (flee cooldown: ${Math.ceil((fleeCooldownMs - msSinceLastFlee) / 1000)}s remaining)`);
+                }
               }
             }
             // Abort wait if bot is in water — drowning risk at ANY HP level.

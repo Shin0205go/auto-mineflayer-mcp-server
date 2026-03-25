@@ -99,7 +99,11 @@ export async function minecraft_gather_resources(
       // Early exit: if too many unique positions failed, all nearby blocks are unreachable.
       // Bot1 bug: coal_ore/birch_log showed "nearby" but all instances were on cliff faces or
       // across Y-level gaps, causing 120s timeout. Break early to let bot try something else.
-      if (failedPositions.size >= 5) {
+      // Reduced from 5 to 3: each digBlock approach attempt takes up to 25s. With 5 failures,
+      // total time is 5×25=125s which exceeds the agent's typical 90s mc_execute timeout.
+      // 3 failures (3×25=75s) still catches all unreachable blocks while staying within timeout.
+      // Session 65: birch_log at Y=93-103 — all 5 instances unreachable, timeout fired first.
+      if (failedPositions.size >= 3) {
         console.error(`[GatherResources] ${failedPositions.size} positions unreachable — all nearby ${item.name} appear inaccessible.`);
         results.push(`${item.name}: ${collected}/${targetCount} (${failedPositions.size} blocks found but all unreachable — try moving to a different area)`);
         break;
