@@ -1,3 +1,16 @@
+## [2026-03-26] Bug: bot.status() call causes immediate disconnect from Minecraft server (CRITICAL)
+
+- **Cause**: Calling `await bot.status()` inside mc_execute causes the bot to immediately disconnect. `bot.log()` and `await bot.wait()` work fine. `bot.status()` specifically triggers the disconnect.
+- **Reproduction**:
+  1. mc_connect → mc_execute `{ await bot.wait(100); bot.log("ok"); }` → SUCCESS
+  2. mc_connect → mc_execute `{ await bot.wait(100); const s = await bot.status(); }` → FAIL "Not connected" after 103ms
+  3. mc_connect → mc_execute `{ const s = await bot.status(); }` → FAIL after 2ms
+- **Hypothesis**: bot.status() may be calling bot.entity or bot.inventory or another property that doesn't exist when the Minecraft bot is in a disconnecting/reconnecting state, causing an error that closes the connection.
+- **Impact**: CRITICAL - Cannot check HP, position, inventory, or any game state. All meaningful gameplay impossible.
+- **Status**: Reported 2026-03-26. CRITICAL BLOCKING.
+
+---
+
 ## [2026-03-26] Bug: Session 65 - gather() navigates but collects 0 iron_ore after 120s (CRITICAL)
 
 - **Cause**: bot.gather("iron_ore", 8) runs for 120s, bot moves ~20 blocks around cave at Y=59-61, but returns 0 raw_iron. The bot IS navigating (position changes) but no items collected.
