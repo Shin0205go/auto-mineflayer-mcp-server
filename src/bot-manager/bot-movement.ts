@@ -338,21 +338,28 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       }
 
       // SAFETY: Detect underground cave routing — abort if bot descends far below expected path.
-      // Case 1: Target is at/above start — bot should NOT descend more than 3 blocks below start.
-      //   Reduced from 5 to 3: Bot1 Sessions 42-44, Bot3 #17,#19: bots descended 5+ blocks
-      //   into caves before the old threshold caught it, by which point they were surrounded
-      //   by underground mobs. 3 blocks allows natural terrain variation (hills, ravine edges)
-      //   but catches cave entries much earlier, limiting underground exposure.
-      // Case 2: Target is below start — bot should NOT descend more than 10 blocks below target Y.
-      //   The pathfinder may legitimately descend when target is lower, but it should converge
-      //   toward target Y, not dive far below it through cave systems.
-      // Bot1 Session 44: navigated to (100,96,0) from surface, ended at Y=72 in cave, drowned.
-      // Bot3 Death #11: navigated to farm, fell into ravine via pathfinder digging.
-      // Bot3 Death #4: navigated from Y=9 to Y=64, pathfinder went to Y=112 then fell.
+      // Case 1: Target is at/above start — bot should NOT descend more than N blocks below start.
+      //   Normal surface (Y<=75): limit = 3 blocks. Strict limit prevents cave routing.
+      //   Elevated terrain (Y>75): limit = 10 blocks. At Y=92 (birch forest clifftop),
+      //   all natural terrain paths descend 5-15 blocks — the 3-block limit falsely fired,
+      //   making ALL movement impossible and creating a complete movement freeze.
+      //   Bot1 Session 56: bot stranded at Y=92, moveTo/flee/pillarUp/gather all returned
+      //   immediately because the 3-block descent limit prevented any downhill path.
+      //   10 blocks is safe for elevated terrain: Y=92-10=82, still well above Y=63 (surface).
+      //   For normal surface Y<=75: keep 3-block limit to prevent cave routing at ground level.
+      // Case 2: Target is below start — allow descent proportional to target depth.
+      //   Bot1 Session 44: navigated to (100,96,0) from surface, ended at Y=72 in cave, drowned.
+      //   Bot3 Death #11: navigated to farm, fell into ravine via pathfinder digging.
+      //   Bot3 Death #4: navigated from Y=9 to Y=64, pathfinder went to Y=112 then fell.
       const yDescentFromStart = start.y - currentPos.y;
       const targetIsAtOrAboveStart = y >= start.y - 5; // target within 5 blocks below start is "surface-level"
-      if (targetIsAtOrAboveStart && yDescentFromStart > 3) {
-        console.error(`[MoveTo] UNDERGROUND ROUTING DETECTED: Bot descended ${yDescentFromStart.toFixed(1)} blocks below start (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}) while target Y=${y.toFixed(1)} is at/above start. Pathfinder is routing through caves. Aborting.`);
+      // Elevated terrain adjustment: at Y>75 (mountain/cliff/treetop), 3-block limit is too tight.
+      // Natural descent from elevated positions spans 5-15 blocks — not cave routing.
+      // Use 10-block limit above Y=75 to allow descent without triggering false underground abort.
+      const elevatedStart = start.y > 75;
+      const case1DescentLimit = elevatedStart ? 10 : 3;
+      if (targetIsAtOrAboveStart && yDescentFromStart > case1DescentLimit) {
+        console.error(`[MoveTo] UNDERGROUND ROUTING DETECTED: Bot descended ${yDescentFromStart.toFixed(1)} blocks below start (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}) while target Y=${y.toFixed(1)} is at/above start. Pathfinder is routing through caves. Aborting. (limit=${case1DescentLimit} for ${elevatedStart ? "elevated" : "surface"} start)`);
         finish({
           success: false,
           message: `Navigation stopped: pathfinder routed underground (Y=${start.y.toFixed(0)} → Y=${currentPos.y.toFixed(0)}, target Y=${y.toFixed(0)}). Bot was descending into cave system. Try navigating in shorter segments or to a different waypoint.`,
@@ -367,14 +374,16 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       //       Previous flat 8-block limit was too restrictive: Bot1/Bot2/Bot3 [2026-03-22] could
       //       not reach chests/infrastructure 10-15 blocks below (e.g., bot at Y=99, chest at Y=88).
       //       The moveToBasic cave detection fired at 8 blocks down, aborting legitimate navigation.
-      //       New: max descent = (startY - targetY) + 5, capped at 20 for safety.
+      //       New: max descent = (startY - targetY) + 5, capped at 25 for elevated start (was 20).
+      //       Elevated start (Y>75) gets cap=25 to allow descent from cliffs to ground level.
+      //       Session 56: bot at Y=92 → Y=70 requires 22 blocks descent; old cap=20 triggered abort.
       //   2b) Overshoot: bot should not go more than 5 blocks below target Y.
-      //       Reduced from 10 to 5: when target is far below start, the bot may legitimately
-      //       descend but should converge toward target, not dive 10+ blocks past it.
       if (!targetIsAtOrAboveStart) {
         // 2a: Dynamic max descent from start — proportional to target depth
         const expectedDescent = start.y - y; // how far down the target is
-        const maxAllowedDescent = Math.min(expectedDescent + 5, 20); // buffer for terrain + hard cap
+        // Elevated starts (Y>75) get higher cap to allow cliff/mountain descent to ground level.
+        const maxDescentCap = elevatedStart ? 30 : 20;
+        const maxAllowedDescent = Math.min(expectedDescent + 5, maxDescentCap);
         if (yDescentFromStart > maxAllowedDescent) {
           console.error(`[MoveTo] CAVE DESCENT DETECTED: Bot descended ${yDescentFromStart.toFixed(1)} blocks below start (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}, target Y=${y.toFixed(1)}, max allowed=${maxAllowedDescent.toFixed(0)}). Aborting to prevent underground trapping.`);
           finish({
@@ -2343,11 +2352,19 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     // into caves without any abort.
     // Bot2 [2026-03-22]: flee retry sent bot from Y=80 into cave at Y=56 because
     // the retry direction bypassed safeSetGoal's Y-descent check.
+    //
+    // ELEVATED TERRAIN EXCEPTION (Bot1 Session 56):
+    // Bot at Y=92, safeSetGoal maxYDescent=4 fired immediately as any flee path descends
+    // 5+ blocks naturally on elevated birch forest terrain → flee always aborted → bot froze.
+    // Fix: when start Y>75, allow 15-block descent (allows reaching ground from cliff).
+    // Normal surface (Y<=75): keep 4-block limit (prevents cave routing).
+    const fleeMaxYDescent = startPos.y > 75 ? 15 : 4;
     let currentFleeHandle = safeSetGoal(bot,
       new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3),
       {
+        maxYDescent: fleeMaxYDescent,
         onAbort: (yDescent) => {
-          console.error(`[Flee] CAVE DESCENT ABORT: Bot dropped ${yDescent.toFixed(1)} blocks during flee (Y=${startPos.y.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Stopping.`);
+          console.error(`[Flee] CAVE DESCENT ABORT: Bot dropped ${yDescent.toFixed(1)} blocks during flee (Y=${startPos.y.toFixed(0)}→${bot.entity.position.y.toFixed(0)}, limit=${fleeMaxYDescent}). Stopping.`);
           try { bot.setControlState("sprint", false); bot.setControlState("sneak", false); } catch { /* ignore */ }
         }
       }
@@ -2479,8 +2496,9 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
               // allowing retries to route into caves.
               currentFleeHandle.cleanup();
               currentFleeHandle = safeSetGoal(bot, retryGoal, {
+                maxYDescent: fleeMaxYDescent,
                 onAbort: (yDescent) => {
-                  console.error(`[Flee] CAVE DESCENT ABORT during retry #${retryCount}: dropped ${yDescent.toFixed(1)} blocks (Y=${startPos.y.toFixed(0)}→${bot.entity.position.y.toFixed(0)}). Stopping.`);
+                  console.error(`[Flee] CAVE DESCENT ABORT during retry #${retryCount}: dropped ${yDescent.toFixed(1)} blocks (Y=${startPos.y.toFixed(0)}→${bot.entity.position.y.toFixed(0)}, limit=${fleeMaxYDescent}). Stopping.`);
                   try { bot.setControlState("sprint", false); bot.setControlState("sneak", false); } catch { /* ignore */ }
                 }
               });
@@ -2535,8 +2553,9 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
           const retryHandle = safeSetGoal(bot,
             new goals.GoalNear(retryTarget.x, retryTarget.y, retryTarget.z, 3),
             {
+              maxYDescent: fleeMaxYDescent,
               onAbort: (yDescent) => {
-                console.error(`[Flee] Directional retry #${retryIdx} CAVE DESCENT: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
+                console.error(`[Flee] Directional retry #${retryIdx} CAVE DESCENT: dropped ${yDescent.toFixed(1)} blocks (limit=${fleeMaxYDescent}). Aborting.`);
                 try { bot.setControlState("sprint", false); } catch { /* ignore */ }
               }
             }

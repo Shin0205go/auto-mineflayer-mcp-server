@@ -2127,22 +2127,47 @@ export async function mc_navigate(
     // Bot2: mc_navigate fell bot from Y=97 to Y=68 (29 blocks) during navigation.
     // Bot1 Session 44: navigated to (100,96,0), fell into cave at Y=72, drowned.
     // Bot3 Death #4: move_to Y=64 routed through Y=112, then fell.
+    // [2026-03-24] Bot1 Session: navigate({x:2, y:72, z:5}) routed to Y=55 underground cave,
+    // bot got trapped (20+ navigate attempts failed "Path blocked"), fled, pillarUp → water → death.
     //
-    // Threshold depends on horizontal distance:
-    // - Long distance (>30 blocks): clamp at 10 blocks below. The pathfinder has more
-    //   opportunity to find and route through caves on long paths. 10 blocks allows hills.
-    // - Short distance (<=30 blocks): handled by existing 20-block clamp below (line ~2140).
-    //   Short navigation to nearby infrastructure (chest at Y-15) should work.
-    // If the agent genuinely needs to go underground, they should use moveTo in small steps
-    // or dig a tunnel with mc_tunnel.
+    // Core insight: Pathfinder will find EVEN LEGITIMATE surface-level targets by routing
+    // through caves if a cave path is physically shorter. We must prevent ANY substantial
+    // Y-descent that could trigger cave routing:
+    // - ANY navigation more than 5 blocks downward is dangerous (surface caves start at Y~63-64)
+    // - Horizontal distance makes cave routing MORE likely (longer paths = more cave opportunities)
+    // - The only safe navigation is when target Y >= bot Y - 5 (shallow or level/upward)
+    //
+    // [2026-03-24 CRITICAL FIX]: Strengthen Y-clamping to prevent pathfinder from routing
+    // through caves even to legitimate destinations. The previous logic allowed:
+    // - Y <= 50: clamped (good)
+    // - Y > 50 AND horizDist > 30 AND yDescent > 10: clamped to Y = bot.y - 10 (still vulnerable)
+    // - Y > 50 AND (short distance OR shallow descent): NOT clamped (DANGEROUS)
+    //
+    // New strategy: ALWAYS clamp downward navigation to max 5 blocks below bot's Y.
+    // This prevents cave routing entirely. For intentional underground work, use moveTo/gather.
     const pos = botManager.getPosition(username);
     if (pos) {
       const horizDist = Math.sqrt((nx - pos.x) ** 2 + (nz - pos.z) ** 2);
       const yDescent = pos.y - ny;
-      if (horizDist > 30 && yDescent > 10) {
-        const clampedY = Math.round(pos.y - 10);
-        console.error(`[Navigate] Y-CLAMP: Target Y=${ny} is ${yDescent.toFixed(0)} blocks below bot Y=${pos.y.toFixed(0)} over ${horizDist.toFixed(0)} horizontal blocks. Clamping to Y=${clampedY} to prevent cave routing. Use bot.moveTo() in small steps for intentional underground navigation.`);
-        nightWarning += `\n[WARNING] Target Y=${ny} was ${yDescent.toFixed(0)} blocks below you over ${horizDist.toFixed(0)} blocks (cave routing risk). Clamped to Y=${clampedY}. For intentional underground travel, use bot.moveTo() in small Y-steps or bot.gather() for ores.`;
+
+      // Downward descent limit: prevent cave routing.
+      // Bot1 Session [2026-03-24]: navigate({x:2, y:72, z:5}) from Y~82 attempted
+      // to descend 10 blocks. Pathfinder found a cave route through Y=55 and trapped the bot.
+      //
+      // ELEVATED TERRAIN EXCEPTION (Bot1 Session 56):
+      // Bot stranded at Y=92 (birch forest cliff). 5-block clamp set target to Y=87 (still cliff).
+      // Pathfinder found no horizontal path from Y=87-92 → ALL movements timed out.
+      // Fix: when bot is elevated (Y>75), allow descent of up to 20 blocks to reach ground level.
+      // Y=92-20=72, still well above Y=63 (sea level / surface caves).
+      // The moveToBasic underground detection in bot-movement.ts enforces the real safety limit.
+      //
+      // Normal surface (Y<=75): clamp to 5 blocks (unchanged, prevents cave routing).
+      // Elevated start (Y>75): clamp to 20 blocks (allows cliff descent to ground level).
+      const yClampLimit = pos.y > 75 ? 20 : 5;
+      if (yDescent > yClampLimit) {
+        const clampedY = Math.round(pos.y - yClampLimit);
+        console.error(`[Navigate] CAVE AVOIDANCE Y-CLAMP: Target Y=${ny} requires descent of ${yDescent.toFixed(0)} blocks from bot Y=${pos.y.toFixed(0)}. Clamping to Y=${clampedY} (max ${yClampLimit} blocks down, ${pos.y > 75 ? "elevated" : "surface"} start). For intentional underground travel, use bot.moveTo() in small Y-steps or bot.gather() for ores.`);
+        nightWarning += `\n[WARNING] Target Y=${ny} would require descending ${yDescent.toFixed(0)} blocks (cave routing risk). Clamped to Y=${clampedY} (max ${yClampLimit} blocks down). For deeper underground travel, use bot.moveTo({x, y, z}) in steps.`;
         ny = clampedY;
       }
     }
@@ -2262,9 +2287,20 @@ export async function mc_navigate(
           // Bot1 Sessions 31-34,44: 6+ drowning deaths from pathfinder routing through
           // water at Y=61-62 during multi-segment navigation to lower-Y targets.
           // Bot3 Death #11: fell into ravine during multi-segment nav to farm.
-          // Fix: only use the actual target Y on the final segment (remainDist <= segmentSize).
+          // [2026-03-24 CRITICAL]: Even final segment needs cave avoidance. If navigating
+          // to a lower-Y target (e.g., Y=72 from Y=82), allow only shallow descent (<5 blocks)
+          // per segment. If target is deeper, it should be reached in small moveTo steps
+          // or as a genuine underground task via bot.gather().
           const isFinalSegment = remainDist <= segmentSize;
-          const iy = isFinalSegment ? ny : curPos.y;
+          let iy = isFinalSegment ? ny : curPos.y;
+          // Even on final segment, clamp deep descents to prevent cave routing.
+          // [2026-03-24]: navigate to Y=72 routed through Y=55 cave. Clamp final segment
+          // to max 5 blocks descent to keep pathfinder above-ground.
+          if (iy < curPos.y - 5) {
+            const clampedSegY = curPos.y - 5;
+            console.error(`[Navigate] Segment ${i}/${steps}: intermediate target Y=${iy} would descend ${(curPos.y - iy).toFixed(1)} blocks. Clamping to Y=${clampedSegY} (max 5 blocks) to prevent cave routing.`);
+            iy = clampedSegY;
+          }
           lastResult = await botManager.moveTo(username, ix, iy, iz);
           // Check if segment failed — stop early instead of wasting turns
           if (lastResult.includes("Cannot reach") || lastResult.includes("Path blocked") || lastResult.includes("timeout")) {
@@ -2285,7 +2321,18 @@ export async function mc_navigate(
           if (lastResult.includes("underground") || lastResult.includes("cave") || lastResult.includes("descended")) {
             const curPos3 = botManager.getPosition(username);
             const posStr3 = curPos3 ? `(${Math.round(curPos3.x)}, ${Math.round(curPos3.y)}, ${Math.round(curPos3.z)})` : "unknown";
-            return `[ABORTED] Navigation stopped after ${i}/${steps} segments — underground/cave routing detected. ${lastResult} Current position: ${posStr3}. Navigate in shorter hops or use mc_tunnel(direction="up") to return to surface.` + nightWarning;
+            // [2026-03-24 FIX] Underground cave trap escape routing:
+            // When navigate() detects underground/cave routing mid-travel, immediately abort
+            // and suggest escape options: pillarUp + moveTo surface, or direct flee.
+            // Bug: Bot1 Session [2026-03-24] got trapped Y=55 underground after navigate()
+            // routed through cave. 20+ navigate attempts returned "Path blocked". Need explicit
+            // surface-targeting escape instead of continuing same failed path.
+            const escapeMsg = `\n[CAVE TRAP ESCAPE ROUTING]\n` +
+              `1. bot.minecraft_pillar_up(30) — Climb straight up ${Math.max(80 - (curPos3?.y ?? 50), 10)} blocks to surface (Y=${80}).\n` +
+              `2. bot.mc_navigate({x: ${Math.round(curPos3?.x ?? 0)}, y: 80, z: ${Math.round(curPos3?.z ?? 0)}}) — Navigate directly to surface level Y=80.\n` +
+              `3. bot.mc_flee(40) — Flee away from cave in a different direction and try alternate surface path.\n` +
+              `4. bot.mc_gather("stone") — Mine upward through solid rock if pillarUp blocks fail.`;
+            return `[ABORTED] Navigation stopped after ${i}/${steps} segments — underground/cave routing detected. ${lastResult} Current position: ${posStr3}.${escapeMsg}` + nightWarning;
           }
         }
         const segResult = lastResult || await botManager.moveTo(username, nx, ny, nz);
@@ -2801,6 +2848,9 @@ export async function mc_chat(
 
 // ─── mc_connect ──────────────────────────────────────────────────────────────
 
+// Store last connection params for mc_reconnect
+let _lastConnectArgs: { host: string; port: number; username: string; version?: string } | null = null;
+
 export async function mc_connect(
   args: {
     action: "connect" | "disconnect";
@@ -2830,23 +2880,38 @@ export async function mc_connect(
   setAgentType("game");
 
   await botManager.connect({ host, port, username, version });
-
-  // Start prismarine-viewer via persistent viewer server if VIEWER=1
-  if (process.env.VIEWER === "1") {
-    const viewerPort = parseInt(process.env.VIEWER_PORT || "3007");
-    try {
-      const { onBotConnected } = await import("../viewer-server.js");
-      const bot = botManager.getBot(username);
-      if (bot) {
-        await onBotConnected(bot, username, viewerPort);
-        console.error(`[Viewer] Started at http://localhost:${viewerPort}`);
-      }
-    } catch (e) {
-      console.error(`[Viewer] Failed to start: ${e}`);
-    }
-  }
+  _lastConnectArgs = { host, port, username, version };
 
   return `Connected to ${host}:${port} as ${username}`;
+}
+
+// ─── mc_reconnect ────────────────────────────────────────────────────────────
+
+export async function mc_reconnect(): Promise<string> {
+  const params = _lastConnectArgs ||
+    (process.env.BOT_USERNAME ? {
+      host: process.env.MC_HOST || "localhost",
+      port: parseInt(process.env.MC_PORT || "25565"),
+      username: process.env.BOT_USERNAME,
+    } : null);
+
+  if (!params) {
+    throw new Error("No previous connection info. Call mc_connect first.");
+  }
+
+  // Disconnect existing bot if connected
+  try {
+    const existing = botManager.getFirstBotUsername();
+    if (existing) {
+      await botManager.disconnect(existing);
+    }
+  } catch (_) { /* ignore if not connected */ }
+
+  // Reconnect
+  await botManager.connect(params);
+  _lastConnectArgs = params;
+
+  return `Reconnected to ${params.host}:${params.port} as ${params.username}`;
 }
 
 // ─── mc_flee ─────────────────────────────────────────────────────────────────
@@ -2913,6 +2978,6 @@ export async function mc_tunnel(direction: string, length: number = 10): Promise
 
 registry.coreTools = {
   mc_status, mc_gather, mc_craft, mc_build, mc_navigate,
-  mc_combat, mc_eat, mc_store, mc_chat, mc_connect,
+  mc_combat, mc_eat, mc_store, mc_chat, mc_connect, mc_reconnect,
   mc_flee, minecraft_pillar_up, mc_smelt, mc_tunnel,
 };
