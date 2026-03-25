@@ -88,7 +88,7 @@ export function getPosition(managed: ManagedBot): { x: number; y: number; z: num
 /**
  * Basic pathfinding move (internal use)
  */
-async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number): Promise<{ success: boolean; message: string; stuckReason?: string }> {
+async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number, options?: { allowDig?: boolean }): Promise<{ success: boolean; message: string; stuckReason?: string }> {
   const bot = managed.bot;
   const targetPos = new Vec3(x, y, z);
 
@@ -880,7 +880,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       if (waterBlock) bot.pathfinder.movements.blocksToAvoid.add(waterBlock.id);
       if (flowingWaterBlock) bot.pathfinder.movements.blocksToAvoid.add(flowingWaterBlock.id);
 
-      // SAFETY: ALWAYS disable canDig to prevent cave routing.
+      // SAFETY: Disable canDig by default to prevent cave routing.
       // Bot1 Sessions 42-44, Bot3 #17,#19: pathfinder with canDig=true digs through terrain,
       // opening cave systems where underground mobs surround the bot.
       // Previously only disabled at night or HP<10, but Bot1/Bot2/Bot3 [2026-03-22] still
@@ -889,7 +889,9 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number)
       // canDig provides no meaningful benefit for surface navigation — the bot has mc_tunnel
       // for intentional digging. Pathfinder digging through terrain is ALWAYS dangerous
       // because it creates unpredictable cave openings and Y-descent that bypass safety checks.
-      bot.pathfinder.movements.canDig = false;
+      // EXCEPTION: allowDig=true is passed when the bot is stuck with no path (e.g. cliff-edge
+      // surrounded by stone blocks) as a last-resort escape via controlled dig-through.
+      bot.pathfinder.movements.canDig = options?.allowDig === true ? true : false;
       // Enable scaffolding with available blocks (dirt, cobblestone, netherrack)
       const scaffoldBlocks: number[] = [];
       const mcData = (bot as any).registry || require("minecraft-data")(bot.version);
@@ -1254,7 +1256,18 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   }
 
   // Use pathfinder directly - it handles digging and tower building automatically
-  const result = await moveToBasic(managed, x, y, z);
+  let result = await moveToBasic(managed, x, y, z);
+
+  // FALLBACK: If pathfinder found no path (e.g. cliff-edge surrounded by stone blocks),
+  // retry with canDig=true so pathfinder can dig through obstacles as last resort.
+  // Bot1 Session 57: surrounded by stone N/E/W + cliff S at Y=91, no_path with canDig=false.
+  if (!result.success && result.stuckReason === "no_path") {
+    console.error(`[Move] no_path — retrying with allowDig=true as fallback`);
+    result = await moveToBasic(managed, x, y, z, { allowDig: true });
+    if (result.success) {
+      console.error(`[Move] Recovered via allowDig fallback`);
+    }
+  }
 
   // POST-MOVE: If aborted due to water, ensure bot swims up and report position.
   // The moveToBasic water detector sets jump=true, but we also need to wait briefly
