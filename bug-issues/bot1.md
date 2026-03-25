@@ -10,6 +10,26 @@
 
 ---
 
+## [2026-03-25] Bug: bot.navigate() ALWAYS returns 0.0 distance - Session 64 CRITICAL
+
+- **Cause**: bot.navigate({type:'entity',name:'cow'}) and bot.navigate({type:'block',name:'iron_ore'}) both return immediately without moving the bot. Distance moved = 0.0 in ALL cases. navigate("furnace") worked once (moved 3 blocks) but navigate with object type never moves bot.
+- **Coordinates**: Tested at multiple positions: (10.3,100,-0.5), (39.7,76,-2.5), (8.7,92,9.8)
+- **Evidence**: "Navigate cow: moved 0.0 blocks", "Navigate iron: moved 0.0 to same pos"
+- **Root Cause Theory**: navigate() with {type:'entity/block', name:...} format may not be the correct API call format, OR pathfinder fails to find entities/blocks, OR navigate() crashes silently.
+- **Impact**: Cannot reach animals for food. Cannot reach iron ore. Cannot make any gameplay progress.
+- **Status**: CRITICAL. Session 64.
+
+---
+
+## [2026-03-25] Bug: bot.flee() moves toward more hostile mobs - Session 64
+
+- **Cause**: flee(250) from position (-15,72,-4) with 3 threats → moved to (2,72,-4) with 6 threats. flee() is running TOWARD more mobs instead of away. This is extremely dangerous (HP dropped from 7 to near-death).
+- **Expected**: flee() should find direction away from all mobs and move there
+- **Actual**: flee() navigated toward spawn area (x=0,z=0) which has highest mob density
+- **Status**: CRITICAL BUG. Session 64.
+
+---
+
 ## [2026-03-25] Bug: Bot drowned - moveTo navigated into water - Session 64 death #3
 
 - **Cause**: moveTo(4,82,14) sent bot to (1,95,18) instead. Bot drowned. The pathfinder navigated through/into water while trying to reach chest.
