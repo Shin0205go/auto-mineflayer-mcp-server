@@ -423,6 +423,12 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
 
       // Check A: Creeper within 8 blocks at ANY time — emergency abort.
       // Creeper fuse is 1.5s, explosion radius ~3 blocks, deals up to 49 damage unarmored.
+      // IMPORTANT: Use 3D distance but EXCLUDE creeperss that are ≥4 blocks BELOW the bot.
+      // A creeper on the ground while the bot is on a pillar (Y+4 or more) cannot explode
+      // the bot — its explosion radius is ~3 blocks. Without this exception, the bot is
+      // permanently stuck on a pillar because all moveTo calls abort the instant they start.
+      // Bot1 [2026-03-25]: pillarUp(10) succeeded but every subsequent moveTo aborted at
+      // <500ms due to creeper_danger (creeperss at ground level, Y-10 from bot position).
       {
         let creeperNearby = false;
         let creeperDist = Infinity;
@@ -430,6 +436,9 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
           if (!entity || !entity.position || entity === bot.entity) continue;
           const eName = entity.name?.toLowerCase() ?? "";
           if (eName === "creeper") {
+            const verticalOffset = currentPos.y - entity.position.y; // positive = creeper is below
+            // Skip creeperss that are ≥4 blocks below (explosion won't reach from that depth)
+            if (verticalOffset >= 4) continue;
             const eDist = entity.position.distanceTo(currentPos);
             if (eDist < 8) {
               creeperNearby = true;
@@ -537,6 +546,12 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
             const eDist = entity.position.distanceTo(currentPos);
             if (eDist > 16) continue;
             const eName = entity.name?.toLowerCase() ?? "";
+            // Skip ranged mobs that are ≥4 blocks BELOW the bot.
+            // Bot1 [2026-03-25]: on a pillar (Y+10), skeletons at ground level triggered
+            // ranged_mob_danger, causing every moveTo to abort within 500ms. Skeletons
+            // cannot shoot effectively straight up through solid terrain.
+            const rangedVertOffset = currentPos.y - entity.position.y;
+            if (rangedVertOffset >= 4) continue;
             if (RANGED_MOBS.includes(eName)) {
               const timeNote = navIsNight ? "at night" : "during daytime";
               const armorNote = armorCount === 0 ? "NO ARMOR" : `PARTIAL ARMOR (${armorCount}/4)`;
@@ -609,6 +624,14 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
             const eName = entity.name?.toLowerCase() ?? "";
             // Skip ranged mobs — already handled by check B1 above at 16-block radius.
             if (RANGED_MOBS.includes(eName)) continue;
+            // Skip mobs that are ≥4 blocks BELOW the bot (bot is elevated on a pillar).
+            // Melee mobs can only hit if at same Y level. A zombie 4+ blocks below on the
+            // ground cannot reach a bot on top of a pillar. Without this exception, every
+            // moveTo aborts immediately when the bot is on a pillar above a hostile area.
+            // Bot1 [2026-03-25]: 10+ consecutive moveTo failures on pillar top due to
+            // melee_mob_danger check firing even when mobs were far below on the ground.
+            const meleeVertOffset = currentPos.y - entity.position.y;
+            if (meleeVertOffset >= 4) continue;
             if (isHostileMob(bot, eName)) {
               const timeNote = navIsNight ? "at night" : "during daytime";
               const armorNote = armorCount === 0 ? "NO ARMOR" : `PARTIAL ARMOR (${armorCount}/4)`;
@@ -1363,6 +1386,16 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     return result.message + getBriefStatus(managed);
   }
 
+  // When aborted due to hostile danger checks, skip emergency dig — digging into terrain
+  // while surrounded by creeperss/skeletons/zombies is extremely dangerous and unhelpful.
+  // Return immediately with the abort message and advice to use flee().
+  // Bot1 [2026-03-25]: creeper_danger/ranged_mob_danger fallthrough caused 10+ consecutive
+  // emergency-dig attempts that never moved the bot but wasted time while under attack.
+  const DANGER_ABORT_REASONS = ["creeper_danger", "ranged_mob_danger", "melee_mob_danger", "cliff_knockback_danger", "hp_drop"];
+  if (result.stuckReason && DANGER_ABORT_REASONS.includes(result.stuckReason)) {
+    return result.message + getBriefStatus(managed);
+  }
+
   // If pathfinder failed, try emergency dig-through strategy
   console.error(`[Move] Pathfinder failed (${result.stuckReason}), attempting emergency dig-through...`);
 
@@ -1628,7 +1661,7 @@ export async function emergencyDigUp(managed: ManagedBot, maxBlocks: number = 30
 /**
  * Pillar up by jump-placing blocks
  */
-export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky: boolean = false): Promise<string> {
+export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky: boolean = false, _ignoreThreats: boolean = false): Promise<string> {
   const bot = managed.bot;
   const startY = bot.entity.position.y;
 
@@ -1683,11 +1716,17 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
   // Bot1 Session 55: Zombie at 14.9 blocks approached to melee range during pillarUp
   // execution (19s window), killing bot while placement was failing. Early abort prevents
   // prolonged exposure to enemies.
+  // EXCEPTION: When called from flee() with _ignoreThreats=true, skip this check.
+  // flee() pre-pillar is a DEFENSIVE move when already surrounded — aborting it would
+  // leave the bot on the ground in melee range, which is strictly worse.
   const initialThreat = checkThreatsForPillar();
-  if (initialThreat) {
+  if (initialThreat && !_ignoreThreats) {
     const msg = `Melee threat (${initialThreat.threat.name}) detected ${initialThreat.distance.toFixed(1)} blocks away. pillarUp will expose bot for ~${estimatedTime}s. Use mc_flee first, then pillarUp. Current HP=${bot.health?.toFixed(1) ?? '?'}${getBriefStatus(managed)}`;
     console.error(`[Pillar] ${msg}`);
     return msg;
+  }
+  if (initialThreat && _ignoreThreats) {
+    console.error(`[Pillar] Melee threat nearby (${initialThreat.threat.name} at ${initialThreat.distance.toFixed(1)}m) but ignoring — emergency pillar from flee().`);
   }
 
   // SAFETY: Detect if bot is currently IN water — pillarUp cannot work in water.
@@ -2302,6 +2341,91 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     result += `. PARTIAL: Stopped early (${remaining} blocks short). Reason: ${scaffoldCount < targetHeight ? `Only had ${scaffoldCount} blocks` : 'Placement failed'}`;
   }
 
+  // POST-PILLAR HOSTILE CHECK: Warn if still surrounded by hostiles after elevated.
+  // Bot1 [2026-03-25]: pillarUp(10) succeeded but creeperss/skeletons still nearby at ground
+  // level. moveTo/flee then abort immediately (creeper_danger/ranged_mob_danger) because
+  // checks fire based on entity distance, not vertical clearance. Bot was trapped on pillar.
+  // Solution: After pillarUp with significant gain (≥4 blocks), if hostiles still nearby,
+  // attempt pathfinder descent toward a safe horizontal position. From height, pathfinder
+  // CAN navigate downward even through mob-dense areas because it routes around ground-level
+  // mobs. Use a random horizontal offset (±10 blocks) to break out of the stuck column.
+  if (gained >= 4) {
+    const postPillarHostiles = Object.values(bot.entities)
+      .filter(e => isHostileMob(bot, e.name?.toLowerCase() || ""))
+      .map(e => ({ entity: e, dist: e.position.distanceTo(bot.entity.position) }))
+      .filter(h => h.dist <= 20)
+      .sort((a, b) => a.dist - b.dist);
+
+    if (postPillarHostiles.length > 0) {
+      console.error(`[Pillar] ${postPillarHostiles.length} hostile(s) still nearby after pillar (at Y=${finalY.toFixed(0)}). Attempting elevated flee...`);
+      // Compute flee direction away from center-of-mass of all nearby hostiles
+      let comX = 0, comZ = 0, totalWeight = 0;
+      for (const h of postPillarHostiles) {
+        const weight = 1 / Math.max(h.dist * h.dist, 1);
+        comX += h.entity.position.x * weight;
+        comZ += h.entity.position.z * weight;
+        totalWeight += weight;
+      }
+      const centerX = totalWeight > 0 ? comX / totalWeight : bot.entity.position.x;
+      const centerZ = totalWeight > 0 ? comZ / totalWeight : bot.entity.position.z;
+      const awayX = bot.entity.position.x - centerX;
+      const awayZ = bot.entity.position.z - centerZ;
+      const len = Math.sqrt(awayX * awayX + awayZ * awayZ);
+      const fleeTargetDist = 15;
+      const targetX = len > 0.1
+        ? bot.entity.position.x + (awayX / len) * fleeTargetDist
+        : bot.entity.position.x + (Math.random() > 0.5 ? fleeTargetDist : -fleeTargetDist);
+      const targetZ = len > 0.1
+        ? bot.entity.position.z + (awayZ / len) * fleeTargetDist
+        : bot.entity.position.z + (Math.random() > 0.5 ? fleeTargetDist : -fleeTargetDist);
+
+      try {
+        // From pillar height, pathfinder can descend. Use GoalNear at ground level.
+        // Temporarily allow larger drops for descent from pillar.
+        const prevDrop = bot.pathfinder.movements?.maxDropDown ?? 2;
+        if (bot.pathfinder.movements) bot.pathfinder.movements.maxDropDown = gained + 2;
+        const descentGoal = new goals.GoalNear(targetX, startY, targetZ, 3);
+        bot.pathfinder.setGoal(descentGoal);
+        const descentStartPos = bot.entity.position.clone();
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => {
+            try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+            resolve();
+          }, 8000);
+          const check = setInterval(() => {
+            try {
+              if (!bot.pathfinder.isMoving() && Date.now() > Date.now() - 7000) {
+                // pathfinder stopped
+              }
+              const descentDist = bot.entity.position.distanceTo(descentStartPos);
+              if (descentDist >= 3 || !bot.pathfinder.isMoving()) {
+                clearInterval(check);
+                clearTimeout(timeout);
+                try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+                resolve();
+              }
+            } catch {
+              clearInterval(check); clearTimeout(timeout); resolve();
+            }
+          }, 300);
+        });
+        if (bot.pathfinder.movements) bot.pathfinder.movements.maxDropDown = prevDrop;
+        const postDescentPos = bot.entity.position;
+        const descentMoved = postDescentPos.distanceTo(descentStartPos);
+        if (descentMoved >= 1) {
+          console.error(`[Pillar] Post-pillar descent moved ${descentMoved.toFixed(1)} blocks to (${postDescentPos.x.toFixed(1)},${postDescentPos.y.toFixed(1)},${postDescentPos.z.toFixed(1)})`);
+          result += `. Descended ${descentMoved.toFixed(0)} blocks from pillar to escape hostile area.`;
+        } else {
+          console.error(`[Pillar] Post-pillar descent: pathfinder didn't move. Bot at Y=${postDescentPos.y.toFixed(0)}.`);
+          result += `. [WARNING] Still on pillar at Y=${Math.floor(postDescentPos.y)} with hostiles below. Call bot.flee() or bot.moveTo() to descend — from height, pathfinder should find a path down.`;
+        }
+      } catch (descentErr) {
+        console.error(`[Pillar] Post-pillar descent failed: ${descentErr}`);
+        result += `. [WARNING] Hostiles still nearby at Y=${Math.floor(bot.entity.position.y)}. Call bot.flee() to escape from pillar top.`;
+      }
+    }
+  }
+
   return result + getBriefStatus(managed);
 }
 
@@ -2367,7 +2491,9 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
         const meleeDist = meleeThreat.position.distanceTo(bot.entity.position).toFixed(1);
         console.error(`[Flee] Melee threat detected (${meleeThreat.name} at ${meleeDist}m). Pillaring up 3 blocks before fleeing.`);
         try {
-          await pillarUp(managed, 3);
+          // Pass ignoreThreats=true: this IS the emergency, no point aborting the pillar
+          // just because the threat that triggered flee is within 4 blocks.
+          await pillarUp(managed, 3, false, true);
           console.error(`[Flee] Pillar up complete — now at Y=${bot.entity.position.y.toFixed(0)}, continuing flee.`);
         } catch (pillarErr) {
           console.error(`[Flee] Pillar up failed (${pillarErr instanceof Error ? pillarErr.message : String(pillarErr)}), continuing flee anyway.`);
