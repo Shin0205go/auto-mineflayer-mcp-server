@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 72e - HP:1.3 trap, no food, moveTo blocked below HP threshold
+- **Cause**: HP dropped to 1.3 from unknown source. moveTo completely blocked (returns immediately without moving). No food in inventory. Natural regen not working (hunger:13 < 18 threshold). Bot completely stuck.
+- **Coordinates**: (60, 80, -2) birch_forest
+- **Last Actions**: gather("birch_log") loop → HP dropped to 2.3 → fled → HP stayed at 1.3 → moveTo blocked → stuck
+- **Error Message**: moveTo returns without movement. HP:1.3 threshold check blocks movement.
+- **Contributing Factors**: 1) moveTo has a HP minimum check that blocks at HP<1.5. 2) No food escape route available. 3) Could not gather food animals. 4) admin authorized respawn as last resort.
+- **Status**: Reported - Respawn required as last resort per admin instruction
+
 ## [2026-03-26] Bug: Session 72d - moveTo completely non-functional, always returns to same position
 - **Cause**: bot.moveTo() returns immediately but position doesn't change. Calling moveTo(100,100,100) or moveTo(startX+30, y, z) all return position (5, 80, -9) after execution. No movement at all.
 - **Coordinates**: (5, 80, -9) birch_forest - this is the position bot keeps returning to
