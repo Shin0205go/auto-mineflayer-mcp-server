@@ -5,7 +5,7 @@
 - **Last Actions**: reconnect → forceEscape x3 → flee → navigate(cow/sheep/pig/chicken) x4 → combat x4 (no drops) → farm() → TIMEOUT (120s) → [Server] Claude1 was slain by Zombie
 - **Error Message**: "Claude1 was slain by Zombie" in chat
 - **State at death**: HP=6.3, Hunger=0, all food hunting failed due to combat drop bug
-- **Key Bug**: combat() never yields food items. Inventory unchanged after killing cow, sheep, pig, chicken. This is the same bug reported in Session 67 but still not fixed.
+- **Key Bug**: combat() NEVER yields ANY drops for ANY mob. Tested: cow, sheep, pig, chicken, zombie, spider, skeleton - ALL produce zero drops. This is NOT just passive mobs - ALL mob types affected. String x2 and arrows x3 in inventory are pre-existing from earlier sessions. This is the same bug reported in Session 67 but still not fixed, and now confirmed to affect hostile mobs too.
 - **Secondary Bug**: farm() hangs indefinitely (120s+ timeout). Does not complete or return.
 - **Status**: Reported
 
