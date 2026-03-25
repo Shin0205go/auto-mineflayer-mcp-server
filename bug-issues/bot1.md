@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 72c - Death by Zombie while stuck underground with HP:5.2
+- **Cause**: Bot got stuck in underground cave at Y=70-75. pillarUp failed (no blocks placed), moveTo couldn't change Y. HP dropped to 5.2 from unknown source. flee() timed out during emergency escape attempt.
+- **Coordinates**: (-22, 70, -29) old_growth_birch_forest underground cave
+- **Last Actions**: gather("iron_ore") → HP:5.2 warning → flee(50) attempt → timeout → "Claude1 was slain by Zombie"
+- **Error Message**: "Claude1 was slain by Zombie", flee timed out after 30s
+- **Contributing Factors**: 1) pillarUp completely non-functional in cave environment. 2) moveTo cannot increase Y coordinate when blocked by ceiling. 3) flee() timed out during emergency. 4) No food in inventory to eat for HP recovery. 5) Multiple deaths in same session from underground cave trap.
+- **Root Cause**: Cave navigation creates death traps - no reliable escape mechanism when underground.
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 72b - Death by drowning during farm() loop at night.
 - **Cause**: farm() loop navigated bot into water body at night. HP dropped to 4.7 from drowning. No escape triggered during farm() execution.
 - **Coordinates**: (~101, 63, -3) old_growth_birch_forest
