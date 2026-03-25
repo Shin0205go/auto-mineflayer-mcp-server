@@ -914,7 +914,25 @@ export async function mc_farm(): Promise<string> {
         logs.push(`Filtered farmCoords: ${beforeCount} → ${farmCoords.length} (within 4 blocks of water at ${wp.x},${wp.y},${wp.z})`);
       }
     }
-    if (!waterBlock || farmCoords.length === 0) {
+    // SHORT-CIRCUIT: If water is nearby and farmCoords is empty, check if there are
+    // growing crops in the 20-block radius. If so, the established farm just has no
+    // empty spots — skip expensive water navigation and go straight to bone-meal/harvest.
+    // Bug: bot had 51+ wheat_seeds but mc_farm navigated away from existing irrigated farm
+    // because farmCoords=[] after filter, wasting 30-60s navigating while doing nothing.
+    let skipWaterNav = false;
+    if (waterBlock && farmCoords.length === 0) {
+      const GROWING_CROPS_CHECK = new Set(["wheat", "carrots", "potatoes", "beetroots"]);
+      const nearGrowingCrops = bot.findBlocks({
+        matching: (b: any) => GROWING_CROPS_CHECK.has(b.name),
+        maxDistance: 20,
+        count: 5,
+      });
+      if (nearGrowingCrops.length > 0) {
+        logs.push(`Established farm detected: ${nearGrowingCrops.length} growing crop(s) nearby. Water is present. Skipping water navigation — will bone-meal existing crops and harvest mature ones.`);
+        skipWaterNav = true;
+      }
+    }
+    if (!skipWaterNav && (!waterBlock || farmCoords.length === 0)) {
       // No water nearby or no valid farm spots near water
       if (!waterBlock) {
         logs.push("No water within 10 blocks — farmland may dry out. Searching for water source...");
@@ -1374,7 +1392,7 @@ export async function mc_farm(): Promise<string> {
         }
       }
     } else {
-      logs.push(`Water source nearby at (${waterBlock.position.x}, ${waterBlock.position.y}, ${waterBlock.position.z}) — farmland will stay moist.`);
+      logs.push(`Water source nearby at (${waterBlock?.position.x}, ${waterBlock?.position.y}, ${waterBlock?.position.z}) — farmland will stay moist.`);
     }
   }
 
@@ -1600,6 +1618,56 @@ export async function mc_farm(): Promise<string> {
         } catch (e) {
           logs.push(`Bone_meal failed at (${fc.x},${fc.y + 1},${fc.z}): ${e}`);
           break;
+        }
+      }
+    }
+    // Step 4b: Apply remaining bone_meal to pre-existing growing crops in 20-block radius.
+    // Bug: mc_farm had bone_meal but did nothing when plantedCoords was empty (established farm
+    // with all spots occupied by growing crops). Bone-mealing existing crops accelerates
+    // harvest so the bot can eat sooner, even when no new planting was done this session.
+    const boneMealAfter = botManager.getInventory(username).find(i => i.name === "bone_meal");
+    if (boneMealAfter && boneMealAfter.count > 0) {
+      const BONEMEAL_CROP_NAMES = new Set(["wheat", "carrots", "potatoes", "beetroots"]);
+      const growingCropBlocks = bot.findBlocks({
+        matching: (b: any) => {
+          if (!BONEMEAL_CROP_NAMES.has(b.name)) return false;
+          const props = b.getProperties ? b.getProperties() : null;
+          const age = props?.age ?? b.metadata;
+          return age < 7; // not yet mature
+        },
+        maxDistance: 20,
+        count: 10,
+      });
+      if (growingCropBlocks.length > 0) {
+        logs.push(`Step 4b: Applying bone_meal to ${growingCropBlocks.length} pre-existing growing crop(s) in 20-block radius.`);
+        const { Vec3: Vec3Cls4b } = await import("vec3");
+        for (const gcPos of growingCropBlocks) {
+          if (Date.now() - farmStartTime > FARM_TIMEOUT_MS) {
+            logs.push(`[ABORTED] mc_farm timed out during pre-existing crop bone meal phase.`);
+            break;
+          }
+          const bmNow = botManager.getInventory(username).find(i => i.name === "bone_meal");
+          if (!bmNow || bmNow.count === 0) break;
+          try {
+            const bDist4b = bot.entity.position.distanceTo(new Vec3Cls4b(gcPos.x + 0.5, gcPos.y, gcPos.z + 0.5));
+            if (bDist4b > 3.5) {
+              await botManager.moveTo(username, gcPos.x + 1, gcPos.y, gcPos.z);
+            }
+            for (let attempt = 0; attempt < 8; attempt++) {
+              const bmNowCheck = botManager.getInventory(username).find(i => i.name === "bone_meal");
+              if (!bmNowCheck || bmNowCheck.count === 0) break;
+              const cropBlock4b = bot.blockAt(new Vec3Cls4b(gcPos.x, gcPos.y, gcPos.z));
+              if (!cropBlock4b || !BONEMEAL_CROP_NAMES.has(cropBlock4b.name)) break;
+              const props4b = cropBlock4b && (cropBlock4b as any).getProperties ? (cropBlock4b as any).getProperties() : null;
+              const age4b = props4b?.age ?? (cropBlock4b as any).metadata;
+              if (age4b >= 7) break; // fully grown now
+              const bmResult4b = await botManager.useItemOnBlock(username, "bone_meal", gcPos.x, gcPos.y, gcPos.z);
+              logs.push(`Bone_meal pre-existing crop at (${gcPos.x},${gcPos.y},${gcPos.z}): ${bmResult4b}`);
+              await new Promise(r => setTimeout(r, 200));
+            }
+          } catch (e) {
+            logs.push(`Bone_meal pre-existing crop failed at (${gcPos.x},${gcPos.y},${gcPos.z}): ${e}`);
+          }
         }
       }
     }
