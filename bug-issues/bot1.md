@@ -1,3 +1,16 @@
+## [2026-03-26] Bug: Session 78 - gather/combat が実行完了してもアイテムがインベントリに追加されない
+
+- **Cause**: bot.gather("iron_ore", 16) および bot.combat("cow"), bot.combat("chicken") が "完了" と返るがインベントリにアイテムが追加されない
+- **Coordinates**: x=-16.7, y=67, z=8.3 (old_growth_birch_forest biome), その後Y=58まで移動
+- **Last Actions**:
+  1. bot.combat("cow") → "牛狩り完了" と表示されるが cooked_beef / beef なし
+  2. bot.combat("chicken") → チキン発見・戦闘成功と表示されるが cooked_chicken / chicken なし
+  3. bot.gather("iron_ore", 16) → 採掘完了と表示（Y=67→58まで移動）されるが raw_iron / iron_ore なし
+- **Inventory check**: 全アイテムが変化なし（stone_hoe, bucket, cobblestone等の初期アイテムのみ）
+- **Status**: HP:9 Hunger:15 (まだ生存中)。gather/combat が成功しているように見えるが実際にアイテムを取得できていない。
+- **Impact**: 食料ゼロのまま進行できない。鉄装備作成も不可。
+- **Status**: Reported 2026-03-26 Session 78. CRITICAL.
+
 ## [2026-03-25] Bug: Session 68 - SAME CRITICAL BUG as Session 76/77: All bot.* APIs fail with "Not connected" immediately after mc_connect
 
 - **Cause**: After mc_reload + mc_connect, bot.log() works but ALL other bot.* APIs (status, inventory, moveTo, navigate, gather, place, farm, build, combat, etc.) fail with "Not connected" within 1-2ms.
