@@ -10,6 +10,23 @@
 
 ---
 
+## [2026-03-25] Bug: Death by zombie - Session 64 death #4
+
+- **Cause**: Bot HP=20 during midnight wait, zombie killed during server-side movement. Position changed from (4.5,94,8.5) to somewhere else between wait iterations.
+- **Error**: "[Server] Claude1 was slain by Zombie"
+- **Status**: Reported. Session 64 death #4.
+
+---
+
+## [2026-03-25] Bug: Spawn area terrain prison - all paths return to x=0-10,z=-10-5 - Session 64 ROOT CAUSE
+
+- **Cause**: pathfinder cannot find any path AWAY from spawn area (x=0-30,z=-25 to 10). ALL movement functions (moveTo, navigate, flee, gather) return the bot to the same spawn center within 100 blocks. moveTo(200,70,200) → arrived at (4,65,-3). flee(200) → moved 0.1 blocks. This is the ROOT CAUSE of all prior stuck-at-cliff bugs.
+- **Evidence**: Tested moveTo to (50,70,50), (100,70,100), (150,70,150), (200,70,200) - all arrived within (0-5, 64-70, -8 to 5).
+- **Fix Required**: Admin /tp to plains biome (x=300,y=70,z=300) AND change spawn point. OR pathfinder larger search radius.
+- **Status**: CRITICAL ROOT BUG. Session 64.
+
+---
+
 ## [2026-03-25] Bug: bot.navigate() ALWAYS returns 0.0 distance - Session 64 CRITICAL
 
 - **Cause**: bot.navigate({type:'entity',name:'cow'}) and bot.navigate({type:'block',name:'iron_ore'}) both return immediately without moving the bot. Distance moved = 0.0 in ALL cases. navigate("furnace") worked once (moved 3 blocks) but navigate with object type never moves bot.
