@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 73 - mc_connect returns "Connected" but mc_execute still fails with "Not connected"
+- **Cause**: mc_connect returns "Connected to localhost:25565 as Claude1" but subsequent mc_execute and mc_chat calls return "Not connected" error. mc_reload auto-reconnect also reports "Connected" but mc_execute still fails. The connection state is inconsistent between mc_connect and bot-core.
+- **Coordinates**: N/A (cannot get position)
+- **Last Actions**: mc_connect (version auto-detect failed first, then 1.21.4 succeeded) → mc_execute fails → mc_reload → mc_execute still fails
+- **Error Message**: "Not connected to any server. Use minecraft_connect(host="localhost", port=25565, username="Claude1", agentType="game") first."
+- **Root Cause**: mc_connect may be returning success before the bot is fully initialized in bot-core, or there is a MCP session mismatch between tool calls.
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 72f - Death by Skeleton at HP:1.3, moveTo safety block created inescapable trap
 - **Cause**: moveTo blocked at HP:1.3 ("HP too low even for food search"). Bot could not move to escape. Skeleton arrow killed bot.
 - **Coordinates**: (4, 110, -1) birch_forest
