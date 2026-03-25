@@ -17,6 +17,13 @@
   4. HP cannot go below 1 but also cannot recover without food
   5. Bot is completely stuck with no way to get food or escape
 - **Status**: CRITICAL. Bot survival is impossible without admin intervention. Need: /feed + /tp away from cliff + food items. Same location as Sessions 58-60.
+- **Additional Findings (Session 61 continued)**:
+  - bot.wait() ABORTS every time due to "HP dropped to 1.0" even during daytime (ticks 6093-6393)
+  - Daytime (phase:day) started but mobs still attacking (creeper, skeleton in daytime = bug or mob behavior)
+  - moveTo(27, 86, -4) always returns to (26.7, 86.0, -3.5) — pathfinder is completely unable to path from this exact location
+  - cobblestone place() succeeds at nearby coords but moveTo after place() still fails
+  - This is the SAME location (26.5-26.7, 86.0, -3.5 to -4.0) as Sessions 58-60 — the bot always spawns/ends up here
+  - Root cause theory: The spawn/respawn point is set to this exact cliff edge location, and the pathfinder cannot navigate FROM this specific location (possibly the block structure prevents it)
 
 ---
 
