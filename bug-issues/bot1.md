@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 71e - Death by drowning during gather(oak_log). 4th death in session.
+- **Cause**: gather("oak_log", 8) triggered navigation that led bot into water, causing drowning death.
+- **Coordinates**: (-9, 112, 7) at death attempt, birch_forest Y=112
+- **Last Actions**: flee(50) to clear area → gather("oak_log", 8) → "Claude1 drowned"
+- **Error Message**: "Claude1 drowned"
+- **Contributing Factors**: gather() navigation routes through water without drowning protection. High altitude Y=112 area with water sources nearby. 4th death in single session.
+- **Session Summary (71a-71e)**: Death by Skeleton x2, Zombie x1, Drowning x1. Root causes: pillarUp non-functional, build(shelter) timeout, combat/gather drops not collected, farm() immediate return, moveTo doesn't reach low Y targets.
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 71d - Death x3 in session (Zombie). Night survival completely broken.
 - **Cause**: Multiple deaths this session. zombie killed bot at HP<10, Hunger=6, food=0. All night survival methods failing: pillarUp Y doesn't change, build("shelter") timeouts, wait() auto-flee from shelter position, place("cobblestone") doesn't create sealed room.
 - **Coordinates**: ~(94, 71, -94) before death, respawn at (-4, 112, -9)
