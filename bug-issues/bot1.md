@@ -1,3 +1,15 @@
+## [2026-03-25] Bug: moveTo() non-functional near spawn (-10,82,13) - Session 65 CRITICAL
+
+- **Cause**: bot.moveTo(x, y, z) called with coordinates far away (200m+). Bot stays at (-10, 82, 13). moveTo(200,82,0), moveTo(0,82,0), moveTo(-100,82,-100) all leave bot at same position. Short moves (< 5 blocks) show tiny movement.
+- **Coordinates**: (-10, 82, 13)
+- **Symptoms**: gather() timeouts (can't reach target), navigate() immediate return without movement, pillarUp() timeout or no Y change, bot stuck near (-10, 82, 13)
+- **Root Cause**: Pathfinder fails silently - no path found from current position, moveTo returns without error or movement. Possibly terrain around spawn blocks all paths.
+- **Impact**: Bot cannot gather food, wood, or escape night hostiles. HP=10, Hunger=0, stuck.
+- **Fix Needed**: moveTo should throw error if no path found. Debug pathfinder from (-10, 82, 13).
+- **Status**: Reported. Session 65. CRITICAL BLOCKING.
+
+---
+
 ## [2026-03-25] Bug: Bot drowned at Y=46 underground (water pocket) - Session 65 death
 
 - **Cause**: Bot was stuck at Y=46 underground. dig(px, py+10, pz) failed with "Digging aborted" (hit water block). Bot was in or near an underground water pocket. Server: "Claude1 drowned".
