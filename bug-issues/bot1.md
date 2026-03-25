@@ -1,3 +1,28 @@
+## [2026-03-25] Bug: MCP Connection drops every ~10s causing repeated reconnects - Session current
+
+- **Cause**: MCP server connection drops every 5-15 seconds requiring repeated mc_connect calls. Any mc_execute call longer than ~5s results in "MCP error -32000: Connection closed" or "Bot Claude1 not found". This makes any meaningful gameplay loop impossible.
+- **Coordinates**: N/A (affects all sessions)
+- **Last Actions**: flee(40) → disconnect. pillarUp(30) → disconnect. moveTo() → disconnect. Even wait(10000) sometimes disconnects.
+- **Error Message**: "MCP error -32000: Connection closed" or "Not connected to any server"
+- **Root Cause**: Unknown. May be related to mineflayer bot disconnect events, server timeout, or MCP server instability when bot performs long navigation.
+- **Impact**: Cannot complete any operation longer than ~3-5 seconds. Cannot gather resources, build shelter, craft items effectively.
+- **Fix Needed**: MCP server or bot manager should handle reconnection automatically, or bot should stay connected longer during operations.
+- **Status**: Reported. Session current. CRITICAL - blocks all gameplay.
+
+---
+
+## [2026-03-25] Bug: gather() sends bot underground even from surface - Session current
+
+- **Cause**: bot.gather("birch_log") called from Y=82-84 (surface) but bot ends up at Y=47, Y=34, Y=52 underground. gather finds underground logs via cave systems and navigates through them, pulling bot underground.
+- **Coordinates**: Start ~(-2,84,-4), End ~(-7,47,3)
+- **Last Actions**: gather("birch_log",4) from Y=84 → Y=47 after 90s. gather("oak_log",4) from Y=82 → Y=60.
+- **Error Message**: No error, but bot ends up underground.
+- **Root Cause**: gather() uses navigate() which can route through caves. Once underground, the birch_log target may be in the cave above the bot's position, but pathfinder descends further.
+- **Fix Needed**: gather() should constrain Y coordinate to stay above terrain surface (Y >= current surface Y).
+- **Status**: Reported. Session current.
+
+---
+
 ## [2026-03-25] Bug: Session 68 continued - Death 2 at Y=21 underground, Death 1 at Y=47 underground
 
 - **Cause**: 1) HP=1.5 at Y=47 underground, mob attack → death. 2) HP=6 at Y=21, gather("oak_log") sent bot underground during dawn → died. Both deaths from same pattern: no food + underground + mobs.
