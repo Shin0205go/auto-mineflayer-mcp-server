@@ -1,3 +1,11 @@
+## [2026-03-25] Bug: Session 68 - SAME CRITICAL BUG as Session 76/77: All bot.* APIs fail with "Not connected" immediately after mc_connect
+
+- **Cause**: After mc_reload + mc_connect, bot.log() works but ALL other bot.* APIs (status, inventory, moveTo, navigate, gather, place, farm, build, combat, etc.) fail with "Not connected" within 1-2ms.
+- **Session 68 Timeline**: mc_reload × 5+, mc_connect × 20+, mc_execute fails on all substantive calls.
+- **What DID work during session**: Some calls to status()/moveTo() worked intermittently (right after first connect) before the pattern degraded.
+- **Deaths in Session 68**: 4 confirmed deaths (respawn at Y=82-112 each time). All from no-food starvation since combat() produces no drops and farm()/build() fail with "Bot not found".
+- **Status**: Same root cause as Session 76/77. BLOCKING. Game completely unplayable.
+
 ## [2026-03-26] Bug: Session 77 - bot.log() のみ動作、他の全API (inventory/navigate/chat/gather等) が即時 "Not connected" エラー
 
 - **Cause**: mc_connect後、bot.log()は動作するが、他の全てのbot.*APIが即時(1-2ms)に "Not connected to any server" エラーになる。
