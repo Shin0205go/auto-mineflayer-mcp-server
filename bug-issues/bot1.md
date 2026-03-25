@@ -1,3 +1,28 @@
+## [2026-03-25] Bug: Bot stuck at cliff (26.5,83,-2.3) - HP=1, no food, all movement fails - Session 63
+
+- **Cause**: Bot at (26.5, 83, -2.3), HP=1, Hunger=0, no food in inventory. SAME cliff area as Sessions 58-62. All movement APIs fail: moveTo, flee, navigate, pillarUp, setControlState all leave bot at same position. 7+ hostiles nearby (pillager x1, bat x11, skeleton x3, creeper x7, zombie x1, drowned x1, spider x1). combat('zombie') does not produce rotten flesh. ender_pearl in inventory but no API to throw it. wait() ABORTS immediately due to HP=1.
+- **Coordinates**: (26.5, 83, -2.3) — same cliff zone as Sessions 58-62
+- **Last Actions**:
+  1. Connected with Claude1 — bot already at HP=1, Hunger=0 with no food
+  2. flee(30) → no movement
+  3. setControlState all directions + jump → no horizontal movement
+  4. pillarUp(5) → Y unchanged
+  5. moveTo(50,84,50) → returns to (26.5,83,-2.3)
+  6. combat('zombie') → no rotten flesh dropped
+  7. navigate('cow') → no movement
+  8. placed cobblestone N/S/E/W → still can't move
+- **Error Message**: "[wait] ABORTED: HP dropped to 1.0 during wait" — all wait() calls abort
+- **Critical Issues**:
+  1. Bot has been stuck at this specific cliff (26,83~86,-3) for Sessions 58-63 (6 sessions!)
+  2. No food obtainable — combat drops nothing, no animals reachable
+  3. moveTo pathfinder completely broken at this terrain — always returns to same spot
+  4. HP=1 prevents any wait() calls from completing
+  5. ender_pearl in inventory but no API to throw/use items directly
+- **Status**: CRITICAL RECURRING. Session 63. Admin /tp + /feed required to escape. Root terrain bug at (26,83,-3) persists across all code fixes.
+- **Suggested Fix**: Admin needs to /tp bot away from (26,83,-3) spawn point and /feed. Also: bot.use(item) or ender pearl throw API needed. Also: pathfinder must be fixed to not return to same stuck point.
+
+---
+
 ## [2026-03-25] Bug: Bot STILL stuck at (26,84,-4) - moveTo always returns to same location - Session 62
 
 - **Cause**: Bot at (26.5, 84, -3.7), HP=1, Hunger=0. mc_reload + reconnect performed (commit 5d42734 fix). moveTo(35,85,5), moveTo(26,84,0), moveTo(26,84,10) ALL return bot to (26,84,-4). Bot is stuck in pathfinder loop despite cobblestone placed at (25-29,84,-3), (26,84,-2 to 0). flee(20) also returns to same location.
