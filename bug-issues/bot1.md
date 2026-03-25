@@ -1,3 +1,17 @@
+## [2026-03-26] Bug: Session 71d - Death x3 in session (Zombie). Night survival completely broken.
+- **Cause**: Multiple deaths this session. zombie killed bot at HP<10, Hunger=6, food=0. All night survival methods failing: pillarUp Y doesn't change, build("shelter") timeouts, wait() auto-flee from shelter position, place("cobblestone") doesn't create sealed room.
+- **Coordinates**: ~(94, 71, -94) before death, respawn at (-4, 112, -9)
+- **Last Actions**: flee repeatedly, place cobblestone walls, wait(30000) x8 loops all aborted by auto-flee creeper approach
+- **Error Message**: "Claude1 was slain by Zombie"
+- **Contributing Factors**:
+  1. pillarUp(8) doesn't change Y coordinate - completely non-functional
+  2. build("shelter") timeouts (120s)
+  3. wait() auto-flee keeps moving bot away from any shelter position
+  4. No food = hunger drop = can't recover HP
+  5. Spawn area Y=100-112 has constant hostile mob density at night
+- **Pattern**: This is the same night survival failure pattern as Sessions 67, 70, 70b, 70c
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 71c - Death by Skeleton during night, pillarUp non-functional + build("shelter") timeout
 - **Cause**: Night survival failed. pillarUp(8) executed but Y stayed at 81 (no height gained). Skeleton continued attacking. build("shelter") timed out after 120s. Bot shot and killed at HP=8.5.
 - **Coordinates**: (129, 72, 57) at death
