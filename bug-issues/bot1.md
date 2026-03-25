@@ -1,3 +1,12 @@
+## [2026-03-25] Bug: Session 63 - Bot disconnects during wait(3000) at HP=1.5 underground - Death by mob
+
+- **Cause**: Bot at HP=1.5, Y=47 underground, morning (ticks=1233). wait(3000) call causes disconnect at exactly 3002ms. Bot being killed underground by mobs during the 3-second wait, resulting in death + disconnect.
+- **Coordinates**: (-7.5, 47, 3.5)
+- **Root Cause**: HP=1.5 is not safe for any wait(). Even with the HP<3 abort fix, a single mob hit kills bot at 1.5 HP. Disconnect follows death.
+- **Status**: Reported. Continuing gameplay with shorter wait() calls to avoid death.
+
+---
+
 ## [2026-03-25] Bug: Session 70d - Repeated deaths from creepers/zombies at night near spawn (Y=73-109)
 
 - **Cause**: Bot kept dying to creepers/zombies near spawn (0,0) at night. Pattern: respawn → HP=20 → night mob attacks → die again → repeat x4-5 times. Spawn point Y=95-117 is on high mountain with dense mob spawns. flee() couldn't escape creeper clusters (4 creepers tracked bot). bot.build("shelter") failed with "Bot Claude1 not found" error. Frequent disconnects during wait().
