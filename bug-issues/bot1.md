@@ -1,3 +1,14 @@
+## [2026-03-25] Bug: Death by zombie - HP=1.5 no food recovery - Session 64
+
+- **Cause**: Bot at (-14.7, 72.6, -2.4), HP=1.5 (zombie attack). No food items in inventory. bot.combat() does not drop food from any animal (cow/chicken/pig/zombie - all 0 drops). bot.eat() cannot eat because no food. bot.flee() moved bot to y=101 with HP=20 (admin refill again). Then slain by zombie.
+- **Coordinates**: (-14.7, 72.6, -2.4) at time of critical HP
+- **Last Actions**: flee(50) → HP became 20 briefly → "Claude1 was slain by Zombie"
+- **Error Message**: "[Server] Claude1 was slain by Zombie"
+- **Root Bug**: bot.combat() NEVER drops food items from any animal type. This has persisted across all sessions. Without food drops, hunger cannot be managed naturally.
+- **Status**: Reported. Session 64 death #1.
+
+---
+
 ## [2026-03-25] Bug: Bot STILL stuck at cliff (26,83,-3) after wait() fix - Session 64 ONGOING
 
 - **Cause**: After wait() fix (67e5137), bot reconnected at HP=1, Hunger=0, same cliff location (26.7,83,-2.3) as Sessions 58-63. wait() no longer aborts BUT movement still completely fails: moveTo/flee/navigate/pillarUp ALL return bot to same position. bot.gather() works (slight position shifts 0.5-1 block) but bot cannot leave the cliff zone. 17 hostiles nearby (skeleton x4, creeper x9-10, zombie x1, drowned x1, spider x1). Survived night at HP=1 (hostiles not killing = confirmation of terrain trap).
