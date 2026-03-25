@@ -1,3 +1,11 @@
+## [2026-03-25] Bug: Session 68 - Death 3 (starvation HP=6, Y=66 underground), build("shelter") throws "Bot Claude1 not found"
+
+- **Cause**: HP=6, Hunger=8, no food, underground at Y=66. Died from starvation damage. Also: bot.build("shelter") throws error "Bot Claude1 not found" - indicates botManager.bots map doesn't have the correct key during shelter building.
+- **Death Pattern**: All 3 deaths this session from same cause: no food (combat() produces no drops, can't find/eat animals), mob attacks while at low HP
+- **build() bug**: `bot.build("shelter")` fails with "Bot Claude1 not found" error. This is likely a botManager key mismatch - the bot is registered under a different key than the username.
+- **Coordinates**: Death 3: (~-40, 66, -10)
+- **Status**: Reported - 3 deaths total in Session 68
+
 ## [2026-03-25] Bug: Complete movement failure - bot stuck underground Y=55-68 (Session 65 SUMMARY)
 
 - **Cause**: Multiple compounding failures in Session 65:

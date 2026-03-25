@@ -19,6 +19,8 @@ export class BotCore extends EventEmitter {
   protected bots: Map<string, ManagedBot> = new Map();
   private connectionConfigs: Map<string, BotConfig> = new Map(); // Store connection params for auto-reconnect
   private connectingPromises: Map<string, Promise<string>> = new Map(); // Track ongoing connections
+  private deathTimestamps: Map<string, number> = new Map(); // Track last death time for auto-reconnect after death-disconnect
+  private reconnectTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map(); // Track pending reconnect timers
 
   constructor() {
     super();
@@ -75,6 +77,35 @@ export class BotCore extends EventEmitter {
       );
     }
     return username;
+  }
+
+  // Wait up to maxWaitMs for a bot to become available (e.g. during death-triggered reconnect).
+  // Returns the username once connected, or throws if timeout is reached.
+  async waitForBot(maxWaitMs: number = 8000): Promise<string> {
+    const pollInterval = 200;
+    const deadline = Date.now() + maxWaitMs;
+    while (Date.now() < deadline) {
+      const username = this.getFirstBotUsername();
+      if (username) return username;
+      await new Promise(r => setTimeout(r, pollInterval));
+    }
+    // Final check
+    const username = this.getFirstBotUsername();
+    if (username) return username;
+    const botUsername = process.env.BOT_USERNAME || "Claude";
+    const mcHost = process.env.MC_HOST || "localhost";
+    const mcPort = process.env.MC_PORT || "25565";
+    throw new Error(
+      `Not connected to any server after waiting ${maxWaitMs}ms. Use minecraft_connect(host="${mcHost}", port=${mcPort}, username="${botUsername}", agentType="game") first.`
+    );
+  }
+
+  // Check if a death-triggered reconnect is currently pending (bot recently died)
+  isDeathReconnectPending(username?: string): boolean {
+    if (username) {
+      return this.reconnectTimeouts.has(username);
+    }
+    return this.reconnectTimeouts.size > 0;
   }
 
   protected delay(ms: number): Promise<void> {
@@ -543,7 +574,7 @@ export class BotCore extends EventEmitter {
           }
         });
 
-        // Handle disconnection with auto-reconnect
+        // Handle disconnection with conditional auto-reconnect
         bot.on("end", (reason) => {
           if (managedBot.particleInterval) {
             clearInterval(managedBot.particleInterval);
@@ -552,10 +583,49 @@ export class BotCore extends EventEmitter {
           const reasonStr = typeof reason === 'string' ? reason : JSON.stringify(reason);
           console.error(`[BotManager] ${config.username} disconnected. Reason: ${reasonStr}`);
 
-          // Auto-reconnect is disabled - let the caller (Claude Code loop) handle reconnection
-          // This prevents zombie connections when MCP processes are replaced
-          this.connectionConfigs.delete(config.username);
-          console.error(`[BotManager] ${config.username} will not auto-reconnect (managed by caller)`);
+          // Check if disconnect was caused by death (death event fired within the last 10 seconds).
+          // When a bot dies in Minecraft, the server sends a disconnect+respawn sequence, which
+          // causes Mineflayer's "end" event to fire even though keepInventory is ON and the bot
+          // should immediately respawn. Without auto-reconnect, all subsequent mc_execute calls
+          // fail with "Not connected after 1ms" — the bot is still alive in the game but removed
+          // from botManager.bots. Bug [2026-03-26]: "Session 76 - CRITICAL: bot.status() disconnects bot".
+          const lastDeathTime = this.deathTimestamps.get(config.username) ?? 0;
+          const msSinceDeath = Date.now() - lastDeathTime;
+          const storedConfig = this.connectionConfigs.get(config.username);
+          const isDeath = msSinceDeath < 10000 && storedConfig;
+
+          if (isDeath) {
+            console.error(`[BotManager] ${config.username} disconnected after death (${msSinceDeath}ms ago). Auto-reconnecting in 3s...`);
+            // Cancel any existing pending reconnect for this username
+            const existingTimer = this.reconnectTimeouts.get(config.username);
+            if (existingTimer) {
+              clearTimeout(existingTimer);
+            }
+            const timer = setTimeout(async () => {
+              this.reconnectTimeouts.delete(config.username);
+              this.deathTimestamps.delete(config.username);
+              // Only reconnect if not already connected or connecting
+              if (this.bots.has(config.username) || this.connectingPromises.has(config.username)) {
+                console.error(`[BotManager] ${config.username} already connected/connecting, skipping auto-reconnect`);
+                return;
+              }
+              try {
+                console.error(`[BotManager] Auto-reconnecting ${config.username} after death...`);
+                await this.connect(storedConfig);
+                console.error(`[BotManager] ${config.username} auto-reconnected successfully after death`);
+              } catch (err) {
+                console.error(`[BotManager] ${config.username} auto-reconnect after death failed:`, err);
+              }
+            }, 3000);
+            this.reconnectTimeouts.set(config.username, timer);
+          } else {
+            // Real disconnect (not death-triggered) — do not auto-reconnect.
+            // Let the caller (Claude Code loop / mc_connect) handle reconnection.
+            // This prevents zombie connections when MCP processes are replaced.
+            this.connectionConfigs.delete(config.username);
+            this.deathTimestamps.delete(config.username);
+            console.error(`[BotManager] ${config.username} will not auto-reconnect (real disconnect, managed by caller)`);
+          }
         });
 
         bot.on("kicked", (reason, loggedIn) => {
@@ -572,6 +642,8 @@ export class BotCore extends EventEmitter {
         // Auto-respawn on death
         bot.on("death", () => {
           console.error(`[BotManager] ${config.username} died! Auto-respawning...`);
+          // Record death timestamp so end handler can distinguish death-disconnect from real disconnects
+          this.deathTimestamps.set(config.username, Date.now());
           addEvent("death", "Bot died! Respawning...");
           bot.chat("やられた！リスポーン中...");
           setTimeout(async () => {
@@ -817,6 +889,14 @@ export class BotCore extends EventEmitter {
       throw new Error(`Bot '${username}' not found`);
     }
 
+    // Cancel any pending death-triggered reconnect so explicit disconnect is final
+    const existingTimer = this.reconnectTimeouts.get(username);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      this.reconnectTimeouts.delete(username);
+    }
+    this.deathTimestamps.delete(username);
+
     if (managed.particleInterval) {
       clearInterval(managed.particleInterval);
     }
@@ -826,6 +906,13 @@ export class BotCore extends EventEmitter {
   }
 
   disconnectAll(): void {
+    // Cancel all pending death-triggered reconnects
+    for (const [_username, timer] of this.reconnectTimeouts) {
+      clearTimeout(timer);
+    }
+    this.reconnectTimeouts.clear();
+    this.deathTimestamps.clear();
+
     for (const [_username, managed] of this.bots) {
       if (managed.particleInterval) {
         clearInterval(managed.particleInterval);

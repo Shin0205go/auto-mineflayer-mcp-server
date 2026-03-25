@@ -48,6 +48,26 @@ export async function mc_execute(
   const logs: string[] = [];
   const startTime = Date.now();
 
+  // Pre-execution connection check: if bot is not connected but a death-triggered
+  // reconnect is pending, wait up to 8s for the reconnect to complete before failing.
+  // Bug [2026-03-26]: "mc_execute disconnects after every single call" — after bot death,
+  // the Minecraft server briefly disconnects the bot (end event fires), clearing botManager.bots.
+  // The death auto-reconnect takes ~3s to complete. Without this wait, any mc_execute call
+  // in the reconnect window fails immediately with "Not connected after 1ms".
+  if (!botManager.isConnected()) {
+    if (botManager.isDeathReconnectPending()) {
+      console.error(`[mc_execute] Bot not connected but death-reconnect pending — waiting up to 8s`);
+      try {
+        await botManager.waitForBot(8000);
+        console.error(`[mc_execute] Bot reconnected after death, proceeding with execution`);
+      } catch (waitErr) {
+        const elapsed = Date.now() - startTime;
+        return `Error: Bot disconnected (death/respawn) and auto-reconnect timed out after 8s. Call mc_connect to reconnect manually.\n\nFailed after ${elapsed}ms`;
+      }
+    }
+    // If no death-reconnect pending, let the normal flow fail with a clear error
+  }
+
   // Build the bot API object that delegates to core-tools
   const botApi = {
     // Status
