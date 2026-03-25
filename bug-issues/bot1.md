@@ -10,6 +10,22 @@
 
 ---
 
+## [2026-03-25] Bug: Drowned during wait() loop - Session 64 death #6
+
+- **Cause**: Bot at (-2,90,5) HP=20 waiting for dawn. Drowned during wait interval. The wait() auto-flee moved bot into water nearby. This is the 3rd drowning in this session.
+- **Error**: "[Server] Claude1 drowned"
+- **Status**: Reported.
+
+---
+
+## [2026-03-25] Bug: Death by zombie - Session 64 death #5
+
+- **Cause**: Bot HP=20 during midnight wait at (4.5,94,8.5). Slain by zombie during wait interval.
+- **Error**: "[Server] Claude1 was slain by Zombie"
+- **Status**: Reported.
+
+---
+
 ## [2026-03-25] Bug: Death by zombie - Session 64 death #4
 
 - **Cause**: Bot HP=20 during midnight wait, zombie killed during server-side movement. Position changed from (4.5,94,8.5) to somewhere else between wait iterations.
