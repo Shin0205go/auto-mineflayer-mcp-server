@@ -1,3 +1,16 @@
+## [2026-03-26] Bug: Session 76 - CRITICAL: mc_execute non-deterministically fails with "Not connected"
+- **Symptom**: After mc_connect or mc_reload, mc_execute sometimes succeeds (1-2 times) then ALWAYS fails with "Not connected" on subsequent calls. Non-deterministic: same code succeeds one time, fails the next.
+- **Key Evidence**:
+  - `await bot.wait(500); bot.log("A"); await bot.navigate("cow");` → SUCCESS (1034ms)
+  - Same code executed immediately after mc_connect: → FAILS after 504ms (bot.log OK, navigate fails)
+  - bot.log() (no botManager call): ALWAYS succeeds
+  - bot.navigate(), bot.status(), bot.inventory() etc. (botManager API): UNPREDICTABLE
+- **Root Cause**: mc_execute completes → bot.on("end") fires → botManager.bots Map cleared → all subsequent mc_execute fail
+- **Why end fires**: Either (1) Minecraft server kicks bot after each mc_execute, or (2) mc_execute cleanup triggers bot disconnection, or (3) bot deaths (HP=0) trigger respawn which fires end event
+- **Impact**: GAME IS UNPLAYABLE. Cannot reliably execute any game action.
+- **Fix Needed**: After bot.on("end"), do NOT delete from botsMap if bot is respawning. OR handle reconnection transparently in mc_execute instead of failing.
+- **Status**: Reported - CRITICAL BLOCKER
+
 ## [2026-03-25] Bug: Session 68 - Death 3 (starvation HP=6, Y=66 underground), build("shelter") throws "Bot Claude1 not found"
 
 - **Cause**: HP=6, Hunger=8, no food, underground at Y=66. Died from starvation damage. Also: bot.build("shelter") throws error "Bot Claude1 not found" - indicates botManager.bots map doesn't have the correct key during shelter building.
