@@ -270,6 +270,20 @@ export class BotCore extends EventEmitter {
         // Default is 1 which treats water same as land. High cost makes pathfinder prefer land.
         (movements as any).liquidCost = 10000;
 
+        // Avoid water completely — liquidCost alone is not sufficient.
+        // When no land route is available, pathfinder falls back to water routing regardless of liquidCost.
+        // blocksToAvoid makes water impassable so pathfinder returns no_path instead of routing through water.
+        // Bot1 Sessions 31-34,40b,44,64: 7+ deaths from water routing.
+        // Also add flowing_water to movements.liquids — pathfinder's default liquids set only includes
+        // water (source block), not flowing_water. Without this, flowing_water is treated as safe
+        // walkable space (liquid=false, safe=true) and the "dont go underwater" checks don't apply.
+        const waterBlock = bot.registry.blocksByName["water"];
+        const flowingWaterBlock = bot.registry.blocksByName["flowing_water"];
+        if (waterBlock) movements.blocksToAvoid.add(waterBlock.id);
+        if (flowingWaterBlock) movements.blocksToAvoid.add(flowingWaterBlock.id);
+        // Ensure flowing_water is treated as liquid by pathfinder (not just source water)
+        if (flowingWaterBlock) (movements as any).liquids.add(flowingWaterBlock.id);
+
         // Avoid lava completely (liquidCost alone doesn't distinguish water vs lava)
         // Bot2: "tried to swim in lava" — must avoid both static and flowing lava.
         const lavaBlock = bot.registry.blocksByName["lava"];
@@ -284,7 +298,16 @@ export class BotCore extends EventEmitter {
         if (soulFireBlock) movements.blocksToAvoid.add(soulFireBlock.id);
 
         bot.pathfinder.setMovements(movements);
-        console.error(`[BotManager] Pathfinder configured: canDig=false, allow1by1towers=true, scaffoldingBlocks=${movements.scafoldingBlocks.length} types`);
+
+        // Extend pathfinder think timeout for long-distance navigation.
+        // Default thinkTimeout=5000ms is insufficient for 100-200 block paths through hilly terrain
+        // (spawn area cliff/mountain geography). With water/lava/digging disabled, pathfinder must
+        // find longer surface routes which require more A* search time.
+        // Bot1 Session 64: moveTo(200,70,200) arrived at (4,65,-3) — pathfinder timed out and
+        // fell back to the "best partial node" near spawn instead of the actual target.
+        // 10000ms gives the A* search 2× the time to find long surface routes.
+        (bot.pathfinder as any).thinkTimeout = 10000;
+        console.error(`[BotManager] Pathfinder configured: canDig=false, allow1by1towers=true, scaffoldingBlocks=${movements.scafoldingBlocks.length} types, thinkTimeout=10000ms`);
 
         // PATCH: Fix mineflayer's block_place sequence bug (hardcoded 0 in both
         // generic_place.js and inventory.js activateBlock).

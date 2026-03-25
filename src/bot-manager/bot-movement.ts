@@ -851,14 +851,17 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
     // by mineflayer-pathfinder internals or dimension-change handlers between calls.
     // Setting them here guarantees they are always active for this navigation call.
     if (bot.pathfinder.movements) {
-      // maxDropDown=2: Allow 2-block drops for natural terrain navigation.
-      // maxDropDown=1 was too restrictive — pathfinder couldn't find paths in hilly biomes
-      // (birch_forest, mountains) where 2-block elevation changes are common, causing
-      // bot.moveTo() and bot.gather() to silently fail with no path found.
-      // The physics fall detector (>2.5 blocks cumulative) catches unsafe falls before
+      // maxDropDown=3: Allow 3-block drops for natural terrain navigation.
+      // maxDropDown=2 was too restrictive in mountainous spawn biomes — pathfinder couldn't
+      // find any surface route beyond ~10 blocks when terrain has 3-block elevation drops
+      // (hills, cliff edges), causing moveTo to return "no_path" and fall back to allowDig
+      // which generated underground routes leading back to spawn.
+      // Bot1 Session 64: moveTo(200,70,200) arrived at (4,65,-3) with maxDropDown=2.
+      // maxDropDown=3 lets pathfinder traverse steeper terrain without digging.
+      // The physics fall detector (>3 blocks cumulative) catches unsafe falls before
       // fall damage starts (4 blocks). High-route and underground-routing detectors
       // provide additional safety against cliff-edge routing.
-      bot.pathfinder.movements.maxDropDown = 2;
+      bot.pathfinder.movements.maxDropDown = 3;
       bot.pathfinder.movements.allowFreeMotion = false; // Prevent cliff falls from skipped path nodes
       bot.pathfinder.movements.allow1by1towers = true; // Allow pillar up to reach higher terrain
       // Re-apply liquidCost every call — bot-core.ts sets it at init, but pathfinder
@@ -1261,11 +1264,24 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   // FALLBACK: If pathfinder found no path (e.g. cliff-edge surrounded by stone blocks),
   // retry with canDig=true so pathfinder can dig through obstacles as last resort.
   // Bot1 Session 57: surrounded by stone N/E/W + cliff S at Y=91, no_path with canDig=false.
+  //
+  // IMPORTANT: Only allow dig-fallback when bot is at surface level (Y > 60).
+  // When Y <= 60, bot is underground — canDig=true generates underground routes that lead
+  // back to the spawn cave system instead of the intended surface target.
+  // Bot1 Session 64: allowDig=true at Y=65 (spawn cliff) generated underground path to (4,65,-3)
+  // instead of the intended target (200,70,200). The underground route IS a "path" but leads
+  // in the wrong direction (toward spawn's cave system, not the surface target).
+  const botY = bot.entity.position.y;
+  const allowDigFallback = botY > 60;
   if (!result.success && result.stuckReason === "no_path") {
-    console.error(`[Move] no_path — retrying with allowDig=true as fallback`);
-    result = await moveToBasic(managed, x, y, z, { allowDig: true });
-    if (result.success) {
-      console.error(`[Move] Recovered via allowDig fallback`);
+    if (allowDigFallback) {
+      console.error(`[Move] no_path at Y=${botY.toFixed(1)} (surface) — retrying with allowDig=true as fallback`);
+      result = await moveToBasic(managed, x, y, z, { allowDig: true });
+      if (result.success) {
+        console.error(`[Move] Recovered via allowDig fallback`);
+      }
+    } else {
+      console.error(`[Move] no_path at Y=${botY.toFixed(1)} (underground) — skipping allowDig fallback to avoid underground rerouting to spawn`);
     }
   }
 
@@ -1304,8 +1320,8 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
       // Bot moved — retry pathfinding from new position
       console.error(`[Move] Re-trying pathfinder after manual escape...`);
       result = await moveToBasic(managed, x, y, z);
-      if (!result.success) {
-        // One more attempt with allowDig in case new position is also blocked
+      if (!result.success && allowDigFallback) {
+        // One more attempt with allowDig — only at surface level (Y>60) to avoid underground rerouting
         result = await moveToBasic(managed, x, y, z, { allowDig: true });
       }
       if (result.success) {
