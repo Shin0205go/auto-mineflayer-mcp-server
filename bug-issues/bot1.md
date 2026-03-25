@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 72f - Death by Skeleton at HP:1.3, moveTo safety block created inescapable trap
+- **Cause**: moveTo blocked at HP:1.3 ("HP too low even for food search"). Bot could not move to escape. Skeleton arrow killed bot.
+- **Coordinates**: (4, 110, -1) birch_forest
+- **Last Actions**: moveTo blocked with "SAFETY: Cannot move 255.8 blocks with critical HP" → Short moveTo returned "Navigation stopped: pathfinder climbed too high" → "Claude1 was shot by Skeleton"
+- **Error Message**: "Claude1 was shot by Skeleton"
+- **Root Cause Analysis**: The moveTo safety block at low HP creates a death trap — bot cannot move to flee OR find food. Need a flee-always exception that ignores HP checks, or automatic flee to water/safe zone when HP drops below 2.
+- **Related**: Same session 72e bug - HP:1.3 trap compound failure
+- **Status**: Reported - 4th death in Session 72
+
 ## [2026-03-26] Bug: Session 72e - HP:1.3 trap, no food, moveTo blocked below HP threshold
 - **Cause**: HP dropped to 1.3 from unknown source. moveTo completely blocked (returns immediately without moving). No food in inventory. Natural regen not working (hunger:13 < 18 threshold). Bot completely stuck.
 - **Coordinates**: (60, 80, -2) birch_forest
