@@ -873,18 +873,24 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
       // Bot1 Sessions 31-34,40b,44: 6+ deaths from pathfinder choosing water-level routes.
       (bot.pathfinder.movements as any).liquidCost = 10000;
 
-      // SAFETY: Add water blocks to blocksToAvoid — liquidCost alone is not sufficient.
-      // liquidCost=10000 penalizes water paths in cost calculations, but when the pathfinder
+      // SAFETY: Add water and lava blocks to blocksToAvoid — liquidCost alone is not sufficient.
+      // liquidCost=10000 penalizes fluid paths in cost calculations, but when the pathfinder
       // cannot find ANY land route (e.g., river between bot and target), it still uses the
-      // water route as a fallback. blocksToAvoid makes the pathfinder treat water as impassable,
-      // forcing it to fail (and return to the caller) instead of routing through water.
+      // fluid route as a fallback. blocksToAvoid makes the pathfinder treat fluids as impassable,
+      // forcing it to fail (and return to the caller) instead of routing through them.
       // Bot1 [2026-03-23]: moveTo(0,72,80) routed through water at Y=114 despite liquidCost.
-      // The real-time water detector in the 500ms check loop catches it eventually, but
-      // blocksToAvoid prevents the pathfinder from even PLANNING a water route.
+      // Bot1 Session 65 [2026-03-25]: flee() routed through lava underground (Y=37) — lava was
+      // not in blocksToAvoid so pathfinder treated it as high-cost but passable.
+      // The real-time water/lava detector in the 500ms check loop catches fluid contact eventually,
+      // but blocksToAvoid prevents the pathfinder from even PLANNING a fluid route.
       const waterBlock = bot.registry.blocksByName["water"];
       const flowingWaterBlock = bot.registry.blocksByName["flowing_water"];
       if (waterBlock) bot.pathfinder.movements.blocksToAvoid.add(waterBlock.id);
       if (flowingWaterBlock) bot.pathfinder.movements.blocksToAvoid.add(flowingWaterBlock.id);
+      const lavaBlock = bot.registry.blocksByName["lava"];
+      const flowingLavaBlock = bot.registry.blocksByName["flowing_lava"];
+      if (lavaBlock) bot.pathfinder.movements.blocksToAvoid.add(lavaBlock.id);
+      if (flowingLavaBlock) bot.pathfinder.movements.blocksToAvoid.add(flowingLavaBlock.id);
 
       // SAFETY: Disable canDig by default to prevent cave routing.
       // Bot1 Sessions 42-44, Bot3 #17,#19: pathfinder with canDig=true digs through terrain,
@@ -2602,6 +2608,19 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       // Flee uses setGoal() directly (bypasses moveToBasic safety checks), so canDig
       // cave prevention from moveToBasic doesn't apply. Must disable explicitly here.
       bot.pathfinder.movements.canDig = false;
+      // SAFETY: Add water and lava to blocksToAvoid for flee pathfinding.
+      // liquidCost=100000 penalizes fluids but pathfinder may still route through them
+      // when no pure-land route exists (underground caves, enclosed spaces).
+      // Bot1 Session 65 [2026-03-25]: flee() at Y=37 underground routed through lava —
+      // "Claude1 tried to swim in lava". blocksToAvoid makes fluids truly impassable.
+      const fleeWater = bot.registry.blocksByName["water"];
+      const fleeFlowingWater = bot.registry.blocksByName["flowing_water"];
+      const fleeLava = bot.registry.blocksByName["lava"];
+      const fleeFlowingLava = bot.registry.blocksByName["flowing_lava"];
+      if (fleeWater) bot.pathfinder.movements.blocksToAvoid.add(fleeWater.id);
+      if (fleeFlowingWater) bot.pathfinder.movements.blocksToAvoid.add(fleeFlowingWater.id);
+      if (fleeLava) bot.pathfinder.movements.blocksToAvoid.add(fleeLava.id);
+      if (fleeFlowingLava) bot.pathfinder.movements.blocksToAvoid.add(fleeFlowingLava.id);
     }
 
     // Use a mutable reference so flee retries can replace the handle.

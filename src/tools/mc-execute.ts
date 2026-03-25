@@ -157,6 +157,31 @@ export async function mc_execute(
       if (block.hardness < 0) {
         return `Cannot dig ${block.name} at (${x}, ${y}, ${z}) — unbreakable (hardness=${block.hardness})`;
       }
+      // SAFETY: Check if the target block itself is water or lava — digging these is a no-op
+      // and causes fluid to flow into the bot's position.
+      // Bot1 Session 65 [2026-03-25]: bot.dig(px, py+10, pz) hit a water block.
+      // mineflayer returned "Digging aborted" (cannot dig fluids), then water flowed
+      // into the bot's position causing drowning. Guard against this explicitly.
+      const isFluid = (name: string | undefined) =>
+        name === "water" || name === "flowing_water" || name === "lava" || name === "flowing_lava";
+      if (isFluid(block.name)) {
+        return `[WARNING] Cannot dig ${block.name} at (${x}, ${y}, ${z}) — fluid block. Digging fluids causes flow. Abort dig sequence or use a bucket to remove the fluid first.`;
+      }
+      // SAFETY: Check 6 faces adjacent to the target block for water/lava.
+      // When you dig a block adjacent to fluid, the fluid immediately flows into the
+      // newly empty space — potentially drowning or burning the bot.
+      // Bot1 Session 65 [2026-03-25]: water at Y+10 flowed down after block above was dug.
+      const adjacentOffsets: [number, number, number][] = [[0,1,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]];
+      const adjacentFluids: string[] = [];
+      for (const [dx, dy, dz] of adjacentOffsets) {
+        const adj = rawBot.blockAt(new Vec3(x + dx, y + dy, z + dz));
+        if (adj && isFluid(adj.name)) {
+          adjacentFluids.push(`${adj.name} at (${x+dx},${y+dy},${z+dz})`);
+        }
+      }
+      if (adjacentFluids.length > 0) {
+        return `[WARNING] Digging ${block.name} at (${x}, ${y}, ${z}) is unsafe — adjacent fluid will flow in: ${adjacentFluids.join(", ")}. Place blocks to seal the fluid first, or choose a different block to dig.`;
+      }
       // Auto-equip best pickaxe to maximize dig speed
       const pickaxePriority = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe", "wooden_pickaxe"];
       for (const toolName of pickaxePriority) {
