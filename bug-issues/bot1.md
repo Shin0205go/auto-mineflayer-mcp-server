@@ -1,3 +1,23 @@
+## [2026-03-26] Bug: Session 65 - gather() navigates but collects 0 iron_ore after 120s (CRITICAL)
+
+- **Cause**: bot.gather("iron_ore", 8) runs for 120s, bot moves ~20 blocks around cave at Y=59-61, but returns 0 raw_iron. The bot IS navigating (position changes) but no items collected.
+- **Coordinates**: Start (-3.5, 61, 3), End (-23.7, 59, 5.5)
+- **Last Actions**: gather("iron_ore", 8) timeout 300000ms → ran for 120s → 0 raw_iron
+- **Possible Cause**: (1) Stone pickaxe not being equipped, (2) Navigation finds block but mining fails silently, (3) Item pickup fails after mining
+- **Status**: Reported. Session 65.
+
+---
+
+## [2026-03-26] Bug: bot.eat() returns success but no food items consumed (Session 65)
+
+- **Cause**: bot.eat() called with hunger=11, HP=6. Returns "Ate food" but food count stays at 0. No food items in inventory.
+- **Coordinates**: (-39.5, 63, 3)
+- **Last Actions**: eat() → "Ate food" logged but HP stays at 6, hunger stays at 10
+- **Impact**: HP cannot recover without food. HP=6 stuck state.
+- **Status**: Reported. Session 65.
+
+---
+
 ## [2026-03-26] Bug: mc_execute disconnects after every single call (Session current - CRITICAL BLOCKING)
 
 - **Cause**: mc_execute succeeds exactly once after mc_connect or mc_reload, then ALL subsequent mc_execute calls immediately fail with "Not connected to any server". Pattern: mc_reload → mc_execute (success) → mc_execute (FAIL). mc_connect → mc_execute (FAIL). This makes any multi-step gameplay impossible.
