@@ -9,7 +9,7 @@
  */
 
 import { botManager } from "../bot-manager/index.js";
-import { checkDangerNearby, isHostileMob, isNeutralMob, EDIBLE_FOOD_NAMES } from "../bot-manager/minecraft-utils.js";
+import { checkDangerNearby, isHostileMob, isNeutralMob, EDIBLE_FOOD_NAMES, isWaterBlock } from "../bot-manager/minecraft-utils.js";
 import { setAgentType } from "../agent-state.js";
 import { registry } from "../tool-handler-registry.js";
 import { lastSleepTick } from "../bot-manager/bot-survival.js";
@@ -1448,6 +1448,36 @@ export async function mc_farm(): Promise<string> {
       try { logs.push(`[FLEE] ${await mc_flee(15)}`); } catch (e) { logs.push(`[FLEE FAILED] ${e}`); }
     }
 
+    // Mid-farm IN-WATER check: if bot entered water (e.g. pathfinder routed through water
+    // toward a farm block adjacent to a river), immediately swim up and abort this iteration.
+    // Bot1 Session 72b [2026-03-26]: farm() loop navigated into water body at night,
+    // HP dropped to 4.7 from drowning with no escape triggered.
+    {
+      const fPos = bot.entity.position.floor();
+      const fBlock = bot.blockAt(fPos);
+      const hBlock = bot.blockAt(bot.entity.position.offset(0, 1, 0).floor());
+      const midInWater = isWaterBlock(fBlock?.name) || isWaterBlock(hBlock?.name);
+      if (midInWater) {
+        bot.setControlState("sneak", false);
+        bot.setControlState("jump", true);
+        logs.push(`[WARNING] Bot in water during farming! Attempting swim-up emergency escape.`);
+        let surfaced = false;
+        for (let wi = 0; wi < 16; wi++) {
+          await new Promise(r => setTimeout(r, 500));
+          const wFeet = bot.blockAt(bot.entity.position.floor());
+          const wHead = bot.blockAt(bot.entity.position.offset(0, 1, 0).floor());
+          if (!isWaterBlock(wFeet?.name) && !isWaterBlock(wHead?.name)) { surfaced = true; break; }
+        }
+        bot.setControlState("jump", false);
+        const finalBotW = botManager.getBot(username);
+        if (!surfaced) {
+          return logs.join("\n") + `\nmc_farm ABORTED: bot entered water and could not surface. HP: ${finalBotW?.health ?? '?'}, Hunger: ${finalBotW?.food ?? '?'}. Escape water manually (bot.navigate or bot.pillarUp).` + farmWarning;
+        }
+        logs.push(`Surfaced from water at (${bot.entity.position.x.toFixed(1)}, ${bot.entity.position.y.toFixed(1)}, ${bot.entity.position.z.toFixed(1)}). Skipping farm block at (${fc.x},${fc.y},${fc.z}).`);
+        continue; // skip this farm coord — don't navigate back into water
+      }
+    }
+
     // Enable sneaking BEFORE moving near the block — prevents farmland trampling
     // if the pathfinder routes over tilled soil during approach or planting.
     // Bot3 Bug #20, Bot2 Bug: farmland reverts to dirt because bot walks on it
@@ -1455,13 +1485,50 @@ export async function mc_farm(): Promise<string> {
     bot.setControlState("sneak", true);
     await new Promise(r => setTimeout(r, 100));
 
-    // Move close to the block before tilling (must be within 4 blocks)
+    // Move close to the block before tilling (must be within 4 blocks).
+    // Filter approach positions to avoid water blocks — bot falls off a riverbank
+    // adjacent to a farm block and enters the water below.
+    // Bot1 Session 72b [2026-03-26]: moveTo(fc.x+1, fc.y+1, fc.z) for blocks right next
+    // to a river sent the bot into the river, causing drowning.
     try {
       const botPos = bot.entity.position;
       const dist = botPos.distanceTo(new (bot.entity.position.constructor as any)(fc.x + 0.5, fc.y + 1, fc.z + 0.5));
       if (dist > 3.5) {
-        await botManager.moveTo(username, fc.x + 1, fc.y + 1, fc.z);
-        logs.push(`Moved to (${fc.x + 1},${fc.y + 1},${fc.z}) for tilling`);
+        // Find a safe (non-water) approach position among the 4 cardinal directions
+        const approachCandidates = [
+          { x: fc.x + 1, y: fc.y + 1, z: fc.z },
+          { x: fc.x - 1, y: fc.y + 1, z: fc.z },
+          { x: fc.x, y: fc.y + 1, z: fc.z + 1 },
+          { x: fc.x, y: fc.y + 1, z: fc.z - 1 },
+        ];
+        let safeApproach = approachCandidates[0]; // default fallback
+        for (const ap of approachCandidates) {
+          const apBlock = bot.blockAt(new (bot.entity.position.constructor as any)(ap.x, ap.y, ap.z));
+          const apBelow = bot.blockAt(new (bot.entity.position.constructor as any)(ap.x, ap.y - 1, ap.z));
+          // Prefer a position with solid ground below and no water at foot-level
+          if (!isWaterBlock(apBlock?.name) && apBelow && apBelow.name !== "air" && !isWaterBlock(apBelow.name)) {
+            safeApproach = ap;
+            break;
+          }
+        }
+        await botManager.moveTo(username, safeApproach.x, safeApproach.y, safeApproach.z);
+        logs.push(`Moved to (${safeApproach.x},${safeApproach.y},${safeApproach.z}) for tilling`);
+        // Post-move in-water check: if the safe approach still ended up in water, skip this coord
+        const pFeet = bot.blockAt(bot.entity.position.floor());
+        const pHead = bot.blockAt(bot.entity.position.offset(0, 1, 0).floor());
+        if (isWaterBlock(pFeet?.name) || isWaterBlock(pHead?.name)) {
+          bot.setControlState("sneak", false);
+          bot.setControlState("jump", true);
+          logs.push(`[WARNING] Entered water moving to farm block (${fc.x},${fc.y},${fc.z}). Swimming up and skipping.`);
+          for (let wi2 = 0; wi2 < 12; wi2++) {
+            await new Promise(r => setTimeout(r, 500));
+            const wf2 = bot.blockAt(bot.entity.position.floor());
+            const wh2 = bot.blockAt(bot.entity.position.offset(0, 1, 0).floor());
+            if (!isWaterBlock(wf2?.name) && !isWaterBlock(wh2?.name)) break;
+          }
+          bot.setControlState("jump", false);
+          continue;
+        }
       }
     } catch (e) {
       logs.push(`Move to farm block failed: ${e}`);
@@ -1478,13 +1545,37 @@ export async function mc_farm(): Promise<string> {
       { x: fc.x, y: fc.y + 1, z: fc.z - 1 },      // north
     ];
     let farmlandConfirmed = false;
+    let tillInWaterAbort = false;
     for (let tillAttempt = 0; tillAttempt < tillPositions.length && !farmlandConfirmed; tillAttempt++) {
       const tp = tillPositions[tillAttempt];
+      // Skip approach positions that are water blocks — bot1 Session 72b drowning fix.
+      const tpBlock = bot.blockAt(new (bot.entity.position.constructor as any)(tp.x, tp.y, tp.z));
+      if (isWaterBlock(tpBlock?.name)) {
+        logs.push(`Skipping water approach (${tp.x},${tp.y},${tp.z}) for till retry`);
+        continue;
+      }
       // Move to this approach position
       if (tillAttempt > 0) {
         try {
           await botManager.moveTo(username, tp.x, tp.y, tp.z);
           logs.push(`Retry till from (${tp.x},${tp.y},${tp.z})`);
+          // In-water check after retry moveTo
+          const rtFeet = bot.blockAt(bot.entity.position.floor());
+          const rtHead = bot.blockAt(bot.entity.position.offset(0, 1, 0).floor());
+          if (isWaterBlock(rtFeet?.name) || isWaterBlock(rtHead?.name)) {
+            bot.setControlState("sneak", false);
+            bot.setControlState("jump", true);
+            logs.push(`[WARNING] Entered water during till retry moveTo. Swimming up and skipping farm coord.`);
+            for (let wi3 = 0; wi3 < 12; wi3++) {
+              await new Promise(r => setTimeout(r, 500));
+              const rf3 = bot.blockAt(bot.entity.position.floor());
+              const rh3 = bot.blockAt(bot.entity.position.offset(0, 1, 0).floor());
+              if (!isWaterBlock(rf3?.name) && !isWaterBlock(rh3?.name)) break;
+            }
+            bot.setControlState("jump", false);
+            tillInWaterAbort = true;
+            break;
+          }
         } catch (_) { continue; }
       }
       // Till the block
@@ -1505,6 +1596,8 @@ export async function mc_farm(): Promise<string> {
         }
       }
     }
+    // If water abort was triggered in the retry loop, skip this farm coord entirely
+    if (tillInWaterAbort) { continue; }
     if (!farmlandConfirmed) {
       logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): NOT farmland after ${tillPositions.length} positions — skipping`);
       bot.setControlState("sneak", false);
@@ -1521,12 +1614,28 @@ export async function mc_farm(): Promise<string> {
     logs.push(`Farmland check (${fc.x},${fc.y},${fc.z}): farmland confirmed`);
 
     // Navigate NEXT TO the farmland (not on top — walking on farmland tramples it!)
-    try {
-      await botManager.moveTo(username, fc.x + 1, fc.y + 1, fc.z);
-    } catch (_) {
-      try {
-        await botManager.moveTo(username, fc.x - 1, fc.y + 1, fc.z);
-      } catch (_) {}
+    // Use water-safe approach: try non-water positions first.
+    {
+      const plantApproaches = [
+        { x: fc.x + 1, y: fc.y + 1, z: fc.z },
+        { x: fc.x - 1, y: fc.y + 1, z: fc.z },
+        { x: fc.x, y: fc.y + 1, z: fc.z + 1 },
+        { x: fc.x, y: fc.y + 1, z: fc.z - 1 },
+      ];
+      let plantMoved = false;
+      for (const pa of plantApproaches) {
+        const paBlock = bot.blockAt(new (bot.entity.position.constructor as any)(pa.x, pa.y, pa.z));
+        if (isWaterBlock(paBlock?.name)) continue; // skip water approach positions
+        try {
+          await botManager.moveTo(username, pa.x, pa.y, pa.z);
+          plantMoved = true;
+          break;
+        } catch (_) {}
+      }
+      if (!plantMoved) {
+        logs.push(`Could not move next to farmland at (${fc.x},${fc.y},${fc.z}) — all approach positions blocked/water. Skipping.`);
+        continue;
+      }
     }
 
     // Disable sneaking
