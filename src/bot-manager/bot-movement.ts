@@ -820,11 +820,14 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
         }
         const totalFall = fallStartY - cy;
 
-        // Stop immediately if cumulative fall exceeds 3 blocks (fall damage starts at 4 blocks).
-        // With maxDropDown=2, planned drops can be up to 2 blocks. Threshold=3 avoids
-        // false positives on planned 2-block drops while catching unsafe 3+ block falls
-        // before fall damage (4 blocks) is reached.
-        if (totalFall > 3) {
+        // Stop immediately if cumulative fall exceeds 4 blocks (fall damage starts at >4 blocks).
+        // maxDropDown=4 allows 4-block planned drops; threshold=4 avoids false positives
+        // on planned 4-block drops (no fall damage) while catching unsafe 5+ block falls.
+        // Previous threshold=3 with maxDropDown=3 was contradictory: pathfinder planned
+        // 3-block drops but physicsTick aborted them mid-execution (totalFall hit 3 during
+        // the drop), causing no_path on mountainous terrain where every direction has
+        // 3-4 block drops (e.g. birch_forest spawn at Y=82-94).
+        if (totalFall > 4) {
           console.error(`[MoveTo] PHYSICS FALL: ${totalFall.toFixed(1)} blocks cumulative (started at Y=${fallStartY.toFixed(1)}, now Y=${cy.toFixed(1)}). Emergency stop!`);
           bot.pathfinder.stop();
           bot.clearControlStates();
@@ -851,17 +854,17 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
     // by mineflayer-pathfinder internals or dimension-change handlers between calls.
     // Setting them here guarantees they are always active for this navigation call.
     if (bot.pathfinder.movements) {
-      // maxDropDown=3: Allow 3-block drops for natural terrain navigation.
-      // maxDropDown=2 was too restrictive in mountainous spawn biomes — pathfinder couldn't
-      // find any surface route beyond ~10 blocks when terrain has 3-block elevation drops
-      // (hills, cliff edges), causing moveTo to return "no_path" and fall back to allowDig
-      // which generated underground routes leading back to spawn.
-      // Bot1 Session 64: moveTo(200,70,200) arrived at (4,65,-3) with maxDropDown=2.
-      // maxDropDown=3 lets pathfinder traverse steeper terrain without digging.
-      // The physics fall detector (>3 blocks cumulative) catches unsafe falls before
-      // fall damage starts (4 blocks). High-route and underground-routing detectors
-      // provide additional safety against cliff-edge routing.
-      bot.pathfinder.movements.maxDropDown = 3;
+      // maxDropDown=4: Allow 4-block drops for natural terrain navigation.
+      // maxDropDown=3 caused a critical contradiction with the physicsTick fall detector
+      // (totalFall > 3): pathfinder planned 3-block drops but the detector aborted them
+      // mid-execution, resulting in no_path on mountainous terrain (Y=82-94, birch_forest)
+      // where every direction has 3-4 block drops. The bot was stuck even though the
+      // terrain was navigable with slightly larger drops.
+      // maxDropDown=4: Minecraft fall damage starts at >4 blocks (4-block drop = 0 damage).
+      // physicsTick threshold raised to >4 to match — planned 4-block drops complete safely.
+      // This allows pathfinder to descend mountain cliffs common in birch_forest/mountains
+      // spawn biomes without triggering false-positive fall aborts.
+      bot.pathfinder.movements.maxDropDown = 4;
       bot.pathfinder.movements.allowFreeMotion = false; // Prevent cliff falls from skipped path nodes
       bot.pathfinder.movements.allow1by1towers = true; // Allow pillar up to reach higher terrain
       // Re-apply liquidCost every call — bot-core.ts sets it at init, but pathfinder
