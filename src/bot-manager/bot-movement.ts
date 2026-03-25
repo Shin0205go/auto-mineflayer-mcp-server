@@ -1449,57 +1449,163 @@ export async function emergencyDigUp(managed: ManagedBot, maxBlocks: number = 30
   console.error(`[EmergencyDigUp] Starting from (${startX}, ${startY}, ${startZ}), max ${maxBlocks} blocks`);
 
   // Equip pickaxe if available
-  const pickaxe = bot.inventory.items().find(i => i.name.includes("pickaxe"));
-  if (pickaxe) {
-    await bot.equip(pickaxe, "hand");
+  const pickaxePriority = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe", "wooden_pickaxe"];
+  let equippedPickaxe = "";
+  for (const toolName of pickaxePriority) {
+    const tool = bot.inventory.items().find(i => i.name === toolName);
+    if (tool) { await bot.equip(tool, "hand"); equippedPickaxe = toolName; break; }
   }
+  if (!equippedPickaxe) {
+    const anyPickaxe = bot.inventory.items().find(i => i.name.includes("pickaxe"));
+    if (anyPickaxe) { await bot.equip(anyPickaxe, "hand"); equippedPickaxe = anyPickaxe.name; }
+  }
+
+  const isScaffoldItem = (name: string) => {
+    const cleanName = name.replace("minecraft:", "");
+    const excludePatterns = ["_ore", "spawner", "bedrock", "obsidian", "portal",
+      "diamond_block", "emerald_block", "gold_block", "iron_block", "netherite_block",
+      "ancient_debris", "crying_obsidian", "reinforced_deepslate"];
+    if (excludePatterns.some(p => cleanName.includes(p))) return false;
+    const blockInfo = bot.registry.blocksByName[cleanName];
+    return !!(blockInfo && blockInfo.boundingBox === "block");
+  };
+
+  const digBlock = async (pos: Vec3): Promise<boolean> => {
+    const block = bot.blockAt(pos);
+    if (!block || block.name === "air" || block.name === "cave_air" || block.name === "void_air") return true;
+    if (block.hardness < 0) return false;
+    if (equippedPickaxe) {
+      const pick = bot.inventory.items().find(i => i.name === equippedPickaxe);
+      if (pick) await bot.equip(pick, "hand");
+    }
+    try {
+      await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+      await bot.dig(block, false);
+      return true;
+    } catch { return false; }
+  };
 
   let blocksDug = 0;
-  let currentY = startY;
+  let blocksClimbed = 0;
 
+  // Bot1 Session 64 [2026-03-25]: emergencyDigUp only dug blocks but never moved the bot
+  // upward — it broke Y+1, Y+2... but the bot stayed at startY because there was no
+  // jump/climb mechanism. In enclosed caves, the bot needs to both dig AND ascend.
+  // Strategy: dig Y+1 and Y+2 for head clearance, then jump-place scaffold to gain +1Y.
+  // If no scaffold, dig only (creates a shaft but bot cannot ascend without scaffold).
   for (let i = 0; i < maxBlocks; i++) {
-    currentY++;
-    const checkPos = new Vec3(startX, currentY, startZ);
-    const block = bot.blockAt(checkPos);
+    const curX = Math.floor(bot.entity.position.x);
+    const curY = Math.floor(bot.entity.position.y);
+    const curZ = Math.floor(bot.entity.position.z);
 
-    if (!block || block.name === "air" || block.name === "cave_air" || block.name === "void_air") {
-      // Found air - check if we're truly at the surface (can see sky)
-      const lightLevel = (block as any).light ?? 0;
-      if (lightLevel >= 13 || currentY >= startY + 5) {
-        console.error(`[EmergencyDigUp] Reached surface at Y=${currentY}, dug ${blocksDug} blocks`);
-        return `Emergency escape successful! Dug ${blocksDug} blocks up to Y=${currentY}. Now at surface.`;
+    // Check if we've reached a surface-like area (open sky above)
+    let openAbove = true;
+    for (let checkDy = 1; checkDy <= 4; checkDy++) {
+      const b = bot.blockAt(new Vec3(curX, curY + checkDy, curZ));
+      if (b && b.name !== "air" && b.name !== "cave_air" && b.name !== "void_air") {
+        openAbove = false;
+        break;
       }
-      // Keep going - might just be a cave pocket
-      continue;
+    }
+    if (openAbove && curY >= startY + 5) {
+      console.error(`[EmergencyDigUp] Reached open area at Y=${curY}, climbed ${blocksClimbed} blocks`);
+      return `Emergency escape: dug ${blocksDug} blocks, climbed ${blocksClimbed} blocks. Now at Y=${curY}.`;
     }
 
-    // Unbreakable block
-    if (block.hardness < 0) {
-      return `Hit bedrock or unbreakable block (${block.name}) at Y=${currentY} after digging ${blocksDug} blocks. Cannot escape this way.`;
+    // Dig Y+1 and Y+2 for head clearance before jump
+    const digPos1 = new Vec3(curX, curY + 1, curZ);
+    const digPos2 = new Vec3(curX, curY + 2, curZ);
+    const cleared1 = await digBlock(digPos1);
+    if (!cleared1) {
+      return `Hit unbreakable block at Y=${curY + 1} after digging ${blocksDug} blocks. Cannot escape upward.`;
+    }
+    const block1Before = bot.blockAt(digPos1);
+    if (block1Before && block1Before.name !== "air" && block1Before.name !== "cave_air") blocksDug++;
+    const cleared2 = await digBlock(digPos2);
+    if (!cleared2) {
+      return `Hit unbreakable block at Y=${curY + 2} after digging ${blocksDug} blocks.`;
+    }
+    const block2Before = bot.blockAt(digPos2);
+    if (block2Before && block2Before.name !== "air" && block2Before.name !== "cave_air") blocksDug++;
+
+    await delay(100);
+
+    // Attempt to jump and place scaffold to gain +1 Y
+    const scaffold = bot.inventory.items().find(i => isScaffoldItem(i.name));
+    if (scaffold) {
+      try {
+        await bot.equip(scaffold, "hand");
+        // Look down at the block we're standing on
+        const standingBlock = bot.blockAt(new Vec3(curX, curY - 1, curZ))
+          || bot.blockAt(new Vec3(curX, curY, curZ));
+        if (standingBlock && standingBlock.name !== "air" && standingBlock.name !== "cave_air") {
+          const jumpBaseY = bot.entity.position.y;
+          bot.setControlState("jump", true);
+          // Wait for jump apex
+          let jumpedEnough = false;
+          await new Promise<void>((resolve) => {
+            let elapsed = 0;
+            const iv = setInterval(() => {
+              elapsed += 10;
+              if (bot.entity.position.y - jumpBaseY >= 0.4) { jumpedEnough = true; clearInterval(iv); resolve(); }
+              else if (elapsed >= 600) { clearInterval(iv); resolve(); }
+            }, 10);
+          });
+          bot.setControlState("jump", false);
+          if (jumpedEnough) {
+            try {
+              await bot.placeBlock(standingBlock, new Vec3(0, 1, 0));
+              await delay(400);
+              const newY = Math.floor(bot.entity.position.y);
+              if (newY > curY) {
+                blocksClimbed += newY - curY;
+                console.error(`[EmergencyDigUp] Climbed: Y ${curY} → ${newY}`);
+              } else {
+                console.error(`[EmergencyDigUp] Jump-place succeeded but Y didn't change (${curY})`);
+              }
+            } catch (placeErr) {
+              console.error(`[EmergencyDigUp] Place failed: ${placeErr}`);
+              await delay(300);
+            }
+          } else {
+            // Jump failed — head still blocked? Try dig again and wait
+            console.error(`[EmergencyDigUp] Jump too low at Y=${curY}, re-digging Y+1`);
+            await digBlock(new Vec3(curX, curY + 1, curZ));
+            await delay(300);
+          }
+        }
+      } catch (err) {
+        console.error(`[EmergencyDigUp] Jump-place error: ${err}`);
+      }
+    } else {
+      // No scaffold: dig only mode. Clear Y+1..Y+maxBlocks in one pass and report.
+      // The bot cannot ascend without scaffold, but at least opens a shaft.
+      console.error(`[EmergencyDigUp] No scaffold — dig-only mode, opening shaft upward`);
+      for (let dy = 1; dy <= maxBlocks - i; dy++) {
+        const block = bot.blockAt(new Vec3(curX, curY + dy, curZ));
+        if (!block || block.name === "air" || block.name === "cave_air") continue;
+        if (block.hardness < 0) break;
+        try {
+          await bot.lookAt(new Vec3(curX + 0.5, curY + dy + 0.5, curZ + 0.5));
+          if (equippedPickaxe) {
+            const pick = bot.inventory.items().find(i => i.name === equippedPickaxe);
+            if (pick) await bot.equip(pick, "hand");
+          }
+          await bot.dig(block, false);
+          blocksDug++;
+        } catch { /* ignore */ }
+      }
+      return `No scaffold blocks — dug ${blocksDug} shaft blocks upward from Y=${startY}. Use bot.pillarUp() after gathering scaffold blocks (cobblestone/dirt) to climb out.`;
     }
 
-    // Dig the block
-    try {
-      await bot.lookAt(new Vec3(startX + 0.5, currentY + 0.5, startZ + 0.5));
-      await bot.dig(block, false);  // Don't force dig
-      blocksDug++;
-      await delay(150); // Brief pause
-
-      // Check if bot fell - if so, wait for them to land
-      const botY = Math.floor(bot.entity.position.y);
-      if (botY < currentY - 2) {
-        console.error(`[EmergencyDigUp] Bot fell, waiting to land...`);
-        await delay(1000);
-        // Restart from new position
-        return emergencyDigUp(managed, maxBlocks - blocksDug);
-      }
-    } catch (err) {
-      console.error(`[EmergencyDigUp] Failed to dig ${block.name} at Y=${currentY}: ${err}`);
-      return `Failed to dig through ${block.name} at Y=${currentY} after digging ${blocksDug} blocks. Error: ${err}`;
+    // Check if bot fell - if so, wait and restart
+    if (Math.floor(bot.entity.position.y) < curY - 2) {
+      console.error(`[EmergencyDigUp] Bot fell, waiting to land...`);
+      await delay(1000);
     }
   }
 
-  return `Dug ${blocksDug} blocks upward but haven't reached surface yet (now at Y=${currentY}). May need to dig more or try a different location.`;
+  return `Emergency dig: dug ${blocksDug} blocks, climbed ${blocksClimbed} blocks. Now at Y=${Math.floor(bot.entity.position.y)}.`;
 }
 
 /**
