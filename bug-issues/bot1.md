@@ -1,3 +1,13 @@
+## [2026-03-25] Bug: Death at (132,83,90) - furnace placement near mobs - Session current
+
+- **Cause**: HP was 9 on reconnect. Placed furnace+crafting_table with zombie×2 and skeleton×1 nearby. HP dropped to 1 immediately. flee(50) didn't save. Respawned after 5s.
+- **Coordinates**: (132, 83, 90)
+- **Last Actions**: place("furnace") + place("crafting_table") → zombie×2 skeleton×1 nearby → HP=1 → flee → respawn HP=20 Hunger=20 at (4, 117, 10)
+- **Fix Needed**: equip armor and flee hostiles before placing blocks.
+- **Status**: Reported. keepInventory=true. stone_pickaxe×3, stone_sword×1 intact.
+
+---
+
 ## [2026-03-26] Bug: Session 74b - Death during night flee, HP 9→1 then respawn
 - **Cause**: HP was 9 at night with skeleton+zombie. bot.flee(50) ran ~8s but HP dropped to 1 during flight (mobs were hitting during flee). No food available to recover. Bot died and respawned.
 - **Coordinates**: ~(136, 83, 100) old_growth_birch_forest
