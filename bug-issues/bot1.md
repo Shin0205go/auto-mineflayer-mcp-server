@@ -1,3 +1,25 @@
+## [2026-03-25] Bug: bot.combat() NEVER drops food - All sessions - CRITICAL
+
+- **Cause**: bot.combat() against cow/pig/chicken/sheep/zombie returns 0 food drops in ALL sessions. bot.navigate({type:'entity',name:'cow'}) confirms it finds and reaches the animal (position changes), but after combat(), inventory has no new food items. This is not related to gamerule (doMobLoot is TRUE per earlier confirmation). The combat() API kills mobs but doesn't collect drops.
+- **Evidence**: Session 64 - tested cow/pig/sheep/chicken/zombie at multiple locations, all 0 drops after combat().
+- **Expected**: raw_beef, raw_porkchop, raw_chicken etc. should appear in inventory after combat.
+- **Actual**: Zero food items added to inventory after any animal combat.
+- **Impact**: Bot CANNOT get food naturally. Relies entirely on admin /feed.
+- **Status**: CRITICAL ONGOING. All sessions. Needs urgent fix to item pickup in combat API.
+
+---
+
+## [2026-03-25] Bug: moveTo/navigate silently fails for long distances - Session 64
+
+- **Cause**: bot.moveTo(x+200, y, z+200) only moves 1-3 blocks instead of 200. No error thrown. bot.navigate({type:'entity',name:'cow'}) "finds" target but doesn't move bot far (position changes by <10 blocks then returns success). bot.navigate({type:'block',name:'iron_ore'}) navigates bot to same position and gather() returns 0 items. Pathfinder silently fails for anything beyond ~10 blocks.
+- **Coordinates**: Multiple locations: (26,77,-6), (51,95,3), (88,70,90), (78,71,79)
+- **Evidence**: moveTo(278,70,277) from (78,71,77) → arrived at (78,71,79). moveTo(126,77,-6) from (26,77,-6) → arrived at (29,77,-7).
+- **Impact**: Bot cannot explore, cannot find food/resources, cannot make progress on any phase.
+- **Root Cause Theory**: Pathfinder path limit too short, or terrain blocks all paths, or there is a max-distance cap on pathfinding that is too small (~10 blocks?).
+- **Status**: CRITICAL. Pathfinder distance bug. Session 64.
+
+---
+
 ## [2026-03-25] Bug: Death by zombie - HP=1.5 no food recovery - Session 64
 
 - **Cause**: Bot at (-14.7, 72.6, -2.4), HP=1.5 (zombie attack). No food items in inventory. bot.combat() does not drop food from any animal (cow/chicken/pig/zombie - all 0 drops). bot.eat() cannot eat because no food. bot.flee() moved bot to y=101 with HP=20 (admin refill again). Then slain by zombie.
