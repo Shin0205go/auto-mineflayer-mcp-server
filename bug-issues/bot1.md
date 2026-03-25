@@ -1,3 +1,14 @@
+## [2026-03-25] Bug: Session 69 - Bot killed by Zombie during farm() timeout + combat() drops broken
+
+- **Cause**: Two compounding bugs caused death: (1) bot.farm() timed out after 120s without returning, leaving bot exposed to mobs. (2) bot.combat() for cow/sheep/pig/chicken all find the animals successfully but ZERO food drops appear in inventory after kills. All 4 animal types affected - navigate() finds them, combat() succeeds, but no raw_beef/raw_chicken/etc in inventory afterward. Bot died from Zombie at Y=60 while farm() was blocking.
+- **Coordinates**: (-35, 60, 37)
+- **Last Actions**: reconnect → forceEscape x3 → flee → navigate(cow/sheep/pig/chicken) x4 → combat x4 (no drops) → farm() → TIMEOUT (120s) → [Server] Claude1 was slain by Zombie
+- **Error Message**: "Claude1 was slain by Zombie" in chat
+- **State at death**: HP=6.3, Hunger=0, all food hunting failed due to combat drop bug
+- **Key Bug**: combat() never yields food items. Inventory unchanged after killing cow, sheep, pig, chicken. This is the same bug reported in Session 67 but still not fixed.
+- **Secondary Bug**: farm() hangs indefinitely (120s+ timeout). Does not complete or return.
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Session 68 - Bot permanently stuck at Y=72, moveTo/navigate/flee all return with zero displacement
 
 - **Cause**: After reload (commit ea6cf7d + b0eddfc applied), bot spawned at Y=74-75 on a pillar. flee(80) doesn't move the bot at all (X stays at ~12, Y stays at 72). moveTo() with targets at Y=64-68 (even 100+ blocks away) all return with Y=72. Placed 10-step staircase (X=13-22, Y=71-62) but walking the staircase steps also returns Y=72 every time. The bot is completely frozen in horizontal movement - X doesn't change either (12.6 throughout).
