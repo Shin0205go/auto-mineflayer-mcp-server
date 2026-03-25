@@ -14,7 +14,16 @@
   1. moveTo always returns bot to same location (26,84,-4) — pathfinder may be using this as a "safe" spot
   2. HP=1 with no food, cannot recover
   3. Bot has been stuck at this cliff area for Sessions 58-62
-- **Status**: Reported. Admin intervention likely needed (/tp, /feed, or bed placement at safe location).
+- **Status**: CRITICAL - ONGOING. Additional findings from Session 62 continued:
+  - pillarUp(3/6) → always times out (30s)
+  - flee(30) → returns to same position (26,84,-3)
+  - navigate({type:'entity',name:'cow',max_distance:200}) → no movement
+  - navigate('cow'/'pig'/'sheep'/'chicken') → no movement
+  - Morning phase (ticks=973) still has skeleton x3, creeper x7 nearby
+  - combat('cow') → returns immediately, no food dropped (food drop bug confirmed again)
+  - ALL movement APIs fail: moveTo, flee, navigate, pillarUp all return bot to (26,84,-3)
+  - Root cause: pathfinder is completely broken at this specific terrain location
+  - Admin /tp is REQUIRED to escape. Bot cannot self-rescue.
 
 ---
 
