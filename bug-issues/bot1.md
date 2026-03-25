@@ -10,6 +10,20 @@
 
 ---
 
+## [2026-03-25] Bug: Bot trapped at y=36-50 cave - all escape methods fail - Session 64 SEVERE
+
+- **Cause**: Bot fell to y=36 (from y=50 underground). tunnel("up") sent bot DOWN to y=36. tunnel("north/south/east/west") all kept bot at y=36. navigate() to all block types returns y=50 blocks (underground grass/dirt). pillarUp fails "no solid ground". gather(stone) returns 0. All movement stays within y=36-55 zone. HP=2.3 from hostiles/starvation.
+- **Coordinates**: (-3.7, 36, 13.1)
+- **Last Actions**: tunnel("up") → y=36 (went down!), all directions tunnel → y=36, all gather → y=40 (no change)
+- **Root Cause**: Bot is in an enclosed cave at y=36-55 that has no pathfindable exit. The cave has grass_block/dirt blocks at y=50 (cave ceiling/floor). All pathfinding leads to these underground blocks. pillarUp fails because either cave ceiling blocks movement, or no "solid ground" detected correctly underground.
+- **Fix Required**:
+  1. tunnel("up") should actually dig UPWARD (positive Y) not move bot down
+  2. pillarUp() needs to detect cave ceiling and dig through it
+  3. Alternatively: admin /tp is truly the only solution
+- **Status**: SEVERE. Session 64. Bot trapped underground for >30 minutes.
+
+---
+
 ## [2026-03-25] Bug: Drowned during wait() loop - Session 64 death #6
 
 - **Cause**: Bot at (-2,90,5) HP=20 waiting for dawn. Drowned during wait interval. The wait() auto-flee moved bot into water nearby. This is the 3rd drowning in this session.
