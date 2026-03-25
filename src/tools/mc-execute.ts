@@ -473,6 +473,13 @@ export async function mc_execute(
                 const eName = entity.name?.toLowerCase() ?? "";
                 if (!isHostileMob(waitBot, eName)) continue;
                 const dist = entity.position.distanceTo(waitBot.entity.position);
+                // Bot1 Session 67 [2026-03-25]: drowned at Y=68 with bot on pillar at Y=75
+                // triggered wait() abort via midWaitClosestDist<=8 (3D distance = 7 blocks).
+                // But the drowned is 7 blocks below on the ground — it cannot reach the bot
+                // on the pillar. This caused repeated wait() aborts with no actual danger.
+                // Skip mobs that are ≥4 blocks BELOW the bot (same exception as moveTo check B2).
+                const vertOffset = waitBot.entity.position.y - entity.position.y;
+                if (vertOffset >= 4) continue;
                 if (dist < midWaitClosestDist) {
                   midWaitClosestDist = dist;
                   midWaitClosestName = eName;

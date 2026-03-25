@@ -2416,18 +2416,29 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
         const descentGoal = new goals.GoalNear(targetX, startY, targetZ, 3);
         bot.pathfinder.setGoal(descentGoal);
         const descentStartPos = bot.entity.position.clone();
+        const descentStartTime = Date.now();
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {
             try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
             resolve();
-          }, 8000);
+          }, 10000);
           const check = setInterval(() => {
             try {
-              if (!bot.pathfinder.isMoving() && Date.now() > Date.now() - 7000) {
-                // pathfinder stopped
-              }
               const descentDist = bot.entity.position.distanceTo(descentStartPos);
-              if (descentDist >= 3 || !bot.pathfinder.isMoving()) {
+              const descentElapsed = Date.now() - descentStartTime;
+              // Success: moved enough horizontally/vertically
+              if (descentDist >= 3) {
+                clearInterval(check);
+                clearTimeout(timeout);
+                try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+                resolve();
+                return;
+              }
+              // Bot1 Session 67 [2026-03-25]: !isMoving() check at 300ms fired immediately
+              // because pathfinder needs ~500-1500ms to compute a path from pillar top.
+              // Exiting at 300ms with 0 movement meant the descent never ran at all.
+              // Match the same guard used in flee() (elapsed > 2000) before trusting isMoving().
+              if (descentElapsed > 2000 && !bot.pathfinder.isMoving()) {
                 clearInterval(check);
                 clearTimeout(timeout);
                 try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
@@ -2445,8 +2456,24 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
           console.error(`[Pillar] Post-pillar descent moved ${descentMoved.toFixed(1)} blocks to (${postDescentPos.x.toFixed(1)},${postDescentPos.y.toFixed(1)},${postDescentPos.z.toFixed(1)})`);
           result += `. Descended ${descentMoved.toFixed(0)} blocks from pillar to escape hostile area.`;
         } else {
-          console.error(`[Pillar] Post-pillar descent: pathfinder didn't move. Bot at Y=${postDescentPos.y.toFixed(0)}.`);
-          result += `. [WARNING] Still on pillar at Y=${Math.floor(postDescentPos.y)} with hostiles below. Call bot.flee() or bot.moveTo() to descend — from height, pathfinder should find a path down.`;
+          // Descent via direct pathfinder call failed (no path found or pathfinder refused).
+          // Bot1 Session 67 [2026-03-25]: even with the isMoving() race-condition fix, the
+          // pathfinder may find no valid path from pillar top when mob density is very high
+          // or terrain is complex. Fall back to flee() which has robust multi-retry logic,
+          // elevated-terrain maxDropDown handling, and direction rotation.
+          console.error(`[Pillar] Post-pillar descent: pathfinder didn't move. Bot at Y=${postDescentPos.y.toFixed(0)}. Attempting flee() as fallback.`);
+          try {
+            const fleeResult = await flee(managed, 20);
+            const afterFleePos = bot.entity.position;
+            const fleeeMoved = afterFleePos.distanceTo(descentStartPos);
+            if (fleeeMoved >= 3) {
+              result += `. Escaped pillar via flee (moved ${fleeeMoved.toFixed(0)} blocks from pillar top).`;
+            } else {
+              result += `. [WARNING] Still near pillar at Y=${Math.floor(afterFleePos.y)} after flee. ${fleeResult}`;
+            }
+          } catch (fleeErr) {
+            result += `. [WARNING] Still on pillar at Y=${Math.floor(postDescentPos.y)} with hostiles below. Both pathfinder descent and flee() failed. Try bot.moveTo() with a far-away coordinate.`;
+          }
         }
       } catch (descentErr) {
         console.error(`[Pillar] Post-pillar descent failed: ${descentErr}`);
