@@ -1,3 +1,13 @@
+## [2026-03-25] Bug: Session 70c - Death x2 by Zombie (dawn mob lingering at Y=103-109)
+
+- **Cause**: Bot respawned at high mountain Y=109 at dawn. Zombie killed bot twice while transitioning to day (dawn zombies don't burn until full sunlight). Bot had stone tools from Phase 3 and was checking for iron_ore when killed.
+- **Coordinates**: (3, 109, -3)
+- **Last Actions**: gather(iron_ore) call → instantly returned (no iron nearby) → [Server] Claude1 was slain by Zombie. Same pattern x2 in quick succession
+- **Error Message**: "Claude1 was slain by Zombie" x2
+- **Contributing Factors**: High mountain spawn point (Y=103-109) with hostile mobs lingering at dawn; no armor equipped; gather() returned immediately instead of searching for iron
+- **Post-death**: Respawned HP=20 Hunger=20 (keepInventory). Stone tools retained.
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Session 70b - Death by Zombie while navigating with HP=5.5 Hunger=0
 
 - **Cause**: Bot was navigating to find food animals (sheep at -133,75,188) with HP=5.5, Hunger=0 from starvation. Zombies spawned nearby during navigation in old_growth_birch_forest. Bot killed by zombie.
