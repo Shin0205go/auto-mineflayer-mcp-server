@@ -139,6 +139,34 @@ export async function mc_execute(
     },
 
     // Building
+    // bot.dig(x, y, z) — Dig (break) the block at the specified coordinates using
+    // mineflayer's native bot.dig(). Useful for clearing cave ceilings, digging escape
+    // paths, or removing individual blocks when pillarUp/tunnel are insufficient.
+    // Bot1 Session 64 [2026-03-25]: bot trapped at y=40 in enclosed cave; pillarUp
+    // failed because ceiling at y+1/y+2 prevented jump. bot.dig was not in the sandbox,
+    // making it impossible for the agent to clear the ceiling manually.
+    dig: async (x: number, y: number, z: number) => {
+      const username = botManager.requireSingleBot();
+      const rawBot = botManager.getBot(username);
+      if (!rawBot) throw new Error("Bot not connected");
+      const { Vec3 } = await import("vec3");
+      const block = rawBot.blockAt(new Vec3(x, y, z));
+      if (!block || block.name === "air" || block.name === "cave_air" || block.name === "void_air") {
+        return `No block to dig at (${x}, ${y}, ${z}) — it is ${block?.name ?? "air"}`;
+      }
+      if (block.hardness < 0) {
+        return `Cannot dig ${block.name} at (${x}, ${y}, ${z}) — unbreakable (hardness=${block.hardness})`;
+      }
+      // Auto-equip best pickaxe to maximize dig speed
+      const pickaxePriority = ["netherite_pickaxe", "diamond_pickaxe", "iron_pickaxe", "stone_pickaxe", "wooden_pickaxe"];
+      for (const toolName of pickaxePriority) {
+        const tool = rawBot.inventory.items().find((i: any) => i.name === toolName);
+        if (tool) { await rawBot.equip(tool, "hand"); break; }
+      }
+      await rawBot.lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5));
+      await rawBot.dig(block);
+      return `Dug ${block.name} at (${x}, ${y}, ${z})`;
+    },
     place: async (blockType: string, x: number, y: number, z: number) => {
       const username = botManager.requireSingleBot();
       const result = await botManager.placeBlock(username, blockType, x, y, z);
