@@ -1,3 +1,11 @@
+## [2026-03-25] Bug: Session 68 - farm() and build("shelter") fail with "Bot Claude1 not found"
+
+- **Cause**: bot.farm() and bot.build("shelter") both throw "Bot Claude1 not found". This matches the Session 76 bug: botManager.bots Map gets cleared after bot death (respawn), so when farm/build try to look up the bot by username, it's gone.
+- **Confirmed Pattern**: bot.status(), bot.inventory(), bot.moveTo() still work after respawn (these might use a different code path). But bot.farm() and bot.build() fail.
+- **Root Cause**: These high-level functions use botManager.getBotByUsername("Claude1") which returns null after respawn clears the Map.
+- **Fix Needed**: botManager should re-register the bot after respawn, or farm/build should use the bot reference directly.
+- **Status**: Reported - same root cause as Session 76 non-deterministic "Not connected" bug
+
 ## [2026-03-26] Bug: Session 76 - CRITICAL: mc_execute non-deterministically fails with "Not connected"
 - **Symptom**: After mc_connect or mc_reload, mc_execute sometimes succeeds (1-2 times) then ALWAYS fails with "Not connected" on subsequent calls. Non-deterministic: same code succeeds one time, fails the next.
 - **Key Evidence**:
