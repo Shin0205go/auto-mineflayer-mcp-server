@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 74c - Death underground at Y=47, HP=1.5 no food (3rd death this session)
+- **Cause**: Bot was at Y=47 underground with HP=1.5 and no food. Took damage from enderman/creeper hits while trying to wait for dawn and climb to surface. Died.
+- **Coordinates**: ~(-6, 47, 2) underground cave
+- **Last Actions**: Underground shelter dig → HP 1.5 → wait() ABORTED multiple times (damage) → tried to moveTo surface → died → respawned at spawn (6, 67, 1) with HP:10
+- **Error Message**: HP=1.5 with no food recovery option. bot.wait() repeatedly aborted.
+- **Root Cause Analysis**: (1) Underground at Y=47 during night - enderman aggro and mob spawns in cave. (2) No food = no HP regen = death spiral. (3) bot.wait() being aborted is correct but there's no recovery path at HP=1.5.
+- **Fix Suggestion**: When HP<3 with no food, bot should spam-dig upward immediately to get to light. Also, bot.eat("rotten_flesh") should work even with hunger>9.
+- **Status**: Reported (Session 74c)
+
 ## [2026-03-25] Bug: Session 68 - Death at Y=47 underground (HP=1.5, multiple mobs)
 
 - **Cause**: Bot went from Y=65 surface → Y=47 underground (flee went DOWN not up). At Y=47, surrounded by skeleton, zombie, creeper in cave. HP=1.5 from prior mob damage. no food. Died to mob attack.
