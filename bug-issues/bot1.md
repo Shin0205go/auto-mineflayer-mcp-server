@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 74b - Death during night flee, HP 9→1 then respawn
+- **Cause**: HP was 9 at night with skeleton+zombie. bot.flee(50) ran ~8s but HP dropped to 1 during flight (mobs were hitting during flee). No food available to recover. Bot died and respawned.
+- **Coordinates**: ~(136, 83, 100) old_growth_birch_forest
+- **Last Actions**: night detected → flee(50) → HP=9→1 → eat() failed (no food) → place cobblestone walls → death → respawn at (-1, 99, 10)
+- **Error Message**: HP dropped to 1 then to 0 during flee. Respawned with HP:10.3 at spawn.
+- **Root Cause Analysis**: Flee runs into mobs rather than away from them, or mobs can hit while bot is running. At night with multiple hostiles and low HP, flee alone is insufficient. Need: (1) flee check actual direction away from mobs, (2) when HP<5 at night, dig into ground/pillar instead of running.
+- **Status**: Reported (Session 74b)
+
 ## [2026-03-25] Bug: Session 74 - HP dropped to 1 during night crafting despite flee at hostiles detection
 - **Cause**: During night crafting session, zombies attacked and HP dropped from ~9 to 1. The flee logic in mc_execute code ran but was too slow - by the time flee() completed HP was already 1. craft_chain also detected HP=1 and aborted. Bot nearly died.
 - **Coordinates**: ~(131, 80, 86) old_growth_birch_forest
