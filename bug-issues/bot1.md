@@ -1,3 +1,18 @@
+## [2026-03-25] Bug: Bot still stuck at cliff edge Y=89 - moveTo/navigate/flee all fail - Session 60
+
+- **Cause**: Bot is still stuck at same cliff edge (27, 89, -14) as Session 59. moveTo to 6 different far coordinates all return immediately without moving. navigate("cow"), navigate("chicken") return immediately. flee(50) returns without moving. Position stays at (27, 89, -14) regardless of command.
+- **Coordinates**: (27, 89, -14) - same cliff edge in birch_forest biome as previous sessions
+- **Last Actions**:
+  1. moveTo(80, 89, -12) → position unchanged (27, 89, -14)
+  2. moveTo(-30, 89, -12) → position unchanged
+  3. navigate("cow") → returns in 447ms, position unchanged
+  4. flee(50) → returns but position unchanged
+  5. pillarUp(10) → "Failed to pillar up. No blocks placed" after 59s timeout
+- **Error Message**: moveTo returns silently with no movement, pillarUp times out after 59s
+- **Status**: PERSISTENT BUG - Same location across 3+ sessions. Bot cannot escape. Needs admin /tp or pathfinder fix for cliff-edge stuck state. Previous fix (cc69be1) did not resolve.
+
+---
+
 ## [2026-03-25] Bug: Bot completely stuck at cliff edge Y=90 - all actions timeout - Session 59
 
 - **Cause**: Bot is stuck at cliff edge at Y=90-91. ALL navigation actions (moveTo, navigate, flee, gather, combat) timeout after 60-120 seconds without moving more than 1-2 blocks. cobblestone place() succeeded but subsequent moveTo fails.
