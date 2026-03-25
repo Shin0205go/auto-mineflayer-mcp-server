@@ -25,6 +25,7 @@ import {
   minecraft_pillar_up,
   mc_smelt,
   mc_tunnel,
+  mc_reconnect,
 } from "./core-tools.js";
 import { botManager } from "../bot-manager/index.js";
 import { isHostileMob } from "../bot-manager/minecraft-utils.js";
@@ -259,6 +260,174 @@ export async function mc_execute(
       const rawBot = botManager.getBot(username);
       if (!rawBot) throw new Error("Bot not connected");
       await rawBot.look(yaw, pitch, true);
+    },
+    // Reconnect: disconnect and reconnect to reset ALL server-side state.
+    // mc_reload only reloads TypeScript modules — it does NOT reset the bot entity,
+    // pathfinder state, or server-side position sync.
+    // Bot1 Sessions 66-68: position freeze persisted across mc_reload because the
+    // Minecraft server entity was still at Y=72 with the pathfinder in a deadlock state.
+    // reconnect() creates a brand-new bot entity, clearing entity desync and pathfinder state.
+    reconnect: async () => {
+      return await mc_reconnect();
+    },
+    // forceEscape: detect "caged" state (bot surrounded by its own placed blocks on all sides)
+    // and escape by digging through the nearest wall in the direction away from mob center-of-mass.
+    // Bot1 Sessions 66-68: bot placed staircase blocks that walled it in at Y=72.
+    // flee() with canDig=false cannot escape because all 4 horizontal directions are solid.
+    // forceEscape() explicitly enables canDig and breaks out by digging the nearest block.
+    //
+    // Returns a status string describing what was attempted and the result.
+    forceEscape: async () => {
+      const username = botManager.requireSingleBot();
+      const rawBot = botManager.getBot(username);
+      if (!rawBot) throw new Error("Bot not connected");
+      const { Vec3 } = await import("vec3");
+
+      const pos = rawBot.entity.position;
+      const bx = Math.floor(pos.x);
+      const by = Math.floor(pos.y);
+      const bz = Math.floor(pos.z);
+
+      // Step 1: Detect cage — check all 4 horizontal sides at feet AND head level.
+      // A "cage" is when ≥3 of 4 horizontal sides are solid at BOTH levels.
+      const horizontalDirs: [number, number][] = [[1,0],[-1,0],[0,1],[0,-1]];
+      const isAirOrPassable = (name: string | undefined) =>
+        !name || name === "air" || name === "cave_air" || name === "void_air"
+        || name.includes("torch") || name.includes("sign") || name.includes("carpet");
+
+      let solidCount = 0;
+      let firstOpenDir: [number, number] | null = null;
+      for (const [dx, dz] of horizontalDirs) {
+        const feet = rawBot.blockAt(new Vec3(bx + dx, by, bz + dz));
+        const head = rawBot.blockAt(new Vec3(bx + dx, by + 1, bz + dz));
+        if (!isAirOrPassable(feet?.name) || !isAirOrPassable(head?.name)) {
+          solidCount++;
+        } else {
+          if (!firstOpenDir) firstOpenDir = [dx, dz];
+        }
+      }
+
+      if (logs.length < MAX_LOG_LINES) {
+        logs.push(`[forceEscape] Position: (${bx},${by},${bz}), solidSides=${solidCount}/4`);
+      }
+
+      // Step 2: If ≥3 sides blocked, try canDig escape.
+      if (solidCount >= 3) {
+        if (logs.length < MAX_LOG_LINES) {
+          logs.push(`[forceEscape] CAGE DETECTED (${solidCount}/4 sides blocked). Initiating dig escape.`);
+        }
+
+        // Find best dig direction: away from mob center-of-mass, or first open/weakest direction.
+        // Prefer digging toward lowest-hardness block.
+        let bestDir: [number, number] = [1, 0];
+        let lowestHardness = Infinity;
+
+        // If there's an open direction, use it (no digging needed).
+        if (firstOpenDir) {
+          bestDir = firstOpenDir;
+          if (logs.length < MAX_LOG_LINES) {
+            logs.push(`[forceEscape] Found open direction (${bestDir[0]},${bestDir[1]}), walking through.`);
+          }
+          // Walk toward open direction briefly.
+          const angle = Math.atan2(bestDir[0], bestDir[1]);
+          await rawBot.look(angle, 0, true);
+          rawBot.setControlState("sprint", true);
+          rawBot.setControlState("forward", true);
+          rawBot.setControlState("jump", true);
+          await new Promise(r => setTimeout(r, 1500));
+          rawBot.clearControlStates();
+          const newPos = rawBot.entity.position;
+          const moved = newPos.distanceTo(pos);
+          if (logs.length < MAX_LOG_LINES) {
+            logs.push(`[forceEscape] Walked ${moved.toFixed(1)} blocks through open direction.`);
+          }
+          return `[forceEscape] Escaped through open side. Moved ${moved.toFixed(1)} blocks. New pos: (${Math.floor(newPos.x)}, ${Math.floor(newPos.y)}, ${Math.floor(newPos.z)})`;
+        }
+
+        // All 4 sides blocked — find lowest-hardness block to dig through.
+        for (const [dx, dz] of horizontalDirs) {
+          const b = rawBot.blockAt(new Vec3(bx + dx, by, bz + dz));
+          if (b && b.hardness >= 0 && b.hardness < lowestHardness) {
+            lowestHardness = b.hardness;
+            bestDir = [dx, dz];
+          }
+        }
+
+        if (logs.length < MAX_LOG_LINES) {
+          logs.push(`[forceEscape] Digging through direction (${bestDir[0]},${bestDir[1]}), hardness=${lowestHardness.toFixed(1)}`);
+        }
+
+        // Equip best pickaxe.
+        const pickaxePriority = ["netherite_pickaxe","diamond_pickaxe","iron_pickaxe","stone_pickaxe","wooden_pickaxe"];
+        for (const toolName of pickaxePriority) {
+          const tool = rawBot.inventory.items().find((i: any) => i.name === toolName);
+          if (tool) { try { await rawBot.equip(tool, "hand"); } catch { /* ignore */ } break; }
+        }
+
+        // Dig feet and head level in best direction.
+        for (const dy of [0, 1]) {
+          const blockPos = new Vec3(bx + bestDir[0], by + dy, bz + bestDir[1]);
+          const b = rawBot.blockAt(blockPos);
+          if (!b || b.hardness < 0 || isAirOrPassable(b.name)) continue;
+          try {
+            await rawBot.lookAt(blockPos.offset(0.5, 0.5, 0.5), true);
+            await Promise.race([
+              rawBot.dig(b),
+              new Promise<void>((_, reject) => setTimeout(() => reject(new Error("dig timeout")), 6000)),
+            ]);
+            if (logs.length < MAX_LOG_LINES) {
+              logs.push(`[forceEscape] Dug ${b.name} at (${blockPos.x},${blockPos.y},${blockPos.z})`);
+            }
+          } catch (e) {
+            if (logs.length < MAX_LOG_LINES) {
+              logs.push(`[forceEscape] Dig failed at (${blockPos.x},${blockPos.y},${blockPos.z}): ${e}`);
+            }
+          }
+        }
+
+        // Walk through the dug gap.
+        const digAngle = Math.atan2(bestDir[0], bestDir[1]);
+        await rawBot.look(digAngle, 0, true);
+        rawBot.setControlState("sprint", true);
+        rawBot.setControlState("forward", true);
+        rawBot.setControlState("jump", true);
+        await new Promise(r => setTimeout(r, 1500));
+        rawBot.clearControlStates();
+        const afterPos = rawBot.entity.position;
+        const moved = afterPos.distanceTo(pos);
+        if (logs.length < MAX_LOG_LINES) {
+          logs.push(`[forceEscape] Moved ${moved.toFixed(1)} blocks after digging.`);
+        }
+        if (moved < 1) {
+          // Dig escape failed — recommend reconnect.
+          return `[forceEscape] Dig escape failed (moved ${moved.toFixed(1)} blocks). Recommend calling bot.reconnect() to fully reset bot entity state.`;
+        }
+        return `[forceEscape] Cage escape successful. Dug through ${lowestHardness.toFixed(1)}-hardness block, moved ${moved.toFixed(1)} blocks. New pos: (${Math.floor(afterPos.x)}, ${Math.floor(afterPos.y)}, ${Math.floor(afterPos.z)})`;
+      }
+
+      // Step 3: Not fully caged (≤2 sides blocked). Check if we're just frozen (position not changing).
+      // Try a simple jump+sprint in 4 directions for 1s each.
+      for (const [dx, dz] of horizontalDirs) {
+        const feet = rawBot.blockAt(new Vec3(bx + dx, by, bz + dz));
+        const head = rawBot.blockAt(new Vec3(bx + dx, by + 1, bz + dz));
+        if (isAirOrPassable(feet?.name) && isAirOrPassable(head?.name)) {
+          const walkAngle = Math.atan2(dx, dz);
+          await rawBot.look(walkAngle, 0, true);
+          rawBot.setControlState("sprint", true);
+          rawBot.setControlState("forward", true);
+          rawBot.setControlState("jump", true);
+          await new Promise(r => setTimeout(r, 1000));
+          rawBot.clearControlStates();
+          const newPos = rawBot.entity.position;
+          const moved = newPos.distanceTo(pos);
+          if (moved >= 1) {
+            return `[forceEscape] Escape via open side (${dx},${dz}). Moved ${moved.toFixed(1)} blocks. New pos: (${Math.floor(newPos.x)}, ${Math.floor(newPos.y)}, ${Math.floor(newPos.z)})`;
+          }
+        }
+      }
+
+      // Nothing worked. Recommend reconnect.
+      return `[forceEscape] Could not break free physically. solidSides=${solidCount}/4. Recommend bot.reconnect() to reset entity state.`;
     },
     wait: async (ms: number) => {
       // Bot1 [2026-03-22]: drowned during bot.wait() at y=86 with hunger=0.

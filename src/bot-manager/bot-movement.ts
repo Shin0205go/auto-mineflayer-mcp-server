@@ -3092,6 +3092,110 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
             console.error(`[Flee] emergencyDigUp failed: ${digErr instanceof Error ? digErr.message : String(digErr)}`);
           }
         }
+
+        // SURFACE CAGE LAST RESORT: Sessions 66-68 [2026-03-25]
+        // If bot is at surface level (Y>=65) and ALL horizontal flee attempts failed (moved <5 blocks),
+        // the bot may be caged by its own placed blocks (pillar + staircase walling it in).
+        // Detect cage: check if ≥3 of 4 horizontal sides are solid at BOTH feet and head level.
+        // If caged, try canDig=true pathfinding to break through the nearest wall.
+        // This is intentionally separate from underground (canDig already=true underground):
+        // surface flee uses canDig=false by default to prevent cave routing.
+        // A surface cage only happens when the bot itself placed blocks forming an enclosure.
+        if (finalMoved < 5 && finalPos.y >= 65) {
+          const cageCheckX = Math.floor(finalPos.x);
+          const cageCheckY = Math.floor(finalPos.y);
+          const cageCheckZ = Math.floor(finalPos.z);
+          const cageDirs: [number, number][] = [[1,0],[-1,0],[0,1],[0,-1]];
+          const isAirLike = (name: string | undefined) =>
+            !name || name === "air" || name === "cave_air" || name === "void_air";
+          let cageSolidCount = 0;
+          for (const [cdx, cdz] of cageDirs) {
+            const feetB = bot.blockAt(new Vec3(cageCheckX + cdx, cageCheckY, cageCheckZ + cdz));
+            const headB = bot.blockAt(new Vec3(cageCheckX + cdx, cageCheckY + 1, cageCheckZ + cdz));
+            if (!isAirLike(feetB?.name) || !isAirLike(headB?.name)) {
+              cageSolidCount++;
+            }
+          }
+          console.error(`[Flee] Surface position (Y=${cageCheckY}), solid sides: ${cageSolidCount}/4. Flee moved only ${finalMoved.toFixed(1)} blocks.`);
+          if (cageSolidCount >= 3) {
+            console.error(`[Flee] SURFACE CAGE DETECTED (${cageSolidCount}/4 sides blocked). Attempting canDig=true escape...`);
+            // Find the direction with the lowest-hardness block and try to dig through it.
+            // Also try canDig pathfinder as backup.
+            let softestDir: [number, number] = [1, 0];
+            let lowestHardness = Infinity;
+            for (const [cdx, cdz] of cageDirs) {
+              const b = bot.blockAt(new Vec3(cageCheckX + cdx, cageCheckY, cageCheckZ + cdz));
+              if (b && b.hardness >= 0 && b.hardness < lowestHardness) {
+                lowestHardness = b.hardness;
+                softestDir = [cdx, cdz];
+              }
+            }
+            try {
+              // Manual dig through feet + head level of softest wall.
+              const pickaxePriority = ["netherite_pickaxe","diamond_pickaxe","iron_pickaxe","stone_pickaxe","wooden_pickaxe"];
+              for (const toolName of pickaxePriority) {
+                const tool = bot.inventory.items().find((i: any) => i.name === toolName);
+                if (tool) { try { await bot.equip(tool, "hand"); } catch { /* ignore */ } break; }
+              }
+              for (const dy of [0, 1]) {
+                const digTarget = new Vec3(cageCheckX + softestDir[0], cageCheckY + dy, cageCheckZ + softestDir[1]);
+                const digBlock = bot.blockAt(digTarget);
+                if (digBlock && digBlock.hardness >= 0 && !isAirLike(digBlock.name)) {
+                  try {
+                    await bot.lookAt(digTarget.offset(0.5, 0.5, 0.5), true);
+                    await Promise.race([
+                      bot.dig(digBlock),
+                      new Promise<void>((_, reject) => setTimeout(() => reject(new Error("dig timeout")), 6000)),
+                    ]);
+                    console.error(`[Flee] Cage escape: dug ${digBlock.name} at (${digTarget.x},${digTarget.y},${digTarget.z})`);
+                  } catch (de) {
+                    console.error(`[Flee] Cage escape: dig failed: ${de}`);
+                  }
+                }
+              }
+              // Now walk through the dug hole with sprint+jump.
+              const cageEscapeAngle = Math.atan2(softestDir[0], softestDir[1]);
+              await bot.look(cageEscapeAngle, 0, true);
+              bot.setControlState("sprint", true);
+              bot.setControlState("forward", true);
+              bot.setControlState("jump", true);
+              await delay(1500);
+              bot.clearControlStates();
+              const cageEscapePos = bot.entity.position;
+              const cageEscapeMoved = cageEscapePos.distanceTo(finalPos);
+              console.error(`[Flee] Cage escape result: moved ${cageEscapeMoved.toFixed(1)} blocks. New pos: (${cageEscapePos.x.toFixed(1)},${cageEscapePos.y.toFixed(1)},${cageEscapePos.z.toFixed(1)})`);
+            } catch (cageErr) {
+              console.error(`[Flee] Cage escape error: ${cageErr instanceof Error ? cageErr.message : String(cageErr)}`);
+            }
+          } else if (finalMoved < 5) {
+            // Not fully caged but still frozen. Try raw movement (bypass pathfinder).
+            // This can happen when pathfinder state is corrupted (entity desync).
+            // Session 68: pathfinder returned instantly with 0 displacement even though
+            // the bot entity is valid. Raw setControlState bypasses pathfinder entirely.
+            console.error(`[Flee] Surface freeze detected (moved ${finalMoved.toFixed(1)} blocks, ${cageSolidCount}/4 sides blocked). Attempting raw control-state movement as pathfinder bypass.`);
+            try {
+              // Try each open direction for 2 seconds.
+              for (const [cdx, cdz] of cageDirs) {
+                const feetB = bot.blockAt(new Vec3(cageCheckX + cdx, cageCheckY, cageCheckZ + cdz));
+                const headB = bot.blockAt(new Vec3(cageCheckX + cdx, cageCheckY + 1, cageCheckZ + cdz));
+                if (isAirLike(feetB?.name) && isAirLike(headB?.name)) {
+                  const rawAngle = Math.atan2(cdx, cdz);
+                  await bot.look(rawAngle, 0, true);
+                  bot.setControlState("sprint", true);
+                  bot.setControlState("forward", true);
+                  bot.setControlState("jump", true);
+                  await delay(2000);
+                  bot.clearControlStates();
+                  const rawMoved = bot.entity.position.distanceTo(finalPos);
+                  console.error(`[Flee] Raw movement in direction (${cdx},${cdz}): moved ${rawMoved.toFixed(1)} blocks`);
+                  if (rawMoved >= 1) break;
+                }
+              }
+            } catch (rawErr) {
+              console.error(`[Flee] Raw movement escape failed: ${rawErr}`);
+            }
+          }
+        }
       }
     }
 
