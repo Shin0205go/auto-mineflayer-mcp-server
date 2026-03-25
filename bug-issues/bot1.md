@@ -1,3 +1,16 @@
+## [2026-03-25] Bug: pillarUp() always times out underground - Session 65 CRITICAL
+
+- **Cause**: bot.pillarUp(30) called at Y=57-66 underground. Cobblestone available (135 blocks). Method either times out (120s) or completes but bot Y doesn't change. Even after placing cobblestone at feet first, pillarUp still times out.
+- **Coordinates**: (7.5, 57, 4.5)
+- **Last Actions**: pillarUp(30) → 50s timeout → Y=57 unchanged. pillarUp(20) → timeout → Y unchanged. pillarUp(5) → timeout.
+- **Error**: "Execution timed out after Xs" OR completes but Y stays same
+- **Root Cause**: pillarUp appears to place block at Y-1 (feet) but bot doesn't actually move upward. Scaffold placement loop may be checking wrong conditions or bot is unable to jump underground (ceiling too low? invalid terrain?).
+- **Impact**: Bot stuck underground at Y=57-62 with HP=7.5, food=0, night, creepers x5. Cannot escape.
+- **Fix Needed**: pillarUp should: 1) check clearance above, 2) dig ceiling if needed, 3) use reliable jump+place loop
+- **Status**: Reported. Session 65. BLOCKING - bot cannot escape underground.
+
+---
+
 ## [2026-03-25] Bug: bot.flee() navigated through lava - Session 65
 
 - **Cause**: bot.flee() was called when HP=2.3 at y=37 (underground). Bot tried to swim in lava during escape. Server message: "Claude1 tried to swim in lava". Bot survived (HP went to 20 after escape to y=90), but lava navigation is dangerous.
