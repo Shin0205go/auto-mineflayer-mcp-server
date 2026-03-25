@@ -363,12 +363,19 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
       // SAFETY: Detect underground cave routing — abort if bot descends far below expected path.
       // Case 1: Target is at/above start — bot should NOT descend more than N blocks below start.
       //   Normal surface (Y<=75): limit = 3 blocks. Strict limit prevents cave routing.
-      //   Elevated terrain (Y>75): limit = 10 blocks. At Y=92 (birch forest clifftop),
-      //   all natural terrain paths descend 5-15 blocks — the 3-block limit falsely fired,
-      //   making ALL movement impossible and creating a complete movement freeze.
+      //   Elevated terrain (Y>75): limit = 18 blocks. At Y=80-92 (birch forest hilltop),
+      //   all natural terrain paths descend 5-18 blocks — the old 10-block limit falsely fired,
+      //   making ALL movement impossible from any elevated spawn position.
+      //   Bot1 Session 72d [2026-03-26]: bot at Y=80, moveTo to any coordinate always returned
+      //   to same position (5,80,-9). Terrain descent of 11-17 blocks (normal birch forest
+      //   valley traversal) was triggering underground_routing abort at every pathfinder attempt.
+      //   The absolute Y<62 floor check (above) is the real protection against cave routing —
+      //   case1DescentLimit is redundant secondary protection. For elevated starts (Y>75),
+      //   real floor is Y=62, which is 13-30 blocks below start. Raising limit to 18 blocks
+      //   allows birch forest valley traversal (typical 10-18 block descent) while the
+      //   absolute floor check still catches any actual underground routing (Y<62).
       //   Bot1 Session 56: bot stranded at Y=92, moveTo/flee/pillarUp/gather all returned
-      //   immediately because the 3-block descent limit prevented any downhill path.
-      //   10 blocks is safe for elevated terrain: Y=92-10=82, still well above Y=63 (surface).
+      //   immediately because the 3-block (then 10-block) limit prevented any downhill path.
       //   For normal surface Y<=75: keep 3-block limit to prevent cave routing at ground level.
       // Case 2: Target is below start — allow descent proportional to target depth.
       //   Bot1 Session 44: navigated to (100,96,0) from surface, ended at Y=72 in cave, drowned.
@@ -377,10 +384,11 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
       const yDescentFromStart = start.y - currentPos.y;
       const targetIsAtOrAboveStart = y >= start.y - 5; // target within 5 blocks below start is "surface-level"
       // Elevated terrain adjustment: at Y>75 (mountain/cliff/treetop), 3-block limit is too tight.
-      // Natural descent from elevated positions spans 5-15 blocks — not cave routing.
-      // Use 10-block limit above Y=75 to allow descent without triggering false underground abort.
+      // Natural descent from elevated positions spans 5-18 blocks — not cave routing.
+      // Use 18-block limit above Y=75 to allow descent without triggering false underground abort.
+      // The absolute Y<62 floor check (above this block) is the real cave routing protection.
       const elevatedStart = start.y > 75;
-      const case1DescentLimit = elevatedStart ? 10 : 3;
+      const case1DescentLimit = elevatedStart ? 18 : 3;
       if (targetIsAtOrAboveStart && yDescentFromStart > case1DescentLimit) {
         console.error(`[MoveTo] UNDERGROUND ROUTING DETECTED: Bot descended ${yDescentFromStart.toFixed(1)} blocks below start (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}) while target Y=${y.toFixed(1)} is at/above start. Pathfinder is routing through caves. Aborting. (limit=${case1DescentLimit} for ${elevatedStart ? "elevated" : "surface"} start)`);
         finish({
