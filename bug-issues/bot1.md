@@ -9,7 +9,7 @@
   4. flee(50) → returns but position unchanged
   5. pillarUp(10) → "Failed to pillar up. No blocks placed" after 59s timeout
 - **Error Message**: moveTo returns silently with no movement, pillarUp times out after 59s
-- **Status**: PERSISTENT BUG - Same location across 3+ sessions. Bot cannot escape. Needs admin /tp or pathfinder fix for cliff-edge stuck state. Previous fix (cc69be1) did not resolve.
+- **Status**: CRITICAL - Bot survived at HP=1 for extended period but cannot escape. flee() always returns to (26.5,86,-3.5). Night has been ongoing for 3000+ ticks without ending (possible time bug or gamerule issue). Mob count constantly 14+ entities including creeper x5, skeleton x3-4, zombie, drowned, spider, pillager. Hunger=0 entire session, combat food drops still not working. Needs admin /tp + /heal + /feed OR code fix for: 1) pathfinder escape from cliff 2) food drops from combat 3) night ending normally.
 
 ---
 
