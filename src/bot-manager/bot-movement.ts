@@ -2264,7 +2264,16 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
           // be silently rejected by server — server expected look direction to match
           // cursor dy=1.0 (top face). Using forceLook:true fixes this.
           console.error(`[Pillar] Placing on ${freshBlock!.name} at (${freshBlock!.position.x},${freshBlock!.position.y},${freshBlock!.position.z}), held=${bot.heldItem?.name ?? 'null'}`);
-          await (bot as any)._placeBlockWithOptions(freshBlock!, new Vec3(0, 1, 0), { forceLook: true, swingArm: 'right' });
+          // Timeout wrapper: _placeBlockWithOptions waits for blockUpdate event which may
+          // never fire (server lag, packet drop, look angle mismatch). Without a timeout,
+          // a single hung placement blocks the entire pillarUp loop for the rest of the
+          // 45s global timer, resulting in 0 Y gain despite successful jump.
+          // Session 71c [2026-03-26]: pillarUp(8) returned Y unchanged because
+          // _placeBlockWithOptions hung indefinitely on first attempt.
+          await Promise.race([
+            (bot as any)._placeBlockWithOptions(freshBlock!, new Vec3(0, 1, 0), { forceLook: true, swingArm: 'right' }),
+            new Promise<void>((_, reject) => setTimeout(() => reject(new Error("placeBlock timeout 3s")), 3000)),
+          ]);
           blocksPlaced++;
           placed = true;
           console.error(`[Pillar] Placed ${blocksPlaced}/${targetHeight} at Y=${currentY}`);
@@ -2335,7 +2344,10 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
           const refBlock = bot.blockAt(apexPos);
           console.error(`[Pillar] Fallback: blockAt offset(0,-1,0)=${refBlock?.name ?? 'null'} at (${apexPos.x.toFixed(1)},${apexPos.y.toFixed(1)},${apexPos.z.toFixed(1)})`);
           if (refBlock && refBlock.name !== "air" && refBlock.name !== "cave_air" && refBlock.name !== "void_air") {
-            await bot.placeBlock(refBlock, new Vec3(0, 1, 0));
+            await Promise.race([
+              bot.placeBlock(refBlock, new Vec3(0, 1, 0)),
+              new Promise<void>((_, reject) => setTimeout(() => reject(new Error("fallback placeBlock timeout 3s")), 3000)),
+            ]);
             blocksPlaced++;
             placed = true;
             fallbackPlaced = true;
@@ -2348,7 +2360,10 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
               const scanBlock = bot.blockAt(new Vec3(Math.floor(bot.entity.position.x), scanY, Math.floor(bot.entity.position.z)));
               console.error(`[Pillar] Fallback scan Y=${scanY}: ${scanBlock?.name ?? 'null'}`);
               if (scanBlock && scanBlock.name !== "air" && scanBlock.name !== "cave_air" && scanBlock.name !== "void_air") {
-                await bot.placeBlock(scanBlock, new Vec3(0, 1, 0));
+                await Promise.race([
+                  bot.placeBlock(scanBlock, new Vec3(0, 1, 0)),
+                  new Promise<void>((_, reject) => setTimeout(() => reject(new Error("fallback placeBlock scan timeout 3s")), 3000)),
+                ]);
                 blocksPlaced++;
                 placed = true;
                 fallbackPlaced = true;
