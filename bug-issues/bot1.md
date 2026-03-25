@@ -1,3 +1,25 @@
+## [2026-03-25] Bug: Bot STILL stuck at cliff edge Y=86 - HP1 Hunger0 - pillarUp not working - Session 61
+
+- **Cause**: Bot starts at (26.5, 86, -3.5) same birch_forest cliff area. HP=1, Hunger=0, no food in inventory. pillarUp(8) logs "executed" but Y stays at 86.0. bot.eat() returns but hunger stays 0 (no food items). bot.combat("cow") returns immediately with no food. wait() ABORTS immediately due to "HP dropped to 1.0". Night phase "midnight" persists for 1300+ ticks. Creeper x6-7, skeleton x3, zombie x2, drowned x1, spider x1 nearby.
+- **Coordinates**: (26.5, 86, -3.5) - same cliff area as previous sessions
+- **Last Actions**:
+  1. bot.flee(30) → HP still 1, position unchanged
+  2. bot.pillarUp(5) then pillarUp(8) → Y stays at 86.0 (not working)
+  3. bot.eat() → hunger stays 0 (no food)
+  4. bot.combat("cow") → returns immediately, no food
+  5. bot.build("shelter") → success but HP still 1
+  6. bot.wait(5000) → ABORTS "HP dropped to 1.0 during wait"
+- **Error Message**: "[wait] ABORTED: HP dropped to 1.0 during wait — auto-fleeing from danger" x14 times
+- **Critical Issues**:
+  1. pillarUp does not change Y position (claimed "success" but Y unchanged)
+  2. Night phase "midnight" persists abnormally long (1300+ ticks in this session alone)
+  3. No food in inventory after multiple sessions - combat food drop bug persists
+  4. HP cannot go below 1 but also cannot recover without food
+  5. Bot is completely stuck with no way to get food or escape
+- **Status**: CRITICAL. Bot survival is impossible without admin intervention. Need: /feed + /tp away from cliff + food items. Same location as Sessions 58-60.
+
+---
+
 ## [2026-03-25] Bug: Bot still stuck at cliff edge Y=89 - moveTo/navigate/flee all fail - Session 60
 
 - **Cause**: Bot is still stuck at same cliff edge (27, 89, -14) as Session 59. moveTo to 6 different far coordinates all return immediately without moving. navigate("cow"), navigate("chicken") return immediately. flee(50) returns without moving. Position stays at (27, 89, -14) regardless of command.
