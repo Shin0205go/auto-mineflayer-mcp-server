@@ -1,3 +1,13 @@
+## [2026-03-25] Bug: Session 70b - Death by Zombie while navigating with HP=5.5 Hunger=0
+
+- **Cause**: Bot was navigating to find food animals (sheep at -133,75,188) with HP=5.5, Hunger=0 from starvation. Zombies spawned nearby during navigation in old_growth_birch_forest. Bot killed by zombie.
+- **Coordinates**: (~-89, 109, 135)
+- **Last Actions**: mc_reload (ESM cache fix) → connect → flee(creeper) → navigate(sheep) → zombie encounter → death
+- **Error Message**: "Claude1 was slain by Zombie"
+- **Contributing Factors**: HP=5.5 from prior starvation; no food obtained all session; old_growth_birch_forest had no cows within 300 blocks; night mob spawns
+- **Post-death**: Respawned HP=20 Hunger=20. Items retained via keepInventory.
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Session 70 - combat() zero drops STILL broken after 627a514 fix
 
 - **Cause**: After mc_reload applying commits 627a514 (food drop fix) and f04fb2a (moveTo fix), combat() still produces ZERO drops for ALL mob types. Tested: cow x4, pig x2, sheep x1, chicken x1, zombie x2, drowned x1, skeleton x1 - total drops = 0 items. Only exception: skeleton previously gave arrows (pre-existing count), but all drops still broken.
