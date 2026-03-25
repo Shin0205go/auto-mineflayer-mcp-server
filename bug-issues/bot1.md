@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 71 - Death by Skeleton (shot)
+- **Cause**: Bot shot by Skeleton. Likely exposed outdoors with no armor equipped.
+- **Coordinates**: Approximately (6, 100, -3) - birch_forest biome
+- **Last Actions**: Previous session ended, reconnected and found death message "Claude1 was shot by Skeleton"
+- **Inventory at reconnect**: stone_axe, stone_sword, stone_pickaxe x2 (kept due to keepInventory). Food=0.
+- **Contributing Factors**: No food in inventory, likely hunger=0 so HP recovery impossible. Skeleton ranged attack.
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Session 70c - Death x2 by Zombie (dawn mob lingering at Y=103-109)
 
 - **Cause**: Bot respawned at high mountain Y=109 at dawn. Zombie killed bot twice while transitioning to day (dawn zombies don't burn until full sunlight). Bot had stone tools from Phase 3 and was checking for iron_ore when killed.
