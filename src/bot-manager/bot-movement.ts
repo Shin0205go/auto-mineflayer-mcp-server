@@ -1479,10 +1479,18 @@ export async function emergencyDigUp(managed: ManagedBot, maxBlocks: number = 30
       if (pick) await bot.equip(pick, "hand");
     }
     try {
-      await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
-      await bot.dig(block, false);
+      await bot.lookAt(pos.offset(0.5, 0.5, 0.5), true);
+      // Timeout: bot.dig() waits for diggingCompleted event which can hang if the server
+      // doesn't respond (e.g., unreachable block, look angle mismatch, server lag).
+      await Promise.race([
+        bot.dig(block, false),
+        new Promise<void>((_, reject) => setTimeout(() => reject(new Error("dig timeout")), 5000)),
+      ]);
       return true;
-    } catch { return false; }
+    } catch (e) {
+      try { bot.stopDigging(); } catch { /* ignore */ }
+      return false;
+    }
   };
 
   let blocksDug = 0;
@@ -1586,14 +1594,17 @@ export async function emergencyDigUp(managed: ManagedBot, maxBlocks: number = 30
         if (!block || block.name === "air" || block.name === "cave_air") continue;
         if (block.hardness < 0) break;
         try {
-          await bot.lookAt(new Vec3(curX + 0.5, curY + dy + 0.5, curZ + 0.5));
+          await bot.lookAt(new Vec3(curX + 0.5, curY + dy + 0.5, curZ + 0.5), true);
           if (equippedPickaxe) {
             const pick = bot.inventory.items().find(i => i.name === equippedPickaxe);
             if (pick) await bot.equip(pick, "hand");
           }
-          await bot.dig(block, false);
+          await Promise.race([
+            bot.dig(block, false),
+            new Promise<void>((_, reject) => setTimeout(() => reject(new Error("dig timeout")), 5000)),
+          ]);
           blocksDug++;
-        } catch { /* ignore */ }
+        } catch { try { bot.stopDigging(); } catch { /* ignore */ } }
       }
       return `No scaffold blocks — dug ${blocksDug} shaft blocks upward from Y=${startY}. Use bot.pillarUp() after gathering scaffold blocks (cobblestone/dirt) to climb out.`;
     }
@@ -1915,6 +1926,13 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     // In tight caves, a block at Y+1 prevents the jump from starting entirely — the bot
     // rises only 0.1-0.2 blocks (below the 0.5 threshold), causing placement to fail.
     // Now also dig Y+1 to ensure head clearance before jump.
+    //
+    // Bot1 Session 65 [2026-03-25]: pillarUp(3) timed out at 30s in a Y=62 cave with 126
+    // cobblestone. Root cause: bot.dig(blockAbove) has NO timeout — mineflayer's dig()
+    // waits for diggingCompleted/diggingAborted events, which may never fire in tight caves
+    // (e.g., server drops the packet, block is unreachable due to look angle, or bot is
+    // slightly out of range). A single hanging dig blocks the entire pillarUp loop.
+    // Fix: wrap bot.dig() with Promise.race and a 5s per-block timeout.
     for (const yOffset of [1, 2, 3]) {
       const blockAbove = bot.blockAt(new Vec3(curX, currentY + yOffset, curZ));
       if (blockAbove && blockAbove.name !== "air" && blockAbove.name !== "water" && blockAbove.name !== "cave_air") {
@@ -1932,9 +1950,17 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
           bot.setControlState("jump", false);
           bot.setControlState("sprint", false);
           await new Promise(r => setTimeout(r, 100));
-          await bot.dig(blockAbove);
+          // Look at the block before digging — mineflayer's dig() requires the bot to
+          // face the block or it may silently fail / not fire diggingCompleted.
+          await bot.lookAt(blockAbove.position.offset(0.5, 0.5, 0.5), true);
+          // Timeout: if dig() hangs (no event), abort after 5s and continue anyway.
+          await Promise.race([
+            bot.dig(blockAbove),
+            new Promise<void>((_, reject) => setTimeout(() => reject(new Error("dig timeout")), 5000)),
+          ]);
         } catch (e) {
           console.error(`[Pillar] Dig failed at Y+${yOffset}: ${e}`);
+          try { bot.stopDigging(); } catch { /* ignore */ }
           // Continue anyway - might be able to proceed
         }
       }
@@ -2159,7 +2185,11 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
           try {
             const pick = bot.inventory.items().find(i => i.name.includes("pickaxe"));
             if (pick) await bot.equip(pick, "hand");
-            await bot.dig(headBlockCheck);
+            await bot.lookAt(headBlockCheck.position.offset(0.5, 0.5, 0.5), true);
+            await Promise.race([
+              bot.dig(headBlockCheck),
+              new Promise<void>((_, reject) => setTimeout(() => reject(new Error("dig timeout")), 5000)),
+            ]);
             // Re-equip scaffold for the next placement attempt
             const scaffoldReEquip = bot.inventory.items().find(i => isScaffoldBlock(i.name));
             if (scaffoldReEquip) await bot.equip(scaffoldReEquip, "hand");
