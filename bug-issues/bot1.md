@@ -5,9 +5,15 @@
 - **Last Actions**: mc_reload → mc_connect → flee(80) → moveTo() x6 far positions → place() staircase x10 → moveTo() staircase steps x10 → navigate() x3 → gather() x5 → all return without position change
 - **Error Message**: No errors thrown. All navigation APIs succeed instantly with no movement. X coordinate stays at 12.6 entire session.
 - **State**: HP=9.3, Hunger=0, entities: enderman:2, zombie:3, creeper:2, skeleton:5, drowned:1, bat:5
-- **Root Cause Hypothesis**: Bot may be surrounded by placed cobblestone blocks forming a cage (from previous session's pillar + this session's staircase attempts). Or pathfinder is in a deadlock state after the reload. Or flee() is being blocked because creeper/skeleton are within safety threshold in all directions.
-- **Impact**: Bot permanently immobile. Hunger=0 with no food means starvation death imminent.
-- **Status**: Reported
+- **Root Cause Analysis** (code review):
+  1. **Self-built cage**: Session 67 bot pillarUp'd to Y=75, stayed at (12,75,-7). Session 68 agent placed a 10-step staircase at X=13-22, Y=71-62. Combined with the original pillar column, this formed a closed enclosure around the bot at Y=72. flee(canDig=false) counted all 8 flee directions as obstructed (staircase blocks + pillar on adjacent sides), collapsed distance to 5 blocks, pathfinder found no 5-block path inside the enclosure → 0 displacement every call.
+  2. **moveTo instant abort**: skeleton x5 within 16 blocks triggered `ranged_mob_danger` check at 500ms, aborting every moveTo call before the pathfinder could compute a path.
+  3. **mc_reload doesn't fix pathfinder deadlock**: mc_reload reloads TypeScript modules but does NOT disconnect/reconnect the bot. The Minecraft server entity stays at Y=72, pathfinder state is preserved (deadlocked). A reconnect would have created a fresh entity and cleared the deadlock.
+- **Fix Applied** (commit 546d4f6):
+  1. `flee()` surface cage last resort: after all directional retries fail at Y>=65 with <5 blocks moved, detect cage by counting solid sides (≥3/4 sides blocked at feet+head level). If caged: manually dig through lowest-hardness wall, then sprint+jump through the gap. If not caged but frozen: bypass pathfinder via raw setControlState(forward+sprint+jump) toward each open direction.
+  2. `bot.forceEscape()` in mc-execute sandbox: new bot API agents can call when all navigation returns 0 displacement. Detects cage, digs out, falls back to recommending reconnect.
+  3. `bot.reconnect()` in mc-execute sandbox: exposes mc_reconnect() (disconnect+reconnect) as a bot API. Resets bot entity, server-side position sync, and pathfinder state. Solves the "mc_reload didn't fix the freeze" problem from all 3 sessions.
+- **Status**: Fixed.
 
 ## [2026-03-25] Bug: Session 67 - Bot stuck on pillar at Y=75 surrounded by mobs, all movement blocked, Hunger=0 starvation
 
