@@ -1,3 +1,27 @@
+## [2026-03-25] Bug: Session 66 - Bot completely stuck at Y=56, all movement/combat APIs non-functional
+
+- **Cause**: All navigation/escape APIs failing silently. moveTo(), flee(), pillarUp(), combat() all return instantly without movement or effect.
+- **Coordinates**: (-1, 56, 2)
+- **Last Actions**: Attempted moveTo(100,65,100), pillarUp(10), flee(50), combat("skeleton") - all failed without error, bot stays at same position Y=56
+- **Symptoms**:
+  - moveTo() returns in 3 seconds without movement
+  - flee() returns in 56 seconds without movement
+  - pillarUp() returns in 50 seconds without Y change
+  - combat() returns instantly, no entity kills, skeleton count unchanged
+  - wait() aborted immediately by "skeleton at 0.4 blocks"
+  - arrow x20 in nearbyEntities shows bot is being shot continuously
+- **Environment**: Y=56 (underground), surrounded by skeleton x3, zombie x2, creeper x4, drowned x1
+- **HP**: 15.5, Hunger: 14
+- **Impact**: Bot cannot escape, cannot fight, cannot farm. Completely immobilized.
+- **Root Cause Hypothesis**: Bot may be in a cave/enclosed space blocking pathfinder. Skeletons preventing all wait() calls. Possible pathfinder deadlock similar to Session 65 bug.
+- **Fix Needed**:
+  1. moveTo should try jumping/breaking blocks to escape enclosed spaces
+  2. combat() should actually fight nearby enemies, not return instantly
+  3. flee() should work even in enclosed spaces (break blocks or jump)
+- **Status**: Reported. Session 66. CRITICAL BLOCKING.
+
+---
+
 ## [2026-03-25] Bug: Death by Skeleton (HP=2 from Hunger=0 starvation) - Session 65 death #2
 
 - **Cause**: HP=2 from hunger damage (Hunger=0 for extended period). While moving (Z-direction exploration), skeleton shot bot. "Claude1 was shot by Skeleton". HP too low to survive one arrow.
