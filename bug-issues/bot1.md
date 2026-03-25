@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 71c - Death by Skeleton during night, pillarUp non-functional + build("shelter") timeout
+- **Cause**: Night survival failed. pillarUp(8) executed but Y stayed at 81 (no height gained). Skeleton continued attacking. build("shelter") timed out after 120s. Bot shot and killed at HP=8.5.
+- **Coordinates**: (129, 72, 57) at death
+- **Last Actions**: flee(60) → HP:8.5, build("shelter") → timeout 120s → "Claude1 was shot by Skeleton"
+- **Error Message**: "Execution timed out after 120000ms" during build("shelter"). Then death message.
+- **Contributing Factors**: pillarUp not increasing Y coordinate (Y=81 before and after pillarUp(8)). build("shelter") blocking for >120s. Skeleton ranged attack bypasses pillar safety.
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 71b - gather("iron_ore") always returns success but raw_iron never added to inventory
 - **Cause**: bot.gather("iron_ore") returns immediately with no displacement and no items collected. Navigate to iron_ore works (moves bot to ore location), but gather() after navigation also collects nothing.
 - **Coordinates**: (37, 77, 31) → moved to (46, 74, 29) after navigate
