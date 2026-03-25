@@ -1269,6 +1269,53 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     }
   }
 
+  // FALLBACK: Manual movement escape when pathfinder cannot find any path.
+  // Bot1 Sessions 58-61: bot stuck at respawn point (26.7, 86.0, -3.5) — pathfinder
+  // reports no_path even with canDig=true, but place() works fine. The pathfinder
+  // cannot compute a route FROM this exact cliff-edge spawn location, yet the bot's
+  // physics are intact. Using setControlState(forward/jump) for 1.5s physically
+  // moves the bot 2-3 blocks, breaking the pathfinder deadlock.
+  // Also apply to pathfinder_stopped and obstacle — same "pathfinder gave up" symptom.
+  const MANUAL_ESCAPE_REASONS = ["no_path", "pathfinder_stopped", "obstacle"];
+  if (!result.success && result.stuckReason && MANUAL_ESCAPE_REASONS.includes(result.stuckReason)) {
+    const preEscapePos = bot.entity.position.clone();
+    console.error(`[Move] ${result.stuckReason} — attempting manual escape via setControlState (forward+jump 1.5s)`);
+    try {
+      // Face toward the target so forward movement heads in the right direction.
+      const dx = x - preEscapePos.x;
+      const dz = z - preEscapePos.z;
+      const yaw = Math.atan2(-dx, dz);
+      bot.look(yaw, 0, true);
+      await delay(100); // Allow look to settle
+      bot.setControlState("forward", true);
+      bot.setControlState("jump", true);
+      bot.setControlState("sprint", true);
+      await delay(1500);
+      bot.clearControlStates();
+      await delay(300); // Allow physics to settle after clearing controls
+    } catch (escapeErr) {
+      console.error(`[Move] Manual escape control error: ${escapeErr}`);
+      try { bot.clearControlStates(); } catch (_) {}
+    }
+    const postEscapePos = bot.entity.position;
+    const escapedDist = postEscapePos.distanceTo(preEscapePos);
+    console.error(`[Move] Manual escape moved ${escapedDist.toFixed(2)} blocks (${preEscapePos.x.toFixed(1)},${preEscapePos.y.toFixed(1)},${preEscapePos.z.toFixed(1)}) → (${postEscapePos.x.toFixed(1)},${postEscapePos.y.toFixed(1)},${postEscapePos.z.toFixed(1)})`);
+    if (escapedDist >= 1.0) {
+      // Bot moved — retry pathfinding from new position
+      console.error(`[Move] Re-trying pathfinder after manual escape...`);
+      result = await moveToBasic(managed, x, y, z);
+      if (!result.success) {
+        // One more attempt with allowDig in case new position is also blocked
+        result = await moveToBasic(managed, x, y, z, { allowDig: true });
+      }
+      if (result.success) {
+        console.error(`[Move] Recovered via manual escape + pathfinder retry`);
+      }
+    } else {
+      console.error(`[Move] Manual escape had no effect (moved ${escapedDist.toFixed(2)} blocks < 1.0). Pathfinder likely unable to compute path from this terrain.`);
+    }
+  }
+
   // POST-MOVE: If aborted due to water, ensure bot swims up and report position.
   // The moveToBasic water detector sets jump=true, but we also need to wait briefly
   // for the bot to surface before returning control to the agent.
