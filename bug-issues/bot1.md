@@ -8,7 +8,13 @@
 - **Root Cause Hypothesis**: moveTo() is being blocked by mob safety checks (creeper x3 + skeleton x2 nearby). Bot is stuck because: 1) can't move due to mob checks, 2) can't eat (no food), 3) can't combat (drops not registering), 4) pillarUp is the only working API but barely.
 - **Bug Pattern**: Same as Session 66 - mob cluster + movement block = total immobility. Starvation death likely.
 - **Impact**: Bot will die from hunger in ~5 minutes without intervention.
-- **Status**: Reported
+- **Root Cause Analysis** (code review):
+  1. `post-pillar descent race condition` (bot-movement.ts): The descent interval checked `!bot.pathfinder.isMoving()` at 300ms after setGoal(). Pathfinder needs 500-1500ms to compute a path from pillar top. isMoving() was false at the first check → interval exited with 0 movement → bot stayed stuck on pillar. The previous fix from commit 73caabd added the descent code but introduced this subtle race condition.
+  2. `wait() missing vertical clearance` (mc-execute.ts): midWaitClosestDist used 3D distance. Drowned at Y=68 with bot at Y=75 = 7 blocks 3D distance, triggering abort every 500ms even though the drowned cannot melee the bot on the pillar. Same problem as moveTo's melee check, but wait() had no vertical exception.
+- **Fix Applied** (commit b0eddfc):
+  1. `pillarUp() post-descent`: Added `descentElapsed > 2000` guard before using `!isMoving()` as exit condition (same pattern as flee()'s elapsed > 2000). Also added `flee(20)` as fallback when pathfinder descent moves < 1 block — flee's multi-retry/elevated-terrain logic handles pillar tops better than raw setGoal().
+  2. `wait() hostile check`: Added `vertOffset >= 4` skip for mobs ≥4 blocks below the bot (same exception as moveTo check B2). Prevents repeated abort loops when bot is safely elevated on a pillar.
+- **Status**: Fixed.
 
 ## [2026-03-25] Bug: Session 67 - combat() not yielding drops
 
