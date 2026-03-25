@@ -2403,9 +2403,10 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     // ELEVATED TERRAIN EXCEPTION (Bot1 Session 56):
     // Bot at Y=92, safeSetGoal maxYDescent=4 fired immediately as any flee path descends
     // 5+ blocks naturally on elevated birch forest terrain → flee always aborted → bot froze.
-    // Fix: when start Y>75, allow 15-block descent (allows reaching ground from cliff).
+    // Fix: when start Y>75, allow 30-block descent (birch forest cliffs can be Y=89→Y=63 = 26 blocks).
+    // 15 was insufficient: Y=89 cliff → Y=70 ground = 19 blocks > 15 limit → flee always aborted.
     // Normal surface (Y<=75): keep 4-block limit (prevents cave routing).
-    const fleeMaxYDescent = startPos.y > 75 ? 15 : 4;
+    const fleeMaxYDescent = startPos.y > 75 ? 30 : 4;
     let currentFleeHandle = safeSetGoal(bot,
       new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3),
       {
