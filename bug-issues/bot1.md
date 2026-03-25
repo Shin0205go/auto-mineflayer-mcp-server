@@ -18,6 +18,14 @@
 - **Item losses**: coal x8, torch x2, crafting_table, chest x2 lost across multiple deaths
 - **Status**: Reported
 
+## [2026-03-26] Bug: Session 76 Death - HP:1.5 + death from mob underground (Y=44) - bot auto-respawned
+- **Cause**: Bot was at HP:1.5 underground (Y=44) with no food. Mob killed bot. Auto-respawn triggered (keepInventory=ON).
+- **Root Cause of Low HP**: Bot was stuck underground with HP:1.5 and no food. Could not reach chest to get food due to disconnect bug.
+- **Coordinates**: (-8, 44, 5) underground birch_forest
+- **Post-Death**: Bot respawned at Y=112 surface with HP:20 Hunger:20. keepInventory maintained all items.
+- **Pattern**: This is the ongoing pattern where bot dies underground with no food. See also Session 63 bug.
+- **Status**: Reported - Death #1 this session
+
 ## [2026-03-26] Bug: Session 76 - CRITICAL: await bot.status() disconnects bot, making game unplayable
 - **Cause**: After mc_connect succeeds, bot.log() (sync, no botManager call) works fine multiple times. But ANY call to `await bot.status()` causes the bot to disconnect from botManager. After the disconnect, ALL subsequent mc_execute calls fail with "Not connected" (1ms).
 - **Pattern**: mc_connect → mc_execute{bot.log("A")} SUCCESS → mc_execute{bot.log("B")} SUCCESS → mc_execute{await bot.status()} → SUCCESS ONCE (HP:1.5) → all subsequent calls FAIL
@@ -27,8 +35,8 @@
 - **Coordinates**: (-8, 44, 5) Y=44 underground birch_forest
 - **Current Game State**: HP:1.5, Hunger:8, no food, skeleton+creeper nearby, chest at (-6,61,2), morning
 - **Impact**: CANNOT PLAY THE GAME. Bot dies at HP:1.5 with no way to recover food. All game actions that use botManager (status, moveTo, flee, etc.) disconnect the bot.
-- **Fix Needed**: Investigate why mc_status() or botManager calls cause bot disconnection. Check if there's an unhandled promise rejection or synchronous error inside mc_status() that triggers bot.end().
-- **Status**: Reported - CRITICAL BLOCKER
+- **Fix Needed**: Investigate why mc_status() or botManager calls cause bot disconnection. Root cause is likely death → Mineflayer respawn → bot.on("end") fires → botsMap cleared. After mc_reload the bot reconnected at HP:20 (post-respawn), confirming this theory.
+- **Status**: Reported - prevent deaths to prevent this disconnect cycle
 
 ## [2026-03-25] Bug: Session 75 - Death: Zombie climbed pillar, no food to recover
 
