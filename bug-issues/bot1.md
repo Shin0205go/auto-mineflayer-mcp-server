@@ -1,3 +1,23 @@
+## [2026-03-25] Bug: Session 67 - Bot stuck on pillar at Y=75 surrounded by mobs, all movement blocked, Hunger=0 starvation
+
+- **Cause**: Bot pillarUp'd to Y=75 (birch_forest) to escape night mobs, but mobs persisted into daytime. drowned kept triggering wait() abort, preventing movement. moveTo() returns instantly without movement when mobs nearby.
+- **Coordinates**: (12, 75, -7)
+- **Last Actions**: pillarUp(10) → wait(20000) aborted by drowned → combat(drowned) failed to kill → moveTo(210, 72, 193) returned instantly without movement
+- **Error Message**: moveTo returns in <1s with no position change. wait() aborted repeatedly by drowned at 7-8 blocks.
+- **State**: HP=9.3, Hunger=0, 15 mobs nearby (enderman:1, zombie:3, creeper:3, skeleton:2, drowned:1, bat:2)
+- **Root Cause Hypothesis**: moveTo() is being blocked by mob safety checks (creeper x3 + skeleton x2 nearby). Bot is stuck because: 1) can't move due to mob checks, 2) can't eat (no food), 3) can't combat (drops not registering), 4) pillarUp is the only working API but barely.
+- **Bug Pattern**: Same as Session 66 - mob cluster + movement block = total immobility. Starvation death likely.
+- **Impact**: Bot will die from hunger in ~5 minutes without intervention.
+- **Status**: Reported
+
+## [2026-03-25] Bug: Session 67 - combat() not yielding drops
+
+- **Cause**: bot.combat() for cow/pig/chicken/sheep returns success but no food drops appear in inventory
+- **Coordinates**: (12, 72, -7)
+- **Last Actions**: navigate(cow) → combat(cow) → inventory check shows no raw_beef/cooked_beef
+- **Error Message**: No error thrown, but inventory unchanged after combat
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Session 66 - Bot completely stuck at Y=56, all movement/combat APIs non-functional
 
 - **Cause**: All navigation/escape APIs failing silently. moveTo(), flee(), pillarUp(), combat() all return instantly without movement or effect.
