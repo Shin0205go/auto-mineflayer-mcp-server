@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 72d - moveTo completely non-functional, always returns to same position
+- **Cause**: bot.moveTo() returns immediately but position doesn't change. Calling moveTo(100,100,100) or moveTo(startX+30, y, z) all return position (5, 80, -9) after execution. No movement at all.
+- **Coordinates**: (5, 80, -9) birch_forest - this is the position bot keeps returning to
+- **Last Actions**: Multiple moveTo calls with different targets → all show position unchanged at (5, 80, -9)
+- **Error Message**: No error thrown, moveTo returns success but bot stays in place
+- **Contributing Factors**: Pathfinder may be blocked in all directions. Y=80 is inside a hill or blocked area. Bot also shows hostile mobs (skeleton, creeper) in daylight, suggesting underground spawn points nearby.
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 72c - Death by Zombie while stuck underground with HP:5.2
 - **Cause**: Bot got stuck in underground cave at Y=70-75. pillarUp failed (no blocks placed), moveTo couldn't change Y. HP dropped to 5.2 from unknown source. flee() timed out during emergency escape attempt.
 - **Coordinates**: (-22, 70, -29) old_growth_birch_forest underground cave
