@@ -1,3 +1,25 @@
+## [2026-03-25] Bug: Bot STILL stuck at cliff (26,83,-3) after wait() fix - Session 64 ONGOING
+
+- **Cause**: After wait() fix (67e5137), bot reconnected at HP=1, Hunger=0, same cliff location (26.7,83,-2.3) as Sessions 58-63. wait() no longer aborts BUT movement still completely fails: moveTo/flee/navigate/pillarUp ALL return bot to same position. bot.gather() works (slight position shifts 0.5-1 block) but bot cannot leave the cliff zone. 17 hostiles nearby (skeleton x4, creeper x9-10, zombie x1, drowned x1, spider x1). Survived night at HP=1 (hostiles not killing = confirmation of terrain trap).
+- **Coordinates**: (26.7, 83, -2.3) — SAME cliff zone as Sessions 58-63
+- **Last Actions**:
+  1. mc_reload after connection
+  2. flee(50) → no movement
+  3. pillarUp(8) → Y unchanged (44s spent)
+  4. navigate('cow') → combat('cow') → 0 food drops
+  5. moveTo(100,83,100) → no movement
+  6. step-by-step moveTo → all fail, return to (26,83,-3)
+  7. Waited full night (ticks 13813→23933 = ~2.5 hours game time)
+  8. navigate('furnace') → no movement
+  9. navigate('coal_ore') → position shifted 0.2 blocks only
+  10. gather('coal_ore') → slight position shift only
+  11. farm() → no wheat, no food
+- **Root Cause**: Pathfinder CANNOT navigate from this terrain. Bot stands on/near cliff edge. pathfinder finds no valid path away. moveTo silently "succeeds" without moving. wait() fix did NOT fix movement — the problem is deeper in pathfinder terrain handling.
+- **Critical**: 7+ consecutive sessions (58-64) stuck at same cliff. Admin /tp + /feed REQUIRED to escape this terrain trap. Code fix needed: pathfinder must handle no_path gracefully with jump/place-block fallback, OR spawn point must be changed.
+- **Status**: CRITICAL ONGOING. Session 64.
+
+---
+
 ## [2026-03-25] Bug: wait() HP=1 abort makes ALL movement impossible - Sessions 58-63 CRITICAL ROOT CAUSE
 
 - **Cause**: bot.wait() aborts at HP<3 even when HP is STABLE at 1.0. This creates an infinite loop: HP=1 → wait() aborts → no movement possible → no food → no HP recovery → HP stays at 1. ALL movement APIs (flee, moveTo, pillarUp, setControlState) use wait() internally and fail. The only way to move is without wait(), but the sandbox has no setTimeout/setInterval.
