@@ -1,3 +1,38 @@
+## [2026-03-25] Bug: Session 68 - Death at Y=47 underground (HP=1.5, multiple mobs)
+
+- **Cause**: Bot went from Y=65 surface → Y=47 underground (flee went DOWN not up). At Y=47, surrounded by skeleton, zombie, creeper in cave. HP=1.5 from prior mob damage. no food. Died to mob attack.
+- **Coordinates**: (-7, 47, 3) approximate
+- **Last Actions**: flee(60) from skeleton x4+creeper x2 → resulted in bot going deeper underground to Y=47 → mob kill
+- **Error Message**: Connection dropped (death). Respawned at (6, 112, 9) with HP=20, Hunger=20
+- **Root Cause**: flee() with canDig=true underground routes through stone, going DOWNWARD instead of upward. Exits into deeper cave with more mobs.
+- **Status**: Reported
+
+## [2026-03-25] Bug: Session 68 - combat() kills 0 entities - no drops, entity count unchanged after repeated attacks
+
+- **Cause**: bot.combat("zombie") and bot.combat("cow") called repeatedly (10+ times). nearbyEntities count never decreases. No food drops, no XP. combat() appears to not deal damage or not detect kills properly.
+- **Coordinates**: (~5, 68, -3) and others
+- **Last Actions**: for loop calling combat("zombie") x5 → entity count unchanged (zombie:3 before AND after)
+- **Error Message**: No error thrown. Returns success with no effect.
+- **Related**: This was reported in Session 67 (combat drops bug ea6cf7d fix). Drops bug may be fixed but KILL detection is broken - mobs survive combat.
+- **Status**: Reported
+
+## [2026-03-25] Bug: Session 68 - flee() always TIMES OUT when skeleton/creeper >3 are nearby
+
+- **Cause**: flee(60) consistently times out (30-60 second timeout) when surrounded by skeleton x4-6 + creeper x2-3. Logs show "Fleeing mobs..." then timeout without any position change.
+- **Coordinates**: (~5, 68, -3)
+- **Last Actions**: flee(60) called → 30-60s timeout → same position
+- **Error Message**: "Execution timed out" after exactly the timeout duration
+- **Pattern**: flee() succeeds when mobs are 1-2, fails completely when 4+ skeletons present. The ranged_mob_danger check likely aborts the pathfinding immediately for all 4 directions.
+- **Status**: Reported
+
+## [2026-03-25] Bug: Session 68 - Mobs follow bot across 80+ block distances during daytime
+
+- **Cause**: After aggroing during nighttime, mob cluster (skeleton:5-6, creeper:2-3, zombie:3-4) follows the bot regardless of distance. moveTo(50,65,50) and moveTo(200,65,200) both show same mob counts. Mobs should stop following at ~40 blocks in daylight.
+- **Coordinates**: Started at (2, 68, -8), persisted at (50, 68, 50)
+- **Last Actions**: moveTo to various positions - mob count unchanged at all locations
+- **Error Message**: None - just observational pattern
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Session 63 - Bot disconnects during wait(3000) at HP=1.5 underground - Death by mob
 
 - **Cause**: Bot at HP=1.5, Y=47 underground, morning (ticks=1233). wait(3000) call causes disconnect at exactly 3002ms. Bot being killed underground by mobs during the 3-second wait, resulting in death + disconnect.
