@@ -1487,19 +1487,59 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     }
   }
 
+  // UNDERGROUND ESCAPE AUTO-TRIGGER: Session 72c [2026-03-26]
+  // Bot stuck at Y=59-73 in cave system. moveTo to surface (Y>62) fails because:
+  //   1. Pathfinder cannot find horizontal route (cave walls block all paths)
+  //   2. allowDig fallback is disabled at Y<=60 to prevent underground rerouting
+  //   3. Manual forward+jump escape does nothing with a ceiling overhead
+  // When all pathfinder attempts failed AND bot is underground (Y<62) AND target is
+  // higher (surface direction), auto-trigger emergencyDigUp to dig straight up.
+  // This is the only reliable escape from an enclosed cave: dig vertically to open air.
+  // Condition: bot currently underground (Y<62) AND target Y is higher than current Y by >5
+  // This ensures we only auto-escape when genuinely trying to go UP (surface-bound), not
+  // when trying to move horizontally at cave level.
+  const currentBotY = bot.entity.position.y;
+  const targetIsHigher = y - currentBotY > 5;
+  if (currentBotY < 62 && targetIsHigher) {
+    console.error(`[Move] Underground escape: bot at Y=${currentBotY.toFixed(1)} (underground) with target Y=${y} (${(y - currentBotY).toFixed(0)} blocks up). Pathfinder failed — auto-triggering emergencyDigUp.`);
+    try {
+      const escapeResult = await emergencyDigUp(managed, 40);
+      console.error(`[Move] emergencyDigUp result: ${escapeResult}`);
+      // After digging up, retry pathfinding from new elevated position
+      const postEscapeY = bot.entity.position.y;
+      if (postEscapeY > currentBotY + 2) {
+        console.error(`[Move] Climbed from Y=${currentBotY.toFixed(1)} to Y=${postEscapeY.toFixed(1)} — retrying pathfinder...`);
+        const retryResult = await moveToBasic(managed, x, y, z);
+        if (retryResult.success) {
+          return `Underground escape + pathfinder: ${escapeResult} Then ${retryResult.message}` + getBriefStatus(managed);
+        }
+        return `Underground escape: ${escapeResult} Now at Y=${postEscapeY.toFixed(0)}, ${retryResult.message}` + getBriefStatus(managed);
+      }
+      return `Underground escape attempted: ${escapeResult} Position: (${bot.entity.position.x.toFixed(1)}, ${bot.entity.position.y.toFixed(1)}, ${bot.entity.position.z.toFixed(1)})` + getBriefStatus(managed);
+    } catch (escapeErr) {
+      console.error(`[Move] emergencyDigUp failed: ${escapeErr instanceof Error ? escapeErr.message : String(escapeErr)}`);
+    }
+  }
+
   let failureMsg = `Cannot reach (${x}, ${y}, ${z}). Current: (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}), ${finalDist.toFixed(1)} blocks away.`;
 
   // Give specific guidance based on the failure reason
   if (result.stuckReason === "target_higher") {
     const inv = bot.inventory.items();
     const hasScaffold = inv.some(i => ["dirt", "cobblestone", "stone", "planks"].some(b => i.name.includes(b)));
-    if (hasScaffold) {
+    if (currentBotY < 62) {
+      // Bot is underground — escapeUnderground is the right approach
+      failureMsg += ` Bot is underground (Y=${currentBotY.toFixed(0)}). Use bot.escapeUnderground() to dig straight up to surface, then retry movement.`;
+    } else if (hasScaffold) {
       failureMsg += ` Target is ${heightDiff.toFixed(0)} blocks higher. Try minecraft_pillar_up to climb.`;
     } else {
       failureMsg += ` Target is ${heightDiff.toFixed(0)} blocks higher. Need blocks (dirt, cobblestone) to climb. Collect materials first.`;
     }
   } else if (result.stuckReason === "target_lower") {
     failureMsg += ` Target is ${Math.abs(heightDiff).toFixed(0)} blocks lower. Dig down or find stairs/cave entrance.`;
+  } else if (currentBotY < 62) {
+    // Generic failure but bot is underground — surface escape is priority
+    failureMsg += ` Bot is underground (Y=${currentBotY.toFixed(0)}). Use bot.escapeUnderground() to dig straight up and escape the cave system.`;
   } else {
     failureMsg += ` Path blocked. Try moving around obstacles or mining through.`;
   }
@@ -1674,10 +1714,28 @@ export async function emergencyDigUp(managed: ManagedBot, maxBlocks: number = 30
         console.error(`[EmergencyDigUp] Jump-place error: ${err}`);
       }
     } else {
-      // No scaffold: dig only mode. Clear Y+1..Y+maxBlocks in one pass and report.
-      // The bot cannot ascend without scaffold, but at least opens a shaft.
-      console.error(`[EmergencyDigUp] No scaffold — dig-only mode, opening shaft upward`);
-      for (let dy = 1; dy <= maxBlocks - i; dy++) {
+      // No scaffold in inventory yet. Dig Y+1 and Y+2 — digging stone/dirt adds cobblestone/dirt
+      // to inventory, which can then be used as scaffold. After digging 2 blocks, re-check inventory.
+      // Session 72c [2026-03-26]: old "dig-only mode" dug a shaft but never re-checked inventory
+      // for newly acquired scaffold from the dug blocks, so the bot could never ascend.
+      console.error(`[EmergencyDigUp] No scaffold in inventory — digging Y+1/Y+2 to acquire blocks...`);
+      const digPos1NoScaff = new Vec3(curX, curY + 1, curZ);
+      const digPos2NoScaff = new Vec3(curX, curY + 2, curZ);
+      const cleared1NoScaff = await digBlock(digPos1NoScaff);
+      if (cleared1NoScaff) blocksDug++;
+      const cleared2NoScaff = await digBlock(digPos2NoScaff);
+      if (cleared2NoScaff) blocksDug++;
+      await delay(300); // Wait for item pickup
+      // Re-check inventory for newly acquired scaffold blocks
+      const newScaffold = bot.inventory.items().find(i => isScaffoldItem(i.name));
+      if (newScaffold) {
+        console.error(`[EmergencyDigUp] Acquired scaffold (${newScaffold.name}) from digging — switching to climb mode`);
+        // Continue main loop iteration (scaffold now available, loop will use it next iteration)
+        continue;
+      }
+      // Still no scaffold — dig remaining shaft blocks in one pass then return
+      console.error(`[EmergencyDigUp] No scaffold after digging — opening shaft upward (dig-only mode)`);
+      for (let dy = 3; dy <= maxBlocks - i; dy++) {
         const block = bot.blockAt(new Vec3(curX, curY + dy, curZ));
         if (!block || block.name === "air" || block.name === "cave_air") continue;
         if (block.hardness < 0) break;
@@ -1692,9 +1750,21 @@ export async function emergencyDigUp(managed: ManagedBot, maxBlocks: number = 30
             new Promise<void>((_, reject) => setTimeout(() => reject(new Error("dig timeout")), 5000)),
           ]);
           blocksDug++;
+          // Check for scaffold after each dig — stone gives cobblestone
+          const scaffoldCheck = bot.inventory.items().find(i => isScaffoldItem(i.name));
+          if (scaffoldCheck) {
+            console.error(`[EmergencyDigUp] Acquired scaffold (${scaffoldCheck.name}) mid-shaft — breaking to climb mode`);
+            // Break out of the shaft-dig loop and let the main loop handle climbing
+            break;
+          }
         } catch { try { bot.stopDigging(); } catch { /* ignore */ } }
       }
-      return `No scaffold blocks — dug ${blocksDug} shaft blocks upward from Y=${startY}. Use bot.pillarUp() after gathering scaffold blocks (cobblestone/dirt) to climb out.`;
+      // If we now have scaffold, the main loop will continue and climb
+      const scaffoldAfterShaft = bot.inventory.items().find(i => isScaffoldItem(i.name));
+      if (!scaffoldAfterShaft) {
+        return `No scaffold blocks available — dug ${blocksDug} shaft blocks upward from Y=${startY}. Inventory has no suitable climbing blocks. Use bot.pillarUp() after gathering cobblestone/dirt to climb out.`;
+      }
+      // Otherwise continue the main loop to climb
     }
 
     // Check if bot fell - if so, wait and restart

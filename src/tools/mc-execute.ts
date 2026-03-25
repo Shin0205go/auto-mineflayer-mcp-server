@@ -27,6 +27,7 @@ import {
   mc_tunnel,
   mc_reconnect,
 } from "./core-tools.js";
+import { emergencyDigUp } from "../bot-manager/bot-movement.js";
 import { botManager } from "../bot-manager/index.js";
 import { isHostileMob, EDIBLE_FOOD_NAMES } from "../bot-manager/minecraft-utils.js";
 import { equipArmor } from "../bot-manager/bot-items.js";
@@ -134,6 +135,23 @@ export async function mc_execute(
     },
     pillarUp: async (height?: number) => {
       return await minecraft_pillar_up(height ?? 1);
+    },
+    // bot.escapeUnderground() — dig straight up from underground to surface.
+    // Use when the bot is trapped at Y<62 in a cave and cannot reach surface via moveTo/pillarUp.
+    // Digs Y+1 and Y+2, then jump-places scaffold to gain height each step.
+    // If no scaffold blocks are available, opens a vertical shaft (bot cannot ascend without blocks).
+    // Always call bot.status() first to confirm current Y and check for hostiles.
+    // Session 72c [2026-03-26]: added as first-class API after bot died at HP=5 underground
+    // because moveTo/pillarUp/flee could not escape enclosed cave at Y=59-73.
+    escapeUnderground: async (maxBlocks?: number) => {
+      const username = botManager.requireSingleBot();
+      const managed = botManager.getBotByUsername(username);
+      if (!managed) throw new Error("Bot not connected");
+      const curY = managed.bot.entity.position.y;
+      if (curY >= 62) {
+        return `[WARNING] bot.escapeUnderground() called but bot is already at surface level (Y=${curY.toFixed(1)} >= 62). No escape needed. Use bot.moveTo() or bot.pillarUp() instead.`;
+      }
+      return await emergencyDigUp(managed, maxBlocks ?? 40);
     },
     tunnel: async (direction: string, length?: number) => {
       return await mc_tunnel(direction, length ?? 10);
