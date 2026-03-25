@@ -636,8 +636,9 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
                 });
                 bowCollectHandle.cleanup();
               }
+              const bowInventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
               await delay(800);
-              await collectNearbyItems(managed);
+              await collectNearbyItems(managed, { inventoryBefore: bowInventoryBefore });
             } catch (_) {}
             const inv = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
             return `Killed ${target.name} with ${bow.name}. HP: ${(bot.health ?? 0).toFixed(1)}/20. Inventory: ${inv}`;
@@ -802,14 +803,16 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         // Bot2/Bot3 [2026-03-22]: mob drops not collected because item entities hadn't
         // spawned yet (800ms too short on busy server). Increased to 1s for all mobs.
         const isEnderman = target.name === "enderman";
+        // Capture inventoryBefore BEFORE itemSpawnDelay (same fix as fight()).
+        const attackInventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
         await delay(isEnderman ? 1000 : 1000);
         let collectionResult = "Collection not attempted";
         try {
           // Wider search for endermen (teleport, items scatter far).
           // Default 10-block radius with waitRetries=10 for all mobs to catch delayed spawns.
           const attackCollectOpts = isEnderman
-            ? { searchRadius: 16, waitRetries: 12 }
-            : { searchRadius: 12, waitRetries: 10 };
+            ? { searchRadius: 16, waitRetries: 12, inventoryBefore: attackInventoryBefore }
+            : { searchRadius: 12, waitRetries: 10, inventoryBefore: attackInventoryBefore };
           collectionResult = await collectNearbyItems(managed, attackCollectOpts);
           console.error(`[Attack] Item collection result: ${collectionResult}`);
         } catch (err) {
@@ -1701,6 +1704,16 @@ export async function fight(
       const isEnderman = targetName === "enderman";
       const isFoodAnimal = FOOD_ANIMALS.some(a => targetName.toLowerCase().includes(a));
       const itemSpawnDelay = isEnderman ? 1000 : (isFoodAnimal ? 1000 : 800);
+      // Capture inventoryBefore BEFORE itemSpawnDelay wait.
+      // Items dropped by the mob may auto-collect via Mineflayer's pickup mechanism
+      // within 0.5s of spawning (10-tick pickup delay expires). If we wait 1s before
+      // capturing inventoryBefore, these auto-collected items are already counted in
+      // inventoryBefore → inventoryAfter - inventoryBefore = 0 → "No items nearby".
+      // By capturing BEFORE the wait, any auto-collected items during the wait ARE
+      // counted as new items (inventoryAfter > inventoryBefore).
+      // Bot1 Sessions 67-69: combat(cow/sheep/pig/chicken) in melee range caused
+      // items to auto-collect in 0.5s, but inventoryBefore was captured 1s later.
+      const inventoryBeforeCollection = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
       await delay(itemSpawnDelay);
       let collectionResult = "Collection not attempted";
       try {
@@ -1708,10 +1721,10 @@ export async function fight(
         // Default 10 blocks often misses items at 4-5 block offset from bot position.
         // Also increase waitRetries: server item entity spawn can take 1-2s on busy servers.
         const collectOpts = isEnderman
-          ? { searchRadius: 16, waitRetries: 12 }
+          ? { searchRadius: 16, waitRetries: 12, inventoryBefore: inventoryBeforeCollection }
           : isFoodAnimal
-            ? { searchRadius: 14, waitRetries: 10 }
-            : undefined;
+            ? { searchRadius: 14, waitRetries: 10, inventoryBefore: inventoryBeforeCollection }
+            : { inventoryBefore: inventoryBeforeCollection };
         collectionResult = await collectNearbyItems(managed, collectOpts);
         console.error(`[Fight] Item collection result: ${collectionResult}`);
       } catch (err) {

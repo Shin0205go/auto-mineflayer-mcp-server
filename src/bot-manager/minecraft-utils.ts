@@ -105,6 +105,12 @@ export const EDIBLE_FOOD_NAMES = new Set([
   "beetroot", "dried_kelp", "cookie", "pumpkin_pie", "mushroom_stew",
   "rabbit_stew", "beetroot_soup", "suspicious_stew", "chorus_fruit",
   // Raw meats — edible but less effective
+  // Use raw_* prefix (Minecraft 1.13+ item IDs after the flattening).
+  // Pre-1.13 names ("beef", "porkchop", etc.) no longer match server item IDs.
+  // Bot1 Sessions 67-69: auto-eat never triggered after cow/pig/chicken kills because
+  // raw_beef/raw_porkchop/raw_chicken didn't match "beef"/"porkchop"/"chicken" in this list.
+  "raw_beef", "raw_porkchop", "raw_chicken", "raw_mutton", "raw_rabbit", "raw_cod", "raw_salmon",
+  // Keep old names as fallback for any server version that may still use them
   "beef", "porkchop", "chicken", "mutton", "rabbit", "cod", "salmon",
   // Emergency food — better than starving
   "rotten_flesh",

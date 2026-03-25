@@ -18,12 +18,18 @@ function delay(ms: number): Promise<void> {
 /**
  * Collect dropped items near the bot
  */
-export async function collectNearbyItems(managed: ManagedBot, options?: { searchRadius?: number; waitRetries?: number }): Promise<string> {
+export async function collectNearbyItems(managed: ManagedBot, options?: { searchRadius?: number; waitRetries?: number; inventoryBefore?: number }): Promise<string> {
   const bot = managed.bot;
   const searchRadius = options?.searchRadius ?? 10;
   const waitRetries = options?.waitRetries ?? 8;
   console.error(`[CollectItems] Starting collection, bot at ${bot.entity.position.toString()}, searchRadius=${searchRadius}, waitRetries=${waitRetries}`);
-  const inventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+  // Allow caller to pass inventoryBefore captured BEFORE itemSpawnDelay.
+  // Without this, items auto-collected by Mineflayer during the 1s itemSpawnDelay
+  // are already in inventory when collectNearbyItems starts. inventoryBefore would
+  // then equal inventoryAfter → actuallyCollected = 0 → "No items nearby" despite
+  // items actually being collected. Bot1 Sessions 67-69: all mob kills (cow/pig/chicken)
+  // returned 0 drops because items auto-collected in melee range within 0.5-1s of kill.
+  const inventoryBefore = options?.inventoryBefore ?? bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
 
   // Simplified and more reliable item detection
   const findItems = () => {
@@ -296,6 +302,23 @@ export async function collectNearbyItems(managed: ManagedBot, options?: { search
         }
 
         bot.pathfinder.setGoal(null);
+
+        // If we're within 1.5 blocks (reachedItem=true) but item still exists,
+        // physically walk THROUGH the item position to force server-side auto-pickup.
+        // When GoalNear stops pathfinder just BEFORE the item (~1-1.5 blocks away),
+        // the bot is STATIONARY. Minecraft's server-side pickup requires the bot
+        // to physically move into the item's bounding box.
+        // Bot1 Sessions 67-69: bot stopped 1.0-1.5 blocks from item, waited 1.2s
+        // stationary — server never triggered collect because bot didn't move through item.
+        if (reachedItem && bot.entities[item.id]) {
+          await bot.lookAt(itemPos);
+          bot.setControlState("forward", true);
+          bot.setControlState("jump", true);
+          await delay(600); // Sprint through item
+          bot.setControlState("forward", false);
+          bot.setControlState("jump", false);
+          await delay(300);
+        }
 
         // If close but not quite there, make final approach
         // Extended distance threshold from 3 to 5: items from knockback scatter can land

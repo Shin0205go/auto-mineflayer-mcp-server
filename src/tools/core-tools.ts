@@ -1243,7 +1243,20 @@ export async function mc_farm(): Promise<string> {
                   break;
                 }
               }
-              const vMoveResult = await botManager.moveTo(username, vLandTarget.x, vLandTarget.y, vLandTarget.z);
+              // Wrap vLandTarget moveTo in Promise.race to enforce global farm timeout.
+              // Without this, moveTo can hang indefinitely (e.g., pathfinder stuck at Y=60)
+              // causing mc_farm to exceed the 120s MCP response timeout.
+              // Bot1 Session 69: farm() timeout (120s+) because vMoveResult had no timeout wrap.
+              const vMoveRemainingMs = FARM_TIMEOUT_MS - (Date.now() - farmStartTime);
+              const vMoveResult = await Promise.race([
+                botManager.moveTo(username, vLandTarget.x, vLandTarget.y, vLandTarget.z),
+                new Promise<string>(resolve => setTimeout(() => resolve("TIMEOUT"), vMoveRemainingMs))
+              ]);
+              if (vMoveResult === "TIMEOUT") {
+                logs.push(`[ABORTED] mc_farm far-water navigation timed out (${FARM_TIMEOUT_MS / 1000}s global limit).`);
+                const finalBot = botManager.getBot(username);
+                return logs.join("\n") + `\nmc_farm: timed out during far-water navigation (pathfinder stuck). HP: ${finalBot?.health ?? '?'}, Hunger: ${finalBot?.food ?? '?'}. Try moving to a different area first.`;
+              }
               // SAFETY: Abort if moveTo routed underground (same check as 64-block search)
               const vPostMoveY = bot.entity.position.y;
               if (vMoveResult.includes("underground") || vMoveResult.includes("cave") || vMoveResult.includes("descended")) {

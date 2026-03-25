@@ -6,7 +6,13 @@
 - **Error Message**: "Claude1 starved to death" (anticipated - Hunger=0, HP=8.5 and falling)
 - **Root Cause Hypothesis**: keepInventory gamerule or some server config may have caused item collection to stop working entirely. Or the bot's item pickup/collection code has a regression that prevents any item from being added to inventory via drop pickup or harvest.
 - **Critical Note**: gather() correctly navigates to blocks and mines them (cobblestone count changed: was 60, gained some from gather) BUT food items don't appear. Stone/cobblestone from gather() DO appear in inventory. ONLY food/mob drops are affected.
-- **Status**: Reported - starvation death imminent
+- **Root Cause Analysis** (code review - Sessions 67-69):
+  1. **`inventoryBefore` timing bug** (bot-items.ts + bot-survival.ts): `collectNearbyItems()` captured `inventoryBefore` at function entry, AFTER `fight()`/`attack()` had already waited 1s (`itemSpawnDelay`). During that 1s wait, Mineflayer auto-collects nearby items (Minecraft's 10-tick pickup delay = 0.5s). Items picked up during `itemSpawnDelay` were already counted in `inventoryBefore` → `actuallyCollected = 0` → "No items nearby" despite items being in inventory. Fix: capture `inventoryBefore` BEFORE `itemSpawnDelay` in `fight()`, `attack()`, and bow-kill paths, then pass as `options.inventoryBefore` to `collectNearbyItems`.
+  2. **Stationary bot after GoalNear stops** (bot-items.ts): `GoalNear(pos, 1)` stops pathfinder when within 1.5 blocks of item. At that point, bot is STATIONARY — Minecraft server requires physical bot movement to trigger item auto-pickup. Fix: added explicit 600ms sprint-through-item when `reachedItem=true` and item entity still exists.
+  3. **`EDIBLE_FOOD_NAMES` pre-1.13 names** (minecraft-utils.ts): Set had `"beef"`, `"porkchop"`, `"chicken"` etc. — pre-1.13 names. Minecraft 1.13+ flattening renamed these to `"raw_beef"`, `"raw_porkchop"`, `"raw_chicken"`. Auto-eat after kills never triggered because raw meat items didn't match the set. Fix: added `raw_*` variants.
+  4. **`mc_farm()` far-water `moveTo` timeout** (core-tools.ts): 200-block water search called `botManager.moveTo()` without `Promise.race` timeout, causing 120s+ hangs. Fix: wrapped in `Promise.race` with remaining farm budget.
+- **Fix Applied** (commit pending): All 4 fixes applied to bot-items.ts, bot-survival.ts, minecraft-utils.ts, core-tools.ts.
+- **Status**: Fixed.
 
 ## [2026-03-25] Bug: Session 69 - Bot killed by Zombie during farm() timeout + combat() drops broken
 
@@ -17,7 +23,8 @@
 - **State at death**: HP=6.3, Hunger=0, all food hunting failed due to combat drop bug
 - **Key Bug**: combat() NEVER yields ANY drops for ANY mob. Tested: cow, sheep, pig, chicken, zombie, spider, skeleton - ALL produce zero drops. This is NOT just passive mobs - ALL mob types affected. String x2 and arrows x3 in inventory are pre-existing from earlier sessions. This is the same bug reported in Session 67 but still not fixed, and now confirmed to affect hostile mobs too.
 - **Secondary Bug**: farm() hangs indefinitely (120s+ timeout). Does not complete or return.
-- **Status**: Reported
+- **Root Cause Analysis**: See Session 69b entry above (same compounding bugs). `inventoryBefore` timing + stationary bot after GoalNear + EDIBLE_FOOD_NAMES wrong names + farm() missing timeout.
+- **Status**: Fixed.
 
 ## [2026-03-25] Bug: Session 68 - Bot permanently stuck at Y=72, moveTo/navigate/flee all return with zero displacement
 
