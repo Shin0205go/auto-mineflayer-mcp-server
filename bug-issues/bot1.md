@@ -18,14 +18,17 @@
 - **Item losses**: coal x8, torch x2, crafting_table, chest x2 lost across multiple deaths
 - **Status**: Reported
 
-## [2026-03-26] Bug: Session 76 - bot.status() fails mid-session, botManager.bots Map empties after mc_execute
-- **Cause**: After mc_connect succeeds, bot.log() (no botManager call) succeeds, but bot.status() (calls botManager.requireSingleBot()) fails immediately with "Not connected". botManager.bots Map is getting emptied between mc_execute calls or during async execution.
-- **Pattern**: mc_connect → success; mc_execute{bot.log("A")} → success; mc_execute{await bot.status()} → FAILS at 1ms
-- **Coordinates**: N/A (cannot get position)
-- **Root Cause Hypothesis**: bot.on("end") fires during/after mc_execute async execution, deleting bot from botManager.bots. The Minecraft server may be disconnecting the bot immediately, or mc_execute's async operations trigger a disconnect. Since bot.log() is sync and bot.status() is async, the disconnect happens asynchronously between them.
-- **Evidence**: mc_connect returns "Connected to localhost:25565 as Claude1" but bot.status() fails 1-2ms later. Only the very first await call in mc_execute sometimes works (HP:9.9 once), subsequent calls always fail.
-- **Impact**: CRITICAL - Cannot play game at all. Cannot check HP, inventory, or perform any gameplay actions.
-- **Status**: Reported
+## [2026-03-26] Bug: Session 76 - CRITICAL: await bot.status() disconnects bot, making game unplayable
+- **Cause**: After mc_connect succeeds, bot.log() (sync, no botManager call) works fine multiple times. But ANY call to `await bot.status()` causes the bot to disconnect from botManager. After the disconnect, ALL subsequent mc_execute calls fail with "Not connected" (1ms).
+- **Pattern**: mc_connect → mc_execute{bot.log("A")} SUCCESS → mc_execute{bot.log("B")} SUCCESS → mc_execute{await bot.status()} → SUCCESS ONCE (HP:1.5) → all subsequent calls FAIL
+- **Reproduced multiple times**: The pattern is: bot.status() sometimes succeeds once (HP:1.5 returned), but then bot is disconnected. Rarely it fails immediately (1ms).
+- **Root Cause**: bot.status() calls mc_status() which is an async function. Something inside mc_status() or its promise chain causes bot.on("end") to fire, deleting the bot from botManager.bots Map. This disconnects the bot from the game.
+- **Additional Evidence**: mc_execute{await bot.moveTo()} also causes immediate failure - moveTo() never starts (0ms failure), meaning botManager.requireSingleBot() fails instantly when called inside moveTo's implementation.
+- **Coordinates**: (-8, 44, 5) Y=44 underground birch_forest
+- **Current Game State**: HP:1.5, Hunger:8, no food, skeleton+creeper nearby, chest at (-6,61,2), morning
+- **Impact**: CANNOT PLAY THE GAME. Bot dies at HP:1.5 with no way to recover food. All game actions that use botManager (status, moveTo, flee, etc.) disconnect the bot.
+- **Fix Needed**: Investigate why mc_status() or botManager calls cause bot disconnection. Check if there's an unhandled promise rejection or synchronous error inside mc_status() that triggers bot.end().
+- **Status**: Reported - CRITICAL BLOCKER
 
 ## [2026-03-25] Bug: Session 75 - Death: Zombie climbed pillar, no food to recover
 
