@@ -1,3 +1,13 @@
+## [2026-03-25] Bug: bot.setControlState is not a function - Session 59
+
+- **Cause**: `bot.setControlState('forward', true)` throws `TypeError: bot.setControlState is not a function` inside mc_execute sandbox. Admin instructed using setControlState to escape cliff, but the method is not exposed in the bot API object.
+- **Coordinates**: (27.6, 90.0, -12.2) stuck on cliff at Y=90
+- **Last Actions**: Tried all moveTo directions (6 directions) but position unchanged. Admin suggested setControlState as workaround.
+- **Error Message**: `TypeError: bot.setControlState is not a function`
+- **Status**: Reported. Need to expose bot.setControlState in mc_execute sandbox, or add bot.moveForward()/bot.jump() helpers.
+
+---
+
 ## [2026-03-25] Bug: bot.combat() kills animals but NO food drops collected - Session 58
 
 - **Cause**: bot.combat("cow"), bot.combat("chicken"), bot.combat("pig") all return success, but no food items (raw_beef, raw_chicken, raw_porkchop, etc.) appear in inventory after repeated kills.
