@@ -1,3 +1,14 @@
+## [2026-03-25] Bug: wait() HP=1 abort makes ALL movement impossible - Sessions 58-63 CRITICAL ROOT CAUSE
+
+- **Cause**: bot.wait() aborts at HP<3 even when HP is STABLE at 1.0. This creates an infinite loop: HP=1 → wait() aborts → no movement possible → no food → no HP recovery → HP stays at 1. ALL movement APIs (flee, moveTo, pillarUp, setControlState) use wait() internally and fail. The only way to move is without wait(), but the sandbox has no setTimeout/setInterval.
+- **Coordinates**: (26.3, 83, -2.5) — same cliff zone Sessions 58-63
+- **Root Cause**: wait() function has `if (hp < 3) abort` check. At HP=1 (stable, not dropping), this fires every single time regardless of actual danger. Bot cannot move AT ALL when HP=1.
+- **Fix Required**: In bot.wait(): if HP is stable at 1 (same as previous check), do NOT abort. Only abort if HP is actively dropping (hpDroppedSinceStart > 0). The stable HP=1 case means minecraft's natural half-heart protection — bot is not in active danger.
+- **Evidence**: 7 sessions (58-63) all stuck at same location. wait() shows "ABORTED: HP dropped to 1.0" even though HP is STABLE at 1.0 (not dropping).
+- **Status**: CRITICAL ROOT BUG. Needs code fix to wait() in mc-execute.ts/core-tools.ts
+
+---
+
 ## [2026-03-25] Bug: Bot stuck at cliff (26.5,83,-2.3) - HP=1, no food, all movement fails - Session 63
 
 - **Cause**: Bot at (26.5, 83, -2.3), HP=1, Hunger=0, no food in inventory. SAME cliff area as Sessions 58-62. All movement APIs fail: moveTo, flee, navigate, pillarUp, setControlState all leave bot at same position. 7+ hostiles nearby (pillager x1, bat x11, skeleton x3, creeper x7, zombie x1, drowned x1, spider x1). combat('zombie') does not produce rotten flesh. ender_pearl in inventory but no API to throw it. wait() ABORTS immediately due to HP=1.
