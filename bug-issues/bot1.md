@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 89 - 死亡29回目 Skeleton射撃（地上Y=92、HP低+Hunger:0での戦闘）
+- **Cause**: Hunger:0・HP:9.3の状態でzombie戦闘中にSkeleton射撃を受けて死亡。HP低下中に戦闘を試みたのが問題。
+- **Coordinates**: (-2, 92, 36) 付近
+- **Last Actions**: zombie戦闘試み → "Claude1 was shot by Skeleton" → 死亡
+- **Error Message**: "Claude1 was shot by Skeleton"
+- **Status**: Reported. HP<10かつHunger<4の状態での戦闘はfleeを優先すべき。
+
 ## [2026-03-27] Bug: Session 89 - 死亡28回目 Creeperに爆殺（テレポート直後Y=98）
 - **Cause**: adminテレポート後(6,98,-6)でCreeper爆発により即死。HP:20/Hunger:20でも周辺確認なしに行動してCreeper接触。
 - **Coordinates**: (6, 98, -6)
