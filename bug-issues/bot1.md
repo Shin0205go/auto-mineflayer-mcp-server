@@ -1,3 +1,15 @@
+## [2026-03-26] Bug: Session 83 - 全移動手段失敗 + combat()ドロップ取得不可（CRITICAL）
+
+- **Cause**: mc_reload後も以下の全操作が機能しない：
+  1. `moveTo(x,y,z)` - 成功を返すが座標変化なし（全方向試験済み）
+  2. `setControlState('forward', true)` - 10秒間前進させても座標変化なし
+  3. `combat('cow'/'pig'/'chicken'/'sheep'/'zombie')` - ドロップが一切インベントリに入らない
+  4. `navigate()` - 近傍のみ機能（遠距離不可）
+- **Coordinates**: x=-66, y=97, z=5 （固定）
+- **Last Actions**: reconnect × 3回、mc_reload × 2回でも改善なし
+- **Status**: CRITICAL。Hunger=0、食料0、移動不能。HP=7。
+- **必要な修正**: moveTo/pathfinder/setControlState/combatドロップ取得の全面的な修正が必要。
+
 ## [2026-03-26] Bug: Session 83 - combat()後に肉ドロップが取得できない + 地形スタック継続
 
 - **Cause**: mc_reload後もcombat("cow"/"pig"/"chicken"/"sheep")を実行すると「成功」を返すが、インベントリに肉が追加されない。navigate()で動物に近づいてcombat()しても同様。
