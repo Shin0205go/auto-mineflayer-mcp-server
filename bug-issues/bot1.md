@@ -1,3 +1,11 @@
+## [2026-03-27] Bug: Session 88 - 死亡17回目 落下死（Y=87から落下）
+
+- **Cause**: navigate(farmland)後Y=87の高地に移動、gather("wheat")60秒タイムアウト中に落下死。
+- **Coordinates**: (-0.5, 87, 1.6)
+- **Last Actions**: navigate(farmland) → 60s timeout → `Claude1 hit the ground too hard`
+- **Error Message**: `<[Server]> Claude1 hit the ground too hard`
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 88 - 連続死亡パターン（根本原因報告）
 
 - **Cause**: 以下の複合バグにより食料確保が不可能な状態が続き死亡ループが発生:
