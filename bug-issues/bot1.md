@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 83 - combat()後に肉ドロップが取得できない + 地形スタック継続
+
+- **Cause**: mc_reload後もcombat("cow"/"pig"/"chicken"/"sheep")を実行すると「成功」を返すが、インベントリに肉が追加されない。navigate()で動物に近づいてcombat()しても同様。
+- **Coordinates**: x=-72, y=109, z=4
+- **Last Actions**: mc_reload → navigate("cow") → combat("cow") × 5回 → インベントリ変化なし。navigate("chicken") × 3回も同様。
+- **Error Message**: エラーなし（成功と表示されるが肉がインベントリに入らない）
+- **Status**: Reported。Hunger=0、食料0の緊急状態。地形スタックも継続中。
+- **Additional**: moveTo()/navigate()が同じ座標(-72,109,4)に戻り続ける。flee()でわずかに動くが戻る。pillarUp後に高地スタックの状態が継続している。
+
 ## [2026-03-26] Bug: 地形スタック - Y=109山頂から移動不能（Session 81-82）
 
 - **Cause**: Y=109のold_growth_birch_forest山頂に閉じ込められ、全移動手段が失敗。
