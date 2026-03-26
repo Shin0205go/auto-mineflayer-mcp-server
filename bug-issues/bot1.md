@@ -4037,3 +4037,12 @@ Bot needs to explore further (200+ blocks) to find animals.
 - **Root Cause**: 敵に囲まれた状態でpathfinderが経路を見つけられない/敵回避で移動できない。
 - **Impact**: HP=3.5, Hunger=0で移動も食料確保もできない死亡確定状態。
 - **Status**: Reported. gather()/pillarUp()に敵検知時の中断・flee機能が必要。
+
+## [2026-03-27] Bug: Session 91 - moveTo()がY軸方向に移動できない（地下閉じ込め）
+- **Cause**: moveTo(x, y+20, z)を試みてもy座標が全く変わらない。y=60から moveTo(x, 80, z)を実行してもy=61までしか変わらない。Y方向の経路探索が機能していない可能性。
+- **Coordinates**: x=-2, y=60, z=9 (birch_forest, 地下洞窟内)
+- **Last Actions**: moveTo(x, 65, z) → y=61のまま変わらず × 5回。pillarUp(5)もタイムアウト。place("cobblestone", x, y+1..5, z)は成功するが自分は上に乗れない。
+- **Error Message**: なし（moveTo成功扱い）
+- **Root Cause**: 地下洞窟でpathfinderが地上への経路を見つけられない。place()で足場を作っても反映されない可能性。
+- **Impact**: 地下閉じ込め状態。HP=3.5, Hunger=0で脱出不可能。
+- **Status**: Reported. moveTo()のY軸経路探索修正必要。地下洞窟での脱出ルーチン必要。
