@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 89 - 死亡30回目 Zombie攻撃（シェルター内、夜間）
+- **Cause**: bot.build("shelter")でシェルターを建設したが、シェルター内にZombieが侵入してHP2.5まで削られ死亡。シェルターが密閉されていないか、Zombieがシェルター内に沸いた可能性。
+- **Coordinates**: (-12, 85, 40) 付近
+- **Last Actions**: build("shelter") → wait(30s) → Zombie接近 → HP:20→2.5 → 死亡 → "Claude1 was slain by Zombie"
+- **Error Message**: "Claude1 was slain by Zombie"
+- **Status**: Reported. シェルターがZombie侵入を防げていない。夜間のシェルターが機能不全。
+
 ## [2026-03-27] Bug: Session 89 - gather/farm/pillarUp全ツール連続タイムアウト（Y=83付近）
 - **Cause**: gather("iron_ore",2), gather("birch_log",4), farm(), pillarUp(20) 全てが30-120秒でタイムアウト。ツールが実際には何もしないままタイムアウトする。
 - **Coordinates**: (-13, 83, 40) 付近
