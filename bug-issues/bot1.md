@@ -1,3 +1,13 @@
+## [2026-03-25] Bug: Session 70e - Frequent "Not connected" after mc_connect, bot disconnects during flee()/wait()
+
+- **Cause**: After mc_reload + mc_connect succeeds, subsequent mc_execute calls immediately fail with "Not connected" (0-2ms). Pattern: mc_connect → success → mc_execute → "Not connected" at 0ms. Even simple wait(2000) disconnects the bot. flee() with enderman nearby triggers disconnect. bot.build("shelter") fails with "Bot Claude1 not found".
+- **Coordinates**: (-10, 76, 0) area
+- **Last Actions**: mc_reload → mc_connect → mc_execute{status} → success → mc_execute{flee/wait/place} → fail at 0ms
+- **Error Message**: "Not connected to any server" at 0ms after successful mc_connect
+- **Pattern**: Seems related to enderman proximity (2 endermen within 7-12 blocks), creeper cluster (3+), or combat state. Status() works once but next call fails.
+- **Note**: bot.wait() pre-flee logic ran ("Pre-wait: enderman at 7.3 blocks — auto-fleeing") suggesting bot IS connected but then disconnects during flee operation
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Session 75 - combat() drops completely broken, causing starvation death loop
 
 - **Cause**: bot.combat() returns success but yields ZERO drops from any entity (cow, pig, chicken, sheep, zombie, skeleton, drowned). Tested 20+ times across session.
