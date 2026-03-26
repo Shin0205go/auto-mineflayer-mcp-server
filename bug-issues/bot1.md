@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 80 - Death: ゾンビに殺される（夜明け直前）
+
+- **Cause**: HP1、Hunger0の飢餓状態で夜間待機中、夜明け（ticks=23719）にゾンビが接近。wait()がauto-fleeで中断されたが、flee cooldown（30s）により逃走できず、ゾンビに殺された
+- **Coordinates**: x=-2, y=111, z=-5（死亡時）
+- **Last Actions**: pillarUp → flee → 夜間待機 → wait()がauto-flee中断 → flee cooldown中でゾンビに殺される
+- **Error Message**: "Claude1 was slain by Zombie"
+- **Root Cause**: flee cooldownが30秒あるため、auto-fleeから30秒以内に再び敵が接近した場合に逃走できない。夜明けのゾンビは日光で燃えず、このシナリオで特に危険。
+- **Status**: Reported 2026-03-26 Session 80。keepInventory ON。
+
 ## [2026-03-26] Bug: Session 79 - 洞窟スタック継続 + 全移動API失敗
 
 - **Cause**: x=-7, y=52, z=-10 の洞窟に完全に閉じ込められた状態が続いている。gather("stone"), gather("birch_log"), moveTo, pillarUp, flee 全てがタイムアウトまたは微小移動のみ。2時間以上同じ場所に固定。
