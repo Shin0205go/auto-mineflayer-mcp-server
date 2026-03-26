@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 83 - シェルター内で落下死（4回目の死亡）
+
+- **Cause**: HP=7でシェルター内に待機中、HP=0になって死亡。「fell from a high place」のメッセージ。直前の行動はgather("short_grass")とgather("oak_leaves")でHP変化なしだった。理由不明。
+- **Coordinates**: x=-5, y=62, z=3（死亡地点）
+- **Last Actions**: gather("short_grass") → gather("oak_leaves") → HP=0 → 落下死
+- **Error Message**: "Claude1 fell from a high place"
+- **Root Cause**: シェルター内でHPが突然0に。考えられる原因: (1) シェルター内に落下ダメージを受ける穴がある、(2) gather()が危険な場所に移動させた、(3) mob攻撃
+- **Status**: Reported。4回目リスポーン。HP=20、Hunger=20、朝、Y=107。
+
 ## [2026-03-26] Bug: Session 83 - 矢で弱ってからの落下死（3回目の死亡）
 
 - **Cause**: tunnel("down")ループ中にスケルトンの矢を受けてHP=4.8まで低下。その後「doomed to fall by Arrow」で落下死。
