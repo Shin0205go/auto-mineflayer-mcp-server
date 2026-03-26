@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 88 - 死亡: Zombieに殺された10回目（farm()タイムアウト中）
+
+- **Cause**: HP=5でfarm()実行中（120秒タイムアウト）にZombieに殺された。farm()実行中は安全チェックが効かない。
+- **Coordinates**: (-2.5, 60, -10.4)
+- **Last Actions**: farm() → 120s timeout → `Claude1 was slain by Zombie`
+- **Error Message**: `<[Server]> Claude1 was slain by Zombie`
+- **Status**: Reported。farm()実行中のHP監視が不十分。
+
 ## [2026-03-26] Bug: Session 88 - navigate/gatherが全タイムアウト（pathfinder完全機能不全）
 
 - **Cause**: HP=20/Hunger=20でもnavigate("birch_log")が120秒タイムアウト、gather("birch_log")が60秒タイムアウト。Y=81の高台から木ブロックまでのパス探索が失敗し続ける。
