@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 80 - Death: bot.farm()タイムアウト中にゾンビに殺される（2回目）
+
+- **Cause**: bot.farm()を実行中（180秒タイムアウト）に、実行がハングし敵対的エンティティへの防御ができずゾンビに殺された。farm()が敵接近を検知して中断する機能がない。
+- **Coordinates**: y=112付近（またも高所でリスポーン）
+- **Last Actions**: navigate → farm()開始 → 180秒タイムアウト → "Claude1 was slain by Zombie"
+- **Error Message**: "Execution timed out after 180000ms"
+- **Root Cause**: bot.farm()が長時間ブロッキング実行されている間、HP/安全チェックが行われない
+- **Status**: Reported 2026-03-26 Session 80。2回目のゾンビ死亡。
+
 ## [2026-03-26] Bug: Session 80 - combat()でアイテムドロップが取得できない
 
 - **Cause**: bot.navigate(animal) → bot.combat(animal) を実行しても、動物のドロップアイテム（raw_beef, raw_chicken等）が一切インベントリに追加されない。複数の動物種（chicken, pig, sheep, cow）で試したが全て同様。
