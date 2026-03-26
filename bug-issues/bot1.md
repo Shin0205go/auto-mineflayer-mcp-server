@@ -42,6 +42,15 @@
 - **Error Message**: なし（エラーなしで移動失敗）
 - **Status**: Reported 2026-03-26 Session 80。前回Session 79と同じ洞窟スタックバグ。飢餓死不可避。
 
+## [2026-03-26] Bug: Session 80 - craft()全般がcrafting_table前でも失敗（鉄ピッケル・鉄剣）
+
+- **Cause**: iron_ingot×4、stick×7、crafting_table直前にいるにもかかわらずcraft("iron_pickaxe")とcraft("iron_sword")が失敗する。素材は充分にある。
+- **Coordinates**: x=-8, y=59, z=-9
+- **Last Actions**: navigate("crafting_table") → (到達) → craft("iron_pickaxe") → 失敗 → craft("iron_sword") → 失敗
+- **Error Message**: なし
+- **Root Cause**: crafting_tableとの接触判定か、設置されたcrafting_tableの使用に問題がある可能性
+- **Status**: Reported 2026-03-26 Session 80。furnace、iron_pickaxe、iron_sword全て同じバグで失敗。
+
 ## [2026-03-26] Bug: Session 80 - craft("furnace")がcrafting_tableの直前でも失敗
 
 - **Cause**: crafting_tableを設置しその直前(0ブロック距離)にいても、bot.craft("furnace")が失敗する。インベントリにcobblestone124個あり。autoGather=trueでも同様に失敗。
