@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 88 - 死亡: Zombieに殺された（HP1.7、Hunger0、pillarUp中）
+
+- **Cause**: HP=1.7、Hunger=0の状態でpillarUp中にZombieに殺された。pillarUpがタイムアウト(60秒)で途中停止し、その間に近くのzombieにダメージを受けた。moveTo/combat/gatherが全て機能しない状態で食料確保できず、HP回復不能のまま長時間経過。
+- **Coordinates**: x=1, y=75, z=-23 (birch_forest)
+- **Last Actions**: pillarUpを実行中にtimeout → zombie slain
+- **Error Message**: `<[Server]> Claude1 was slain by Zombie`
+- **Root Cause**: 1) pillarUpがタイムアウトして途中で停止→敵への無防備状態 2) combat()が機能せず食料確保不能 3) HP1.7で何もできない状態が続いた
+- **Status**: Reported。Session 87-88を通じてmoveTo/combat/gather全機能不全が死亡を招いた。緊急コードレビュー必要。
+
 ## [2026-03-26] Bug: Session 88 - moveTo依然無効・動物が300ブロック圏内に存在しない・食料0でHP1.7
 
 - **Cause**: mc_reload後もmoveTo(-200,64,200)などが即時返却で位置変化なし（-15,66,1のまま）。navigate(cow/pig/chicken/sheep, max_distance=300)も全て"No X found"。朝（morning phase）でも動物ゼロ。birch_forestバイオームで動物スポーンが機能していない可能性。
