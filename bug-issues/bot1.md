@@ -7,6 +7,14 @@
 - **Root Cause**: flee()が水場に誘導している。Session 86のdrowned bugと同じパターン。
 - **Status**: Reported。flee()の水場回避が修正されていない。
 
+## [2026-03-26] Bug: Session 88 - 死亡: drowned 8回目
+
+- **Cause**: HP=2でcreeper包囲。gather(wheat,10)が81秒かかりHP=14→2に減少。moveToで逃げようとしたがdrowned。水場への誘導が繰り返されている。
+- **Coordinates**: x=0, y=54, z=4
+- **Last Actions**: gather(wheat)→HP激減→moveTo→drowned
+- **Error Message**: `<[Server]> Claude1 drowned`
+- **Status**: Reported。gather()実行中にHPが大幅に削られる（敵対モブからの攻撃か？）。安全チェックの改善が急務。
+
 ## [2026-03-26] Bug: Session 88 - 死亡: Skeletonに射殺（7回目）
 
 - **Cause**: gather(birch_log,20)タイムアウト（105秒）後にHP=15.2まで削られた状態で、navigate(farmland)実行中にskeletonに射殺された。gather中に移動して敵の射程に入った可能性。
