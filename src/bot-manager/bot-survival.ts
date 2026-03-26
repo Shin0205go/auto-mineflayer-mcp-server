@@ -797,6 +797,15 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       const currentTarget = Object.values(bot.entities).find(e => e.id === targetId);
       if (!currentTarget) {
         // Auto-collect dropped items after kill
+        // Capture inventory snapshot BEFORE navigation to drop position.
+        // Bug [Session 78]: previously captured after navigation, so items auto-collected
+        // during the walk to lastKnownTargetPos were already in inventoryBefore,
+        // causing collectNearbyItems to report actuallyCollected=0.
+        const attackInventoryAtKill = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+        const attackSnapshotAtKill = new Map<string, number>();
+        for (const ai of bot.inventory.items()) {
+          attackSnapshotAtKill.set(ai.name, (attackSnapshotAtKill.get(ai.name) || 0) + ai.count);
+        }
         // Move to last known position first (endermen teleport, drops spawn where they died)
         const distToLastPos = bot.entity.position.distanceTo(lastKnownTargetPos);
         if (distToLastPos > 3) {
@@ -831,8 +840,9 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         // Bot2/Bot3 [2026-03-22]: mob drops not collected because item entities hadn't
         // spawned yet (800ms too short on busy server). Increased to 1s for all mobs.
         const isEnderman = target.name === "enderman";
-        // Capture inventoryBefore BEFORE itemSpawnDelay (same fix as fight()).
-        const attackInventoryBefore = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+        // Use attackInventoryAtKill (captured before nav) as inventoryBefore for collectNearbyItems.
+        // This ensures items auto-collected during navigation are counted as gained.
+        const attackInventoryBefore = attackInventoryAtKill;
         await delay(isEnderman ? 1000 : 1000);
         let collectionResult = "Collection not attempted";
         try {
@@ -846,6 +856,22 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[Attack] CRITICAL: Item collection failed after kill: ${errMsg}`);
+        }
+
+        // Compute actual items gained from kill (vs inventory at kill time).
+        const attackInvAfter = bot.inventory.items();
+        const attackItemsGained: string[] = [];
+        for (const ai of attackInvAfter) {
+          const before = attackSnapshotAtKill.get(ai.name) || 0;
+          const gained = ai.count - before;
+          if (gained > 0) attackItemsGained.push(`${ai.name} x${gained}`);
+        }
+        const attackTotalGained = attackInvAfter.reduce((sum, i) => sum + i.count, 0) - attackInventoryAtKill;
+        if (attackTotalGained > 0 && (collectionResult.includes("No items") || collectionResult.includes("unchanged") || collectionResult.includes("0 items"))) {
+          collectionResult = `Gained ${attackTotalGained} item(s): ${attackItemsGained.join(", ")} (auto-collected during approach)`;
+          console.error(`[Attack] CORRECTED collection result: ${collectionResult}`);
+        } else if (attackTotalGained > 0) {
+          collectionResult += ` [Total gained: ${attackItemsGained.join(", ")}]`;
         }
 
         // AUTO-EAT after kill when HP/hunger is low and food is available.
@@ -1630,6 +1656,18 @@ export async function fight(
       // HP was below flee threshold. Bot starved to death with cow drops on the ground.
       // For food hunts, use a shorter collection timeout (2s) and skip pathfinder movement
       // to minimize danger exposure.
+      //
+      // CRITICAL: Capture inventoryBeforeKill HERE (after kill confirmed) so we can
+      // report accurate "items gained from this kill" in the return value.
+      // Session 78: items auto-collected during navigation to lastKnownFightPos were
+      // already in inventory when inventoryBeforeCollection was captured (after nav),
+      // causing collectNearbyItems to report "0 items" even though items DID transfer.
+      // By snapshotting here (before any movement), we can report correct gains.
+      const inventoryAtKill = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+      const inventorySnapshotAtKill = new Map<string, number>();
+      for (const invItem of bot.inventory.items()) {
+        inventorySnapshotAtKill.set(invItem.name, (inventorySnapshotAtKill.get(invItem.name) || 0) + invItem.count);
+      }
       const postKillHp = bot.health ?? 20;
       let skipCollection = false;
       let skipReason = "";
@@ -1678,6 +1716,14 @@ export async function fight(
       // For food-critical pickups at low HP, use shorter timeout (2s) to minimize danger exposure.
       // Normal collection gets 5s to reach distant drops.
       const collectMoveTimeout = needsFoodDesperately && postKillHp < 10 ? 2000 : 5000;
+      // Capture inventoryBeforeCollection BEFORE navigation to drop location.
+      // Bug [Session 78]: previously captured after navigation, so items auto-collected
+      // during the navigation to lastKnownFightPos were already in inventoryBefore,
+      // causing collectNearbyItems to report actuallyCollected=0 ("No items nearby")
+      // even though items DID enter the inventory during the navigation walk.
+      // Fix: capture here so items collected during nav OR during collectNearbyItems
+      // are both counted as "new items gained from this kill".
+      const inventoryBeforeNavAndCollection = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
       if (distToLast > 3) {
         console.error(`[Fight] Target died ${distToLast.toFixed(1)} blocks away, moving to collect drops (timeout: ${collectMoveTimeout}ms)`);
         applySafePathfinderSettings(bot);
@@ -1732,16 +1778,12 @@ export async function fight(
       const isEnderman = targetName === "enderman";
       const isFoodAnimal = FOOD_ANIMALS.some(a => targetName.toLowerCase().includes(a));
       const itemSpawnDelay = isEnderman ? 1000 : (isFoodAnimal ? 1000 : 800);
-      // Capture inventoryBefore BEFORE itemSpawnDelay wait.
-      // Items dropped by the mob may auto-collect via Mineflayer's pickup mechanism
-      // within 0.5s of spawning (10-tick pickup delay expires). If we wait 1s before
-      // capturing inventoryBefore, these auto-collected items are already counted in
-      // inventoryBefore → inventoryAfter - inventoryBefore = 0 → "No items nearby".
-      // By capturing BEFORE the wait, any auto-collected items during the wait ARE
-      // counted as new items (inventoryAfter > inventoryBefore).
-      // Bot1 Sessions 67-69: combat(cow/sheep/pig/chicken) in melee range caused
-      // items to auto-collect in 0.5s, but inventoryBefore was captured 1s later.
-      const inventoryBeforeCollection = bot.inventory.items().reduce((sum, i) => sum + i.count, 0);
+      // Pass inventoryBeforeNavAndCollection to collectNearbyItems so it counts items
+      // collected during navigation to the drop location AND during the explicit collection.
+      // Previously: inventoryBeforeCollection was captured AFTER navigation, so items
+      // auto-collected while walking to lastKnownFightPos were already in inventoryBefore,
+      // causing actuallyCollected=0 → "No items nearby" even when items DID transfer.
+      // Fix [Session 78]: use inventoryBeforeNavAndCollection (captured before navigation).
       await delay(itemSpawnDelay);
       let collectionResult = "Collection not attempted";
       try {
@@ -1749,15 +1791,37 @@ export async function fight(
         // Default 10 blocks often misses items at 4-5 block offset from bot position.
         // Also increase waitRetries: server item entity spawn can take 1-2s on busy servers.
         const collectOpts = isEnderman
-          ? { searchRadius: 16, waitRetries: 12, inventoryBefore: inventoryBeforeCollection }
+          ? { searchRadius: 16, waitRetries: 12, inventoryBefore: inventoryBeforeNavAndCollection }
           : isFoodAnimal
-            ? { searchRadius: 14, waitRetries: 10, inventoryBefore: inventoryBeforeCollection }
-            : { inventoryBefore: inventoryBeforeCollection };
+            ? { searchRadius: 14, waitRetries: 10, inventoryBefore: inventoryBeforeNavAndCollection }
+            : { inventoryBefore: inventoryBeforeNavAndCollection };
         collectionResult = await collectNearbyItems(managed, collectOpts);
         console.error(`[Fight] Item collection result: ${collectionResult}`);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         console.error(`[Fight] CRITICAL: Item collection failed after kill: ${errMsg}`);
+      }
+
+      // Compute what was actually gained from this kill (compared to inventory at kill time).
+      // This is accurate even when items auto-collected during navigation before collectNearbyItems ran.
+      // Bug [Session 78]: fight() reported "Items: No items nearby" even when items were collected
+      // during navigation, misleading the agent into thinking the kill produced no drops.
+      const inventoryAfterCollection = bot.inventory.items();
+      const actualItemsGained: string[] = [];
+      for (const invItem of inventoryAfterCollection) {
+        const before = inventorySnapshotAtKill.get(invItem.name) || 0;
+        const gained = invItem.count - before;
+        if (gained > 0) actualItemsGained.push(`${invItem.name} x${gained}`);
+      }
+      const totalGained = inventoryAfterCollection.reduce((sum, i) => sum + i.count, 0) - inventoryAtKill;
+      if (totalGained > 0 && (collectionResult.includes("No items") || collectionResult.includes("unchanged") || collectionResult.includes("0 items"))) {
+        // Items were collected (during navigation or auto-pickup) but collectNearbyItems
+        // reported 0 — update the message to accurately reflect what was obtained.
+        collectionResult = `Gained ${totalGained} item(s): ${actualItemsGained.join(", ")} (auto-collected during approach)`;
+        console.error(`[Fight] CORRECTED collection result: ${collectionResult}`);
+      } else if (totalGained > 0) {
+        // Append what was gained for clarity
+        collectionResult += ` [Total gained from kill: ${actualItemsGained.join(", ")}]`;
       }
 
       // AUTO-EAT after food-desperate kill: the bot just killed a food animal and collected

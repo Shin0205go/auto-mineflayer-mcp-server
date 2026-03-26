@@ -18,6 +18,7 @@ import {
   mc_store,
   mc_chat,
   mc_connect,
+  mc_reconnect,
   mc_flee,
   minecraft_pillar_up,
   mc_smelt,
@@ -238,6 +239,15 @@ export const coreTools = {
     },
   },
 
+  mc_reconnect: {
+    description: "Disconnect and reconnect using the previous connection info (host/port/username). Also re-attaches botRef to the dashboard. Use when the bot is stuck or disconnected and needs a fresh connection.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+
   mc_execute: {
     description: "Execute JavaScript code against the bot API. Write code using the `bot` object to perform multiple operations in one call with conditional logic and loops. Available methods: bot.status(), bot.inventory(), bot.moveTo(x,y,z), bot.navigate(target), bot.flee(distance?), bot.pillarUp(height?), bot.gather(block, count?), bot.craft(item, count?, autoGather?), bot.smelt(item, count?), bot.eat(food?), bot.combat(target?, fleeAtHp?), bot.equipArmor(), bot.place(blockType, x,y,z), bot.build(preset, size?), bot.farm(), bot.store(action, itemName?, count?, chestX?, chestY?, chestZ?, keepItems?), bot.drop(itemName, count?), bot.chat(message), bot.getMessages(), bot.log(message), bot.wait(ms). All methods are async. The last expression is returned.",
     inputSchema: {
@@ -296,6 +306,8 @@ export async function handleCoreTool(
           action: (args.action as string) || "connect",
           username: args.username, host: args.host, port: args.port, version: args.version,
         });
+      case "mc_reconnect":
+        return await fn();
       case "mc_flee":
         return await fn((args.distance as number) || 20);
       case "minecraft_pillar_up":
@@ -322,6 +334,7 @@ export async function handleCoreTool(
     case "mc_store": return await mc_store(args.action as any, args.item_name as any, args.count as any, args.chest_x as any, args.chest_y as any, args.chest_z as any, args.keep_items as any);
     case "mc_chat": return await mc_chat(args.message as any);
     case "mc_connect": return await mc_connect({ action: (args.action as any) || "connect", username: args.username as any, host: args.host as any, port: args.port as any, version: args.version as any });
+    case "mc_reconnect": return await mc_reconnect();
     case "mc_flee": return await mc_flee((args.distance as number) || 20);
     case "minecraft_pillar_up": return await minecraft_pillar_up((args.height as number) || 1);
     case "mc_smelt": return await mc_smelt(args.item_name as string, (args.count as number) || 1);

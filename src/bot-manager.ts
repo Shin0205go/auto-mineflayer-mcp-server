@@ -2165,6 +2165,23 @@ export class BotManager extends EventEmitter {
       const headPos = new Vec3(Math.floor(pos.x), Math.floor(pos.y) + 2, Math.floor(pos.z));
       const blockAbove = bot.blockAt(headPos);
 
+      // [2026-03-24 FIX] Water surface escape detection: if we've reached water surface (Y=56-64 range)
+      // during underground cave escape, immediately stop pillaring and try to swim/navigate away.
+      // Bug: pillarUp would exit water but bot would drown immediately after due to hunger/combat.
+      // Solution: detect water surface, note it, and let caller know to flee/navigate away.
+      const checkWaterSurface = new Vec3(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z));
+      const waterBlock = bot.blockAt(checkWaterSurface);
+      if (waterBlock && waterBlock.name === "water") {
+        console.error(`[Pillar] WARNING: Bot is in water at Y=${pos.y.toFixed(1)}. Stopping pillarUp to prevent drowning.`);
+        // Stop pillaring immediately — water surface is not a safe stopping point.
+        // Caller should flee/navigate away from water to a safe location.
+        bot.setControlState("jump", false);
+        const finalY = bot.entity.position.y;
+        const dugInfo = blocksDug > 0 ? `, dug ${blocksDug} blocks above` : "";
+        const blockInfo = lastBlockUsed ? ` using ${lastBlockUsed}` : "";
+        return `[WARNING] Stopped pillaring at Y=${finalY.toFixed(1)} — detected water (likely water surface or underground lake). Pillared ${blocksPlaced} blocks${blockInfo}${dugInfo}. URGENT: Use mc_flee or mc_navigate to move away from water to prevent drowning. Current HP/hunger critical in water.`;
+      }
+
       // Check if we reached sky (no solid block above for 3 blocks)
       if (untilSky) {
         let clearAbove = true;

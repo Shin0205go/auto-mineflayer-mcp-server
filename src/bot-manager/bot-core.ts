@@ -595,7 +595,12 @@ export class BotCore extends EventEmitter {
           const isDeath = msSinceDeath < 10000 && storedConfig;
 
           if (isDeath) {
-            console.error(`[BotManager] ${config.username} disconnected after death (${msSinceDeath}ms ago). Auto-reconnecting in 3s...`);
+            // Reduce reconnect delay from 3000ms to 1000ms.
+            // The 3s gap caused farm()/build() to throw "Bot not found" mid-operation
+            // because getBotByUsername() returns null during the entire reconnect window.
+            // 1s is sufficient for the Minecraft server to process death+respawn before
+            // reconnect, while minimizing the window where bots map is empty.
+            console.error(`[BotManager] ${config.username} disconnected after death (${msSinceDeath}ms ago). Auto-reconnecting in 1s...`);
             // Cancel any existing pending reconnect for this username
             const existingTimer = this.reconnectTimeouts.get(config.username);
             if (existingTimer) {
@@ -616,7 +621,7 @@ export class BotCore extends EventEmitter {
               } catch (err) {
                 console.error(`[BotManager] ${config.username} auto-reconnect after death failed:`, err);
               }
-            }, 3000);
+            }, 1000);
             this.reconnectTimeouts.set(config.username, timer);
           } else {
             // Real disconnect (not death-triggered) — do not auto-reconnect.

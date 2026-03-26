@@ -423,14 +423,40 @@ export async function minecraft_gather_resources(
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
-        // Collect nearby items
+        // Collect nearby items (digBlock already calls this internally, but run again as backup)
         await botManager.collectNearbyItems(username);
 
         // Check inventory after mining (check all possible drop names)
-        const invAfter = botManager.getInventory(username);
-        const countAfter = (name: string) => invAfter.find(i => i.name === name)?.count || 0;
-        const afterCount = dropNames.reduce((sum, n) => sum + countAfter(n), 0);
-        const gained = afterCount - beforeCount;
+        let invAfter = botManager.getInventory(username);
+        let countAfter = (name: string) => invAfter.find(i => i.name === name)?.count || 0;
+        let afterCount = dropNames.reduce((sum, n) => sum + countAfter(n), 0);
+        let gained = afterCount - beforeCount;
+
+        // If gained === 0 but dig was reportedly successful, do a retry approach:
+        // Move physically close to mined block position and wait for item auto-pickup.
+        // Server-side item entities can take 1-2s to appear in bot.entities.
+        // Bot may also be slightly outside the 1-block auto-pickup radius after digging.
+        // Session 78: gather("iron_ore") reported success but no raw_iron — entity detection
+        // failure in collectNearbyItems. Physical proximity guarantees server-side auto-pickup.
+        if (gained === 0 && !digResult.includes("No items dropped") && !digResult.includes("doTileDrops") && !digResult.includes("requires")) {
+          console.error(`[GatherResources] No items gained from ${blockNameToMine} dig (dig reported success). Retrying: moving to block position + extra wait.`);
+          // Move to the mined block position — item entity spawns there
+          await botManager.moveTo(username, Math.floor(x), Math.floor(y), Math.floor(z));
+          // Wait for item entity to spawn and trigger server-side auto-pickup
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          // Try collection one more time with wider radius and more retries
+          await botManager.collectNearbyItems(username);
+          // Re-check inventory
+          invAfter = botManager.getInventory(username);
+          countAfter = (name: string) => invAfter.find(i => i.name === name)?.count || 0;
+          afterCount = dropNames.reduce((sum, n) => sum + countAfter(n), 0);
+          gained = afterCount - beforeCount;
+          if (gained > 0) {
+            console.error(`[GatherResources] Retry collect succeeded: gained ${gained} ${dropNames.join("/")} from ${blockNameToMine}`);
+          } else {
+            console.error(`[GatherResources] Retry collect failed: still 0 items. digResult="${digResult.substring(0, 100)}"`);
+          }
+        }
 
         if (gained > 0) {
           collected += gained;

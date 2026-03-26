@@ -270,6 +270,10 @@ export async function mc_status(): Promise<string> {
       food: foodItems,
       materials,
       slots_used: inventory.length,
+      // items: flat array of all inventory items for agents that do status.inventory.items.forEach()
+      // Bug: agents calling status.inventory.forEach() got TypeError because inventory is an object.
+      // Providing a flat array alongside the categorized view supports both access patterns.
+      items: inventory.map(i => ({ name: i.name, count: i.count })),
     },
     nearbyEntities,
     threats,
