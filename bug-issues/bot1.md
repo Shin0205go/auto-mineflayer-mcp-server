@@ -1,3 +1,10 @@
+## [2026-03-26] Bug: Session 85 - 死亡7: 溺死再発 (Y=57付近の水域)
+
+- **Cause**: navigate("birch_log")実行後、Y=57付近の水中に入り溺死。HP3の状態だったため短時間で死亡。
+- **Coordinates**: x=35, y=57, z=40
+- **Last Actions**: gather("birch_log")失敗(木材ゼロ) → HP3まで低下 → drowned判定
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 85 - 自然HP回復が機能しない
 
 - **Cause**: HP=5、Hunger=14-16の状態で敵がいない場所に60秒以上いるが、HPが全く回復しない。
