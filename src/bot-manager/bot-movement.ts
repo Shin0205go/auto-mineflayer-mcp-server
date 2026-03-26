@@ -1105,8 +1105,8 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
     // Set the goal AFTER checkInterval is initialized (see comment above)
     bot.pathfinder.setGoal(goal);
 
-    // Increased timeout: min 30s + 1.5s per block + extra for complex paths
-    const timeout = Math.max(30000, distance * 1500);
+    // Increased timeout: min 30s + 1.5s per block, capped at 55s to stay within mc_execute 60s limit
+    const timeout = Math.min(55000, Math.max(30000, distance * 1500));
     setTimeout(() => {
       if (!resolved) {
         const finalPos = bot.entity.position;
