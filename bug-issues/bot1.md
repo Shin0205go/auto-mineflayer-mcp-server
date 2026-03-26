@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 94 - 死亡 drowning (navigate "water" 後に水中に落下)
+- **Cause**: bot.navigate("water") で水源に近づいた後、bot.wait() 中に水中に落ちて溺死。Hunger=0 + HP=9.3の飢餓状態で抵抗不能。
+- **Coordinates**: (51, 58, 25) 付近
+- **Last Actions**: navigate("water") → farm() 失敗 → navigate("chicken") → wait(1000) 中に溺死
+- **Error Message**: "[wait] ABORTED: oxygen depleting underwater with HP=9.3", "Claude1 drowned"
+- **Status**: Reported. navigate("water")が危険な水源近傍に誘導している。farm()がwheat=0収穫で終了する問題も継続。
+
 ## [2026-03-27] Bug: Session 93 - 死亡 starvation+mob (Hunger 0 + HP 3.5 + 敵多数)
 - **Cause**: Hunger 0 + HP 3.5で食料なし。スケルトン×3、クリーパー×2に囲まれ、pillarUp中に接続切断。リスポーン後HP=9.3に回復。
 - **Coordinates**: (-14, 58, 5) 付近
