@@ -2098,6 +2098,10 @@ export async function mc_navigate(
         const dist = entity.position.distanceTo(bot.entity.position);
         if (dist > 24) continue;
         const name = entity.name?.toLowerCase() ?? "";
+        // Skip endermen: they don't attack unless the player stares at them.
+        // Bot1 Session 88 [2026-03-26]: endermen permanently blocked all navigate() calls
+        // because the pre-nav hostile scan counted them as active threats.
+        if (name === "enderman") continue;
         if (isHostileMob(bot, name)) {
           nearbyHostiles.push({ name, dist: Math.round(dist * 10) / 10 });
         }

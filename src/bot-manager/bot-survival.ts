@@ -1614,6 +1614,12 @@ export async function fight(
           const eDist = entity.position.distanceTo(bot.entity.position);
           if (eDist > 10) continue;
           const eName = entity.name?.toLowerCase() ?? "";
+          // Skip endermen in multi-mob escalation: endermen don't actively approach or
+          // attack unless provoked. Bot1 Session 88 [2026-03-26]: 3 endermen within 10
+          // blocks caused MULTI-MOB ABORT every fight loop iteration, making it impossible
+          // to kill any enderman and collect ender pearls. Endermen that are not the
+          // current fight target are not an active threat.
+          if (eName === "enderman") continue;
           if (isHostileMob(bot, eName)) {
             otherHostilesClose.push({ name: eName, dist: Math.round(eDist * 10) / 10 });
           }

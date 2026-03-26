@@ -131,6 +131,13 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
     const startHp = bot.health ?? 20; // Track HP at navigation start for rapid-drop detection
     // High mountain flag: Y>90 peaks require relaxed drop/fall limits (see maxDropDown and physicsTick below)
     const isHighMountainStart = start.y > 90;
+    // Elevated terrain flag: Y>75 hills/cliffs have 4-6 block drops that exceed maxDropDown=4.
+    // Bot1 Session 88 [2026-03-26]: bot at Y=77-80 (birch forest hilltop) could not descend
+    // to target Y=63 because surrounding 5-6 block cliff drops blocked all pathfinder routes.
+    // maxDropDown=4 was too restrictive for Y=75-90 elevated terrain (not high mountain but not flat).
+    // Fix: at Y>75, use maxDropDown=6 so pathfinder can plan 5-6 block cliff descents without
+    // triggering cave routing into deep underground. physicsTick threshold raised to match.
+    const isElevatedStart = start.y > 75;
     // Declare checkInterval first to avoid TDZ issues when event handlers fire early
     let checkInterval: ReturnType<typeof setInterval> | null = null;
     let lastPos = start.clone();
@@ -696,6 +703,14 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
             const eName = entity.name?.toLowerCase() ?? "";
             // Skip ranged mobs — already handled by check B1 above at 16-block radius.
             if (RANGED_MOBS.includes(eName)) continue;
+            // Skip endermen during navigation: endermen are conditionally hostile (only
+            // when stared at) and do NOT actively approach or attack the bot unprovoked.
+            // Bot1 Session 88 [2026-03-26]: 3 endermen within 15-20 blocks permanently
+            // blocked all navigate() calls — melee_mob_danger fired on every 500ms check,
+            // making navigation impossible in enderman-dense areas like the overworld at night.
+            // Endermen are handled by combat() when the agent explicitly targets them.
+            // During navigation, skip them so the bot can move through areas where endermen exist.
+            if (eName === "enderman") continue;
             // Skip mobs that are ≥4 blocks BELOW the bot (bot is elevated on a pillar).
             // Melee mobs can only hit if at same Y level. A zombie 4+ blocks below on the
             // ground cannot reach a bot on top of a pillar. Without this exception, every
@@ -743,6 +758,9 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
             const eDist = entity.position.distanceTo(currentPos);
             if (eDist > scanRadius) continue;
             const eName = entity.name?.toLowerCase() ?? "";
+            // Skip endermen in HP-gated check too: endermen don't attack unless provoked.
+            // See B2 comment above for full rationale.
+            if (eName === "enderman") continue;
             if (isHostileMob(bot, eName)) {
               nearHostiles.push({ name: eName, dist: Math.round(eDist * 10) / 10 });
             }
@@ -928,11 +946,14 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
     // (to catch gradual acceleration off cliff edges where per-tick is small but total is huge).
     //
     // Fall threshold must match maxDropDown to avoid false positives on planned drops:
-    //   Normal (Y<=90): maxDropDown=4, threshold=4
+    //   Normal (Y<=75): maxDropDown=4, threshold=4
+    //   Elevated (Y>75 and Y<=90): maxDropDown=6, threshold=6
     //   High mountain (Y>90): maxDropDown=12, threshold=12
     // Bot1 Session 81 [2026-03-26]: at Y=108, mountain cliff drops are 8-12 blocks.
     // Threshold=4 fired on every planned cliff step, causing immediate abort at each attempt.
-    const fallPhysicsThreshold = isHighMountainStart ? 12 : 4;
+    // Bot1 Session 88 [2026-03-26]: at Y=77-80 (birch forest hills), 5-6 block drops were
+    // blocked by threshold=4, preventing descent to target Y=63.
+    const fallPhysicsThreshold = isHighMountainStart ? 12 : isElevatedStart ? 6 : 4;
     let lastPhysicsY = start.y;
     let fallStartY: number | null = null;  // Y when falling started (null = not falling)
     const onPhysicsTick = () => {
@@ -977,16 +998,16 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
     if (bot.pathfinder.movements) {
       // maxDropDown: Allow planned drops for natural terrain navigation.
       // Base value=4: Minecraft fall damage starts at >4 blocks (4-block drop = 0 damage).
-      // High mountain exception (Y>90): mountain peaks have cliffs with 5-15 block drops.
-      // maxDropDown=4 causes pathfinder to find no path at all from mountain peaks because
-      // every adjacent cliff drop exceeds 4 blocks.
-      // Bot1 Session 81 [2026-03-26]: bot at Y=108, pathfinder returned no_path in all 4
-      // directions because surrounding cliff drops were 8-20 blocks (> maxDropDown=4).
-      // Fix: at Y>90, allow maxDropDown=12 so pathfinder can plan mountain cliff descents.
-      // The physicsTick fall detector threshold is raised to match, preventing false aborts
-      // on planned drops that stay within the new limit.
+      // Elevated terrain (Y>75, Y<=90): birch forest/hill cliffs have 5-6 block drops.
+      //   maxDropDown=4 blocks all descent paths from these positions, stranding the bot.
+      //   Bot1 Session 88 [2026-03-26]: bot at Y=77-80 could not reach Y=63 because
+      //   every adjacent cliff exceeded maxDropDown=4. maxDropDown=6 allows 5-6 block drops.
+      // High mountain (Y>90): mountain peaks have cliffs with 8-20 block drops.
+      //   Bot1 Session 81 [2026-03-26]: at Y=108, all 4 directions blocked by maxDropDown=4.
+      //   Fix: maxDropDown=12 so pathfinder can plan mountain cliff descents.
+      // The physicsTick fall detector threshold is raised to match, preventing false aborts.
       // The case1DescentLimit and absolute Y<62 floor check remain as cave routing protection.
-      const effectiveMaxDropDown = isHighMountainStart ? 12 : 4;
+      const effectiveMaxDropDown = isHighMountainStart ? 12 : isElevatedStart ? 6 : 4;
       bot.pathfinder.movements.maxDropDown = effectiveMaxDropDown;
       bot.pathfinder.movements.allowFreeMotion = false; // Prevent cliff falls from skipped path nodes
       bot.pathfinder.movements.allow1by1towers = true; // Allow pillar up to reach higher terrain
