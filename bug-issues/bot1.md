@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 88 - farm()/navigate()が全タイムアウト・完全詰み
+
+- **Cause**: farm()が30-120秒タイムアウト。navigate(water/farmland)が30-90秒タイムアウト。gather()はHP=3で自動中断。HP=3・Hunger=3・食料0の完全詰み状態。
+- **Coordinates**: (91.5, 37.5, 2.3)
+- **Last Actions**: farm() → timeout × 5回, navigate(water) → timeout, gather(birch_log) → ABORTED HP critical
+- **Error Message**: `Execution timed out after 120000ms`, `[ABORTED] mc_gather stopped: HP critically low`
+- **Impact**: ゲーム進行不可。コードレビュー修正が急務。
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 88 - craft()が全て30秒タイムアウト（石ツール含む）
 
 - **Cause**: craft("stone_hoe")、craft("bread")等が30秒でタイムアウト。mc_reload後も改善なし。crafting_tableをインベントリに持っているのに全てのcraftがハングアップする。
