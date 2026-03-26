@@ -1,16 +1,18 @@
-## [2026-03-27] Bug: Session 100 - 3秒切断バグ継続（CRITICAL、keepalive未実装）
+## [2026-03-27] Bug: Session 65/100/current - Connection degraded to <500ms, starvation death imminent
 
-- **Root Cause**: 3秒keepaliveタイムアウトバグ継続。Sessions 65/97/98/99と同じ。コードレビュー後も未修正。
+- **Root Cause**: 3秒keepaliveタイムアウトバグ継続。Sessions 65/97/98/99/100と同じ。未修正。
+- **Session 65 end state**: HP=5.9 (dropping from Hunger=0 starvation), morning ticks=1313, pos=(40.1,76,-1.9)
+- **Connection degradation at end**: After many reconnect attempts, connections now last <500ms (previously 3s). Likely due to 6+ hostile mobs sending rapid damage packets overwhelming mineflayer.
+- **Combat findings**: combat("chicken") times out at 10s with chicken clearly visible in entities list. Combat() is either not approaching the entity or not dealing damage.
 - **New Findings (Session 100)**:
   - bot.combat("chicken") = 20秒後に成功返却するが食料ドロップなし（ドロップ取得バグ）
   - bot.navigate("cow") = 3秒でdisconnect
   - bot.combat("cow") = 1.25秒で成功返却するが食料なし（ドロップ取得バグ）
   - bot.flee() = 15秒でdisconnect（flee中に切断）
-- **状況**: HP:6.9 Hunger:0 birch_forest day (9193 ticks) at (32.7, 76, -4.8)
-- **インベントリ**: iron_sword, wheat_seeds x55, cobblestone x185, stone_pickaxe x4, crafting_table - 食料ゼロ
-- **影響**: ゲームプレイ完全停止。keepalive未実装で長時間操作不可。動物狩りしても肉ドロップなし。
+- **インベントリ**: iron_sword x1, wheat_seeds x55, cobblestone x183, stone_pickaxe x4, crafting_table - 食料ゼロ
+- **影響**: ゲームプレイ完全停止。keepalive未実装で長時間操作不可。動物狩りしても肉ドロップなし。HP=5.9→dropping。
 - **優先度**: CRITICAL - keepalive packet送信 + 動物肉ドロップ取得の修正が両方必要
-- **Status**: Reported. Session 100.
+- **Status**: Reported. Session 65/100 end.
 
 ---
 
