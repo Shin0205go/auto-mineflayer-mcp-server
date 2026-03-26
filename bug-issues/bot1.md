@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 88 - 死亡22回目 Zombie撃殺（Hunger=3・Y=64）
+
+- **Cause**: Hunger=3・HP=11で地下Y=64でZombieに殺された。crafting_table+furnace作成直後。
+- **Coordinates**: (-39.5, 66, -8.5)
+- **Last Actions**: craft(crafting_table) success → place(CT) success → craft(furnace) success → `Claude1 was slain by Zombie`
+- **Status**: Reported。furnace=1はkeepInventoryで保存済み。
+
 ## [2026-03-27] Bug: Session 88 - 死亡21回目 落下死（HP=1.3・Y=77）
 
 - **Cause**: HP=1.3でgather("wheat")実行中に落下。
