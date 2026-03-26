@@ -2640,13 +2640,51 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
       if (!fallbackPlaced) {
         consecutiveFailures++;
         console.error(`[Pillar] Fallback failed at level ${i + 1} (${consecutiveFailures}/3 consecutive failures)`);
-        // After 3 consecutive placement failures (both primary and fallback), abort
-        // Bot1 Session 54-55: pillarUp gained elevation but placed 0 blocks because loop
-        // continued after placement failures. Now abort after 3 failures to prevent
-        // untracked elevation gain that confuses the bot's survival state.
+        // After 3 consecutive placement failures (both primary and fallback), try a
+        // "side-face place" approach: instead of placing on the TOP of the block below,
+        // stand still and place on the NORTH/SOUTH/EAST/WEST face of the same block.
+        // Session 85: _placeBlockWithOptions consistently rejected by server on top face,
+        // possibly due to timing/look-angle mismatch. Side-face placement uses a
+        // different packet and doesn't require being above the block, so the server
+        // may accept it even when top-face placement is rejected.
         if (consecutiveFailures >= 3) {
-          console.error(`[Pillar] Aborting: 3 consecutive placement failures`);
-          break;
+          let sideRecovered = false;
+          const sideFaceVecs = [new Vec3(0, 0, 1), new Vec3(0, 0, -1), new Vec3(1, 0, 0), new Vec3(-1, 0, 0)];
+          const scaffoldForSide = bot.inventory.items().find(i => isScaffoldBlock(i.name));
+          if (scaffoldForSide && blockBelow) {
+            try {
+              await bot.equip(scaffoldForSide, "hand");
+              for (const faceVec of sideFaceVecs) {
+                try {
+                  // Look at the side face of the reference block
+                  const faceLookTarget = blockBelow.position.offset(
+                    0.5 + faceVec.x * 0.5,
+                    0.5,
+                    0.5 + faceVec.z * 0.5
+                  );
+                  await bot.lookAt(faceLookTarget, true);
+                  await Promise.race([
+                    bot.placeBlock(blockBelow, faceVec),
+                    new Promise<void>((_, reject) => setTimeout(() => reject(new Error("side place timeout")), 3000)),
+                  ]);
+                  blocksPlaced++;
+                  placed = true;
+                  sideRecovered = true;
+                  consecutiveFailures = 0;
+                  console.error(`[Pillar] Side-face recovery succeeded at level ${i + 1} using face (${faceVec.x},${faceVec.y},${faceVec.z})`);
+                  break;
+                } catch (sideErr) {
+                  console.error(`[Pillar] Side-face (${faceVec.x},${faceVec.y},${faceVec.z}) failed: ${sideErr}`);
+                }
+              }
+            } catch (sideEquipErr) {
+              console.error(`[Pillar] Side-face equip failed: ${sideEquipErr}`);
+            }
+          }
+          if (!sideRecovered) {
+            console.error(`[Pillar] Aborting: 3 consecutive placement failures and side-face recovery also failed`);
+            break;
+          }
         }
       }
     } else {
@@ -2850,13 +2888,59 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
       if (meleeThreat) {
         const meleeDist = meleeThreat.position.distanceTo(bot.entity.position).toFixed(1);
         console.error(`[Flee] Melee threat detected (${meleeThreat.name} at ${meleeDist}m). Pillaring up 3 blocks before fleeing.`);
+        const pillarStartY = bot.entity.position.y;
+        let pillarSucceeded = false;
         try {
           // Pass ignoreThreats=true: this IS the emergency, no point aborting the pillar
           // just because the threat that triggered flee is within 4 blocks.
           await pillarUp(managed, 3, false, true);
-          console.error(`[Flee] Pillar up complete — now at Y=${bot.entity.position.y.toFixed(0)}, continuing flee.`);
+          const pillarGained = bot.entity.position.y - pillarStartY;
+          pillarSucceeded = pillarGained >= 0.5;
+          console.error(`[Flee] Pillar up complete — now at Y=${bot.entity.position.y.toFixed(0)} (gained ${pillarGained.toFixed(1)}), continuing flee.`);
         } catch (pillarErr) {
           console.error(`[Flee] Pillar up failed (${pillarErr instanceof Error ? pillarErr.message : String(pillarErr)}), continuing flee anyway.`);
+        }
+
+        // PANIC SPRINT: If pillarUp failed to gain elevation (pillar blocked or server reject),
+        // fall back to raw control-state sprint away from the mob cluster.
+        // Session 85: bot stuck at X=0,Y=58,Z=9 surrounded by 4 creepers + 2 skeletons.
+        // pillarUp failed (0 blocks placed), pathfinder-based flee also failed to move bot.
+        // Raw sprint bypasses pathfinder entirely — works even when pathfinder is stuck/frozen.
+        // Direction: away from the weighted center-of-mass of all nearby hostiles.
+        if (!pillarSucceeded) {
+          const panicHostiles = Object.values(bot.entities)
+            .filter(e => e && e.position && e !== bot.entity && isHostileMob(bot, e.name?.toLowerCase() || ""))
+            .filter(e => e.position.distanceTo(bot.entity.position) <= 8);
+          if (panicHostiles.length > 0) {
+            let comX = 0, comZ = 0, totalW = 0;
+            for (const h of panicHostiles) {
+              const w = 1 / Math.max(h.position.distanceTo(bot.entity.position), 0.5);
+              comX += h.position.x * w; comZ += h.position.z * w; totalW += w;
+            }
+            const awayX = bot.entity.position.x - (totalW > 0 ? comX / totalW : bot.entity.position.x);
+            const awayZ = bot.entity.position.z - (totalW > 0 ? comZ / totalW : bot.entity.position.z);
+            const len = Math.sqrt(awayX * awayX + awayZ * awayZ);
+            const panicAngle = len > 0.1 ? Math.atan2(-awayX, awayZ) : Math.random() * 2 * Math.PI;
+            console.error(`[Flee] PANIC SPRINT: pillar failed with ${panicHostiles.length} hostiles within 8 blocks. Sprinting away for 2.5s (raw control state).`);
+            try {
+              bot.pathfinder.setGoal(null);
+              await bot.look(panicAngle, 0, true);
+              bot.setControlState("sprint", true);
+              bot.setControlState("forward", true);
+              bot.setControlState("jump", true);
+              await delay(2500);
+              bot.clearControlStates();
+              const panicMoved = bot.entity.position.distanceTo(new Vec3(
+                bot.entity.position.x - awayX,
+                bot.entity.position.y,
+                bot.entity.position.z - awayZ
+              ));
+              console.error(`[Flee] Panic sprint complete. New pos: (${bot.entity.position.x.toFixed(1)},${bot.entity.position.y.toFixed(1)},${bot.entity.position.z.toFixed(1)})`);
+            } catch (panicErr) {
+              console.error(`[Flee] Panic sprint error: ${panicErr}`);
+              try { bot.clearControlStates(); } catch (_) {}
+            }
+          }
         }
       }
     }

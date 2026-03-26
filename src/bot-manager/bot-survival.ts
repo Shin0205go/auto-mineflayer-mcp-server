@@ -357,6 +357,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
       // into caves while approaching enderman, same issue fixed in fight() enderman path.
       const attackApproachHandle = safeSetGoal(bot, approachGoal, {
         intervalMs: 200,
+        elevationAware: true,
         onAbort: (yDescent) => {
           console.error(`[Attack] CAVE DESCENT during enderman approach: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
         }
@@ -504,6 +505,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
     // could descend into caves with no abort. Now each retarget creates a new monitored goal.
     // Bot1/Bot2/Bot3 [2026-03-22]: multiple deaths from underground routing during combat approach.
     let attackGoalHandle = safeSetGoal(bot, goal, {
+      elevationAware: true,
       onAbort: (yDescent) => {
         console.error(`[Attack] CAVE DESCENT during approach: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
       }
@@ -573,6 +575,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
             attackGoalHandle.cleanup();
             const retargetGoal = new goals.GoalNear(currentTarget.position.x, currentTarget.position.y, currentTarget.position.z, 2);
             attackGoalHandle = safeSetGoal(bot, retargetGoal, {
+              elevationAware: true,
               onAbort: (yDescent) => {
                 console.error(`[Attack] CAVE DESCENT during ranged retarget: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
               }
@@ -646,6 +649,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
                 applySafePathfinderSettings(bot);
                 const collectGoal = new goals.GoalNear(bowLastPos.x, bowLastPos.y, bowLastPos.z, 2);
                 const bowCollectHandle = safeSetGoal(bot, collectGoal, {
+                  elevationAware: true,
                   onAbort: (yDescent) => {
                     console.error(`[Attack] CAVE DESCENT during bow kill collection: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
                   }
@@ -817,6 +821,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
           }
           const collectGoal = new goals.GoalNear(lastKnownTargetPos.x, lastKnownTargetPos.y, lastKnownTargetPos.z, 2);
           const collectHandle = safeSetGoal(bot, collectGoal, {
+            elevationAware: true,
             onAbort: (yDescent) => {
               console.error(`[Attack] CAVE DESCENT during item collection: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
             }
@@ -919,6 +924,7 @@ export async function attack(managed: ManagedBot, entityName?: string): Promise<
         // allowing the bot to chase targets into caves. Bot1/Bot2/Bot3 [2026-03-22]:
         // multiple deaths from underground routing during combat chase loops.
         const chaseHandle = safeSetGoal(bot, chaseGoal, {
+          elevationAware: true,
           onAbort: (yDescent) => {
             console.error(`[Attack] CAVE DESCENT during chase: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
           }
@@ -1240,6 +1246,7 @@ export async function fight(
       const chaseGoal = new goals.GoalNear(target.position.x, target.position.y, target.position.z, 2);
       const chaseHandle = safeSetGoal(bot, chaseGoal, {
         intervalMs: 200,
+        elevationAware: true,
         onAbort: (yDescent) => {
           console.error(`[Fight] CAVE DESCENT during passive chase: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
         }
@@ -1336,6 +1343,7 @@ export async function fight(
         new goals.GoalNear(target!.position.x, target!.position.y, target!.position.z, 12),
         {
           intervalMs: 200,
+          elevationAware: true,
           onAbort: (yDescent) => {
             console.error(`[Fight] CAVE DESCENT during enderman approach: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
           }
@@ -1750,6 +1758,7 @@ export async function fight(
         // mobs that died at lower elevations. Bot2/Bot3 [2026-03-22]: deaths from
         // underground routing during post-kill item collection.
         const collectHandle = safeSetGoal(bot, collectGoal, {
+          elevationAware: true,
           onAbort: (yDescent) => {
             console.error(`[Fight] CAVE DESCENT during item collection: dropped ${yDescent.toFixed(1)} blocks. Aborting collection.`);
           }
@@ -1944,6 +1953,7 @@ export async function fight(
         new goals.GoalNear(target.position.x, target.position.y, target.position.z, isBlaze ? 4 : 2),
         {
           intervalMs: 200,
+          elevationAware: true,
           onAbort: (yDescent) => {
             console.error(`[Fight] CAVE DESCENT during approach: dropped ${yDescent.toFixed(1)} blocks. Aborting.`);
           }
