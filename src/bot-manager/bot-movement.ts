@@ -1997,18 +1997,27 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     throw new Error(`Cannot pillar up - no scaffold blocks! Need: cobblestone, dirt, stone. Have: ${inv}`);
   }
 
-  // UNDERGROUND THICK CEILING DETECTION: Session 66 [2026-03-25]
+  // UNDERGROUND CEILING DETECTION: Session 66 [2026-03-25], Session 79 [2026-03-26]
   // At Y=56 underground surrounded by mobs, pillarUp burned 45s on repeated 5s dig timeouts
-  // against a thick stone ceiling without making any Y progress.
-  // If the bot is underground (Y<65) and there are 4+ consecutive solid blocks directly
-  // above (thick ceiling), skip the jump-place loop entirely and use emergencyDigUp().
-  // emergencyDigUp() is faster in this scenario because it focuses exclusively on
-  // digging upward block-by-block without the jump/place overhead.
+  // against a stone ceiling without making any Y progress.
+  // If the bot is underground (Y<70) and there is ANY solid block directly above,
+  // skip the jump-place loop entirely and use emergencyDigUp().
+  // Root cause of Session 79 failure: bot at Y=52 with cobblestone 96 in cave with ceiling
+  // only 1-3 blocks above. Old threshold (>= 4 consecutive solid blocks) was too high —
+  // a cave with 3 solid blocks of ceiling (which is the NORMAL case) would fall through to
+  // the jump-place loop, which cannot work in an enclosed cave because:
+  //   1. The dig-above phase clears Y+1/+2/+3 — then there's no roof for reference block
+  //   2. _placeBlockWithOptions times out 3 times → consecutiveFailures=3 → abort
+  //   3. Result: "No blocks placed" despite having 96 cobblestone
+  // Fix: ANY solid block above at Y<70 → use emergencyDigUp() which digs+climbs properly.
   {
     const botYForCheck = Math.floor(bot.entity.position.y);
     const botXForCheck = Math.floor(bot.entity.position.x);
     const botZForCheck = Math.floor(bot.entity.position.z);
-    if (botYForCheck < 65) {
+    if (botYForCheck < 70) {
+      const blockDirectlyAbove = bot.blockAt(new Vec3(botXForCheck, botYForCheck + 1, botZForCheck));
+      const blockAbove2 = bot.blockAt(new Vec3(botXForCheck, botYForCheck + 2, botZForCheck));
+      // Count consecutive solid blocks to distinguish open cave (0-1 solid) from enclosed (2+)
       let consecutiveSolidAbove = 0;
       for (let checkDy = 1; checkDy <= 6; checkDy++) {
         const b = bot.blockAt(new Vec3(botXForCheck, botYForCheck + checkDy, botZForCheck));
@@ -2018,8 +2027,16 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
           break;
         }
       }
-      if (consecutiveSolidAbove >= 4) {
-        console.error(`[Pillar] Underground (Y=${botYForCheck}) with ${consecutiveSolidAbove} solid blocks above. Thick ceiling — using emergencyDigUp() for faster escape.`);
+      // Use emergencyDigUp if there's a solid ceiling (1+ consecutive solid blocks directly above)
+      // This covers all cave scenarios: low ceiling (1-2 blocks), medium ceiling (3 blocks),
+      // and thick ceiling (4+ blocks). The old threshold of 4 missed the most common cave shapes.
+      const hasSolidCeiling = consecutiveSolidAbove >= 1;
+      // Exception: if we're at the very surface (block above is sky/open air at most 2 blocks up),
+      // keep the jump-place approach which works well on open terrain.
+      const isOpenAbove = (!blockDirectlyAbove || blockDirectlyAbove.name === "air" || blockDirectlyAbove.name === "cave_air" || blockDirectlyAbove.name === "void_air") &&
+                          (!blockAbove2 || blockAbove2.name === "air" || blockAbove2.name === "cave_air" || blockAbove2.name === "void_air");
+      if (hasSolidCeiling && !isOpenAbove) {
+        console.error(`[Pillar] Underground (Y=${botYForCheck}) with ${consecutiveSolidAbove} solid block(s) above (ceiling at Y+1=${blockDirectlyAbove?.name ?? 'null'}). Using emergencyDigUp() to escape cave.`);
         bot.setControlState("sneak", false);
         return emergencyDigUp(managed, 30);
       }
