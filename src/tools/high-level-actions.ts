@@ -410,6 +410,9 @@ export async function minecraft_gather_resources(
         // Check if dig was successful
         if (digResult.includes("Failed") || digResult.includes("Cannot")) {
           console.error(`[GatherResources] Dig failed: ${digResult}`);
+          // Mark position as failed so we don't retry the same block (e.g. after a dig timeout)
+          failedPositions.add(pk);
+          consecutiveFailures++;
           continue;
         }
 

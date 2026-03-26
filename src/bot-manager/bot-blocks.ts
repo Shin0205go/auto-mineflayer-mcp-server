@@ -777,9 +777,25 @@ export async function digBlock(
     await delay(50);
 
     try {
-      await bot.dig(blockBeforeDig, true);  // forceLook = true
+      // Wrap bot.dig() with a timeout to prevent indefinite hang.
+      // bot.dig() waits for diggingCompleted/diggingAborted events which may never fire
+      // if the server rejects the dig (wrong look angle, physics mismatch, server lag).
+      // Without a timeout, a single hung dig blocks gather() for the full 120s outer timeout.
+      // Fix: use digTime + 5s margin as the dig timeout (e.g. birch_log: 0.7s + 5s = 5.7s).
+      const digTimeoutMs = Math.max(digTime + 5000, 8000);
+      await Promise.race([
+        bot.dig(blockBeforeDig, true),  // forceLook = true
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error(`dig timeout after ${digTimeoutMs}ms`)), digTimeoutMs)
+        ),
+      ]);
       console.error(`[Dig] Finished digging ${blockName}`);
     } catch (digError: any) {
+      // If it was a dig timeout, stop any ongoing dig attempt before retrying
+      if (digError.message && digError.message.includes("dig timeout")) {
+        try { bot.stopDigging(); } catch (_) {}
+        await delay(200);
+      }
       console.error(`[Dig] Dig failed: ${digError.message}`);
 
       // If digging was aborted, it might be due to movement or distance
@@ -832,7 +848,13 @@ export async function digBlock(
           try {
             await bot.lookAt(blockRetry.position.offset(0.5, 0.5, 0.5));
             await delay(100);
-            await bot.dig(blockRetry, true);
+            const retryDigTimeoutMs = Math.max(digTime + 5000, 8000);
+            await Promise.race([
+              bot.dig(blockRetry, true),
+              new Promise<void>((_, reject) =>
+                setTimeout(() => reject(new Error(`dig timeout after ${retryDigTimeoutMs}ms`)), retryDigTimeoutMs)
+              ),
+            ]);
             console.error(`[Dig] Retry ${retry+1} successful for ${blockName}`);
             retrySuccess = true;
             break;
