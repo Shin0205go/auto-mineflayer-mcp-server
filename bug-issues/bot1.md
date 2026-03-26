@@ -1,3 +1,16 @@
+## [2026-03-26] Bug: Session 65 SUMMARY - All resource gathering APIs broken (gather/combat/farm)
+
+- **Session state**: HP=6.9 Hunger=0 at (31.6, 74, -5.7). Day time. Chicken nearby but no food obtainable.
+- **gather() broken**: gather("iron_ore",8) runs 120s, bot moves ~20 blocks underground, returns 0 raw_iron. gather("coal_ore") runs 60s returns 0 coal. gather("deepslate_iron_ore") times out. ALWAYS 0 items for ores.
+- **combat() broken**: combat("chicken") runs 20s, chicken entity still visible after, 0 food drops. Same with cow/pig/sheep. Combat does not kill entities.
+- **bot.eat() false success**: eat() logs "Ate food" with Hunger=0 but no food in inventory.
+- **Disconnect loop**: After mc_reload+mc_connect, 1st mc_execute succeeds, 2nd fails at 2ms "Not connected". Persistent across sessions.
+- **moveTo terrain prison**: moveTo(100,69,0) → arrives at (5,69,0). Only way out is admin teleport.
+- **Progression BLOCKED**: Phase 4 (iron pickaxe) impossible with all gathering/combat APIs broken.
+- **Status**: Reported. All issues already in earlier bug entries. Code reviewer action needed urgently.
+
+---
+
 ## [2026-03-25] Bug: Session 66 end - Disconnect loop confirmed, HP=6.9 Hunger=0 at session end
 
 - **Cause**: Same disconnect loop as Session 70f. mc_connect returns success, first bot.status() works (HP=6.9, Hunger=0, Y=78), all subsequent calls fail immediately with "Not connected".
