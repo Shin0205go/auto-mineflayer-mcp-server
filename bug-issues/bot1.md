@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 80 - Death: flee()で水中に移動して溺死（3回目）
+
+- **Cause**: ゾンビ2体+スパイダーから逃走中、bot.flee()が水中に移動させ溺死。"Claude1 drowned"
+- **Coordinates**: x=-21, y=115, z=13（flee後の位置）
+- **Last Actions**: 周囲に敵 → flee(30) → y=115, x=-21に移動 → 溺死
+- **Error Message**: "Claude1 drowned"
+- **Root Cause**: flee()が安全な陸地ではなく水中に移動させる。flee()は逃走先の安全性（水・溶岩・落下）を確認していない
+- **Status**: Reported 2026-03-26 Session 80。3回目の死亡（flee→水死）。
+
 ## [2026-03-26] Bug: Session 80 - Death: bot.farm()タイムアウト中にゾンビに殺される（2回目）
 
 - **Cause**: bot.farm()を実行中（180秒タイムアウト）に、実行がハングし敵対的エンティティへの防御ができずゾンビに殺された。farm()が敵接近を検知して中断する機能がない。
