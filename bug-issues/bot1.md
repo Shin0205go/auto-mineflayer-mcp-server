@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 86 - 死亡4: 溺死 (シェルター内でHP1になった後)
+
+- **Cause**: シェルター内でHP9→HP1に削られた後、溺死した。シェルターが水際に建設されてbot.flee()が水中に移動させた可能性、またはシェルター内に水源があった可能性。
+- **Coordinates**: Y=48付近 (シェルター x=6, y=48, z=-8)
+- **Last Actions**: 長期待機ループ中にHP:9→HP:1→溺死
+- **Error Message**: `<[Server]> Claude1 drowned`
+- **Status**: Reported。シェルター建設位置の水源チェックが必要。
+
 ## [2026-03-26] Bug: Session 86 - 致命バグ: gather()/combat()/craft()が副作用なしで成功を返す
 
 - **Cause**: gather("cobblestone"), gather("iron_ore"), combat("cow"), combat("zombie"), craft("furnace"), craft("stone_hoe") 全てが「成功」を返すが、インベントリに何も追加されない。gather()はdrop取得処理が機能していない。smelt()は例外的に動作（charcoal:2を取得できた）。
