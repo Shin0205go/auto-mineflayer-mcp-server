@@ -15,6 +15,14 @@
 - **Root Cause**: birch_forestの複雑な地形でpathfinderが正常に動作しない。mc_reload後も改善なし。
 - **Status**: Reported。コードレビュー緊急対応要請。
 
+## [2026-03-26] Bug: Session 88 - 死亡: drowned 13回目（moveTo中）
+
+- **Cause**: HP=2.7/Hunger=0でmoveTo(0,85,0)中にdrownedに殺された。高台(Y=102)到達後にリスポーン。
+- **Coordinates**: (-0.7, 54, 0.5) → (Y=102付近)
+- **Last Actions**: moveTo(0,85,0) → drowned → リスポーン HP=20/Hunger=20
+- **Error Message**: `<[Server]> Claude1 drowned`
+- **Status**: Reported。moveTOが水中経路を選択してdrownedが発生。
+
 ## [2026-03-26] Bug: Session 88 - 死亡: Zombie12回目（gather birch_log タイムアウト中）
 
 - **Cause**: HP=20/Hunger=20でgather("birch_log",8)が120秒タイムアウト中にZombieに殺された。gather()実行中の安全チェックが機能していない（繰り返しパターン）。
