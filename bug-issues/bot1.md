@@ -1,3 +1,12 @@
+## [2026-03-25] Bug: Session 75 - combat() drops completely broken, causing starvation death loop
+
+- **Cause**: bot.combat() returns success but yields ZERO drops from any entity (cow, pig, chicken, sheep, zombie, skeleton, drowned). Tested 20+ times across session.
+- **Evidence**: navigate(cow) confirms cow found, combat(cow) runs, inventory unchanged. rotten_flesh:2 appeared ONCE in inventory at respawn, suggesting drops may occur but are not being picked up.
+- **Impact**: No food obtainable through hunting. Bot starved multiple times (Hunger=0 deaths + low HP deaths).
+- **Drop pickup hypothesis**: Bot may be killing entities but not picking up drops (pathfinder not moving to collect items, or items despawning).
+- **Coordinates**: Various: (12,72,-7), (134,83,94)
+- **Status**: Reported - CRITICAL
+
 ## [2026-03-27] Bug: Session 97 - 頻繁な自動切断（mc_execute実行中または直後に切断）
 - **Cause**: mc_connectで接続成功するが、mc_execute実行中または直後に"Not connected to any server"エラーが繰り返し発生。接続→実行→切断のループ。bot.place()などを呼ぶと7秒以内に切断される。
 - **Coordinates**: (27, 76, -7) birch_forest
