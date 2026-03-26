@@ -1,3 +1,9 @@
+## [2026-03-27] Bug: Session 88 - 死亡21回目 落下死（HP=1.3・Y=77）
+
+- **Cause**: HP=1.3でgather("wheat")実行中に落下。
+- **Coordinates**: (2.7, 77, 12.3)
+- **Status**: Reported
+
 ## [2026-03-27] Bug: Session 88 - 死亡20回目 Skeleton射殺（HP=7.3・Y=66）
 
 - **Cause**: Spider撃破後にHP=7.3まで減少。地下Y=66でSkeleton射殺。
