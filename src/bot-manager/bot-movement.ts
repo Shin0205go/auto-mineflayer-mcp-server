@@ -2918,7 +2918,21 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
           const checkX = bx + Math.round(Math.cos(angle) * checkDist);
           const checkZ = bz + Math.round(Math.sin(angle) * checkDist);
           // Check for ground within maxDyCheck blocks below — also reject lava.
+          // Also check ABOVE bot Y for water (mountain pools): Session 80 bot drowned at Y=115
+          // because flee target was in a high-altitude water pool. The downward scan (by-dy)
+          // missed it because the pool was above the bot's Y at time of direction check.
           let hasSafeGround = false;
+          // First: reject if any block at or above bot Y (up to 4) is water/lava at this XZ.
+          for (let upDy = 0; upDy <= 4; upDy++) {
+            const upBlock = bot.blockAt(new Vec3(checkX, by + upDy, checkZ));
+            if (!upBlock) continue;
+            if (isWaterBlock(upBlock.name) || isLavaBlock(upBlock.name)) {
+              hasSafeGround = false;
+              directionSafe = false;
+              break;
+            }
+          }
+          if (!directionSafe) break;
           for (let dy = 0; dy <= maxDyCheck; dy++) {
             const block = bot.blockAt(new Vec3(checkX, by - dy, checkZ));
             if (!block) continue;
