@@ -1,3 +1,9 @@
+## [2026-03-27] Bug: Session 88 - 死亡26回目 落下死（Y=72地上移動中）
+- **Cause**: moveTo(-1,68,-3)後にY=72付近から落下死
+- **Coordinates**: Y=72→Y=96(respawn)
+- **Last Actions**: flee() → moveTo(-1,68,-3) → moveTo(-1,74,-3) → 落下死
+- **Status**: Reported. keepInventory動作。HP=20/Hunger=20でrespawn。
+
 ## [2026-03-27] Bug: Session 88 - 完全pathfinderデッドロック（shelter建設後・Y=63洞窟内）
 - **Cause**: bot.build("shelter")が洞窟内(Y=63)でcobblestoneシェルターを建設した後、pathfinderが完全に詰まって一切移動不能になった
 - **Coordinates**: (-2.7, 63, -1.3) - 30分以上この場所から動けない
