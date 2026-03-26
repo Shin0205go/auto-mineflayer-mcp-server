@@ -1,3 +1,23 @@
+## [2026-03-27] Bug: Session 98 - 3秒切断バグ継続、全長時間APIが動作不能
+
+- **Root Cause**: 3秒keepaliveタイムアウトバグが継続。以前のバグ報告(Session 65, 97)と同じ問題。
+- **Evidence (Session 98)**:
+  - bot.status() (~250ms) = 動作
+  - bot.inventory() (~250ms) = 動作
+  - bot.moveTo(2ブロック) (595ms) = 実行されるが移動できない
+  - bot.moveTo(5ブロック) → "Not connected" at exactly 3026ms
+  - bot.pillarUp() → タイムアウト30秒
+  - bot.gather() → タイムアウト30秒
+  - bot.farm() → タイムアウト60秒
+  - bot.combat("chicken") (11秒) = 完了するがドロップ0
+  - bot.wait(20秒) = 成功したが後続call時は切断
+- **現状**: HP:6.9 Hunger:0 birch_forest Y=75-77 朝(ticks≈3000)
+- **影響**: 食料確保、移動、採掘が全て不可。ゲームプレイ完全停止。
+- **優先度**: CRITICAL - コードレビュー必須
+- **Status**: Reported. Session 98.
+
+---
+
 ## [2026-03-27] Bug: Session 65 NEW FINDING - Bot disconnects after exactly ~3 seconds (server keepAlive timeout)
 
 - **Root Cause**: Minecraft server kicks bot after ~3 seconds of no packet activity during long operations.
