@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 94 NEW - navigate("chicken")が30秒タイムアウト、combat後ドロップ0継続
+- **Cause**: bot.navigate("chicken") → 30秒タイムアウト。bot.combat("chicken") → "Cannot reach (16.7 blocks away)"でabort。bot.farm() → 120秒タイムアウト。HP9.3/Hunger0の飢餓状態で食料取得手段が完全に機能しない。
+- **Coordinates**: (32, 70, -6)
+- **Last Actions**: navigate("chicken")×2→timeout, combat("chicken")→aborted, farm()→timeout
+- **Error Message**: "Execution timed out after 30000ms", "Cannot reach chicken (16.7 blocks away)"
+- **Status**: CRITICAL. コードレビュー要。navigate/combat/farmの全面修正が必要。
+
 ## [2026-03-27] Bug: Session 93-94総括 - CRITICAL: 食料・資源取得が完全機能不全
 - **Cause**: 以下の全ての食料/資源取得経路が機能していない:
   1. bot.combat("cow"/"sheep"/"chicken"/"pig") → 全てsilent完了 → 食料ドロップ0
