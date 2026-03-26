@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 88 - 死亡23回目 落下死（navigate中Y=92.5から）
+- **Cause**: navigate("crafting_table")実行中に落下死。bot.buildでシェルター建設後に内部ナビゲートで落下
+- **Coordinates**: Y=92.5付近（base area）
+- **Last Actions**: Phase 1完了確認のためnavigate("crafting_table")実行 → 落下
+- **Error Message**: "[Server] Claude1 fell from a high place"
+- **Status**: Reported. Phase 1完了後すぐ死亡。keepInventoryでアイテム保持。
+
+## [2026-03-27] Bug: Session 88 - combat()がmeatドロップを回収しない
+- **Cause**: combat("cow")成功するが、raw_beefやcooked_beefがインベントリに入らない。eggは回収できる（chickensから）。
+- **Coordinates**: (40, 94, 2)
+- **Last Actions**: 5回combat("cow")→食料ゼロ。eggだけ増えた
+- **Error Message**: なし（combatは成功を返す）
+- **Status**: Reported. 食料確保の重大バグ。Phase 2進行が困難。
+
 ## [2026-03-27] Bug: Session 88 - 死亡22回目 Zombie撃殺（Hunger=3・Y=64）
 
 - **Cause**: Hunger=3・HP=11で地下Y=64でZombieに殺された。crafting_table+furnace作成直後。
