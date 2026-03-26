@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 101 (current) - pillarUp timeout + combat drop bug continues
+
+- **Root Cause**: pillarUpが30秒タイムアウト。combat()成功返却するが肉ドロップなし。既知バグ継続。
+- **State**: HP=5.9 Hunger=0 Time=night(15393) Pos=(40, 76, -2) birch_forest
+- **Observed**:
+  - bot.pillarUp(6) → 30秒タイムアウト（接続は生きているが動作しない）
+  - bot.combat("cow") → 1.5秒で成功返却するが食料ドロップ取得なし
+  - bot.moveTo(53, 65, 6) → 60秒タイムアウト（チェストへ移動できず）
+  - bot.flee() → 10秒後成功返却するがHP変化なし
+- **Context**: Chest at (53, 65, 6). 3秒keepalive問題の悪化か？
+- **Status**: Reported. Session 101.
+
+---
+
 ## [2026-03-27] Bug: Session 65/100/current - Connection degraded to <500ms, starvation death imminent
 
 - **Root Cause**: 3秒keepaliveタイムアウトバグ継続。Sessions 65/97/98/99/100と同じ。未修正。
