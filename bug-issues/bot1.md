@@ -1,3 +1,12 @@
+## [2026-03-25] Bug: Session 66 end - Disconnect loop confirmed, HP=6.9 Hunger=0 at session end
+
+- **Cause**: Same disconnect loop as Session 70f. mc_connect returns success, first bot.status() works (HP=6.9, Hunger=0, Y=78), all subsequent calls fail immediately with "Not connected".
+- **Final State**: HP=6.9, Hunger=0, Y=78, birch_forest area. Will likely die from starvation.
+- **Session Summary**: 6+ deaths in Session 66. Root cause cascade: gather() timeouts → no wood → no crafting_table → no farm setup → no food → starvation deaths. flee() caused high-altitude deaths. combat drops never worked.
+- **Status**: Reported. Session 66 end.
+
+---
+
 ## [2026-03-25] Bug: Session 70f - Bot stuck in disconnect loop: API calls fail 2ms after connect
 
 - **Cause**: After mc_connect() returns "Connected", API calls that involve server interaction (bot.status(), bot.navigate(), bot.gather(), bot.combat(), bot.getMessages()) all fail at 1-2ms with "Not connected". Only bot.log() and bot.wait() work. bot.inventory() works once but then fails.
