@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 88 - moveTo依然無効・動物が300ブロック圏内に存在しない・食料0でHP1.7
+
+- **Cause**: mc_reload後もmoveTo(-200,64,200)などが即時返却で位置変化なし（-15,66,1のまま）。navigate(cow/pig/chicken/sheep, max_distance=300)も全て"No X found"。朝（morning phase）でも動物ゼロ。birch_forestバイオームで動物スポーンが機能していない可能性。
+- **Coordinates**: x=-15, y=66, z=1 (birch_forest)
+- **Last Actions**: mc_reload → moveTo複数試行（全失敗） → navigate(全動物種, 300ブロック) → 全て失敗 → 食料0、HP1.7で生存限界
+- **Error Message**: moveTo: エラーなし（即時返却・位置不変）。navigate: "No cow found within 300 blocks"
+- **Root Cause推測**: 1) moveToのpathfinderが経路を計算できない地形 2) birch_forestバイオームでの動物スポーン問題 3) combat()も即時返却で機能していない
+- **Status**: Reported。HP:1.7 Hunger:0 で生存危機継続。Session 87のmoveTo問題が未修正のまま持続。
+
 ## [2026-03-26] Bug: Session 87 - moveTo/navigate完全無効（位置が変わらない）
 
 - **Cause**: moveTo(200, 65, 0), moveTo(0, 65, 200) など全方向への移動が成功を返すが座標が変化しない（実行時間 ~300ms で即時返却）。navigate("village"), navigate("villager") も同様。bot.flee()は短距離動く（7→36ブロック変化を確認）が、moveTo/navigateは全て無効。mc_reload・再接続後も改善なし。
