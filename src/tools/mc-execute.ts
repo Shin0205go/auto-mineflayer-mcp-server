@@ -64,8 +64,22 @@ export async function mc_execute(
         const elapsed = Date.now() - startTime;
         return `Error: Bot disconnected (death/respawn) and auto-reconnect timed out after 8s. Call mc_connect to reconnect manually.\n\nFailed after ${elapsed}ms`;
       }
+    } else {
+      // Non-death disconnect: bot may have briefly disconnected after mc_connect due to
+      // server-side processing (e.g. duplicate session cleanup, chunk loading).
+      // Wait up to 3s for the bot to stabilize before failing.
+      // Bug [Session 97]: mc_connect succeeds but mc_execute immediately gets "Not connected"
+      // because the bot disconnects within ~1-2s of connecting. This retry window allows
+      // the bot to reconnect if it was briefly dropped.
+      console.error(`[mc_execute] Bot not connected — waiting up to 3s for reconnection`);
+      try {
+        await botManager.waitForBot(3000);
+        console.error(`[mc_execute] Bot reconnected, proceeding with execution`);
+      } catch (_waitErr) {
+        // Still not connected — fall through to normal requireSingleBot() error
+        console.error(`[mc_execute] Bot still not connected after 3s wait`);
+      }
     }
-    // If no death-reconnect pending, let the normal flow fail with a clear error
   }
 
   // Build the bot API object that delegates to core-tools
