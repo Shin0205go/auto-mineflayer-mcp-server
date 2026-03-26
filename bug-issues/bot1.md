@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 95 - moveTo/navigate/farm/pillarUp全てタイムアウト、地上脱出不能
+- **Cause**: bot.pillarUp(35)→y=72→73に1ブロックしか上がれず（47秒かかった）。bot.navigate/moveTo→60秒タイムアウト。bot.farm()→120秒タイムアウト。Hunger=0, HP=9.3で飢餓状態。admin指示でpillarUpのみ使用するよう変更。
+- **Coordinates**: (32, 73, -5)
+- **Last Actions**: pillarUp(35)→失敗(1ブロックのみ), navigate→timeout, moveTo→timeout, farm→timeout
+- **Error Message**: タイムアウト多数
+- **Status**: CRITICAL - 全移動/採集コマンドが機能不全
+
 ## [2026-03-27] Bug: Session 94 NEW - navigate("chicken")が30秒タイムアウト、combat後ドロップ0継続
 - **Cause**: bot.navigate("chicken") → 30秒タイムアウト。bot.combat("chicken") → "Cannot reach (16.7 blocks away)"でabort。bot.farm() → 120秒タイムアウト。HP9.3/Hunger0の飢餓状態で食料取得手段が完全に機能しない。
 - **Coordinates**: (32, 70, -6)
