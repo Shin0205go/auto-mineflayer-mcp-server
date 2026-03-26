@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 92 - gather()が全ての鉱石・石材タイプでタイムアウト（完全機能不全）
+- **Cause**: gather("iron_ore",3), gather("deepslate_iron_ore",3), gather("cobblestone",3) が全て60秒タイムアウトで失敗。stone_pickaxe所持、目標ブロックの近くに移動済みでも採掘開始されない。
+- **Coordinates**: Y=62-64付近 (洞窟内)
+- **Last Actions**: navigate(iron_ore) → Y:63発見 → gather("iron_ore",1) → 60s timeout × 5回以上
+- **Error Message**: "Execution timed out after 60000ms" (全ての gather() 呼び出し)
+- **Status**: Reported. CRITICAL: gather()が完全に機能不全。Phase4鉄採掘が不可能。
+
+## [2026-03-27] Bug: Session 92 - 死亡37回目 Creeperに爆破された (食料確保中)
+- **Cause**: 飢餓状態(Hunger=0)でHP3.6まで落ちた後 Creeper に爆破されて死亡。combat()が食料ドロップしないため食料確保不可能状態が続いた。
+- **Coordinates**: Y=80付近
+- **Last Actions**: 食料確保試行 → HP3.6 → "Claude1 was blown up by Creeper"
+- **Error Message**: "Claude1 was blown up by Creeper"
+- **Status**: Reported.
+
 ## [2026-03-27] Bug: Session 92 - 死亡36回目 Creeperに爆破された（木材採集中）
 - **Cause**: navigate(birch_log)でY=114に移動後、gather("birch_log",6)中にCreeper爆発で死亡。タイムアウト(120秒)中に夜になって危険になった。
 - **Coordinates**: Y=114付近 (地表)
