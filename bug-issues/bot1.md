@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 89 - 死亡31回目 Zombie攻撃（Y=64洞窟内）
+- **Cause**: Y=64の洞窟内でHP:2の状態でゾンビに追い詰められ死亡。flee/moveToが機能せず、食料ゼロで回復不能な状況が継続した。
+- **Coordinates**: (-1, 64, 2) 付近
+- **Last Actions**: flee → moveTo(3,100,9) → wait → "Claude1 was slain by Zombie"
+- **Error Message**: "Claude1 was slain by Zombie"
+- **Status**: Reported. 同一エリアでの繰り返し死亡パターン。flee距離が不足している可能性、または同一mobがリスポーン点に沸いている。
+
 ## [2026-03-27] Bug: Session 89 - 死亡30回目 Zombie攻撃（シェルター内、夜間）
 - **Cause**: bot.build("shelter")でシェルターを建設したが、シェルター内にZombieが侵入してHP2.5まで削られ死亡。シェルターが密閉されていないか、Zombieがシェルター内に沸いた可能性。
 - **Coordinates**: (-12, 85, 40) 付近
