@@ -1,3 +1,16 @@
+## [2026-03-26] Bug: Session 86 - クリティカル総括 (全アクション機能不全)
+
+- **Cause**: 複数のコアバグが同時に発生し、生存が不可能な状態。
+  1. **combat()ドロップ取得不可**: cow/pig/chicken/sheep/zombie全て「成功」するが食料がインベントリに追加されない。Session 84から継続。
+  2. **gather()タイムアウト**: birch_log, short_grass, oak_leaves 全てで60秒タイムアウト。
+  3. **craft()タイムアウト**: craft("furnace") が20-30秒でタイムアウト。
+  4. **moveTo()不正確**: moveTo(-6,62,2)がx=2,y=58,z=-14等の全く別の座標に移動。
+  5. **wait()中に攻撃でHP低下**: wait()の自動flee処理が引き金でタイムアウト。
+  6. **pillarUp失敗**: cobblestone 243個持参中でも「No blocks placed」エラー。
+- **State**: HP2.8 Hunger6 食料0 深夜。シェルター内でも生存困難。
+- **Impact**: 完全プレイ不能。コードレビューなしに継続不可能。
+- **Status**: Reported。緊急コードレビュー要。
+
 ## [2026-03-26] Bug: Session 86 - 死亡3: gather()中に落下 (birch_log採取中にY=72→高所落下)
 
 - **Cause**: bot.gather("birch_log", 8)実行中に高所から落下。gather()が崖際や木の上で作業中に落下防止なし。
