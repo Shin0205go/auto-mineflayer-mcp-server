@@ -1,3 +1,11 @@
+## [2026-03-27] Bug: Session 90 - 敵エンティティが長時間追跡し続け、移動系が全てタイムアウト（継続中）
+- **Cause**: クリーパー2体・スケルトン1体が朝(ticks 5273)になっても消えず、同じ位置(27,98,0)近辺で追跡を続ける。moveTo/navigate/gather/pillarUp/fleeが全て30-60秒タイムアウト。status()/wait()は正常動作。
+- **Coordinates**: (27, 98, 0) - mc_reload後も位置変わらず
+- **Last Actions**: mc_reload → pillarUp(5)タイムアウト → navigate("chest")タイムアウト → gather()タイムアウト → 待機しても改善せず
+- **Duration**: 90分以上同一地点でスタック
+- **Error Message**: "Execution timed out after 30000ms" (全移動系)
+- **Status**: Reported. 敵エンティティ近接時のpathfinder計算が無限ループしてスレッドをブロックしている可能性。敵を無視して移動するオプションが必要。
+
 ## [2026-03-27] Bug: Session 90 - moveTo/pillarUp/flee が全てタイムアウト（エンティティ周辺でスタック）
 - **Cause**: クリーパー3体・スケルトン1体の周囲にいる状態でmoveTo/pillarUp/fleeを実行すると全てタイムアウト。ボットが(26,98,1)に固定されて動けない。
 - **Coordinates**: (26, 98, 1)
