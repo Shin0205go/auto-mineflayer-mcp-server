@@ -1,3 +1,16 @@
+## [2026-03-27] Bug: Session 65 (current) - iron_sword obtained from drops but Phase4 still blocked
+
+- **Progress**: iron_sword x1 obtained by picking up dropped items (navigate + small moveTo loop)
+- **State**: HP=6.9 Hunger=0 at (42.7, 74, -6.7) birch_forest day
+- **Inventory highlights**: iron_sword x1, stone_pickaxe x3, cobblestone x180, wheat_seeds x55, bone_meal x13, coal+charcoal x3, crafting_table x1
+- **Still needed**: iron_pickaxe (3 iron ingots), food (hunger=0 indefinitely)
+- **Working operations** (<3s): status(), inventory(), place() single block, moveTo 1-2 blocks
+- **Broken operations** (>3s = disconnect): combat(), navigate(), gather(), farm(), flee(), craft() for complex recipes
+- **Pattern**: bot.moveTo(x+1, y, z) = ~600ms SUCCESS. moveTo(x+4, y, z) = ~2-3s DISCONNECTS. Any operation approaching 3 seconds causes server disconnect.
+- **Status**: Reported. Session 65 ongoing. Phase 4 blocked by 3s timeout bug.
+
+---
+
 ## [2026-03-27] Bug: Session 99 - 3秒切断バグ継続、bot.place()も3秒で切断
 
 - **Root Cause**: 3秒keepaliveタイムアウトバグ継続。Session 65/97/98と同じ。
