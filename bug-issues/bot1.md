@@ -1,3 +1,20 @@
+## [2026-03-27] Bug: Session 99 - 3秒切断バグ継続、bot.place()も3秒で切断
+
+- **Root Cause**: 3秒keepaliveタイムアウトバグ継続。Session 65/97/98と同じ。
+- **New Finding (Session 99)**:
+  - bot.status() (~250ms) = 動作
+  - bot.inventory() (~250ms) = 動作
+  - bot.flee() → "Not connected" at exactly ~15秒（flee中に切断）
+  - bot.place("torch", x, y, z) → "Not connected" at exactly 3024ms
+  - bot.pillarUp() → "Not connected" at ~15秒
+- **状況**: HP:6.9 Hunger:0 birch_forest Y=78 朝(ticks=5813)、敵多数周囲
+- **影響**: bot.status()/bot.inventory()以外全API使用不可。ゲームプレイ完全停止。
+- **接続直後1回目**: 成功率高い。2回目以降は3秒でdisconnect。
+- **優先度**: CRITICAL - コードレビュー必須。keepalive packet送信の実装が必要。
+- **Status**: Reported. Session 99.
+
+---
+
 ## [2026-03-27] Bug: Session 98 - 3秒切断バグ継続、全長時間APIが動作不能
 
 - **Root Cause**: 3秒keepaliveタイムアウトバグが継続。以前のバグ報告(Session 65, 97)と同じ問題。
