@@ -1,3 +1,18 @@
+## [2026-03-27] Bug: Session 97 - 頻繁な自動切断（mc_execute実行中または直後に切断）
+- **Cause**: mc_connectで接続成功するが、mc_execute実行中または直後に"Not connected to any server"エラーが繰り返し発生。接続→実行→切断のループ。bot.place()などを呼ぶと7秒以内に切断される。
+- **Coordinates**: (27, 76, -7) birch_forest
+- **Last Actions**: connect成功→status確認(OK)→place()実行中に切断（2回確認）
+- **Error Message**: "Not connected to any server. Use minecraft_connect(host="localhost", port=25565, username="Claude1", agentType="game") first."
+- **Frequency**: connect直後の最初のmc_execute(status系)は成功、2回目以降のmc_executeで高確率で切断
+- **Status**: CRITICAL - 安定したゲームプレイが不可能
+
+## [2026-03-27] Bug: Session 97 - mc_execute中に突然切断される（Not connected to any server）
+- **Cause**: mc_execute実行中にサーバー接続が切断され、"Not connected to any server"エラー。前のAPIコール（place x12個）の実行中に切断。
+- **Coordinates**: (27, 75, -6)
+- **Last Actions**: bot.place("cobblestone") を複数回ループ実行中に切断
+- **Error Message**: "Not connected to any server. Use minecraft_connect(host="localhost", port=25565, username="Claude1", agentType="game") first."
+- **Status**: Reported - 再接続後も同じ問題が繰り返す可能性あり
+
 ## [2026-03-27] Bug: Session 97 SUMMARY - bot API 総合機能不全レポート（コードレビュー優先対応要）
 - **Cause**: Session 95-97で以下の全てのbotAPIが機能不全:
   1. bot.gather() → 全タイムアウト（20-30秒）
