@@ -1328,6 +1328,16 @@ export async function mc_farm(): Promise<string> {
               }
             }
           }
+          if (!veryFarWater) {
+            // No water found within 200 blocks — farming is impossible here.
+            // Early return to avoid running Step 3+ loops with empty farmCoords,
+            // which wastes time and causes 120s timeout. Bot should move to a
+            // river/ocean biome before attempting to farm.
+            // [2026-03-26]: farm() with no water ran Step 3+ loops for 120s timeout.
+            logs.push("No water found within 200 blocks — cannot start farm. Move to a river/ocean biome first.");
+            const finalBotNoWater = botManager.getBot(username);
+            return logs.join("\n") + `\nmc_farm: No water found within 200 blocks. Farming requires water for irrigation. HP: ${finalBotNoWater?.health ?? '?'}, Hunger: ${finalBotNoWater?.food ?? '?'}.` + farmWarning;
+          }
           if (veryFarWater) {
             logs.push(`Found water at (${veryFarWater.position.x}, ${veryFarWater.position.y}, ${veryFarWater.position.z}), moving near...`);
             try {

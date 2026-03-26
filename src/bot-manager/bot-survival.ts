@@ -1027,7 +1027,7 @@ export async function fight(
   managed: ManagedBot,
   flee: (managed: ManagedBot, distance: number) => Promise<string>,
   entityName?: string,
-  fleeHealthThreshold: number = 12
+  fleeHealthThreshold: number = 8
 ): Promise<string> {
   const bot = managed.bot;
   const fightFuncStartTime = Date.now();
@@ -1048,6 +1048,11 @@ export async function fight(
   // Bot1 [2026-03-23]: bot.combat("cow", 15) "instant completion" — fight() raised threshold
   // to 16, HP 1.8 triggered immediate flee before any attack. Bot couldn't get food.
   // Fix: detect food-desperate state and cap escalation at the caller's threshold.
+  //
+  // [2026-03-26] Lowered default from 12 to 8: HP=8.7 with fleeHealthThreshold=12 caused
+  // "fled before combat" immediately — multi-hostile escalation raised threshold to 14+,
+  // making normal combat impossible at HP<14. With default=8, single-mob combat flees at HP<=8
+  // (reasonable), and multi-hostile escalation caps at 10 (was 14/16) to stay under HP=10.
   const FOOD_ANIMALS_FIGHT = ["cow", "pig", "chicken", "sheep", "rabbit", "mooshroom", "goat", "salmon", "cod"];
   const isFoodAnimalTarget = entityName && FOOD_ANIMALS_FIGHT.some(a => entityName.toLowerCase().includes(a));
   const hasNoFood = !bot.inventory.items().some(i => EDIBLE_FOOD_NAMES.has(i.name));
@@ -1073,10 +1078,13 @@ export async function fight(
     // hostiles are always nearby. Keep the caller's threshold (typically 10).
     console.error(`[Fight] Passive mob hunt "${entityName}": ${nearbyHostileCountFight} hostiles nearby but NOT escalating fleeHealthThreshold (keeping ${fleeHealthThreshold}). Mid-combat hostile abort provides safety.`);
   } else if (nearbyHostileCountFight >= 3) {
-    fleeHealthThreshold = Math.max(fleeHealthThreshold, 16);
+    // Cap at 10 (was 16): default threshold is now 8, so escalating to 16 causes
+    // immediate flee at normal HP levels. 10 provides burst-damage safety margin.
+    fleeHealthThreshold = Math.max(fleeHealthThreshold, 10);
     console.error(`[Fight] ${nearbyHostileCountFight} hostiles nearby — raised fleeHealthThreshold to ${fleeHealthThreshold}`);
   } else if (nearbyHostileCountFight >= 2) {
-    fleeHealthThreshold = Math.max(fleeHealthThreshold, 14);
+    // Cap at 10 (was 14): same reasoning as 3+ hostile case above.
+    fleeHealthThreshold = Math.max(fleeHealthThreshold, 10);
     console.error(`[Fight] ${nearbyHostileCountFight} hostiles nearby — raised fleeHealthThreshold to ${fleeHealthThreshold}`);
   }
 
