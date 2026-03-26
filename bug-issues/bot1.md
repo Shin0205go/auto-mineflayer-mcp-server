@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 85 - 死亡: Zombie に殺された (HP回復中に)
+
+- **Cause**: HP1.3から4.7に回復途中にZombieに殺された。flee()で逃走したが、逃走先にcreeper×3/endermanがいた。逃走先の安全確認が不十分。
+- **Coordinates**: x=2, y=74, z=0 (birch_forest 高台)
+- **Last Actions**: flee(50) → Pos(2, 74, 0)付近で敵に遭遇 → "Claude1 was slain by Zombie"
+- **Error Message**: Server: Claude1 was slain by Zombie
+- **Context**: アイテムピックアップバグで食料ゼロ。HP1.3で長時間過ごした後、flee先に敵が密集していた。
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 85 - アイテムピックアップ不能が継続。HP1.3で生存限界
 
 - **Cause**: combat()/gather()/farm() が「成功」を返すがインベントリにアイテムが追加されない。Session 84から継続している未修正バグ。
