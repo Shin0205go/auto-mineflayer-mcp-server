@@ -1,3 +1,18 @@
+## [2026-03-25] Bug: Session 70f - Bot stuck in disconnect loop: API calls fail 2ms after connect
+
+- **Cause**: After mc_connect() returns "Connected", API calls that involve server interaction (bot.status(), bot.navigate(), bot.gather(), bot.combat(), bot.getMessages()) all fail at 1-2ms with "Not connected". Only bot.log() and bot.wait() work. bot.inventory() works once but then fails.
+- **Coordinates**: Y=76, near spawn (0,0), HP=6.9 (probably died from mobs during the loop)
+- **Diagnostic**:
+  - bot.log("A") → works
+  - bot.wait(2000) → works
+  - bot.status() → fails at 1ms (every time after first use)
+  - bot.gather() → fails at 2ms
+  - bot.inventory() → works FIRST time, then fails
+  - PATTERN: First mc_execute after connect works ONCE. Second call always fails.
+- **Root Cause Hypothesis**: Bot is dying in-game from creeper/mob attacks between mc_execute calls (HP=6.9 with 3+ creepers). When bot dies in Mineflayer, the bot entity leaves the world temporarily. BotManager.requireSingleBot() fails because bot.entity is null during death respawn animation. The bot reconnects to server but the MCP session doesn't know about it.
+- **Alternative Hypothesis**: Server is kicking bot for anti-spam (multiple rapid reconnects during a session)
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Session 70e - Frequent "Not connected" after mc_connect, bot disconnects during flee()/wait()
 
 - **Cause**: After mc_reload + mc_connect succeeds, subsequent mc_execute calls immediately fail with "Not connected" (0-2ms). Pattern: mc_connect → success → mc_execute → "Not connected" at 0ms. Even simple wait(2000) disconnects the bot. flee() with enderman nearby triggers disconnect. bot.build("shelter") fails with "Bot Claude1 not found".
