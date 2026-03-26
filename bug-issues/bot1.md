@@ -1,3 +1,18 @@
+## [2026-03-26] Bug: Session 88 - navigate(farmland)/farm()が連続タイムアウト（60秒）
+
+- **Cause**: navigate({target_block:"farmland", max_distance:50})が毎回60秒でタイムアウト。farm()も同様。ボットが農場エリアに到達できない。
+- **Coordinates**: (-3.5, 44, -11.5) birch_forest
+- **Last Actions**: navigate farmland → timeout → farm() → timeout を3回以上繰り返し
+- **Error Message**: `Execution timed out after 60000ms`
+- **Status**: Reported。農場管理系コマンドがbirch_forestの複雑な地形で機能しない。
+
+## [2026-03-26] Bug: Session 88 - HP=3・食料0・動物スポーンなし・回復不可能状態
+
+- **Cause**: HP=3、Hunger=15、food=0、動物が500ブロック圏内に存在しない。combat("cow/pig/chicken/sheep")全て空振り（動物なし）。eat()も食料なくて実行不可。自然回復なし（Hunger<18）。
+- **Coordinates**: (-3.5, 44, -11.5)
+- **Last Actions**: combat animals → 全空振り → navigate farmland → timeout
+- **Status**: Reported。birch_forestバイオームで動物スポーンがなく食料確保が不可能。
+
 ## [2026-03-26] Bug: Session 88 - 死亡: 溺死2回目（Y=50低地でflee→drowned）
 
 - **Cause**: Y=50の低地でbot.flee(50)を実行 → Y=108の高台に飛ばされた後に溺死したと思われる。または低地のY=50付近に水域があり、flee()が水中に誘導した。
