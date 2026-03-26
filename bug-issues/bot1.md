@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 83 - 落下死亡（高所スタックから脱出不能）
+
+- **Cause**: Y=109高所スタックからdig+water方法で徐々に降下。Y=97で再びスタック。その後「fell from a high place」で死亡。keepInventoryでアイテム保持。リスポーン後HP=20、Hunger=20に回復。
+- **Coordinates**: x=-64, y=97, z=5（死亡地点付近）
+- **Last Actions**: dig+水流で降下試行 → Y=97でスタック → 落下死亡
+- **Error Message**: "Claude1 fell from a high place"
+- **Status**: Reported。リスポーン後にゲームプレイ再開。
+
 ## [2026-03-26] Bug: Session 83 - 全移動手段失敗 + combat()ドロップ取得不可（CRITICAL）
 
 - **Cause**: mc_reload後も以下の全操作が機能しない：
