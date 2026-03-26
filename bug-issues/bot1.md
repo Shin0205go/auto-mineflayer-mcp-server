@@ -5,6 +5,18 @@
 - **Error Message**: "Claude1 drowned"
 - **Status**: Reported. moveTo()が目標座標と全く異なる位置に移動し水没死を引き起こす。
 
+## [2026-03-27] Bug: Session 92 - CRITICAL SUMMARY: 全食料取得方法が機能不全（セッション全体）
+- **Cause**: 以下の全ての食料取得方法が失敗:
+  1. bot.combat("cow"/"pig"/"chicken"/"sheep") → total inventory unchanged (0 drops)
+  2. bot.gather("wheat"/"hay_block"/"carrot"/"potato"/"iron_ore") → 0 drops
+  3. bot.farm() → 120秒タイムアウト
+  4. bot.store("withdraw", "bread") → chest内に食料なし
+- **Evidence**: combat("skeleton")はbone/arrowをドロップ → 無生物ドロップは機能する。animals系だけが壊れている。
+- **Coordinates**: Y=72 付近 (地表)
+- **Last Actions**: cow→0, pig→0, sheep→0, chicken→0 × 5回以上。bone_meal x7, wheat_seeds x70所持だが農場も作れず。
+- **Error Message**: なし（全てsilent fail）
+- **Status**: CRITICAL. 食料確保が完全に不可能。飢餓→HPゼロ→死亡のループが不可避。コードレビュー緊急必要。
+
 ## [2026-03-27] Bug: Session 92 - gather(iron_ore)等の鉱石がドロップを返さない（drop=0バグ）
 - **Cause**: gather("iron_ore",1), gather("gold_ore",1), gather("copper_ore",1) を実行してもraw_iron/raw_gold/raw_copperが0のまま。gather("stone",2)はcobblestoneを返す。gather("coal_ore",2)は最初の1回だけcoalを返す。
 - **Coordinates**: Y=72 (地表付近)
