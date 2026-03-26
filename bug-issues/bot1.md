@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 93 - 死亡40-41回目 飢餓ダメージ（gather/combat全dropバグ継続）
+- **Cause**: gather("iron_ore")がraw_ironを0ドロップ。combat("cow"/"chicken"/"sheep")が肉を0ドロップ。空腹0継続→飢餓→死亡×2回
+- **Coordinates**: 死亡1: x=51 y=58 z=25付近、死亡2: y=104付近
+- **Last Actions**: gather("iron_ore",5)→raw_iron:0、combat系→food:0、HP0.2で死亡、eat()呼び出し時点でリスポーン後
+- **Error Message**: なし（gather/combatともにsilent fail）
+- **Status**: Reported. CRITICAL: gather(鉱石)・combat(動物)の両方がドロップ0。flyなどの移動も目標外。コードレビュー緊急。
+
 ## [2026-03-27] Bug: Session 94 - 死亡 drowning (navigate "water" 後に水中に落下)
 - **Cause**: bot.navigate("water") で水源に近づいた後、bot.wait() 中に水中に落ちて溺死。Hunger=0 + HP=9.3の飢餓状態で抵抗不能。
 - **Coordinates**: (51, 58, 25) 付近
