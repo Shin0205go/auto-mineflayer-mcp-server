@@ -941,24 +941,29 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
         notMovingCount = 0;
       }
 
-      // OVERALL PROGRESS CHECK: Every 30s (60 checks at 500ms), verify bot is actually
-      // making meaningful progress toward the target. This catches the "pathfinder running
-      // but bot not advancing" pattern where small position jitter resets noProgressCount
-      // and pathfinder stays isMoving()=true while the bot never advances toward target.
-      // Session 79 [2026-03-26]: bot at (-112,77,20) ran moveTo(0,77,9) for 120s without
-      // ever leaving the -112...-111 X range, consuming the full mc_execute timeout.
-      // Only check when more than 15 blocks away (close targets may be circling around obstacles).
+      // OVERALL PROGRESS CHECK: Two-tier system to catch "pathfinder running but not advancing".
+      // Session 79 [2026-03-26]: long-range (>15 blocks) check every 30s, require 5 blocks progress.
+      // Session 90 [2026-03-27]: short-range (3-15 blocks) check was skipped (currentDist <= 15),
+      // allowing 30s full timeout even when bot was stuck at same position due to nearby hostiles.
+      // Fix: add short-range tier — check every 10s, require 1 block progress.
       progressCheckTickCount++;
-      if (progressCheckTickCount >= 60 && currentDist > 15) {
+      const isShortRange = currentDist > 3 && currentDist <= 15;
+      const isLongRange = currentDist > 15;
+      const shortRangeInterval = 20; // 10 seconds
+      const longRangeInterval = 60;  // 30 seconds
+      if ((isShortRange && progressCheckTickCount >= shortRangeInterval) ||
+          (isLongRange && progressCheckTickCount >= longRangeInterval)) {
         progressCheckTickCount = 0;
         const distProgress = lastProgressCheckDist - currentDist; // positive = closer to target
-        if (distProgress < 5) {
-          // Less than 5 blocks closer to target in 30 seconds — stuck
+        const requiredProgress = isShortRange ? 1 : 5;
+        const intervalSec = isShortRange ? 10 : 30;
+        if (distProgress < requiredProgress) {
+          // Not enough progress toward target — stuck
           const yDiff = y - currentPos.y;
-          console.error(`[MoveTo] OVERALL PROGRESS TIMEOUT: ${distProgress.toFixed(1)} blocks progress in 30s toward target at (${x},${y},${z}). Pathfinder running but not advancing. Failing early instead of timing out.`);
+          console.error(`[MoveTo] OVERALL PROGRESS TIMEOUT: ${distProgress.toFixed(1)} blocks progress in ${intervalSec}s toward target at (${x},${y},${z}). Pathfinder running but not advancing. Failing early instead of timing out.`);
           finish({
             success: false,
-            message: `Pathfinder running but not advancing: only moved ${distProgress.toFixed(1)} blocks toward target in 30s. Stopped at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}), ${currentDist.toFixed(1)} blocks from target. Try a waypoint closer to ${x},${z} or clear the area first.`,
+            message: `Pathfinder running but not advancing: only moved ${distProgress.toFixed(1)} blocks toward target in ${intervalSec}s. Stopped at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}), ${currentDist.toFixed(1)} blocks from target. Try a waypoint closer to ${x},${z} or clear the area first.`,
             stuckReason: Math.abs(yDiff) > 2 ? (yDiff > 0 ? "target_higher" : "target_lower") : "pathfinder_stopped"
           });
           return;
