@@ -1,3 +1,17 @@
+## [2026-03-26] Bug: Session 85 - アイテムピックアップ不能が継続。HP1.3で生存限界
+
+- **Cause**: combat()/gather()/farm() が「成功」を返すがインベントリにアイテムが追加されない。Session 84から継続している未修正バグ。
+- **Coordinates**: x=-5, y=62, z=2 (birch_forest)
+- **Last Actions**:
+  - bot.combat("cow") → 牛を倒したが beef/cooked_beefがインベントリに入らない
+  - bot.combat("chicken") × 3回 → 全て食料ゼロ
+  - bot.combat("zombie") × 2回 → 腐肉ゼロ
+  - bot.farm() → wheat/seeds ゼロ
+  - チェスト(x=-6, y=61, z=2) → 空
+- **State**: HP:1.3, Hunger:0。食料確保手段が全滅。HP回復不可能。
+- **Impact**: このバグが修正されない限り、食料確保・HP回復・進行が全て不可能
+- **Status**: Reported。**緊急修正必要。combat/gather後のアイテムピックアップ処理を修正せよ。**
+
 ## [2026-03-26] Bug: Session 84 - クリティカル：全アイテム獲得手段が機能せずプレイ不可能
 
 - **Cause**: gather/combat/farm/smelt 全てが「成功」と返すがインベントリにアイテムが入らない。食料確保不可能。
