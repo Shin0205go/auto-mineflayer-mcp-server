@@ -5,6 +5,20 @@
 - **Error Message**: "Claude1 drowned"
 - **Status**: Reported. moveTo()が目標座標と全く異なる位置に移動し水没死を引き起こす。
 
+## [2026-03-27] Bug: Session 92 - gather(iron_ore)等の鉱石がドロップを返さない（drop=0バグ）
+- **Cause**: gather("iron_ore",1), gather("gold_ore",1), gather("copper_ore",1) を実行してもraw_iron/raw_gold/raw_copperが0のまま。gather("stone",2)はcobblestoneを返す。gather("coal_ore",2)は最初の1回だけcoalを返す。
+- **Coordinates**: Y=72 (地表付近)
+- **Last Actions**: gather("iron_ore",1)→raw_iron:0 × 5回以上。gather("stone",2)→cobblestone:+2(成功)
+- **Error Message**: なし（silent fail）
+- **Status**: Reported. CRITICAL: 鉱石のドロップが全て0。Phase4で鉄インゴット入手が不可能。
+
+## [2026-03-27] Bug: Session 92 - craft()が世界に設置済みのcrafting_tableを認識しない
+- **Cause**: crafting_table(2)をインベントリに持ちながら bot.place()で世界に設置してcraft()を呼んでも "requires a crafting_table. Place one nearby first" エラーが出る。bot.navigate("crafting_table")は成功するのに craft()だけ認識しない。
+- **Coordinates**: (21, 72, 7)
+- **Last Actions**: place(crafting_table) → navigate(crafting_table)成功 → craft("iron_pickaxe") → "requires a crafting_table" エラー
+- **Error Message**: "Error: iron_pickaxe requires a crafting_table. Place one nearby first"
+- **Status**: Reported. craft()がplaced crafting_tableを使えないバグ。
+
 ## [2026-03-27] Bug: Session 92 - gather()が全ての鉱石・石材タイプでタイムアウト（完全機能不全）
 - **Cause**: gather("iron_ore",3), gather("deepslate_iron_ore",3), gather("cobblestone",3) が全て60秒タイムアウトで失敗。stone_pickaxe所持、目標ブロックの近くに移動済みでも採掘開始されない。
 - **Coordinates**: Y=62-64付近 (洞窟内)
