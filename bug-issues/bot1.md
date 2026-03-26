@@ -1,3 +1,13 @@
+## [2026-03-26] Bug: Session 85 - 死亡5: Skeleton射殺 (夜間pillarUp中)
+
+- **Cause**: 夜間にpillarUp中、skeleton×2に囲まれ矢で射殺。pillarUp後もY=66にとどまり敵射程内だった
+- **Coordinates**: Y=66-79付近
+- **Last Actions**: pillarUp(6) → HP:20→4 (pillarUp中に被弾) → auto-flee → skeleton attack → death
+- **Error Message**: Server: Claude1 was shot by Skeleton
+- **Context**: 夜間に敵が大量発生（skeleton2, zombie3, creeper3, spider, enderman, zombie_villager）する場所でpillarUpしたが、skeletonは射程が長く高所でも狙われた。
+- **Root Cause**: pillarUp の高さが不十分 (6ブロック)。skeletonの射程は約16ブロック。少なくとも20ブロック以上登る必要がある。
+- **Status**: Reported。pillarUp後も狙われる場合の回避策が必要。
+
 ## [2026-03-26] Bug: Session 85 - 死亡4: gather()中に高所落下 (Y=119から)
 
 - **Cause**: bot.gather("birch_log", 16) 実行中にY=119の高所から落下して死亡
