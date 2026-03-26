@@ -1,3 +1,13 @@
+## [2026-03-26] Bug: Session 81 - Death: gather()中にzombieに殺される
+
+- **Cause**: bot.gather("iron_ore")実行中、zombie接近に気づかず死亡。HP1.7まで落ちてからfleeしたが間に合わず。
+- **Coordinates**: x=-11, y=90, z=-17
+- **Last Actions**: navigate iron_ore → gather iron_ore → HP急落 → flee間に合わず死亡
+- **Error Message**: "Claude1 was slain by Zombie"
+- **Session**: Session 81 (2026-03-26)
+- **Root Cause**: gather()中に敵モニタリングとhp安全チェックが機能していない。HP<5でも採掘を続ける。
+- **Status**: Reported
+
 ## [2026-03-26] Bug: moveTo()が完全に機能しない（bot完全停止）
 
 - **Cause**: bot.moveTo()がどの座標を指定しても現在地のまま。全方向（X±50/100, Z±50/100, Y±35）で失敗。bot自体が動けない状態。
