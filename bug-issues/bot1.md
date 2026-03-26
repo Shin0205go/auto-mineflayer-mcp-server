@@ -1,3 +1,12 @@
+## [2026-03-27] Bug: Session 88 - 死亡18回目 Skeleton射殺（HP=3.7・Hunger=0地下Y=45）
+
+- **Cause**: Hunger=0で地下Y=45に閉じ込め。HP=3.7の状態でSkeletonに射殺。
+- **Coordinates**: (10, 45, 6)
+- **Last Actions**: moveTo(surface) → creeper blocked → passive wait → Skeleton shot
+- **Error Message**: `<[Server]> Claude1 was shot by Skeleton`
+- **Root Cause**: combat flee threshold=10により戦闘不可・moveTOが地下ルートを選択・escape不可能
+- **Status**: Reported
+
 ## [2026-03-27] Bug: Session 88 - 死亡17回目 落下死（Y=87から落下）
 
 - **Cause**: navigate(farmland)後Y=87の高地に移動、gather("wheat")60秒タイムアウト中に落下死。
