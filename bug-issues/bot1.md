@@ -1,3 +1,13 @@
+## [2026-03-26] Bug: Session 85 - 自然HP回復が機能しない
+
+- **Cause**: HP=5、Hunger=14-16の状態で敵がいない場所に60秒以上いるが、HPが全く回復しない。
+- **Coordinates**: x=39, y=63, z=38 (birch_forest)
+- **Last Actions**: flee(100) → 敵ゼロの安全地帯 → wait(30000) → HP変化なし
+- **Expected**: Hunger > 9.5 (=19/2食料ポイント以上) で自然回復開始するはず
+- **Actual**: Hunger14-16でも自然回復ゼロ。bot.eat()後もHP変化なし。
+- **Impact**: HP5のまま回復手段がなく、次の攻撃で死亡する可能性が高い
+- **Status**: Reported。自然HP回復のロジックまたはbotのhealthUpdateの追跡に問題がある可能性。
+
 ## [2026-03-26] Bug: Session 85 - 死亡6: 溺死 (水中でdrowned×2に攻撃されながら脱出不能)
 
 - **Cause**: Y=53付近の水中でdrowned×2に攻撃されながらmoveTo/pillarUpが全て失敗。水中から脱出できずHP2→0で溺死。
