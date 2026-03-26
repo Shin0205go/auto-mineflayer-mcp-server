@@ -1,3 +1,19 @@
+## [2026-03-27] Bug: Session 100 - 3秒切断バグ継続（CRITICAL、keepalive未実装）
+
+- **Root Cause**: 3秒keepaliveタイムアウトバグ継続。Sessions 65/97/98/99と同じ。コードレビュー後も未修正。
+- **New Findings (Session 100)**:
+  - bot.combat("chicken") = 20秒後に成功返却するが食料ドロップなし（ドロップ取得バグ）
+  - bot.navigate("cow") = 3秒でdisconnect
+  - bot.combat("cow") = 1.25秒で成功返却するが食料なし（ドロップ取得バグ）
+  - bot.flee() = 15秒でdisconnect（flee中に切断）
+- **状況**: HP:6.9 Hunger:0 birch_forest day (9193 ticks) at (32.7, 76, -4.8)
+- **インベントリ**: iron_sword, wheat_seeds x55, cobblestone x185, stone_pickaxe x4, crafting_table - 食料ゼロ
+- **影響**: ゲームプレイ完全停止。keepalive未実装で長時間操作不可。動物狩りしても肉ドロップなし。
+- **優先度**: CRITICAL - keepalive packet送信 + 動物肉ドロップ取得の修正が両方必要
+- **Status**: Reported. Session 100.
+
+---
+
 ## [2026-03-27] Bug: Session 65 (current) - iron_sword obtained from drops but Phase4 still blocked
 
 - **Progress**: iron_sword x1 obtained by picking up dropped items (navigate + small moveTo loop)
