@@ -1,3 +1,13 @@
+## [2026-03-26] Bug: Session 83 - 矢で弱ってからの落下死（3回目の死亡）
+
+- **Cause**: tunnel("down")ループ中にスケルトンの矢を受けてHP=4.8まで低下。その後「doomed to fall by Arrow」で落下死。
+- **Coordinates**: x=-3, y=67, z=6（死亡推定地）
+- **Last Actions**: tunnel("down") × 17回実行中 → HP=4.8 → 落下死
+- **Error Message**: "Claude1 was doomed to fall by Arrow" + "Claude1 fell from a high place"
+- **Root Cause**: tunnel()実行中にHP監視が不十分。HP<8になっても採掘を止めなかった（設定HP<8で停止するはずが機能しなかった）。
+- **Status**: Reported。3回目リスポーン。HP=7、Hunger=17、夜間。
+- **追加情報**: tunnel()中にY=1まで降りたがその後Y=104にテレポートしたような動きがある（Y=104→再度降下中に死亡）。tunnel()の挙動が不安定。
+
 ## [2026-03-26] Bug: Session 83 - スケルトンに射殺（2回目の死亡）
 
 - **Cause**: 食料探索中にHPが3.5まで低下。moveTo()で複数地点を探索中にスケルトンの矢を受け続けた。flee()中にHP=0になりリスポーン。
