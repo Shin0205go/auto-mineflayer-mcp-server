@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 85 - moveTo()が完全に機能しない (pathfinder詰まり)
+
+- **Cause**: moveTo()を10回以上呼び出しても座標が全く変化しない。bot の位置がX=-1, Z=8に固定されている。
+- **Coordinates**: x=-1, y=63, z=8 (birch_forest)
+- **Last Actions**: moveTo(x+10)×10回 → 全て失敗(座標変化なし) → moveTo(z+10)×10回 → 全て失敗
+- **Impact**: 逃走不能。HP7.2で敵多数（creeper3, skeleton2, zombie, enderman）に囲まれたまま動けない
+- **Suspected Cause**: pathfinderが拠点構造物の地形で詰まっている。掘った穴や設置したブロックで経路が閉塞している可能性。
+- **Status**: Reported。緊急修正必要。mc_reloadで解消するか要確認。
+
 ## [2026-03-26] Bug: Session 85 - 死亡8: 高所落下 (combat中にY=76から)
 
 - **Cause**: combat("cow")実行中にY=76から崖に落下して死亡
