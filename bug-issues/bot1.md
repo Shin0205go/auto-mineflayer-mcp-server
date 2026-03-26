@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 87 - moveTo/navigate完全無効（位置が変わらない）
+
+- **Cause**: moveTo(200, 65, 0), moveTo(0, 65, 200) など全方向への移動が成功を返すが座標が変化しない。navigate("village"), navigate("villager") も同様。bot.flee()は短距離動く（7→36ブロック変化を確認）が、moveTo/navigateは全て無効。
+- **Coordinates**: x=-8, y=60, z=16 (birch_forest)
+- **Last Actions**: flee()で一部動作 → moveTo(200,65,0) × 3回試行 → navigate("village") → navigate("villager") → 全て同じ座標に留まる
+- **Error Message**: エラーなし（成功と返すが位置変化なし）
+- **Status**: Reported。HP:1.7 Hunger:0 で生存危機。敵（zombie,skeleton,creeper）が30分以上近くに存在し続けている。
+
 ## [2026-03-26] Bug: Session 86 - 死亡4: 溺死 (シェルター内でHP1になった後)
 
 - **Cause**: シェルター内でHP9→HP1に削られた後、溺死した。シェルターが水際に建設されてbot.flee()が水中に移動させた可能性、またはシェルター内に水源があった可能性。
