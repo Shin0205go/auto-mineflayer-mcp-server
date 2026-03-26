@@ -1,3 +1,15 @@
+## [2026-03-27] Bug: Session 88 - 致命的ループ（根本原因・緊急）
+- **Cause**: 食料ゼロ + HP=0.3 + 地下Y=60 + 複数hostile + pillarUp=0効果 の組み合わせで脱出不可能ループ
+- **Pattern**:
+  1. combat()でmeat未ドロップ（バグ） → 食料枯渇
+  2. Hunger<18 → HP自然回復なし
+  3. starvationでHP=0.3 → pillarUp/flee/moveTo全て失敗 or 別のhostileに遭遇
+  4. 死亡 → keepInventoryでrespawn → 食料なし → HP=20/Hunger=20から再スタート
+  5. farm()が高所で落下死 → 地下に戻る → 2へ
+- **Root Cause**: combat()がmeat_dropを回収しない + pillarUp()が0ブロック配置 + farm()が高所で落下死
+- **Session 88 deaths**: 25回以上
+- **Status**: CRITICAL. code-reviewerによる緊急修正が必要。優先度: 1) combat()ドロップ回収修正 2) pillarUp()修正 3) farm()落下防止
+
 ## [2026-03-27] Bug: Session 88 - 死亡25回目 落下死（bot.farm()実行中・Y=96.5から）
 - **Cause**: bot.farm()が高所(Y=96.5)で実行中に移動して落下死。farm()は地形を無視して高所を歩く。
 - **Coordinates**: Y=96.5 → Y=60付近で死亡
