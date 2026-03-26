@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 92 - 死亡33回目 Endermanに殺された（地下脱出後）
+- **Cause**: 地下(Y=61)でスタックしていたが、gather("stone")実行後にY=115に移動してEndermanに殺された。pillarUp()が0ブロックしか積めず機能不全。HP=1.5のまま地表に出て即殺。
+- **Coordinates**: (-5.5, 115, -9.5)
+- **Last Actions**: gather("stone",1) → Y:116.9に移動 → "Claude1 was slain by Enderman"
+- **Error Message**: "Claude1 was slain by Enderman"
+- **Status**: Reported. pillarUp()が全く機能せず、gather()が意図しない遠距離移動を引き起こした。
+
+## [2026-03-27] Bug: Session 92 - pillarUp()が全てのシナリオで0ブロック設置（機能不全）
+- **Cause**: cobblestone 167個所持していても pillarUp() が "Failed to pillar up. No blocks placed." エラーを返す。mc_reload後も改善なし。
+- **Coordinates**: (-2.3, 61, 9.7) 地下洞窟
+- **Last Actions**: pillarUp(15) → エラー → mc_reload → pillarUp(15) → 同エラー × 5回以上
+- **Error Message**: "Failed to pillar up. No blocks placed. Check: 1) Have scaffold blocks? 2) Solid ground below? 3) Open space above?"
+- **Status**: Reported. 深刻なバグ。地下でpillarUpが完全に使えない。
+
 ## [2026-03-27] Bug: Session 91 - 動物狩猟でドロップアイテムが取得できない
 - **Cause**: bot.combat("cow"), bot.combat("sheep"), bot.combat("chicken")を実行すると"完了"と表示されるが、食料アイテム（beef/porkchop/chicken）がインベントリに入らない。
 - **Coordinates**: x=-23, y=60, z=5 付近 (old_growth_birch_forest)
