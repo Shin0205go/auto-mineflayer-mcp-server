@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 80 - combat()でアイテムドロップが取得できない
+
+- **Cause**: bot.navigate(animal) → bot.combat(animal) を実行しても、動物のドロップアイテム（raw_beef, raw_chicken等）が一切インベントリに追加されない。複数の動物種（chicken, pig, sheep, cow）で試したが全て同様。
+- **Coordinates**: x=1, y=82, z=-5 付近
+- **Last Actions**: navigate("chicken") → combat("chicken", 18) → wait(5000) → インベントリ確認 → 変化なし
+- **Error Message**: なし（エラーは出ないが効果もない）
+- **Evidence**: invBefore.length == invAfter.length == 24 (全て同じアイテム)
+- **Status**: Reported 2026-03-26 Session 80。食料確保の大きな障害。
+
 ## [2026-03-26] Bug: Session 80 - Death: ゾンビに殺される（夜明け直前）
 
 - **Cause**: HP1、Hunger0の飢餓状態で夜間待機中、夜明け（ticks=23719）にゾンビが接近。wait()がauto-fleeで中断されたが、flee cooldown（30s）により逃走できず、ゾンビに殺された
