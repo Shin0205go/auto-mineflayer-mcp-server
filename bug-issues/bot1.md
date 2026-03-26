@@ -1,3 +1,11 @@
+## [2026-03-27] Bug: Session 89 - pathfinderスタック・全ツールタイムアウト（地下洞窟Y=42）
+- **Cause**: 地下洞窟Y=42で全ての移動系ツール（moveTo/navigate/flee/combat/gather）がタイムアウトまたは無効。位置が全く変わらない。
+- **Coordinates**: (-1, 42, -9)
+- **Last Actions**: moveTo(100, 42, -9) → 位置(-2,44,-9)（ほぼ変化なし）、navigate("grass_block")タイムアウト、flee()タイムアウト、combat("zombie")タイムアウト
+- **Symptoms**: moveToが実行されてもY座標が変化しない or さらに深くなる。HP:10 Hunger:0で飢餓ダメージ確実。脱出不能。
+- **Error Message**: タイムアウト（120秒）が連続発生
+- **Status**: Reported. 再接続で位置はリセットされず。pathfinder洞窟スタックバグ継続中。
+
 ## [2026-03-27] Bug: Session 88 - 死亡27回目 溺死（Y=53付近、combat後に水に落下）
 - **Cause**: combat("skeleton")実行中にHP=3.2から溺死。Y=53の水中に落ちたと思われる
 - **Coordinates**: (0.3, 53.9, 3.6)
