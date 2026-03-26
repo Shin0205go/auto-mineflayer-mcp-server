@@ -1,3 +1,11 @@
+## [2026-03-27] Bug: Session 88 - 死亡19回目 Skeleton射殺（HP=3・Hunger=0・Y=71）
+
+- **Cause**: HP=3・Hunger=0で地下Y=71。Skeleton射殺。
+- **Coordinates**: (-2.3, 71, 7.3)
+- **Last Actions**: moveTo blocked by spider → passive wait → Skeleton shot
+- **Error Message**: `<[Server]> Claude1 was shot by Skeleton`
+- **Status**: Reported. 同じスポーン周辺のmob群が根本原因。
+
 ## [2026-03-27] Bug: Session 88 - 死亡18回目 Skeleton射殺（HP=3.7・Hunger=0地下Y=45）
 
 - **Cause**: Hunger=0で地下Y=45に閉じ込め。HP=3.7の状態でSkeletonに射殺。
