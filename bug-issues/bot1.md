@@ -7,6 +7,14 @@
 - **Root Cause**: flee()が水場に誘導している。Session 86のdrowned bugと同じパターン。
 - **Status**: Reported。flee()の水場回避が修正されていない。
 
+## [2026-03-26] Bug: Session 88 - 死亡: Skeletonに射殺（7回目）
+
+- **Cause**: gather(birch_log,20)タイムアウト（105秒）後にHP=15.2まで削られた状態で、navigate(farmland)実行中にskeletonに射殺された。gather中に移動して敵の射程に入った可能性。
+- **Coordinates**: x=-1, y=74, z=6 (birch_forest, farmland付近)
+- **Last Actions**: gather(birch_log,20)→HP低下→navigate(farmland)→skeleton slain
+- **Error Message**: `<[Server]> Claude1 was shot by Skeleton`
+- **Status**: Reported。gather()実行中の安全チェックなし。敵が近い状態でnavigateがblockされない。
+
 ## [2026-03-26] Bug: Session 88 - 落下死 (navigate移動中に何度も繰り返す)
 
 - **Cause**: navigate(wheat, 200)実行中にY=107から遠くへ飛ばされた(-38,90,-55)状態でHP=2になった後、wait()のauto-flee中に落下死。navigation中の落下保護が機能していない。
