@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 85 - 死亡4: gather()中に高所落下 (Y=119から)
+
+- **Cause**: bot.gather("birch_log", 16) 実行中にY=119の高所から落下して死亡
+- **Coordinates**: Y=119付近 (birch_forest 山の上)
+- **Last Actions**: gather("birch_log", 16) → タイムアウト(120秒) → "Claude1 fell from a high place"
+- **Error Message**: Server: Claude1 fell from a high place
+- **Context**: リスポーン後Y=119の高い場所にいた状態でgatherを実行。navigate中に崖から落下した可能性。gather()の経路生成も崖落下防止が必要。
+- **Status**: Reported。**gather()/navigate()の経路生成に崖落下防止ロジックが必要。flee()と同様の問題。**
+
 ## [2026-03-26] Bug: Session 85 - 死亡3: 高所落下 (flee()後にY=55に落ちた)
 
 - **Cause**: flee(50)実行後、bot がY=55付近の崖下に落下して死亡
