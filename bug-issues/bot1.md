@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 88 - 死亡20回目 Skeleton射殺（HP=7.3・Y=66）
+
+- **Cause**: Spider撃破後にHP=7.3まで減少。地下Y=66でSkeleton射殺。
+- **Coordinates**: (-14.7, 66, 8.3)
+- **Last Actions**: combat("spider") → gather wheat fail → Skeleton shot
+- **Status**: Reported
+
 ## [2026-03-27] Bug: Session 88 - 死亡19回目 Skeleton射殺（HP=3・Hunger=0・Y=71）
 
 - **Cause**: HP=3・Hunger=0で地下Y=71。Skeleton射殺。
