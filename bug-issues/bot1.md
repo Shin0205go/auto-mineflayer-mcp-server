@@ -1,3 +1,13 @@
+## [2026-03-26] Bug: Session 83 - スケルトンに射殺（2回目の死亡）
+
+- **Cause**: 食料探索中にHPが3.5まで低下。moveTo()で複数地点を探索中にスケルトンの矢を受け続けた。flee()中にHP=0になりリスポーン。
+- **Coordinates**: x=-43, y=48, z=-17（死亡地点）
+- **Last Actions**: 動物探索でmoveTo(0,65,-200)実行中 → スケルトン接近 → HP 3.5 → flee中に死亡
+- **Error Message**: "Claude1 was shot by Skeleton"
+- **Root Cause**: 探索中のHP監視不足。moveTo実行中にスケルトンに追われてHP激減。flee時にはHP=0直前まで落ちていた。
+- **Status**: Reported。2回目リスポーン。HP=20、Hunger=20。
+- **教訓**: moveTo探索中にも敵チェックが必要。HP<8になったら即探索中断してflee。
+
 ## [2026-03-26] Bug: Session 83 - 落下死亡（高所スタックから脱出不能）
 
 - **Cause**: Y=109高所スタックからdig+water方法で徐々に降下。Y=97で再びスタック。その後「fell from a high place」で死亡。keepInventoryでアイテム保持。リスポーン後HP=20、Hunger=20に回復。
