@@ -1,3 +1,11 @@
+## [2026-03-27] Bug: Session 94 SUMMARY - 全移動系API機能不全、place()のみ動作
+- **Cause**: bot.moveTo(), bot.navigate(), bot.pillarUp(), bot.gather(), bot.farm(), bot.combat() が全てタイムアウト。place()のみ動作。pathfinderが完全スタック状態。
+- **Pattern**: moveTo(x,y,z)が「成功」してもほぼ同じ座標のまま。昼間なのにskeleton/zombie多数→屋根付きエリアにスタックしている可能性。
+- **Coordinates**: (25-41, 72-78, -6 to -7) Y=72-78に約2時間スタック
+- **Last Actions**: place()で壁・天井作成、pillarUp試み、moveTo試み→全てタイムアウト
+- **Effect**: HP6.9/Hunger0で食料取得不能。飢餓ダメージで死亡寸前。
+- **Status**: CRITICAL. コードレビュー必須。moveTo/navigate/gather/combat/pillarUpの全面修正が必要。
+
 ## [2026-03-27] Bug: Session 95 - moveTo/navigate/farm/pillarUp全てタイムアウト、地上脱出不能
 - **Cause**: bot.pillarUp(35)→y=72→73に1ブロックしか上がれず（47秒かかった）。bot.navigate/moveTo→60秒タイムアウト。bot.farm()→120秒タイムアウト。Hunger=0, HP=9.3で飢餓状態。admin指示でpillarUpのみ使用するよう変更。
 - **Coordinates**: (32, 73, -5)
