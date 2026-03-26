@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 88 - 死亡: 落下死16回目（cobblestone staircase作成中、Y=96から落下）
+
+- **Cause**: place()でstaircase作成中、60秒タイムアウト後にY=96から落下死。HP=2で極限状態。
+- **Coordinates**: (0, 96, -6)付近
+- **Last Actions**: place("cobblestone",...) staircase → 60s timeout → `Claude1 fell from a high place`
+- **Error Message**: `<[Server]> Claude1 fell from a high place`
+- **Root Cause**: place()の途中でタイムアウト→制御が返った時に高所から落下。高所でのplace()タイムアウトは危険。
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 88 - 死亡: Skeletonに射殺15回目（combat()タイムアウト・HP=5）
 
 - **Cause**: HP=5・Hunger=0で地下Y=63に閉じ込め。combat("skeleton",3)呼び出しが30秒タイムアウト中にSkeletonに射殺された。
