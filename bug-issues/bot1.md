@@ -25,6 +25,15 @@
 - **Evidence**: invBefore.length == invAfter.length == 24 (全て同じアイテム)
 - **Status**: Reported 2026-03-26 Session 80。食料確保の大きな障害。
 
+## [2026-03-26] Bug: Session 80 - Death: place()で足場を作って上昇中に溺死（4回目）
+
+- **Cause**: place("cobblestone")で足場を作ってY=58から上昇中、Y=89に到達した時に溺死。「Claude1 drowned」。cobblestoneを置く過程で水の中に入った可能性。
+- **Coordinates**: x=51, y=58-89, z=29
+- **Last Actions**: place("cobblestone", x, y+1, z) × 5回 → y=89に移動 → drowned
+- **Error Message**: "Claude1 drowned"
+- **Root Cause**: place()で足場を作る際に水が存在する位置を経由している。地下の水域付近でplace()が安全でない
+- **Status**: Reported 2026-03-26 Session 80。4回目の死亡。
+
 ## [2026-03-26] Bug: Session 80 - gather("iron_ore")が複数回タイムアウト
 
 - **Cause**: bot.gather("iron_ore", 8-16)を実行すると120秒タイムアウトする。iron_oreの位置(x=27,y=75,z=5)は発見済みで、navigate()で到達もできているが、gather()がタイムアウトする。周囲に敵(enderman,skeleton,creeper)がいる。
