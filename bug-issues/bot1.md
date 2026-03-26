@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 88 - 死亡24回目 落下死（骨粉ループ中Y=89から）
+- **Cause**: place("bone_meal")のループ中に移動して(6,89,8)付近から落下死
+- **Coordinates**: (6, 89, 8)
+- **Last Actions**: bone_meal apply loop → navigate中に落下 → HP=9 Hunger=0
+- **Error Message**: "[Server] Claude1 fell from a high place"
+- **Status**: Reported. keepInventoryでアイテム保持。Session 88 死亡24回目。
+
 ## [2026-03-27] Bug: Session 88 - 死亡23回目 落下死（navigate中Y=92.5から）
 - **Cause**: navigate("crafting_table")実行中に落下死。bot.buildでシェルター建設後に内部ナビゲートで落下
 - **Coordinates**: Y=92.5付近（base area）
