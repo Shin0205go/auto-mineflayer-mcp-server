@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 88 - 死亡25回目 落下死（bot.farm()実行中・Y=96.5から）
+- **Cause**: bot.farm()が高所(Y=96.5)で実行中に移動して落下死。farm()は地形を無視して高所を歩く。
+- **Coordinates**: Y=96.5 → Y=60付近で死亡
+- **Last Actions**: farm() → "[Server] Claude1 fell from a high place"
+- **Pattern**: Session 88で farm() により複数回の落下死が発生。高所でfarm()を実行すると必ず落下する危険なパターン。
+- **Status**: Reported. bot.farm()は高所では使用禁止。平地(Y=64前後)でのみ使用すること。
+
 ## [2026-03-27] Bug: Session 88 - 死亡24回目 落下死（骨粉ループ中Y=89から）
 - **Cause**: place("bone_meal")のループ中に移動して(6,89,8)付近から落下死
 - **Coordinates**: (6, 89, 8)
