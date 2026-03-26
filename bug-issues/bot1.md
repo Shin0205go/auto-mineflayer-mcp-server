@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 86 - 死亡3: gather()中に落下 (birch_log採取中にY=72→高所落下)
+
+- **Cause**: bot.gather("birch_log", 8)実行中に高所から落下。gather()が崖際や木の上で作業中に落下防止なし。
+- **Coordinates**: x=-14, y=72, z=-2 (birch_forest)
+- **Last Actions**: gather("birch_log", 8) タイムアウト60秒後に落下死
+- **Error Message**: `<[Server]> Claude1 fell from a high place`
+- **HP at death**: 4.3 (HP4.3の状態で採取中に落下→即死)
+- **Status**: Reported。gather()に落下防止ロジックが必要。Y変化が大きい場合にcancelすべき。
+
 ## [2026-03-26] Bug: Session 86 - 死亡: 落下死 (HP1.2→リスポーン後も瀕死フェーズで落下)
 
 - **Cause**: HP1.2、Hunger1の瀕死状態でリスポーン。リスポーン後「hit the ground too hard」で落下死。Y=75の高地にスポーン後に落下したと推測。
@@ -6,6 +15,15 @@
 - **Error Message**: `<[Server]> Claude1 hit the ground too hard`
 - **Root Cause**: moveTo()が逆方向に移動するバグにより、HP1.2+Hunger1の状態でチェストに到達できず飢餓死→落下死のコンボ。
 - **Status**: Reported。keepInventoryでアイテムは保持されていることを確認済み。
+
+## [2026-03-26] Bug: Session 86 - combat()でドロップが取得できない (継続バグ)
+
+- **Cause**: bot.combat("cow"), combat("pig"), combat("chicken"), combat("sheep"), combat("zombie") 全て成功するが、ドロップアイテムがインベントリに追加されない。
+- **Coordinates**: x=3, y=70, z=-2 付近
+- **Last Actions**: combat("chicken"), combat("pig"), combat("cow"), combat("sheep") → 全完了 → inventory確認 → 食料0個
+- **Error Message**: なし（エラーなしで成功するが結果が空）
+- **Impact**: 食料が全く確保できない。飢餓→瀕死のループが発生。
+- **Status**: Reported。bot.combat()のアイテムピックアップロジックに問題あり。
 
 ## [2026-03-26] Bug: Session 86 - 瀕死サバイバル不能 (HP3.2 食料0 creeper×7 戦闘・待機・シェルター全失敗)
 
