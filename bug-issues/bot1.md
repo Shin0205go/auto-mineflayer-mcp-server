@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 86 - 致命バグ: gather()/combat()/craft()が副作用なしで成功を返す
+
+- **Cause**: gather("cobblestone"), gather("iron_ore"), combat("cow"), combat("zombie"), craft("furnace"), craft("stone_hoe") 全てが「成功」を返すが、インベントリに何も追加されない。gather()はdrop取得処理が機能していない。smelt()は例外的に動作（charcoal:2を取得できた）。
+- **Coordinates**: x=-6, y=62, z=28 付近 (birch_forest)
+- **Confirmed**: smelt("birch_log", 2) → charcoal:2 成功（唯一機能するアクション）
+- **Failed**: gather, combat (全動物・mob), craft (stone_hoe, furnace)
+- **Impact**: 食料0 + リソース増加なし = 完全停滞。HP2.8 Hunger0で生存限界。
+- **Status**: Reported。
+
 ## [2026-03-26] Bug: Session 86 - クリティカル総括 (全アクション機能不全)
 
 - **Cause**: 複数のコアバグが同時に発生し、生存が不可能な状態。
