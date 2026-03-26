@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 92 - 死亡36回目 Creeperに爆破された（木材採集中）
+- **Cause**: navigate(birch_log)でY=114に移動後、gather("birch_log",6)中にCreeper爆発で死亡。タイムアウト(120秒)中に夜になって危険になった。
+- **Coordinates**: Y=114付近 (地表)
+- **Last Actions**: navigate("birch_log") → Y:114 → gather("birch_log",6) → タイムアウト → "Claude1 was blown up by Creeper"
+- **Error Message**: "Execution timed out after 120000ms" + "Claude1 was blown up by Creeper"
+- **Status**: Reported. gather()がタイムアウトするため夜間に無防備になりCreeper爆死。
+
 ## [2026-03-27] Bug: Session 92 - 死亡35回目 "fell from a high place" gather中にHP0 (鉄採掘ループ)
 - **Cause**: bot.gather("iron_ore", 8) ループ中にHP=0になり "fell from a high place" で死亡。HP14→HP0と急減。gather()が高所落下を引き起こしている。
 - **Coordinates**: Y=74付近 (地下)
