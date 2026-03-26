@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 97 - flee()が動作しない（同位置に留まる）、Enderman常に6ブロック内で無限auto-flee
+- **Cause**: flee(30), flee(50)実行後も同じ座標(25,74,-6)に留まる。flee が実際に移動していない。Endermanが常に6ブロック以内に張り付き、wait()が毎回ABORTED。gather/navigate/moveTo(大距離)も全て機能不全。
+- **Coordinates**: (25, 74, -6)
+- **Last Actions**: flee(30)→同位置, flee(50)→同位置, wait(30000)→Enderman auto-fleeでABORT×15回
+- **Error Message**: flee後も座標変化なし
+- **Status**: CRITICAL - flee/wait/gather/navigate全不動作、生存危機
+
 ## [2026-03-27] Bug: Session 97 - gather()全タイムアウト、item entity 5個近くにあるが拾えない
 - **Cause**: nearbyEntities.item=5個あるが、moveTo短距離移動で近づいてもアイテムが自動回収されない。gather("feather")もタイムアウト。アイテム回収系が完全に機能不全。
 - **Coordinates**: x=27, y=75, z=-6
