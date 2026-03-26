@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 86 - 瀕死サバイバル不能 (HP3.2 食料0 creeper×7 戦闘・待機・シェルター全失敗)
+
+- **Cause**: HP3.2、食料0、creeper×7に囲まれた状態でHP回復手段が全くない。wait()中も攻撃されHP5.2→3.2に低下。bot.combat("zombie")が60秒タイムアウト。bot.build("shelter")が60秒タイムアウト。pillarUpが「No blocks placed」エラー（cobblestone 246個持参中）。食料なしHunger12ではHP自然回復しない（Hunger18以上必要）。
+- **Coordinates**: x=-6, y=64, z=9 (birch_forest)
+- **Last Actions**: flee → wait(30s) → combat("zombie") timeout → build("shelter") timeout
+- **Error Message**: pillarUp: "Failed to pillar up. No blocks placed." / combat: timeout 60000ms / build shelter: timeout 60000ms
+- **Critical Issue**: Hunger14でHP回復しないのにwait()が敵に攻撃されてHP低下。食料入手手段が全て機能しない状態で生存不可能。
+- **Status**: Reported。緊急コードレビュー必要。
+
 ## [2026-03-26] Bug: Session 85 - 完全地形スタック (moveTo/flee/pillarUp全て機能しない)
 
 - **Cause**: botがX=0, Y=58, Z=9に完全固定。moveTo/flee/pillarUp全てタイムアウトまたは座標変化なし。mc_reloadでも解消せず。
