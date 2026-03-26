@@ -1,3 +1,21 @@
+## [2026-03-27] Bug: Session 97 FINAL - 全APIバグによりゲームプレイ完全停止、2回の昼夜サイクル生存のみ
+
+- **Session Summary**: Session 97 で2回の昼夜サイクルを生存（HP:6.9維持）だが、食料確保ゼロ
+- **動作したAPI**: bot.status(), bot.inventory(), bot.place()（部分的）, bot.moveTo()（極短距離のみ、2ブロック以内）
+- **失敗したAPI**:
+  - combat(): 瞬時完了(200-400ms)でドロップ0 OR 10-25秒後に切断
+  - navigate(): 全てタイムアウト(20-60秒)
+  - farm(): タイムアウト(90秒)
+  - pillarUp(): 26秒でエラー "No blocks placed"（頭上ブロックが天井になっていた可能性）
+  - moveTo(長距離): 15-20秒タイムアウト
+  - craft(): タイムアウト(素材なしのため？)
+  - flee(): 動くが同位置に留まる
+  - gather(): 25秒後に切断（gather自体は完了した可能性あり）
+- **接続パターン**: connect後1回目のmc_executeは成功することが多い。2回目以降は50%の確率で0-2ms で切断。特にwait()、combat()、navigate()実行中は高確率で切断。
+- **生存理由**: Normal難易度でHunger=0でも死なない（HP最小1まで）。HP=6.9で安定。
+- **Coordinates**: birch_forest, Y=74-78付近を漂流
+- **Status**: CRITICAL - コードレビューによる修正なしではゲームプレイ不可能
+
 ## [2026-03-26] Bug: Session 65 SUMMARY - All resource gathering APIs broken (gather/combat/farm)
 
 - **Session state**: HP=6.9 Hunger=0 at (31.6, 74, -5.7). Day time. Chicken nearby but no food obtainable.
