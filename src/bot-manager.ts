@@ -947,6 +947,25 @@ export class BotManager extends EventEmitter {
       };
     }
 
+    // Session 84: Warn if bot is currently in water — placing blocks underwater is rarely
+    // intentional and often indicates the bot has been pushed into a water body by prior
+    // actions (e.g., scaffold loop drove the bot into a cave water pocket).
+    // Return a WARNING (not hard block) so the agent can decide to abort or swim up first.
+    {
+      const feetPos = botPos.floor();
+      const headPos = botPos.offset(0, 1, 0).floor();
+      const feetBlock = bot.blockAt(feetPos);
+      const headBlock = bot.blockAt(headPos);
+      const isInWater = (feetBlock && (feetBlock.name === "water" || feetBlock.name === "flowing_water")) ||
+                        (headBlock && (headBlock.name === "water" || headBlock.name === "flowing_water"));
+      if (isInWater) {
+        return {
+          success: false,
+          message: `[WARNING] Bot is underwater at (${botPos.x.toFixed(1)}, ${botPos.y.toFixed(1)}, ${botPos.z.toFixed(1)}). Cannot place blocks safely while submerged — drowning risk. Use bot.pillarUp() to swim up, or bot.navigate() to reach land first.`
+        };
+      }
+    }
+
     // Creative mode or OP: use /setblock command
     if (useCommand) {
       bot.chat(`/setblock ${Math.floor(x)} ${Math.floor(y)} ${Math.floor(z)} ${blockType}`);

@@ -914,12 +914,10 @@ export async function digBlock(
     if (nearbyItems) {
       console.error(`[Dig] Found item entity on ground within 3 blocks, attempting collection...`);
     } else {
-      console.error(`[Dig] ⚠️ NO ITEM ENTITIES found within 3 blocks of mined block!`);
-      console.error(`[Dig] This suggests server has item drops disabled via:`);
-      console.error(`[Dig]   1. /gamerule doTileDrops false (blocks don't drop)`);
-      console.error(`[Dig]   2. /gamerule doMobLoot false (mobs don't drop)`);
-      console.error(`[Dig]   3. Server plugin blocking drops`);
-      console.error(`[Dig]   4. Item despawn rate set to 0 (instant despawn)`);
+      // No item entities found in bot.entities — this does NOT mean doTileDrops=false.
+      // Item entities can be delayed (server-side processing) or may have been auto-collected
+      // before we scanned. Always attempt collectNearbyItems first before diagnosing.
+      console.error(`[Dig] No item entity visible in bot.entities yet — will attempt inventory check and collectNearbyItems before giving up.`);
     }
 
     // Check inventory immediately - items within 1 block are auto-collected

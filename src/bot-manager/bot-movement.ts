@@ -1678,6 +1678,13 @@ export async function emergencyDigUp(managed: ManagedBot, maxBlocks: number = 30
   const digBlock = async (pos: Vec3): Promise<boolean> => {
     const block = bot.blockAt(pos);
     if (!block || block.name === "air" || block.name === "cave_air" || block.name === "void_air") return true;
+    // Session 84: Do NOT dig water blocks — removing a water block causes water to flow
+    // into the shaft, pushing the bot underwater and causing drowning.
+    // Return true (treated as "already passable") so the caller skips this block.
+    if (isWaterBlock(block.name) || isLavaBlock(block.name)) {
+      console.error(`[EmergencyDigUp] Skipping fluid block (${block.name}) at (${pos.x},${pos.y},${pos.z}) — digging would flood shaft`);
+      return true;
+    }
     if (block.hardness < 0) return false;
     if (equippedPickaxe) {
       const pick = bot.inventory.items().find(i => i.name === equippedPickaxe);
@@ -1710,6 +1717,37 @@ export async function emergencyDigUp(managed: ManagedBot, maxBlocks: number = 30
     const curX = Math.floor(bot.entity.position.x);
     const curY = Math.floor(bot.entity.position.y);
     const curZ = Math.floor(bot.entity.position.z);
+
+    // Session 84: If bot is currently in water, attempt emergency swim-up before digging.
+    // This handles the case where the cave ceiling was above a water pocket and digging
+    // let water flow down onto the bot. Swimming is the only escape from water; digging more
+    // will only make it worse (more water flows in).
+    {
+      const feetBlock = bot.blockAt(new Vec3(curX, curY, curZ));
+      const headBlock = bot.blockAt(new Vec3(curX, curY + 1, curZ));
+      const inWater = (feetBlock && isWaterBlock(feetBlock.name)) || (headBlock && isWaterBlock(headBlock.name));
+      if (inWater) {
+        console.error(`[EmergencyDigUp] Bot is IN WATER at Y=${curY} — switching to swim-up mode.`);
+        bot.setControlState("jump", true);
+        let surfaced = false;
+        for (let swimTick = 0; swimTick < 20; swimTick++) {
+          await delay(300);
+          const checkFeet = bot.blockAt(bot.entity.position.floor());
+          const checkHead = bot.blockAt(bot.entity.position.offset(0, 1, 0).floor());
+          if ((!checkFeet || !isWaterBlock(checkFeet.name)) && (!checkHead || !isWaterBlock(checkHead.name))) {
+            surfaced = true;
+            break;
+          }
+        }
+        bot.setControlState("jump", false);
+        const nowY = Math.floor(bot.entity.position.y);
+        if (surfaced) {
+          return `Emergency escape: dug ${blocksDug} blocks, climbed ${blocksClimbed} blocks. Escaped water by swimming. Now at Y=${nowY}.`;
+        }
+        // Still in water — report so agent can decide next action
+        return `Emergency escape: dug ${blocksDug} blocks. Still in water at Y=${nowY} after swim attempt. Try bot.navigate() to reach land.`;
+      }
+    }
 
     // Check if we've reached a surface-like area (open sky above)
     let openAbove = true;
