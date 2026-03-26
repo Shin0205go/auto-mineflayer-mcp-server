@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: moveTo()が完全に機能しない（bot完全停止）
+
+- **Cause**: bot.moveTo()がどの座標を指定しても現在地のまま。全方向（X±50/100, Z±50/100, Y±35）で失敗。bot自体が動けない状態。
+- **Coordinates**: x=20, y=55, z=-14（動けない）
+- **Last Actions**: mc_reload後にmoveTo()を複数方向に試みるが全て失敗。navigateも失敗。pillarUpも失敗。
+- **Error Message**: エラーなし（成功を返すが位置が変わらない）
+- **Session**: Session 81 (2026-03-26)
+- **Status**: Reported。bot完全停止状態。
+
 ## [2026-03-26] Bug: craft()がインベントリに反映されない
 
 - **Cause**: bot.craft("iron_sword")・bot.craft("iron_pickaxe")・bot.craft("crafting_table")が「成功」を返すがインベントリに変化なし。iron_ingotもstickも消費されない。
