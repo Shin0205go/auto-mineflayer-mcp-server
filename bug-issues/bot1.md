@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 79 - Death: ゾンビに殺された (pillarUp後夜間)
+
+- **Cause**: Hunger:0でHP:0.2の瀕死状態。pillarUp(5)でY=111まで上がったが、そこでゾンビに倒された。pillarUpが高所で止まり、夜間にゾンビが追いかけてきた。
+- **Coordinates**: x=9, y=111, z=-8 (リスポーン位置)
+- **Last Actions**: pillarUp(5) → Y=111 → "Claude1 was slain by Zombie"
+- **Root Cause**: 食料ゼロ(gather/farmバグ) → HP:0.2瀕死 → pillarUp中にゾンビ攻撃
+- **Status**: Reported 2026-03-26 Session 79. keepInventory ON でアイテム保持。
+
 ## [2026-03-26] Bug: Session 79 - moveTo/navigate/gather が全てタイムアウト・移動不能
 
 - **Cause**: bot.moveTo(0,77,20), bot.moveTo(0,77,9) 等を呼び出しても全く移動せず同じ座標のまま。navigate("birch_log"), navigate("oak_log"), navigate("furnace")も複数回タイムアウト。gather("birch_log",4), gather("oak_log",4) も120秒タイムアウト。
