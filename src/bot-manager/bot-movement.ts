@@ -134,6 +134,16 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
     let lastPos = start.clone();
     let pathResetCount = 0;
     let notMovingCount = 0;
+    // OVERALL PROGRESS CHECK: Track distance-to-target every 30s (60 ticks).
+    // Catches the pattern where pathfinder keeps resetting (isMoving()=true, noProgressCount=0
+    // because bot moves slightly each 500ms) but bot makes no real progress toward the target.
+    // Session 79 [2026-03-26]: bot at (-112,77,20) → moveTo(0,77,9): pathfinder ran for 120s
+    // with no forward movement because dense birch forest or mobs blocked every computed path.
+    // The 0.1-block noProgressCount check was reset by small physics jitter (±0.05 blocks).
+    // Every 60 checks (30s), compare distance-to-target. If bot is not within 5 blocks closer
+    // than 30s ago, declare stuck. This is the macro-scale complement to micro-scale noProgressCount.
+    let lastProgressCheckDist = start.distanceTo(targetPos);
+    let progressCheckTickCount = 0;
 
     // Collect cleanup callbacks for listeners added after finish() is defined
     const cleanupCallbacks: Array<() => void> = [];
@@ -413,7 +423,28 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
         // 2a: Dynamic max descent from start — proportional to target depth
         const expectedDescent = start.y - y; // how far down the target is
         // Elevated starts (Y>75) get higher cap to allow cliff/mountain descent to ground level.
-        const maxDescentCap = elevatedStart ? 30 : 20;
+        // CRITICAL FIX (Session 79 [2026-03-26]): When bot is on surface (start.y>=62) and
+        // target is underground (y<62), cap descent at (start.y - 62 + 5) to prevent routing
+        // into underground caves. Previously maxDescentCap=30 for elevated starts let a bot at
+        // Y=77 descend to Y=47 — well into underground water pockets — because:
+        //   - The absolute Y<62 floor check only fires when target Y>=62 (§L351)
+        //   - The case1 descent limit doesn't apply (target is below start by >5)
+        //   - maxDescentCap=30 allowed 30-block descent without cave detection
+        // Result: gather("stone") routed bot from Y=77 to stone at Y=49, bot drowned.
+        // New logic: if start is on surface and target is underground, the maximum SAFE
+        // descent is (start.y - 62 + 5) — i.e., stop 5 blocks below sea level.
+        // This preserves legitimate deep descents when target is ALSO underground (both <62).
+        const undergroundTarget = y < 62;
+        const surfaceStart = start.y >= 62;
+        let maxDescentCap: number;
+        if (surfaceStart && undergroundTarget) {
+          // Surface-to-underground: cap at sea level + 5 buffer to prevent cave routing.
+          // e.g. bot at Y=77 → max descent = 77-62+5 = 20 blocks (stops at Y=57).
+          maxDescentCap = Math.max(start.y - 62 + 5, 10); // min 10 as absolute floor
+        } else {
+          // Normal elevated or underground navigation: use fixed caps.
+          maxDescentCap = elevatedStart ? 30 : 20;
+        }
         const maxAllowedDescent = Math.min(expectedDescent + 5, maxDescentCap);
         if (yDescentFromStart > maxAllowedDescent) {
           console.error(`[MoveTo] CAVE DESCENT DETECTED: Bot descended ${yDescentFromStart.toFixed(1)} blocks below start (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}, target Y=${y.toFixed(1)}, max allowed=${maxAllowedDescent.toFixed(0)}). Aborting to prevent underground trapping.`);
@@ -854,6 +885,31 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
         }
       } else {
         notMovingCount = 0;
+      }
+
+      // OVERALL PROGRESS CHECK: Every 30s (60 checks at 500ms), verify bot is actually
+      // making meaningful progress toward the target. This catches the "pathfinder running
+      // but bot not advancing" pattern where small position jitter resets noProgressCount
+      // and pathfinder stays isMoving()=true while the bot never advances toward target.
+      // Session 79 [2026-03-26]: bot at (-112,77,20) ran moveTo(0,77,9) for 120s without
+      // ever leaving the -112...-111 X range, consuming the full mc_execute timeout.
+      // Only check when more than 15 blocks away (close targets may be circling around obstacles).
+      progressCheckTickCount++;
+      if (progressCheckTickCount >= 60 && currentDist > 15) {
+        progressCheckTickCount = 0;
+        const distProgress = lastProgressCheckDist - currentDist; // positive = closer to target
+        if (distProgress < 5) {
+          // Less than 5 blocks closer to target in 30 seconds — stuck
+          const yDiff = y - currentPos.y;
+          console.error(`[MoveTo] OVERALL PROGRESS TIMEOUT: ${distProgress.toFixed(1)} blocks progress in 30s toward target at (${x},${y},${z}). Pathfinder running but not advancing. Failing early instead of timing out.`);
+          finish({
+            success: false,
+            message: `Pathfinder running but not advancing: only moved ${distProgress.toFixed(1)} blocks toward target in 30s. Stopped at (${currentPos.x.toFixed(1)}, ${currentPos.y.toFixed(1)}, ${currentPos.z.toFixed(1)}), ${currentDist.toFixed(1)} blocks from target. Try a waypoint closer to ${x},${z} or clear the area first.`,
+            stuckReason: Math.abs(yDiff) > 2 ? (yDiff > 0 ? "target_higher" : "target_lower") : "pathfinder_stopped"
+          });
+          return;
+        }
+        lastProgressCheckDist = currentDist;
       }
     }, 500);
 

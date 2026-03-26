@@ -54,10 +54,19 @@ bug-issues/bot1.md, bot2.md, bot3.md を読む
   - 死亡原因に共通点は？
 ```
 
-### 2. git logで最近の変更を確認
+### 2. git logで変更履歴を確認
 ```
-git log --oneline -20 で最近の修正を確認
+# 全体の最近50件
+git log --oneline -50
+
+# 修正対象ファイルごとに履歴を確認（重要）
+git log --oneline -10 -- src/bot-manager/bot-survival.ts
+git log --oneline -10 -- src/tools/core-tools.ts
+# 修正するファイル全てに対して実行する
+
 → 既に修正済みの問題を重複して直さない
+→ 同じファイルへの過去の修正意図を理解してから変更する（デグレ防止）
+→ 複数の修正が同一ファイルに積み重なって干渉していないか確認する
 ```
 
 ### 3. ソースコード分析

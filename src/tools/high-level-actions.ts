@@ -288,6 +288,22 @@ export async function minecraft_gather_resources(
           failedPositions.add(pk);
           continue; // Skip this block, try finding another reachable one
         }
+        // Safety check: Skip blocks significantly below the bot when bot is on surface.
+        // Session 79 [2026-03-26]: gather("stone") found stone at Y=49 (underground water pocket)
+        // while bot was at Y=77. moveTo routed the bot underground where it drowned at Y=49.
+        // Root cause: the case2 descent cap in moveToBasic allows 30 blocks of descent from
+        // elevated starts (Y>75), so a bot at Y=77 can descend to Y=47 without triggering
+        // the cave descent abort. The absolute Y<62 floor check only fires when target Y>=62,
+        // so it also misses underground targets (Y<62).
+        // Fix: if bot is on surface (Y>=62) and block is underground (Y<58), skip it.
+        // Threshold Y<58 (4 below sea level Y=62) avoids rejecting near-surface blocks
+        // like shallow pools or slight depressions at the sea-level boundary.
+        // Surface gathering blocks (birch_log, stone on hillsides, etc.) are always Y>=60.
+        if (botPos && botPos.y >= 62 && y < 58) {
+          console.error(`[GatherResources] Skipping underground block at Y=${y} - bot is on surface at Y=${botPos.y.toFixed(0)}. Would route through caves/water. Only gather surface blocks (Y>=58) from surface.`);
+          failedPositions.add(pk);
+          continue; // Skip this block, try a shallower instance
+        }
 
         // Accessibility check: Skip ore blocks fully embedded in solid terrain.
         // Bot1 [2026-03-22]: bot.gather("iron_ore") timed out at 120s because the ore was
@@ -338,6 +354,17 @@ export async function minecraft_gather_resources(
           }
         } else {
           moveResult = await botManager.moveTo(username, x, y, z);
+        }
+        // Critical safety: abort gather entirely if moveTo encountered drowning or dangerous underground routing.
+        // Session 79 [2026-03-26]: gather("stone") moved bot to stone at Y=49 (underwater cave).
+        // Bot drowned because gather continued to the next block even after moveTo returned "underwater".
+        // The underground block skip above (Y<58 check) prevents most cases, but if the bot already
+        // started the moveTo before the check could fire (race condition), this catches the outcome.
+        if (moveResult.includes("Drowning") || moveResult.includes("underwater") ||
+            moveResult.includes("underground_routing") || moveResult.includes("oxygen")) {
+          console.error(`[GatherResources] ABORT: moveTo returned drowning/underground signal during gather: ${moveResult.substring(0, 120)}`);
+          results.push(`${item.name}: ${collected}/${targetCount} (aborted — moveTo led to underwater/underground area — drowning risk)`);
+          break; // Exit inner gather loop for this item — do not attempt more blocks
         }
         if (!moveResult.includes("Reached") && !moveResult.includes("Moved")) {
           console.error(`[GatherResources] Move failed to (${x},${y},${z}): ${moveResult}`);
