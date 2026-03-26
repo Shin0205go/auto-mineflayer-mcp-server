@@ -166,13 +166,24 @@ export async function minecraft_gather_resources(
         // Bot1: HP dropped from mob attacks during gather, continued mining at HP 3, died.
         // Bot2: skeleton shot bot to HP 1 during gather loop — no abort triggered.
         // Gathering is non-essential compared to survival; abort and let agent decide next action.
+        // EXCEPTION: food-desperate deadlock — if hunger=0 AND no food in inventory, lower
+        // threshold to 2. At hunger=0 with no food, the bot CANNOT recover HP any other way.
+        // Blocking all gathering at HP<6 creates an unescapable deadlock. Allow gathering
+        // food-adjacent items (or any item) down to HP=2 when truly food-desperate.
         const hpCheckBot = botManager.getBot(username);
         if (hpCheckBot) {
           const gatherHp = hpCheckBot.health ?? 20;
-          if (gatherHp < 6) {
-            console.error(`[GatherResources] HP ABORT: HP=${gatherHp.toFixed(1)} — too low to continue gathering safely.`);
+          const gatherHunger = (hpCheckBot as any).food ?? 20;
+          const gatherHasFood = hpCheckBot.inventory.items().some((fi: any) => EDIBLE_FOOD_NAMES.has(fi.name));
+          const isFoodDesperate = gatherHunger === 0 && !gatherHasFood;
+          const hpAbortThreshold = isFoodDesperate ? 2 : 6;
+          if (gatherHp < hpAbortThreshold) {
+            console.error(`[GatherResources] HP ABORT: HP=${gatherHp.toFixed(1)} (threshold=${hpAbortThreshold}, foodDesperate=${isFoodDesperate}) — too low to continue.`);
             results.push(`${item.name}: ${collected}/${targetCount} (ABORTED: HP=${gatherHp.toFixed(1)}, too dangerous to continue)`);
             break;
+          }
+          if (isFoodDesperate && gatherHp < 6) {
+            console.error(`[GatherResources] FOOD DESPERATE: HP=${gatherHp.toFixed(1)} is below normal threshold (6) but above food-desperate threshold (2). Continuing gather for survival.`);
           }
         }
 
