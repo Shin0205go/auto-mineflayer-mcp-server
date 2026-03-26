@@ -1,3 +1,11 @@
+## [2026-03-27] Bug: Session 89 - flee()が地下洞窟へ移動（根本的pathfinderバグ）
+- **Cause**: bot.flee(100)を実行するとYが下がる。地表に出る代わりに洞窟内を逃走ルートとして使っている。Y=67→flee→Y=60→flee→Y=48のように悪化する。
+- **Coordinates**: 付近 (4,60,-5) → (15,48,-9)
+- **Last Actions**: flee(100) × 2回 → Y=67→60→48 と下降
+- **Symptoms**: flee後にskeletonが増える（地下spawnerからか）。逃げるほど危険になる。
+- **Root Cause**: fleeのpathfinderが地表への経路を優先せず、接続された洞窟を逃走ルートにしている。
+- **Status**: Reported. 緊急修正が必要。flee()にY_min制約または地表方向優先ロジックが必要。
+
 ## [2026-03-27] Bug: Session 89 - 死亡31回目 Zombie攻撃（Y=64洞窟内）
 - **Cause**: Y=64の洞窟内でHP:2の状態でゾンビに追い詰められ死亡。flee/moveToが機能せず、食料ゼロで回復不能な状況が継続した。
 - **Coordinates**: (-1, 64, 2) 付近
