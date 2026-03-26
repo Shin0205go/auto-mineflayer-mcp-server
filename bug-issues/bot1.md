@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 85 - 完全地形スタック (moveTo/flee/pillarUp全て機能しない)
+
+- **Cause**: botがX=0, Y=58, Z=9に完全固定。moveTo/flee/pillarUp全てタイムアウトまたは座標変化なし。mc_reloadでも解消せず。
+- **Coordinates**: x=0, y=58, z=9 (birch_forest / 拠点付近)
+- **State**: HP:7.2, creeper×4, skeleton×2, zombie, enderman に囲まれた状態でスタック
+- **All failed**: moveTo(×20回), flee(×3), pillarUp(タイムアウト)
+- **Impact**: 完全プレイ不能。敵に攻撃され続けて死亡するか永久スタック。
+- **Status**: Reported。緊急コードレビュー必要。pathfinderのスタック解消ロジックが必要。または移動に失敗し続けた場合の強制テレポート/ジャンプ等のフォールバック。
+
 ## [2026-03-26] Bug: Session 85 - moveTo()が完全に機能しない (pathfinder詰まり)
 
 - **Cause**: moveTo()を10回以上呼び出しても座標が全く変化しない。bot の位置がX=-1, Z=8に固定されている。
