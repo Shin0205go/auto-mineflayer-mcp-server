@@ -1,12 +1,21 @@
-## [2026-03-26] Bug: 地形スタック - Y=108山頂から移動不能（Session 81-82）
+## [2026-03-26] Bug: 地形スタック - Y=109山頂から移動不能（Session 81-82）
 
-- **Cause**: Y=108のold_growth_birch_forest山頂に閉じ込められ、全移動手段が失敗。moveTo・pillarUp・navigate・gather全て現在地(x=-70,y=107,z=5)から動けない。
-- **Coordinates**: x=-70, y=107, z=5
-- **Last Actions**: moveTo(複数方向・複数距離)→座標変わらず。pillarUp→"No blocks placed"エラー（cobblestone137個あり）。combat(cow)→肉ドロップなし（combat dropバグ継続）。
+- **Cause**: Y=109のold_growth_birch_forest山頂に閉じ込められ、全移動手段が失敗。
+- **Coordinates**: x=-71, y=109, z=3 (変動なし)
+- **Last Actions詳細**:
+  - moveTo(全方向、複数距離100-150ブロック) → 座標変わらず（成功返すが移動なし）
+  - pillarUp(8) → "No blocks placed"（cobblestone 138個あるのに失敗）
+  - navigate(cow/pig/chicken/sheep) → 「成功」返すが肉ドロップなし
+  - bot.place("cobblestone", ...) → 設置は成功するがそのブロックに移動できない
+  - bot.flee(50) → 3ブロック程度しか移動しない
+  - navigate(grass_block, oak_log) → 成功返すが現在地に戻る
+  - bot.gather("birch_log") → タイムアウト（60秒）
+  - bot.build("shelter") → タイムアウト（60秒）
 - **Error Message**: moveTo成功を返すが座標変わらず。pillarUp: "Failed to pillar up. No blocks placed."
 - **Session**: Session 82 (2026-03-26)
-- **Root Cause**: Pathfinderが山頂から降りるルートを見つけられない。断崖地形でpathfinderが詰まる。mc_reloadで改善なし。pillarUpもcobblestoneあるのに機能しない。
-- **Status**: Reported。HP=10 Hunger=0 完全スタック状態。combat dropバグも継続。code-reviewer要対応。
+- **Root Cause**: Pathfinderが山頂（Y=109断崖）から降りるルートを完全に見つけられない。bot.place()でブロック設置は可能だが、moveToでその位置に移動できない。pathfinderの問題かbot位置認識の問題か不明。
+- **Status**: 完全スタック継続。HP=10 Hunger=0。combat dropバグも継続。code-reviewer緊急対応要請。
+- **必要な修正**: moveToが実際に移動するかチェック、pathfinderがY軸降下経路を見つけられるよう改善、またはスタック検出して再接続等の回復手段を実装。
 
 ## [2026-03-26] Bug: Session 81 - Death: gather()中にzombieに殺される
 
