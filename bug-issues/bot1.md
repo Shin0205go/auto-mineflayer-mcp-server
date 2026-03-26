@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 88 - 死亡27回目 溺死（Y=53付近、combat後に水に落下）
+- **Cause**: combat("skeleton")実行中にHP=3.2から溺死。Y=53の水中に落ちたと思われる
+- **Coordinates**: (0.3, 53.9, 3.6)
+- **Last Actions**: flee() → HP 20→11.2 (skeleton shots) → eat() → combat("skeleton") → 溺死
+- **Error Message**: "[Server] Claude1 drowned"
+- **Status**: Reported. admin /kill後のrespawn直後に再死亡。
+
 ## [2026-03-27] Bug: Session 88 - 死亡26回目 落下死（Y=72地上移動中）
 - **Cause**: moveTo(-1,68,-3)後にY=72付近から落下死
 - **Coordinates**: Y=72→Y=96(respawn)
