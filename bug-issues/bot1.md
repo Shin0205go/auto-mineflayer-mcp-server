@@ -15,6 +15,14 @@
 - **Root Cause**: birch_forestの複雑な地形でpathfinderが正常に動作しない。mc_reload後も改善なし。
 - **Status**: Reported。コードレビュー緊急対応要請。
 
+## [2026-03-26] Bug: Session 88 - 落下死14回目（place(wheat_seeds)後に落下）
+
+- **Cause**: farmland付近(5,76,2)にseeds plantingが成功した直後に落下死。30秒タイムアウト中に落下した可能性。
+- **Coordinates**: (1, 77, 1)
+- **Last Actions**: moveTo(5,76,2) → place(wheat_seeds) → `fell from a high place`
+- **Error Message**: `<[Server]> Claude1 fell from a high place`
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 88 - 死亡: drowned 13回目（moveTo中）
 
 - **Cause**: HP=2.7/Hunger=0でmoveTo(0,85,0)中にdrownedに殺された。高台(Y=102)到達後にリスポーン。
