@@ -1,10 +1,11 @@
 ## [2026-03-26] Bug: Session 87 - moveTo/navigate完全無効（位置が変わらない）
 
-- **Cause**: moveTo(200, 65, 0), moveTo(0, 65, 200) など全方向への移動が成功を返すが座標が変化しない。navigate("village"), navigate("villager") も同様。bot.flee()は短距離動く（7→36ブロック変化を確認）が、moveTo/navigateは全て無効。
-- **Coordinates**: x=-8, y=60, z=16 (birch_forest)
-- **Last Actions**: flee()で一部動作 → moveTo(200,65,0) × 3回試行 → navigate("village") → navigate("villager") → 全て同じ座標に留まる
-- **Error Message**: エラーなし（成功と返すが位置変化なし）
-- **Status**: Reported。HP:1.7 Hunger:0 で生存危機。敵（zombie,skeleton,creeper）が30分以上近くに存在し続けている。
+- **Cause**: moveTo(200, 65, 0), moveTo(0, 65, 200) など全方向への移動が成功を返すが座標が変化しない（実行時間 ~300ms で即時返却）。navigate("village"), navigate("villager") も同様。bot.flee()は短距離動く（7→36ブロック変化を確認）が、moveTo/navigateは全て無効。mc_reload・再接続後も改善なし。
+- **Coordinates**: x=-8, y=60, z=16 (birch_forest) → flee後はx=-1, z=1付近
+- **Last Actions**: flee()で一部動作 → moveTo(200,65,0) × 3回試行 → mc_reload → 再接続 → moveTo再試行 → 全て即時返却で位置変化なし
+- **Error Message**: エラーなし（~300msで成功を返すが位置変化なし）
+- **Root Cause推測**: pathfinderが目標地点を計算した結果「移動不要（already at destination）」と判断しているか、pathfinder自体が無効化されている可能性。
+- **Status**: Reported。HP:1.7 Hunger:0 で生存危機。敵（zombie,skeleton,creeper）が30分以上近くに存在し続けている。コードレビュー必須。
 
 ## [2026-03-26] Bug: Session 86 - 死亡4: 溺死 (シェルター内でHP1になった後)
 
