@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 79 - 洞窟スタック継続 + 全移動API失敗
+
+- **Cause**: x=-7, y=52, z=-10 の洞窟に完全に閉じ込められた状態が続いている。gather("stone"), gather("birch_log"), moveTo, pillarUp, flee 全てがタイムアウトまたは微小移動のみ。2時間以上同じ場所に固定。
+- **Coordinates**: x=-7, y=52, z=-10
+- **APIs Failing**: gather(any,any), moveTo(any,any,any), pillarUp(any), flee(50) = y変化なし, place(cobblestone) = 設置するが自分は動かない
+- **Working APIs**: status(), inventory(), eat(), chat(), wait()
+- **Error**: gather → timeout 60-120s; pillarUp → "Failed to pillar up. No blocks placed."
+- **Status**: Reported 2026-03-26 Session 79. CRITICAL ONGOING.
+
 ## [2026-03-26] Bug: Session 79 - Death: 溺死 (3回目)
 
 - **Cause**: Y=49の水中に閉じ込められた。moveTo(x,70,z)を試みていたがガザガザと動けない状態。gather("stone")後にmoveToが成功してY=95に移動したが、その前に溺死。
