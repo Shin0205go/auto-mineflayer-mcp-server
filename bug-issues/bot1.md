@@ -1,3 +1,21 @@
+## [2026-03-26] Bug: Session 88 - 連続死亡パターン（根本原因報告）
+
+- **Cause**: 以下の複合バグにより食料確保が不可能な状態が続き死亡ループが発生:
+  1. **pillarUp()**: 45秒タイムアウト後0ブロック配置。地下脱出不可能。
+  2. **combat() flee threshold**: HP<10で戦闘放棄。食料動物も食料mobも倒せない。
+  3. **moveTo()**: 地下(Y<70)でPath blocked。cave環境での経路探索完全失敗。
+  4. **gather()**: underground環境で60-120sタイムアウト。地上の小麦に届かない。
+  5. **eat()**: wheat単体は食べられない。bread craft必須だがCT不在で作れない。
+  6. **craft()**: CT不在で全てのクラフトが失敗。最初のbirch_log採取もtimeout。
+- **Coordinates**: (-39, 63, 1) - スポーンから40ブロック離れた地下
+- **Session**: 死亡16回以上（Session 88のみ）
+- **Status**: 緊急修正要求。地下脱出機能とcombat flee thresholdが特に重大。
+- **Recommended Fix**:
+  - pillarUp(): 通常のジャンプ+設置ロジックを見直す（現在0ブロックしか置けない）
+  - moveTo(): underground cave navigarionをサポートする、またはY>70に制限してから掘り上がる
+  - combat flee threshold: HP=10からHP=5に下げる（今のHP<10で即flee）
+  - gather(): underground tunnelを自動的に掘り上がる機能を追加
+
 ## [2026-03-26] Bug: Session 88 - 死亡: 落下死16回目（cobblestone staircase作成中、Y=96から落下）
 
 - **Cause**: place()でstaircase作成中、60秒タイムアウト後にY=96から落下死。HP=2で極限状態。
