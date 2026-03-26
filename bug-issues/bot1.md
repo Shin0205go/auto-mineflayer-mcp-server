@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: craft()がインベントリに反映されない
+
+- **Cause**: bot.craft("iron_sword")・bot.craft("iron_pickaxe")・bot.craft("crafting_table")が「成功」を返すがインベントリに変化なし。iron_ingotもstickも消費されない。
+- **Coordinates**: x=17, y=56, z=-11
+- **Last Actions**: mc_reload後にbot.craft("crafting_table")→bot.craft("iron_sword")→bot.craft("iron_pickaxe")を実行
+- **Error Message**: エラーなし（成功と表示されるが反映されない）
+- **Session**: Session 81 (2026-03-26)
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 80 - Death: flee()で水中に移動して溺死（3回目）
 
 - **Cause**: ゾンビ2体+スパイダーから逃走中、bot.flee()が水中に移動させ溺死。"Claude1 drowned"
