@@ -15,6 +15,14 @@
 - **Root Cause**: birch_forestの複雑な地形でpathfinderが正常に動作しない。mc_reload後も改善なし。
 - **Status**: Reported。コードレビュー緊急対応要請。
 
+## [2026-03-26] Bug: Session 88 - 死亡: Drownedに殺された11回目
+
+- **Cause**: HP=7.5/Hunger=0でmoveTo(4,82,4)中にDrownedに殺された。低地(Y=58)→高台(Y=112)へ移動中に水域を通過してDrownedと遭遇。
+- **Coordinates**: (6.7, 58, 16.7)
+- **Last Actions**: moveTo(4,82,4) → Drownedに殺された
+- **Error Message**: `<[Server]> Claude1 was slain by Drowned`
+- **Status**: Reported。飢餓状態での緊急移動中に水域/Drownedに遭遇するパターンが繰り返されている。
+
 ## [2026-03-26] Bug: Session 88 - 死亡: moveTo中に溺死9回目
 
 - **Cause**: birch_log(102,62,-4)へmoveTo中に溺死。moveTo()が水中経路を選択してドラウンド。
