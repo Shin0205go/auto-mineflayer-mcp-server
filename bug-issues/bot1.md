@@ -1,3 +1,19 @@
+## [2026-03-26] Bug: Session 79 - moveTo/navigate/gather が全てタイムアウト・移動不能
+
+- **Cause**: bot.moveTo(0,77,20), bot.moveTo(0,77,9) 等を呼び出しても全く移動せず同じ座標のまま。navigate("birch_log"), navigate("oak_log"), navigate("furnace")も複数回タイムアウト。gather("birch_log",4), gather("oak_log",4) も120秒タイムアウト。
+- **Coordinates**: x=-112, y=77, z=20 (old_growth_birch_forest)
+- **Last Actions**: moveTo(0,77,9) → 3回試行 → 全て(-112,77,20)のまま変化なし
+- **Error Message**: Timed out (120000ms, 180000ms, 300000ms), moveTo3回失敗
+- **Impact**: 拠点に戻れない、木材収集不可、農場作業不可 — 完全に詰まった状態
+- **Status**: Reported 2026-03-26 Session 79. CRITICAL.
+
+## [2026-03-26] Bug: Session 79 - craft("crafting_table", 1, true) がタイムアウト
+
+- **Cause**: autoGather=trueでcraft("crafting_table")を呼び出すと60秒タイムアウト。木材収集フェーズで止まる模様。
+- **Coordinates**: x=-112, y=77, z=21
+- **Last Actions**: craft("crafting_table", 1, true) → 60秒タイムアウト
+- **Status**: Reported 2026-03-26 Session 79.
+
 ## [2026-03-26] Bug: Session 78 - Death: 高所からの落下死亡 (navigate("item")後)
 
 - **Cause**: navigate("item")を実行後、Y=114の高い場所にテレポートまたは移動し、そこから落下死亡
