@@ -34,6 +34,14 @@
 - **Root Cause**: place()で足場を作る際に水が存在する位置を経由している。地下の水域付近でplace()が安全でない
 - **Status**: Reported 2026-03-26 Session 80。4回目の死亡。
 
+## [2026-03-26] Bug: Session 80 - 洞窟スタック（5回目）: X/Z方向に全く移動できない
+
+- **Cause**: x=-9付近、y=54-59、z=-9付近に完全にスタック。moveTo(x,y,z)でX/Z方向の移動が全く効かない。Y方向のみ少し変化する。navigate()も同じ場所に留まる。飢餓状態でチェスト(x=-6,y=61,z=2)まで12ブロック先にあるが到達できない。
+- **Coordinates**: x=-9, y=54-59, z=-9
+- **Last Actions**: moveTo(様々な座標) → x=-9,y=変化,z=-9に留まる × 10回以上
+- **Error Message**: なし（エラーなしで移動失敗）
+- **Status**: Reported 2026-03-26 Session 80。前回Session 79と同じ洞窟スタックバグ。飢餓死不可避。
+
 ## [2026-03-26] Bug: Session 80 - craft("furnace")がcrafting_tableの直前でも失敗
 
 - **Cause**: crafting_tableを設置しその直前(0ブロック距離)にいても、bot.craft("furnace")が失敗する。インベントリにcobblestone124個あり。autoGather=trueでも同様に失敗。
