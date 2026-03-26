@@ -1,4 +1,11 @@
-## [2026-03-27] Bug: Session 92 - 死亡33回目 Endermanに殺された（地下脱出後）
+## [2026-03-27] Bug: Session 92 - 死亡35回目 "fell from a high place" gather中にHP0 (鉄採掘ループ)
+- **Cause**: bot.gather("iron_ore", 8) ループ中にHP=0になり "fell from a high place" で死亡。HP14→HP0と急減。gather()が高所落下を引き起こしている。
+- **Coordinates**: Y=74付近 (地下)
+- **Last Actions**: gather("iron_ore",8) → HP:14 → gather("iron_ore",8) → HP:0 → "Claude1 fell from a high place"
+- **Error Message**: "Claude1 fell from a high place"
+- **Status**: Reported. gather()が鉄採掘中に落下死を引き起こす。地下でgatherすると危険。
+
+## [2026-03-27] Bug: Session 92 - 死亡34回目 Endermanに殺された（地下脱出後）
 - **Cause**: 地下(Y=61)でスタックしていたが、gather("stone")実行後にY=115に移動してEndermanに殺された。pillarUp()が0ブロックしか積めず機能不全。HP=1.5のまま地表に出て即殺。
 - **Coordinates**: (-5.5, 115, -9.5)
 - **Last Actions**: gather("stone",1) → Y:116.9に移動 → "Claude1 was slain by Enderman"
