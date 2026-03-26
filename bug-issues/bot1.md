@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 89 - 死亡28回目 Creeperに爆殺（テレポート直後Y=98）
+- **Cause**: adminテレポート後(6,98,-6)でCreeper爆発により即死。HP:20/Hunger:20でも周辺確認なしに行動してCreeper接触。
+- **Coordinates**: (6, 98, -6)
+- **Last Actions**: adminテレポート → eat() → Creeper爆発 → 死亡
+- **Error Message**: "Claude1 was blown up by Creeper"
+- **Status**: Reported. keepInventory動作。テレポート後のCreeper接近チェックが必要。
+
 ## [2026-03-27] Bug: Session 89 - pathfinderスタック・全ツールタイムアウト（地下洞窟Y=42）
 - **Cause**: 地下洞窟Y=42で全ての移動系ツール（moveTo/navigate/flee/combat/gather）がタイムアウトまたは無効。位置が全く変わらない。
 - **Coordinates**: (-1, 42, -9)
