@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 88 - 死亡: Skeletonに射殺15回目（combat()タイムアウト・HP=5）
+
+- **Cause**: HP=5・Hunger=0で地下Y=63に閉じ込め。combat("skeleton",3)呼び出しが30秒タイムアウト中にSkeletonに射殺された。
+- **Coordinates**: (-39.4, 63, -5.4)
+- **Last Actions**: flee() x3 → wait loop → combat("skeleton",3) 30s timeout → `Claude1 was shot by Skeleton`
+- **Error Message**: `<[Server]> Claude1 was shot by Skeleton`
+- **Root Cause**: pillarUp/gather/escapeUndergroundが全てタイムアウト。地下から脱出できない状態でHPが削られた。
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 88 - 死亡: Zombieに殺された10回目（farm()タイムアウト中）
 
 - **Cause**: HP=5でfarm()実行中（120秒タイムアウト）にZombieに殺された。farm()実行中は安全チェックが効かない。
