@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 88 - 死亡: moveTo中に溺死9回目
+
+- **Cause**: birch_log(102,62,-4)へmoveTo中に溺死。moveTo()が水中経路を選択してドラウンド。
+- **Coordinates**: (90.5, 39, 2.5) → 溺死地点不明
+- **Last Actions**: navigate(birch_log) → moveTo(102,62,-4) → drowned
+- **Error Message**: `<[Server]> Claude1 drowned`
+- **Root Cause**: moveTo()が水中を経由する経路を選択する。特にY=39-62の低地は水域が多い。
+- **Status**: Reported
+
 ## [2026-03-26] Bug: Session 88 - farm()/navigate()が全タイムアウト・完全詰み
 
 - **Cause**: farm()が30-120秒タイムアウト。navigate(water/farmland)が30-90秒タイムアウト。gather()はHP=3で自動中断。HP=3・Hunger=3・食料0の完全詰み状態。
