@@ -531,13 +531,31 @@ export async function mc_gather(
         const monBot = botManager.getBot(username);
         if (!monBot) { clearInterval(hpCheckInterval); return; }
         const monHp = monBot.health ?? 20;
-        // Bot1: died at HP 6-8 during gather from single zombie/skeleton hit (4-8 damage).
-        // Bot2: skeleton shot from HP 20→8 during gather. A single hit at HP<8 is often lethal.
-        // Threshold raised from 6 to 8 to give the agent time to react before death.
-        if (monHp < 4) {
+        // HP abort threshold: context-sensitive to avoid deadlock when bot has no food.
+        // Bot1 Session 88 [2026-03-26]: HP=3, no food, no animals — gather aborted at
+        // monHp<4, leaving the bot completely unable to act (eat/flee both useless with
+        // no food or nearby enemies). With no hostiles nearby, aborting at HP=3 is worse
+        // than letting gather finish (wood = shelter = safety).
+        //
+        // Two-tier threshold:
+        //   - Hostile within 8 blocks: abort at HP<3 (reduced from 6 to prevent deadlock)
+        //     Bot1 Session 88 [2026-03-26]: HP=3, spider nearby, no food — abort at HP<6 caused
+        //     complete deadlock (can't gather→can't get food→can't heal). Lowered to 3.
+        //   - No hostile nearby: abort at HP<2 (near-death only; stationary gather is safer
+        //     than exposing bot to navigation risks while critically low)
+        const monTime = monBot.time?.timeOfDay ?? 0;
+        const monIsNight = monTime > 12541 || monTime < 100;
+        const gatherScanRadius = monIsNight ? 20 : 16;
+        const monDanger = checkDangerNearby(monBot, gatherScanRadius);
+        const hostileNearby = monDanger.dangerous && monDanger.nearestHostile && monDanger.nearestHostile.distance <= 8;
+        const hpAbortThreshold = hostileNearby ? 3 : 2;
+        if (monHp < hpAbortThreshold) {
           clearInterval(hpCheckInterval);
           try { monBot.pathfinder?.stop(); } catch (_) {}
-          resolve(`[ABORTED] mc_gather stopped: HP critically low (${monHp.toFixed(1)}) during gathering. Use mc_flee or mc_eat before retrying.`);
+          const reason = hostileNearby
+            ? `hostile ${monDanger.nearestHostile!.name} at ${monDanger.nearestHostile!.distance.toFixed(1)} blocks`
+            : "no hostiles nearby but HP near zero";
+          resolve(`[ABORTED] mc_gather stopped: HP critically low (${monHp.toFixed(1)}) — ${reason}. Use mc_flee or mc_eat before retrying.`);
           return;
         }
         // Hostile check during gathering — ALWAYS, both night AND daytime.
@@ -550,14 +568,7 @@ export async function mc_gather(
         // hit with no armor, so HP can drop from 20 to 1 in 4-5 hits (~4 seconds).
         // Now: ALWAYS check hostiles regardless of HP. The pre-start check catches mobs
         // present at start, but mobs spawn or approach DURING the 120s operation.
-        const monTime = monBot.time?.timeOfDay ?? 0;
-        const monIsNight = monTime > 12541 || monTime < 100;
-        const gatherScanRadius = monIsNight ? 20 : 16;
         {
-          const monDanger = checkDangerNearby(monBot, gatherScanRadius);
-          // Night: abort if hostile within 16 blocks.
-          // Day: abort if hostile within 12 blocks (closer threshold since fewer mobs).
-          // Ranged mobs (skeleton, pillager): always abort within 16 blocks regardless of time.
           if (monDanger.dangerous && monDanger.nearestHostile) {
             const nearName = monDanger.nearestHostile.name;
             const nearDist = monDanger.nearestHostile.distance;
