@@ -15,6 +15,15 @@ export interface SafeGoalOptions {
    * Session 85: combat/gather deaths from cliff falls on mountain terrain (Y=76-119).
    */
   elevationAware?: boolean;
+  /**
+   * Absolute minimum Y — abort immediately if bot descends below this value,
+   * regardless of maxYDescent. Used by flee() to prevent cumulative cave descent
+   * across retries. Session 89: flee() Y=67→60→48 across retries because each
+   * retry's startY was the post-descent position, allowing unlimited cumulative drop.
+   * absoluteMinY: Math.max(originalStartY - 8, 62) bounds total descent to ≤8 blocks
+   * from the flee start point and never below Y=62 (sea level / cave threshold).
+   */
+  absoluteMinY?: number;
 }
 
 export interface SafeGoalHandle {
@@ -36,7 +45,7 @@ export function safeSetGoal(
   goal: any,
   options: SafeGoalOptions = {}
 ): SafeGoalHandle {
-  const { intervalMs = 300, onAbort, elevationAware = false } = options;
+  const { intervalMs = 300, onAbort, elevationAware = false, absoluteMinY } = options;
   const startY = bot.entity.position.y;
 
   // Compute effective maxYDescent:
@@ -65,13 +74,18 @@ export function safeSetGoal(
 
   const monitor = setInterval(() => {
     try {
-      const yDescent = startY - bot.entity.position.y;
-      if (yDescent > maxYDescent) {
+      const currentY = bot.entity.position.y;
+      const yDescent = startY - currentY;
+      // Check relative descent limit
+      const relativeAbort = yDescent > maxYDescent;
+      // Check absolute Y floor (prevents cumulative descent across retries)
+      const absoluteAbort = absoluteMinY !== undefined && currentY < absoluteMinY;
+      if (relativeAbort || absoluteAbort) {
         handle.aborted = true;
         clearInterval(monitor);
         try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
         if (onAbort) {
-          onAbort(yDescent, startY, bot.entity.position.y);
+          onAbort(yDescent, startY, currentY);
         }
       }
     } catch {

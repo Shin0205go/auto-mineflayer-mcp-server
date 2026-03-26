@@ -3277,12 +3277,25 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
     // 15 was insufficient: Y=89 cliff → Y=70 ground = 19 blocks > 15 limit → flee always aborted.
     // Normal surface (Y<=75): keep 4-block limit (prevents cave routing).
     const fleeMaxYDescent = startPos.y > 75 ? 30 : 4;
+    // ABSOLUTE Y FLOOR: Prevent cumulative cave descent across retries.
+    // Session 89: flee() Y=67→60→48 because each retry started from the post-descent Y,
+    // allowing unlimited cumulative drop despite per-retry maxYDescent=4 checks.
+    // absoluteFleeMinY caps the TOTAL descent from the original flee start:
+    //   - Surface (Y>=65): never descend more than 8 blocks below start, and never below Y=62.
+    //     8 blocks allows natural terrain variation without entering cave systems.
+    //   - Underground (Y<65): already in cave, cap at Y=20 (void prevention only).
+    //     Underground flee uses canDig=true + emergencyDigUp for vertical escape.
+    const fleeIsAtSurface = startPos.y >= 65;
+    const absoluteFleeMinY = fleeIsAtSurface
+      ? Math.max(startPos.y - 8, 62)
+      : 20;
     let currentFleeHandle = safeSetGoal(bot,
       new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3),
       {
         maxYDescent: fleeMaxYDescent,
+        absoluteMinY: absoluteFleeMinY,
         onAbort: (yDescent) => {
-          console.error(`[Flee] CAVE DESCENT ABORT: Bot dropped ${yDescent.toFixed(1)} blocks during flee (Y=${startPos.y.toFixed(0)}→${bot.entity.position.y.toFixed(0)}, limit=${fleeMaxYDescent}). Stopping.`);
+          console.error(`[Flee] CAVE DESCENT ABORT: Bot dropped ${yDescent.toFixed(1)} blocks during flee (Y=${startPos.y.toFixed(0)}→${bot.entity.position.y.toFixed(0)}, limit=${fleeMaxYDescent}, absoluteMin=${absoluteFleeMinY}). Stopping.`);
           try { bot.setControlState("sprint", false); bot.setControlState("sneak", false); } catch { /* ignore */ }
         }
       }
@@ -3415,8 +3428,9 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
               currentFleeHandle.cleanup();
               currentFleeHandle = safeSetGoal(bot, retryGoal, {
                 maxYDescent: fleeMaxYDescent,
+                absoluteMinY: absoluteFleeMinY,
                 onAbort: (yDescent) => {
-                  console.error(`[Flee] CAVE DESCENT ABORT during retry #${retryCount}: dropped ${yDescent.toFixed(1)} blocks (Y=${startPos.y.toFixed(0)}→${bot.entity.position.y.toFixed(0)}, limit=${fleeMaxYDescent}). Stopping.`);
+                  console.error(`[Flee] CAVE DESCENT ABORT during retry #${retryCount}: dropped ${yDescent.toFixed(1)} blocks (Y=${startPos.y.toFixed(0)}→${bot.entity.position.y.toFixed(0)}, limit=${fleeMaxYDescent}, absoluteMin=${absoluteFleeMinY}). Stopping.`);
                   try { bot.setControlState("sprint", false); bot.setControlState("sneak", false); } catch { /* ignore */ }
                 }
               });
@@ -3477,8 +3491,9 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
             new goals.GoalNear(retryTarget.x, retryTarget.y, retryTarget.z, 3),
             {
               maxYDescent: fleeMaxYDescent,
+              absoluteMinY: absoluteFleeMinY,
               onAbort: (yDescent) => {
-                console.error(`[Flee] Directional retry #${retryIdx} CAVE DESCENT: dropped ${yDescent.toFixed(1)} blocks (limit=${fleeMaxYDescent}). Aborting.`);
+                console.error(`[Flee] Directional retry #${retryIdx} CAVE DESCENT: dropped ${yDescent.toFixed(1)} blocks (limit=${fleeMaxYDescent}, absoluteMin=${absoluteFleeMinY}). Aborting.`);
                 try { bot.setControlState("sprint", false); } catch { /* ignore */ }
               }
             }

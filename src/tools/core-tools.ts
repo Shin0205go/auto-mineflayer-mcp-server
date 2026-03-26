@@ -568,13 +568,24 @@ export async function mc_gather(
         // hit with no armor, so HP can drop from 20 to 1 in 4-5 hits (~4 seconds).
         // Now: ALWAYS check hostiles regardless of HP. The pre-start check catches mobs
         // present at start, but mobs spawn or approach DURING the 120s operation.
+        //
+        // ABORT TRIGGER: If hostile comes within 5 blocks, abort gather immediately.
+        // Session 89: gather() timed out because Creeper/Zombie was constantly within
+        // 5 blocks, pathfinder could not navigate to the block target — gather spun
+        // uselessly for 120s until timeout. Aborting early lets the agent call flee()
+        // or combat() instead of burning time on an operation that cannot succeed.
         {
           if (monDanger.dangerous && monDanger.nearestHostile) {
             const nearName = monDanger.nearestHostile.name;
             const nearDist = monDanger.nearestHostile.distance;
             const timeNote = monIsNight ? "night — " : "";
-            // Only log warning, don't abort — let the game's natural combat play out
-            if (nearDist <= 8) {
+            if (nearDist <= 5) {
+              // Hostile in melee range — gather cannot proceed safely, abort immediately.
+              clearInterval(hpCheckInterval);
+              try { monBot.pathfinder?.stop(); } catch (_) {}
+              resolve(`[ABORTED] mc_gather stopped: ${timeNote}${nearName} at ${nearDist.toFixed(1)} blocks (≤5 block abort threshold). Gather cannot proceed safely. Use bot.flee() or bot.combat() first.`);
+              return;
+            } else if (nearDist <= 8) {
               console.error(`[Gather] WARNING: ${timeNote}${nearName} at ${nearDist.toFixed(1)} blocks during gather (HP=${monHp.toFixed(1)})`);
             }
           }
