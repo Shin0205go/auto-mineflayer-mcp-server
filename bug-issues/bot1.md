@@ -25,6 +25,14 @@
 - **Evidence**: invBefore.length == invAfter.length == 24 (全て同じアイテム)
 - **Status**: Reported 2026-03-26 Session 80。食料確保の大きな障害。
 
+## [2026-03-26] Bug: Session 80 - gather("iron_ore")が複数回タイムアウト
+
+- **Cause**: bot.gather("iron_ore", 8-16)を実行すると120秒タイムアウトする。iron_oreの位置(x=27,y=75,z=5)は発見済みで、navigate()で到達もできているが、gather()がタイムアウトする。周囲に敵(enderman,skeleton,creeper)がいる。
+- **Coordinates**: x=27-28, y=75, z=5
+- **Last Actions**: navigate("iron_ore") → gather("iron_ore", 8) → 120s timeout × 3回
+- **Error Message**: "Execution timed out after 120000ms"
+- **Status**: Reported 2026-03-26 Session 80。gather()が敵がいる環境でタイムアウトする可能性。
+
 ## [2026-03-26] Bug: Session 80 - Death: ゾンビに殺される（夜明け直前）
 
 - **Cause**: HP1、Hunger0の飢餓状態で夜間待機中、夜明け（ticks=23719）にゾンビが接近。wait()がauto-fleeで中断されたが、flee cooldown（30s）により逃走できず、ゾンビに殺された
