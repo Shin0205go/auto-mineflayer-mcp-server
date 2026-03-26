@@ -1,3 +1,11 @@
+## [2026-03-27] Bug: Session 90 - 死亡32回目 飢餓ダメージ+高所落下（地下でスタック）
+- **Cause**: moveTo()が目標と逆方向に動き地下(Y=77)へ潜ってしまい、飢餓Hunger:3でダメージを受け、flee()が高所落下を引き起こした。
+- **Coordinates**: (3, 78, -9) 地下洞窟内
+- **Last Actions**: moveTo(-1,87,-2)の繰り返し → Y=77の地下へ移動 → Hunger:3→HP:7.2 → flee() → "Claude1 fell from a high place"
+- **Error Message**: "Claude1 fell from a high place"
+- **Root Cause**: moveTo()が目標座標とは逆方向に移動するバグ。地下に潜ると食料が取れず、飢餓で死亡パターンが再現。
+- **Status**: Reported. moveTo()の方向計算バグとflee()の高所落下バグが複合。
+
 ## [2026-03-27] Bug: Session 90 - 敵エンティティが長時間追跡し続け、移動系が全てタイムアウト（継続中）
 - **Cause**: クリーパー2体・スケルトン1体が朝(ticks 5273)になっても消えず、同じ位置(27,98,0)近辺で追跡を続ける。moveTo/navigate/gather/pillarUp/fleeが全て30-60秒タイムアウト。status()/wait()は正常動作。
 - **Coordinates**: (27, 98, 0) - mc_reload後も位置変わらず
