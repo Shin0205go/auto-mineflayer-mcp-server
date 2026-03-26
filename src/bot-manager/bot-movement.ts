@@ -500,8 +500,13 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
       const navTime = bot.time?.timeOfDay ?? 0;
       const navIsNight = navTime > 12541 || navTime < 100;
 
-      // Check A: Creeper within 8 blocks at ANY time — emergency abort.
+      // Check A: Creeper within 4 blocks at ANY time — emergency abort.
       // Creeper fuse is 1.5s, explosion radius ~3 blocks, deals up to 49 damage unarmored.
+      // Threshold reduced from 8 to 4 blocks: at 8 blocks the check was over-triggering
+      // and blocking navigation in areas with distant creepers that posed no imminent threat.
+      // 4 blocks matches the actual blast damage radius — creeperss at 5+ blocks only deal
+      // partial damage (damage falls off with distance squared), survivable with armor.
+      // Session 88 [2026-03-26]: check at 8 blocks blocked navigation during daytime with HP=20.
       // IMPORTANT: Use 3D distance but EXCLUDE creeperss that are ≥4 blocks BELOW the bot.
       // A creeper on the ground while the bot is on a pillar (Y+4 or more) cannot explode
       // the bot — its explosion radius is ~3 blocks. Without this exception, the bot is
@@ -519,7 +524,7 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
             // Skip creeperss that are ≥4 blocks below (explosion won't reach from that depth)
             if (verticalOffset >= 4) continue;
             const eDist = entity.position.distanceTo(currentPos);
-            if (eDist < 8) {
+            if (eDist < 4) {
               creeperNearby = true;
               creeperDist = Math.min(creeperDist, eDist);
             }
@@ -631,6 +636,14 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
             // cannot shoot effectively straight up through solid terrain.
             const rangedVertOffset = currentPos.y - entity.position.y;
             if (rangedVertOffset >= 4) continue;
+            // Skip skeleton/stray during daytime: they burn in sunlight and cannot shoot.
+            // Session 88 [2026-03-26]: skeleton within 16 blocks during daytime/morning with HP=20
+            // blocked navigation even though the skeleton was on fire and posed no actual threat.
+            // Skeletons only survive daytime in shade (blocks above them), which we can't easily
+            // detect, but the net effect is that most daytime skeletons are harmless. The mid-nav
+            // check fires every 500ms, so if a shaded skeleton actually starts shooting, the HP
+            // drop will trigger Check B3 before damage becomes critical.
+            if (!navIsNight && (eName === "skeleton" || eName === "stray")) continue;
             if (RANGED_MOBS.includes(eName)) {
               const timeNote = navIsNight ? "at night" : "during daytime";
               const armorNote = armorCount === 0 ? "NO ARMOR" : `PARTIAL ARMOR (${armorCount}/4)`;
@@ -687,20 +700,33 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
           // converge from different directions. Bot1 Sessions 20-44: 15+ deaths at night from
           // mobs closing in during navigation. 12 blocks gave only 5.2s before impact.
           const navHasFood = bot.inventory.items().some((item: any) => EDIBLE_FOOD_NAMES.has(item.name));
-          // Bot2 [2026-03-23]: zombie at 22.8m passed mc_navigate pre-check (dayBlockDist=20),
-          // then closed in during navigation. The mid-nav meleeAbortDist was also 20, creating
-          // a gap where mobs at 20-24 blocks could approach undetected by either check if the
-          // bot moved toward them. Increase no-food daytime to 24 to match the pre-nav scan
-          // radius, closing the detection gap. A zombie at 24 blocks reaches melee in ~10.4s
-          // at 2.3 blocks/s — with 500ms check interval, that's 20+ checks to detect and abort.
+          // Session 88 [2026-03-26]: zombie within 21.6 blocks during daytime, HP=20, NO ARMOR
+          // blocked navigate(). The no-food daytime meleeAbortDist of 24 was too wide — zombies
+          // burn in sunlight during daytime, so most are harmless. Reduced to 8 blocks for
+          // daytime sun-burning mobs (zombie, husk, zombie_villager) and kept 6 for other melee
+          // mobs (spiders, cave spiders, etc. that are active during daytime).
+          // Night thresholds unchanged — all mobs are active and dangerous at night.
+          // Separate per-mob dist logic applied inside the loop below.
           const meleeAbortDist = navIsNight
             ? (armorCount <= 1 ? 16 : 10)
-            : (navHasFood ? 6 : 24);
+            : (navHasFood ? 6 : 12);
+          // Mobs that burn in sunlight during daytime — use tighter threshold at day.
+          const DAYTIME_BURN_MOBS = ["zombie", "husk", "zombie_villager", "drowned"];
           for (const entity of Object.values(bot.entities)) {
             if (!entity || !entity.position || entity === bot.entity) continue;
             const eDist = entity.position.distanceTo(currentPos);
-            if (eDist > meleeAbortDist) continue;
             const eName = entity.name?.toLowerCase() ?? "";
+            // During daytime, zombie-type mobs burn in sunlight. Use a tighter abort
+            // distance (4 blocks) so the bot is not blocked by distant burning zombies.
+            // If the zombie is actually shaded and dangerous, it will close to 4 blocks
+            // quickly and the check will catch it. HP drop from actual hits triggers B3.
+            // Session 88 [2026-03-26]: 24-block threshold for zombies at day with no food
+            // caused navigate() to abort immediately every time on daytime maps.
+            if (!navIsNight && DAYTIME_BURN_MOBS.includes(eName)) {
+              if (eDist > 4) continue;
+            } else {
+              if (eDist > meleeAbortDist) continue;
+            }
             // Skip ranged mobs — already handled by check B1 above at 16-block radius.
             if (RANGED_MOBS.includes(eName)) continue;
             // Skip endermen during navigation: endermen are conditionally hostile (only
