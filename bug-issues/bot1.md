@@ -1,3 +1,13 @@
+## [2026-03-26] Bug: 地形スタック - Y=108山頂から移動不能（Session 81）
+
+- **Cause**: Y=108のold_growth_birch_forest山頂に閉じ込められ、全移動手段が失敗。moveTo・pillarUp・navigate・gather全て現在地(x=-66,y=108,z=4)から動けない。
+- **Coordinates**: x=-66, y=108, z=4
+- **Last Actions**: navigate(grass_block)→Y=108のまま。moveTo(複数方向)→Y=108のまま。combat()→Y=108-109の狭い範囲のみ。
+- **Error Message**: moveTo成功を返すが座標変わらず
+- **Session**: Session 81 (2026-03-26)
+- **Root Cause**: Pathfinderが山頂から降りるルートを見つけられない。断崖地形でpathfinderが詰まる。
+- **Status**: Reported。HP=10 Hunger=0 敵多数で完全停止状態。
+
 ## [2026-03-26] Bug: Session 81 - Death: gather()中にzombieに殺される
 
 - **Cause**: bot.gather("iron_ore")実行中、zombie接近に気づかず死亡。HP1.7まで落ちてからfleeしたが間に合わず。
