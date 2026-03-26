@@ -129,6 +129,8 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
     let maxHeightReached = start.y;
     let underwaterTicks = 0; // Track consecutive checks with head underwater
     const startHp = bot.health ?? 20; // Track HP at navigation start for rapid-drop detection
+    // High mountain flag: Y>90 peaks require relaxed drop/fall limits (see maxDropDown and physicsTick below)
+    const isHighMountainStart = start.y > 90;
     // Declare checkInterval first to avoid TDZ issues when event handlers fire early
     let checkInterval: ReturnType<typeof setInterval> | null = null;
     let lastPos = start.clone();
@@ -396,9 +398,17 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
       // Elevated terrain adjustment: at Y>75 (mountain/cliff/treetop), 3-block limit is too tight.
       // Natural descent from elevated positions spans 5-18 blocks — not cave routing.
       // Use 18-block limit above Y=75 to allow descent without triggering false underground abort.
-      // The absolute Y<62 floor check (above this block) is the real cave routing protection.
+      // High mountain exception (Y>90): peaks like Y=108 (mountains biome) require descending
+      // 30-46 blocks to reach ground level (Y=62-78). The 18-block limit (for Y>75) fires
+      // immediately at these heights, making ALL movement impossible from mountain peaks.
+      // Bot1 Session 81 [2026-03-26]: bot stranded at Y=108, all 4 moveTo directions failed —
+      // descent of 28-38 blocks triggered underground_routing abort at every attempt.
+      // Fix: at Y>90, allow descent up to (start.y - 62 + 5) — i.e., allow reaching sea level
+      // from any mountain height. The absolute Y<62 floor check is the real cave protection.
       const elevatedStart = start.y > 75;
-      const case1DescentLimit = elevatedStart ? 18 : 3;
+      const case1DescentLimit = isHighMountainStart
+        ? Math.max(start.y - 62 + 5, 18) // mountains: allow descent to near sea level
+        : elevatedStart ? 18 : 3;
       if (targetIsAtOrAboveStart && yDescentFromStart > case1DescentLimit) {
         console.error(`[MoveTo] UNDERGROUND ROUTING DETECTED: Bot descended ${yDescentFromStart.toFixed(1)} blocks below start (Y=${start.y.toFixed(1)} → Y=${currentPos.y.toFixed(1)}) while target Y=${y.toFixed(1)} is at/above start. Pathfinder is routing through caves. Aborting. (limit=${case1DescentLimit} for ${elevatedStart ? "elevated" : "surface"} start)`);
         finish({
@@ -916,6 +926,13 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
     // SAFETY: Use physicsTick for instant fall detection (500ms interval is too slow)
     // Track BOTH per-tick drops (to catch sudden falls) AND cumulative fall distance
     // (to catch gradual acceleration off cliff edges where per-tick is small but total is huge).
+    //
+    // Fall threshold must match maxDropDown to avoid false positives on planned drops:
+    //   Normal (Y<=90): maxDropDown=4, threshold=4
+    //   High mountain (Y>90): maxDropDown=12, threshold=12
+    // Bot1 Session 81 [2026-03-26]: at Y=108, mountain cliff drops are 8-12 blocks.
+    // Threshold=4 fired on every planned cliff step, causing immediate abort at each attempt.
+    const fallPhysicsThreshold = isHighMountainStart ? 12 : 4;
     let lastPhysicsY = start.y;
     let fallStartY: number | null = null;  // Y when falling started (null = not falling)
     const onPhysicsTick = () => {
@@ -930,15 +947,9 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
         }
         const totalFall = fallStartY - cy;
 
-        // Stop immediately if cumulative fall exceeds 4 blocks (fall damage starts at >4 blocks).
-        // maxDropDown=4 allows 4-block planned drops; threshold=4 avoids false positives
-        // on planned 4-block drops (no fall damage) while catching unsafe 5+ block falls.
-        // Previous threshold=3 with maxDropDown=3 was contradictory: pathfinder planned
-        // 3-block drops but physicsTick aborted them mid-execution (totalFall hit 3 during
-        // the drop), causing no_path on mountainous terrain where every direction has
-        // 3-4 block drops (e.g. birch_forest spawn at Y=82-94).
-        if (totalFall > 4) {
-          console.error(`[MoveTo] PHYSICS FALL: ${totalFall.toFixed(1)} blocks cumulative (started at Y=${fallStartY.toFixed(1)}, now Y=${cy.toFixed(1)}). Emergency stop!`);
+        // Stop if cumulative fall exceeds threshold (matched to maxDropDown to avoid false positives).
+        if (totalFall > fallPhysicsThreshold) {
+          console.error(`[MoveTo] PHYSICS FALL: ${totalFall.toFixed(1)} blocks cumulative (started at Y=${fallStartY.toFixed(1)}, now Y=${cy.toFixed(1)}, threshold=${fallPhysicsThreshold}). Emergency stop!`);
           bot.pathfinder.stop();
           bot.clearControlStates();
           finish({
@@ -964,17 +975,19 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
     // by mineflayer-pathfinder internals or dimension-change handlers between calls.
     // Setting them here guarantees they are always active for this navigation call.
     if (bot.pathfinder.movements) {
-      // maxDropDown=4: Allow 4-block drops for natural terrain navigation.
-      // maxDropDown=3 caused a critical contradiction with the physicsTick fall detector
-      // (totalFall > 3): pathfinder planned 3-block drops but the detector aborted them
-      // mid-execution, resulting in no_path on mountainous terrain (Y=82-94, birch_forest)
-      // where every direction has 3-4 block drops. The bot was stuck even though the
-      // terrain was navigable with slightly larger drops.
-      // maxDropDown=4: Minecraft fall damage starts at >4 blocks (4-block drop = 0 damage).
-      // physicsTick threshold raised to >4 to match — planned 4-block drops complete safely.
-      // This allows pathfinder to descend mountain cliffs common in birch_forest/mountains
-      // spawn biomes without triggering false-positive fall aborts.
-      bot.pathfinder.movements.maxDropDown = 4;
+      // maxDropDown: Allow planned drops for natural terrain navigation.
+      // Base value=4: Minecraft fall damage starts at >4 blocks (4-block drop = 0 damage).
+      // High mountain exception (Y>90): mountain peaks have cliffs with 5-15 block drops.
+      // maxDropDown=4 causes pathfinder to find no path at all from mountain peaks because
+      // every adjacent cliff drop exceeds 4 blocks.
+      // Bot1 Session 81 [2026-03-26]: bot at Y=108, pathfinder returned no_path in all 4
+      // directions because surrounding cliff drops were 8-20 blocks (> maxDropDown=4).
+      // Fix: at Y>90, allow maxDropDown=12 so pathfinder can plan mountain cliff descents.
+      // The physicsTick fall detector threshold is raised to match, preventing false aborts
+      // on planned drops that stay within the new limit.
+      // The case1DescentLimit and absolute Y<62 floor check remain as cave routing protection.
+      const effectiveMaxDropDown = isHighMountainStart ? 12 : 4;
+      bot.pathfinder.movements.maxDropDown = effectiveMaxDropDown;
       bot.pathfinder.movements.allowFreeMotion = false; // Prevent cliff falls from skipped path nodes
       bot.pathfinder.movements.allow1by1towers = true; // Allow pillar up to reach higher terrain
       // Re-apply liquidCost every call — bot-core.ts sets it at init, but pathfinder
@@ -2406,6 +2419,15 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
       const savedBlockPos = preJumpBlock.position.clone();
 
       const jumpBaseY = bot.entity.position.y;
+      // Temporarily release sneak before jumping.
+      // In some server configurations and mineflayer physics, sneak suppresses jump velocity,
+      // causing jumpOk to never reach 0.5 blocks (especially on uneven mountain terrain at Y>90).
+      // Bot1 Session 82 [2026-03-26]: pillarUp failed with "No blocks placed" at Y=109 mountain
+      // peak despite cobblestone×138 — root cause was sneak preventing jump from reaching 0.5 block
+      // threshold (jumpOk=false every attempt → 3 consecutive failures → abort).
+      // Fix: release sneak for the jump window, then re-enable after placement to prevent drift.
+      bot.setControlState("sneak", false);
+      await new Promise(r => setTimeout(r, 50)); // Brief settle after sneak release
       bot.setControlState("jump", true);
 
       // Wait until we've risen enough (>= 0.5 blocks).
@@ -2427,6 +2449,8 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
       });
 
       bot.setControlState("jump", false);
+      // Re-enable sneak after jump to prevent edge drift during placement
+      bot.setControlState("sneak", true);
 
       if (jumpOk) {
         try {
@@ -4305,8 +4329,11 @@ export async function digTunnel(
     currentPos.z = nextZ;
 
     // Check HP periodically
-    if (bot.health < 8) {
-      console.error(`[Tunnel] HP low (${bot.health}), stopping`);
+    // Threshold is 4 (not 8): tunneling is a low-HP-consumption activity (digging, not combat).
+    // Session 83: tunnel("down") stopped at HP=7 with "HP too low" — too conservative.
+    // The agent decides when to eat/flee; the API should only abort at truly critical HP.
+    if (bot.health < 4) {
+      console.error(`[Tunnel] HP critical (${bot.health}), stopping`);
       break;
     }
   }
@@ -4323,7 +4350,7 @@ export async function digTunnel(
 
   // Report if stopped early
   if (blocksDug < length) {
-    const reason = bot.health < 8 ? "HP too low" : "Movement/digging failed";
+    const reason = bot.health < 4 ? "HP critical" : "Movement/digging failed";
     result += ` PARTIAL: Stopped at ${blocksDug}/${length} (${reason}).`;
   }
 

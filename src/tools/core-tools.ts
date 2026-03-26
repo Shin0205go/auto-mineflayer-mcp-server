@@ -9,7 +9,7 @@
  */
 
 import { botManager } from "../bot-manager/index.js";
-import { checkDangerNearby, isHostileMob, isNeutralMob, EDIBLE_FOOD_NAMES, isWaterBlock } from "../bot-manager/minecraft-utils.js";
+import { checkDangerNearby, isHostileMob, isNeutralMob, EDIBLE_FOOD_NAMES, isWaterBlock, isNearCliffEdge } from "../bot-manager/minecraft-utils.js";
 import { setAgentType } from "../agent-state.js";
 import { registry } from "../tool-handler-registry.js";
 import { lastSleepTick } from "../bot-manager/bot-survival.js";
@@ -745,6 +745,21 @@ export async function mc_farm(): Promise<string> {
   const logs: string[] = [];
   const FARM_TIMEOUT_MS = 120000; // 120s global timeout, same as mc_gather
   const farmStartTime = Date.now();
+
+  // Helper: moveTo with remaining farm timeout enforced.
+  // All plain `await botManager.moveTo(...)` calls inside mc_farm must use this wrapper.
+  // Without it, a stuck pathfinder can block moveTo indefinitely, causing mc_farm to
+  // exceed the MCP server's 180s hard timeout (Session 80 bug: "Execution timed out
+  // after 180000ms"). This wrapper returns "TIMEOUT" string if time runs out, matching
+  // the pattern used in the water-navigation blocks above.
+  const farmMoveTo = async (x: number, y: number, z: number): Promise<string> => {
+    const remaining = FARM_TIMEOUT_MS - (Date.now() - farmStartTime);
+    if (remaining <= 0) return "TIMEOUT";
+    return Promise.race([
+      botManager.moveTo(username, x, y, z),
+      new Promise<string>(resolve => setTimeout(() => resolve("TIMEOUT"), remaining)),
+    ]);
+  };
 
   // Check for required items
   const inv = botManager.getInventory(username);
@@ -1515,7 +1530,7 @@ export async function mc_farm(): Promise<string> {
             break;
           }
         }
-        await botManager.moveTo(username, safeApproach.x, safeApproach.y, safeApproach.z);
+        await farmMoveTo(safeApproach.x, safeApproach.y, safeApproach.z);
         logs.push(`Moved to (${safeApproach.x},${safeApproach.y},${safeApproach.z}) for tilling`);
         // Post-move in-water check: if the safe approach still ended up in water, skip this coord
         const pFeet = bot.blockAt(bot.entity.position.floor());
@@ -1561,7 +1576,7 @@ export async function mc_farm(): Promise<string> {
       // Move to this approach position
       if (tillAttempt > 0) {
         try {
-          await botManager.moveTo(username, tp.x, tp.y, tp.z);
+          await farmMoveTo(tp.x, tp.y, tp.z);
           logs.push(`Retry till from (${tp.x},${tp.y},${tp.z})`);
           // In-water check after retry moveTo
           const rtFeet = bot.blockAt(bot.entity.position.floor());
@@ -2331,12 +2346,32 @@ export async function mc_navigate(
       return `Found ${args.target_entity} in entity list but could not get position`;
     }
 
+    // Cliff-edge safety check: warn if target entity is near a cliff edge.
+    // Session 83: navigate("item") at Y=97 → fell from cliff edge. Drop items and other
+    // entities can exist at cliff edges; navigating there causes pathfinder to approach
+    // the edge, and the bot falls off. This is a WARNING (not REFUSED) — the agent may
+    // still proceed, but should be aware of the risk. moveTo() enforces the real safety.
+    {
+      const cliffCheckBot = botManager.getBot(username);
+      if (cliffCheckBot) {
+        // Use isNearCliffEdge centered on the target position to detect edge hazard.
+        // We pass a fake position object matching the entity position.
+        const { Vec3 } = await import("vec3");
+        const targetVec = new Vec3(closestPos.x, closestPos.y, closestPos.z);
+        const cliffInfo = isNearCliffEdge(cliffCheckBot, targetVec);
+        if (cliffInfo.nearEdge && cliffInfo.maxFallDistance > 3) {
+          console.error(`[Navigate] CLIFF WARNING: ${args.target_entity} at (${closestPos.x.toFixed(1)}, ${closestPos.y.toFixed(1)}, ${closestPos.z.toFixed(1)}) is near cliff edge (fall: ${cliffInfo.maxFallDistance} blocks, dirs: ${cliffInfo.edgeDirections.join(",")}). Proceeding with caution.`);
+          nightWarning += `\n[WARNING] Target ${args.target_entity} is near a cliff edge (max fall: ${cliffInfo.maxFallDistance} blocks). Approach carefully — do NOT run/sprint toward it. If it falls or you approach cliff, use bot.pillarUp() or bot.flee() to recover.`;
+        }
+      }
+    }
+
     // Delegate to coordinate-based navigation which has segmented HP checks,
     // auto-eating, and starvation detection for long distances (>50 blocks).
     // Bot1 Sessions 12,31-34,37: deaths during long-distance entity navigation
     // (e.g., navigating to pig at 64 blocks) that bypassed all segment safety checks.
     const entityNavResult = await mc_navigate({ x: closestPos.x, y: closestPos.y, z: closestPos.z });
-    return `Found ${args.target_entity} at (${closestPos.x.toFixed(1)}, ${closestPos.y.toFixed(1)}, ${closestPos.z.toFixed(1)}), ${closestDist.toFixed(1)} blocks away.\n${entityNavResult}`;
+    return `Found ${args.target_entity} at (${closestPos.x.toFixed(1)}, ${closestPos.y.toFixed(1)}, ${closestPos.z.toFixed(1)}), ${closestDist.toFixed(1)} blocks away.\n${entityNavResult}${nightWarning}`;
   }
 
   // Navigate to block type
