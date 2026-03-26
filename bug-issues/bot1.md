@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 91 - 動物狩猟でドロップアイテムが取得できない
+- **Cause**: bot.combat("cow"), bot.combat("sheep"), bot.combat("chicken")を実行すると"完了"と表示されるが、食料アイテム（beef/porkchop/chicken）がインベントリに入らない。
+- **Coordinates**: x=-23, y=60, z=5 付近 (old_growth_birch_forest)
+- **Last Actions**: bot.combat("cow") → 完了 → inventory確認 → 肉なし × 3種類
+- **Error Message**: なし（完了扱い）
+- **Status**: Reported. combatがドロップを拾えないバグ。食料確保が不可能になる重大なバグ。
+
+## [2026-03-27] Bug: Session 91 - HP3.5 空腹0で逃走不可能（敵に囲まれてスタック）
+- **Cause**: スケルトン3体、クリーパー2体に囲まれた状態でflee()を実行しても移動できず、食料もないためHP回復不可能な状態に陥った。
+- **Coordinates**: x=-3, y=61, z=10
+- **Last Actions**: flee(60)実行 → 位置変わらず → 周辺にskeleton×3, creeper×2
+- **Error Message**: なし
+- **Status**: Reported. flee()が敵に囲まれた状態で機能しない。
+
 ## [2026-03-27] Bug: Session 90 - pillarUp()が上方向でなく下方向に移動するバグ
 - **Cause**: pillarUp(20)を呼ぶとY=68→Y=61と下に移動している。本来は上に積み上げるべきだが、下方向に移動している。
 - **Coordinates**: (-5, 68, 3) → (-1, 61, 0) (Y方向が逆)
@@ -3997,3 +4011,29 @@ Bot needs to explore further (200+ blocks) to find animals.
   4. place()で南側に土ブロック足場作成を試みたが解決せず
 - **Fix Needed**: 崖端スタック時の脱出ルーティン。pillarUpが確実に動作するよう崖端判定を修正。
 - **Status**: Phase 1-3完了(stone_sword, stone_pickaxe所持)。Phase 4完全停止中。
+
+## [2026-03-27] Bug: Session 91 - 死亡 - 夜間HP枯渇+接続切断
+- **Cause**: 真夜中(ticks 22813)、食料ゼロ、HP=5.5で敵(creeper x3, skeleton x2)に囲まれた状態でpillarUp()を試みた際にMCP接続が切断。死亡の可能性高い。
+- **Coordinates**: x=-8, y=91, z=17 (birch_forest)
+- **Last Actions**: flee() → combat("cow")失敗→食料なし → build("shelter")完了→HP:20回復 → gather("birch_log")でHP=5.5に急落 → pillarUp()でMCP接続切断
+- **Error Message**: "MCP error -32000: Connection closed"
+- **Root Cause**: gather()中に敵に攻撃されHP低下。食料がなくHP回復できず。pillarUpタイムアウトで接続切断。
+- **Status**: Reported. 夜間の木材収集中にHP枯渇するパターン。gather()に夜間・低HP時の安全チェックが必要。
+
+## [2026-03-27] Bug: Session 91 - combat()が食料ドロップを収集できないバグ
+- **Cause**: combat("cow"), combat("sheep"), combat("chicken"), combat("zombie")を実行してもraw_beef/raw_chicken/rotten_flesh等の食料がインベントリに入らない。combatは「完了」と返すが食料アイテムがゼロのまま。
+- **Coordinates**: x=-18, y=60, z=6 (birch_forest)
+- **Last Actions**: combat("cow") → combat("chicken") → combat("zombie") → 全て「完了」だが食料0
+- **Error Message**: なし（正常終了扱い）
+- **Root Cause**: combat()がエンティティを撃破してもドロップアイテムを拾っていない可能性。または食料が地面に落ちたまま収集されていない。
+- **Impact**: 食料確保が完全に不可能になる致命的バグ。Hunger枯渇で必ず死亡する。
+- **Status**: Reported. combat()のドロップ収集機能を修正必要。
+
+## [2026-03-27] Bug: Session 91 - gather()/pillarUp()が連続タイムアウト（敵囲まれ状態）
+- **Cause**: skeleton x2, creeper x2が周囲にいる状態でgather("birch_log", 2)とpillarUp(15)が両方タイムアウト30-45秒。status()は正常動作。
+- **Coordinates**: x=-15, y=60, z=6 (birch_forest)
+- **Last Actions**: gather("birch_log", 2) × 3回タイムアウト → pillarUp(15)タイムアウト
+- **Error Message**: "Execution timed out after 30000ms/45000ms"
+- **Root Cause**: 敵に囲まれた状態でpathfinderが経路を見つけられない/敵回避で移動できない。
+- **Impact**: HP=3.5, Hunger=0で移動も食料確保もできない死亡確定状態。
+- **Status**: Reported. gather()/pillarUp()に敵検知時の中断・flee機能が必要。
