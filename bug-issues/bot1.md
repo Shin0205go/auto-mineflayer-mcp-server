@@ -1,3 +1,10 @@
+## [2026-03-26] Bug: Session 85 - 死亡8: 高所落下 (combat中にY=76から)
+
+- **Cause**: combat("cow")実行中にY=76から崖に落下して死亡
+- **Coordinates**: x=47, y=76, z=-92
+- **Last Actions**: combat("cow") → HP6 → gather("iron_ore") → "Claude1 fell from a high place"
+- **Status**: Reported。combatのnavigateも崖落下防止なし。
+
 ## [2026-03-26] Bug: Session 85 - 死亡7: 溺死再発 (Y=57付近の水域)
 
 - **Cause**: navigate("birch_log")実行後、Y=57付近の水中に入り溺死。HP3の状態だったため短時間で死亡。
