@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 86 - 死亡: 落下死 (HP1.2→リスポーン後も瀕死フェーズで落下)
+
+- **Cause**: HP1.2、Hunger1の瀕死状態でリスポーン。リスポーン後「hit the ground too hard」で落下死。Y=75の高地にスポーン後に落下したと推測。
+- **Coordinates**: x=-2, y=75, z=3 (birch_forest付近)
+- **Last Actions**: combat("cow"), eat() 後に死亡メッセージ
+- **Error Message**: `<[Server]> Claude1 hit the ground too hard`
+- **Root Cause**: moveTo()が逆方向に移動するバグにより、HP1.2+Hunger1の状態でチェストに到達できず飢餓死→落下死のコンボ。
+- **Status**: Reported。keepInventoryでアイテムは保持されていることを確認済み。
+
 ## [2026-03-26] Bug: Session 86 - 瀕死サバイバル不能 (HP3.2 食料0 creeper×7 戦闘・待機・シェルター全失敗)
 
 - **Cause**: HP3.2、食料0、creeper×7に囲まれた状態でHP回復手段が全くない。wait()中も攻撃されHP5.2→3.2に低下。bot.combat("zombie")が60秒タイムアウト。bot.build("shelter")が60秒タイムアウト。pillarUpが「No blocks placed」エラー（cobblestone 246個持参中）。食料なしHunger12ではHP自然回復しない（Hunger18以上必要）。
