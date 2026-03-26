@@ -15,6 +15,14 @@
 - **Root Cause**: birch_forestの複雑な地形でpathfinderが正常に動作しない。mc_reload後も改善なし。
 - **Status**: Reported。コードレビュー緊急対応要請。
 
+## [2026-03-26] Bug: Session 88 - 死亡: Zombie12回目（gather birch_log タイムアウト中）
+
+- **Cause**: HP=20/Hunger=20でgather("birch_log",8)が120秒タイムアウト中にZombieに殺された。gather()実行中の安全チェックが機能していない（繰り返しパターン）。
+- **Coordinates**: (-2.5, 104, 5.5)
+- **Last Actions**: gather(birch_log) → 120s timeout → Zombie
+- **Error Message**: `<[Server]> Claude1 was slain by Zombie`
+- **Status**: Reported。gather()タイムアウト中のHP監視が機能しない。
+
 ## [2026-03-26] Bug: Session 88 - 死亡: Drownedに殺された11回目
 
 - **Cause**: HP=7.5/Hunger=0でmoveTo(4,82,4)中にDrownedに殺された。低地(Y=58)→高台(Y=112)へ移動中に水域を通過してDrownedと遭遇。
