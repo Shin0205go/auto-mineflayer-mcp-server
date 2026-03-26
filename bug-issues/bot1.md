@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 90 - pillarUp()が上方向でなく下方向に移動するバグ
+- **Cause**: pillarUp(20)を呼ぶとY=68→Y=61と下に移動している。本来は上に積み上げるべきだが、下方向に移動している。
+- **Coordinates**: (-5, 68, 3) → (-1, 61, 0) (Y方向が逆)
+- **Last Actions**: flee() → Y=73地下 → pillarUp(20) → Y=61に下降
+- **Error Message**: なし（完了扱い）
+- **Status**: Reported. pillarUp()がY+方向でなくY-方向に動いている深刻なバグ。地下でpillarUpするとさらに深みにはまる。
+
 ## [2026-03-27] Bug: Session 90 - 死亡32回目 飢餓ダメージ+高所落下（地下でスタック）
 - **Cause**: moveTo()が目標と逆方向に動き地下(Y=77)へ潜ってしまい、飢餓Hunger:3でダメージを受け、flee()が高所落下を引き起こした。
 - **Coordinates**: (3, 78, -9) 地下洞窟内
