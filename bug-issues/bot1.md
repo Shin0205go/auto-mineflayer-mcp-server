@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 79 - Death: 溺死 (3回目)
+
+- **Cause**: Y=49の水中に閉じ込められた。moveTo(x,70,z)を試みていたがガザガザと動けない状態。gather("stone")後にmoveToが成功してY=95に移動したが、その前に溺死。
+- **Coordinates**: x=-3, y=49, z=-5 (溺死場所)
+- **Last Actions**: gather("stone",1) → moveTo(-3,70,-5) → "Claude1 drowned"
+- **Root Cause**: 地下の水中に誤って移動し、脱出できなかった
+- **Status**: Reported 2026-03-26 Session 79. 3回目の死亡。keepInventory ON。
+
 ## [2026-03-26] Bug: Session 79 - Death: スケルトンから逃げて落下死 (2回目)
 
 - **Cause**: HP:3.8、Hunger:0の飢餓状態でスケルトンと戦闘。逃走中に高所から落下死。"Claude1 hit the ground too hard while trying to escape Skeleton"
