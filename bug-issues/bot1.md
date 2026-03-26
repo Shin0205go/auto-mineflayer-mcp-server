@@ -1,3 +1,21 @@
+## [2026-03-26] Bug: Session 84 - bot.combat()でドロップが収集されないバグ
+
+- **Cause**: bot.combat("cow"), bot.combat("sheep"), bot.combat("pig"), bot.combat("chicken") を4回実行。全て「成功」と返るが、インベントリにraw_meatが一切入らない。
+- **Coordinates**: x=20, y=94, z=19付近（birch_forest）
+- **Last Actions**: combat("cow") → combat("sheep") → combat("pig") → combat("chicken") → 全て入手なし
+- **Error Message**: なし（エラーは出ないが結果が空）
+- **Root Cause**: combat()が動物を攻撃するが、ドロップアイテムを収集できていない可能性。または動物を実際には倒せていない可能性。
+- **Status**: Reported。ゲームプレイに戻る。farm()で食料確保に切り替え。
+
+## [2026-03-26] Bug: Session 84 - bot.smelt()後にiron_ingotがインベントリに入らないバグ
+
+- **Cause**: bot.smelt("raw_iron", 3)が成功メッセージを返したが、その後のinventory()でiron_ingotが0個だった。後でcobblestone整理後に1個だけ出現（精錬前からあった可能性）。
+- **Coordinates**: x=20, y=94, z=19付近
+- **Last Actions**: navigate("furnace") → smelt("raw_iron", 3) → inventory()でiron_ingot=0
+- **Error Message**: なし
+- **Root Cause**: smelt()がかまどからアイテムを取り出せていない可能性。furnaceのGUI操作の問題。
+- **Status**: Reported。
+
 ## [2026-03-26] Bug: Session 83 - シェルター内で落下死（4回目の死亡）
 
 - **Cause**: HP=7でシェルター内に待機中、HP=0になって死亡。「fell from a high place」のメッセージ。直前の行動はgather("short_grass")とgather("oak_leaves")でHP変化なしだった。理由不明。
