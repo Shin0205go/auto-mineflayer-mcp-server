@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 88 - craft()が全て30秒タイムアウト（石ツール含む）
+
+- **Cause**: craft("stone_hoe")、craft("bread")等が30秒でタイムアウト。mc_reload後も改善なし。crafting_tableをインベントリに持っているのに全てのcraftがハングアップする。
+- **Coordinates**: (-3.5, 45, -11.5)
+- **Last Actions**: mc_reload → craft("stone_hoe") → timeout × 3回
+- **Error Message**: `Execution timed out after 30000ms`
+- **Note**: Session開始時にcraft("bread")は成功したが、その後craft系が全て失敗するようになった。
+- **Status**: Reported。craft()の実装に問題あり。
+
 ## [2026-03-26] Bug: Session 88 - navigate(farmland)/farm()が連続タイムアウト（60秒）
 
 - **Cause**: navigate({target_block:"farmland", max_distance:50})が毎回60秒でタイムアウト。farm()も同様。ボットが農場エリアに到達できない。
