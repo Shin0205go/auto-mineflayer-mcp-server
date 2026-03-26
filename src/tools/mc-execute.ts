@@ -112,7 +112,11 @@ export async function mc_execute(
             if (moveDist > 30) {
               // Long-distance travel with starvation is lethal — HP drains and mobs finish the job.
               // Bot1 Session 70b: HP=5.5, Hunger=0, 200-block journey killed by zombies.
-              return `[WARNING] moveTo blocked: Hunger=${moveHunger}, HP=${moveHp.toFixed(1)}, no food, distance=${moveDist.toFixed(0)} blocks. Long travel while starving is lethal — HP cannot regenerate and mobs attack during the journey.\n[推奨アクション]\n1. bot.combat("cow") または bot.combat("pig") — 近くの動物を狩る（まず bot.status() で nearbyEntities を確認）\n2. bot.navigate("cow") — 64ブロック以内の動物を探す\n3. bot.craft("bread") — 小麦がインベントリにあればパンをクラフト\n4. bot.store("withdraw", "food") — 近くのチェスト（<30ブロック）から食料取得`;
+              // [WARNING] only — do not block (agent decides whether to proceed).
+              // Session 87: blocking here caused deadlock where bot could not move at all
+              // with Hunger=0, no food, hostile mobs nearby — agent was unable to flee or
+              // reach food sources despite moveTo returning instantly with no position change.
+              console.error(`[moveTo] WARNING: Hunger=${moveHunger}, HP=${moveHp.toFixed(1)}, no food, distance=${moveDist.toFixed(0)} blocks. Long travel while starving is dangerous — proceeding anyway per agent decision.`);
             }
           }
         }

@@ -1151,17 +1151,20 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
 
     // During daytime with no hostile mobs nearby, allow movement at HP≥2 (starvation deadlock prevention)
     // At night or with hostile mobs nearby, use strict HP check to prevent fall death
+    // [WARNING only — do not block]: Session 87: HP < 2 hard-blocks caused deadlock where bot
+    // at HP=1.7+Hunger=0+no-food could not move at all to flee hostiles or reach food.
+    // Agent decides whether to proceed; API warns and executes.
     if (isDaytime && !hasHostileNearby) {
-      // Daytime safe: only block if truly near-death (hp < 2, i.e. 1 heart)
+      // Daytime safe: warn if near-death but proceed — agent may be fleeing to safety
       if (hpNow < 2 && distance > 30) {
-        return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20). Risk of high-altitude pathfinding causing fall death. Eat food or heal first, then retry movement.`;
+        console.error(`[Move] WARNING: Moving ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20) in daytime. Proceeding — agent decision.`);
       }
     } else if (isStarvationDeadlock) {
       // Starvation deadlock: hunger=0, no food, no hostiles. Allow movement at HP≥2.
       // Moving to find food is the only survival option.
       console.error(`[Move] Starvation deadlock detected (hunger=0, no food, no hostiles). Allowing movement at HP=${hpNow.toFixed(1)}.`);
       if (hpNow < 2 && distance > 30) {
-        return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20). HP too low even for starvation escape. Use /give or seek shelter.`;
+        console.error(`[Move] WARNING: HP=${hpNow.toFixed(1)} extremely critical but proceeding — starvation deadlock, no other option.`);
       }
     } else if (!hasFoodInInventory) {
       // No food + nighttime/hostile: deadlock prevention.
@@ -1169,14 +1172,13 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
       // Allow movement at HP≥2 so bot can reach food sources.
       console.error(`[Move] No food + night/hostile. Allowing movement at HP=${hpNow.toFixed(1)} to prevent deadlock.`);
       if (hpNow < 2 && distance > 30) {
-        return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20). HP too low even for food search.`;
+        console.error(`[Move] WARNING: HP=${hpNow.toFixed(1)} extremely critical but proceeding — no food, movement is only escape option.`);
       }
     } else {
       // Nighttime or hostile nearby WITH food available: warn but allow movement to continue.
       // Blocking here causes deadlocks — bot has food and can eat mid-travel via auto-eat.
-      // Only hard-block at HP<2 (truly near-death) to prevent immediate fall death.
       if (hpNow < 2 && distance > 30) {
-        return `⚠️ SAFETY: Cannot move ${distance.toFixed(1)} blocks with critical HP(${hpNow.toFixed(1)}/20) at night/hostile nearby. Risk of immediate death. Eat food first, then retry movement.`;
+        console.error(`[Move] WARNING: HP=${hpNow.toFixed(1)} critical at night/hostile nearby. Proceeding — agent decision. Eat food immediately after moving.`);
       }
       if (hpNow < 8 && distance > 30) {
         console.error(`[Move] WARNING: HP=${hpNow.toFixed(1)} at night/hostile nearby with food. Proceeding with caution — auto-eat will trigger during travel.`);
