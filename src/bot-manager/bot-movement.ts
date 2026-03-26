@@ -946,7 +946,17 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
       // Session 90 [2026-03-27]: short-range (3-15 blocks) check was skipped (currentDist <= 15),
       // allowing 30s full timeout even when bot was stuck at same position due to nearby hostiles.
       // Fix: add short-range tier — check every 10s, require 1 block progress.
-      progressCheckTickCount++;
+      //
+      // BUG FIX (Session 90): When currentDist <= 3 (near goal), neither isShortRange nor
+      // isLongRange is true, so progressCheckTickCount keeps incrementing and lastProgressCheckDist
+      // is never updated. On the next invocation where currentDist enters 3-15 range, the stale
+      // lastProgressCheckDist causes a false stuck detection. Fix: reset both when near goal.
+      if (currentDist <= 3) {
+        progressCheckTickCount = 0;
+        lastProgressCheckDist = currentDist;
+      } else {
+        progressCheckTickCount++;
+      }
       const isShortRange = currentDist > 3 && currentDist <= 15;
       const isLongRange = currentDist > 15;
       const shortRangeInterval = 20; // 10 seconds
@@ -1618,20 +1628,19 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
     }
   }
 
-  // UNDERGROUND ESCAPE AUTO-TRIGGER: Session 72c [2026-03-26]
-  // Bot stuck at Y=59-73 in cave system. moveTo to surface (Y>62) fails because:
+  // UNDERGROUND ESCAPE AUTO-TRIGGER: Session 72c [2026-03-26], Session 90-91 [2026-03-27]
+  // Bot stuck at Y=59-73 in cave system. moveTo to surface (Y>70) fails because:
   //   1. Pathfinder cannot find horizontal route (cave walls block all paths)
   //   2. allowDig fallback is disabled at Y<=60 to prevent underground rerouting
   //   3. Manual forward+jump escape does nothing with a ceiling overhead
-  // When all pathfinder attempts failed AND bot is underground (Y<62) AND target is
+  // When all pathfinder attempts failed AND bot is underground (Y<70) AND target is
   // higher (surface direction), auto-trigger emergencyDigUp to dig straight up.
   // This is the only reliable escape from an enclosed cave: dig vertically to open air.
-  // Condition: bot currently underground (Y<62) AND target Y is higher than current Y by >5
-  // This ensures we only auto-escape when genuinely trying to go UP (surface-bound), not
-  // when trying to move horizontally at cave level.
+  // Raised threshold from Y<62 to Y<70: Session 90 showed bot trapped at Y=65-73 in caves
+  // above old Y<62 threshold. old_growth_birch_forest has caves up to Y=73.
   const currentBotY = bot.entity.position.y;
   const targetIsHigher = y - currentBotY > 5;
-  if (currentBotY < 62 && targetIsHigher) {
+  if (currentBotY < 70 && targetIsHigher) {
     console.error(`[Move] Underground escape: bot at Y=${currentBotY.toFixed(1)} (underground) with target Y=${y} (${(y - currentBotY).toFixed(0)} blocks up). Pathfinder failed — auto-triggering emergencyDigUp.`);
     try {
       const escapeResult = await emergencyDigUp(managed, 40);
@@ -2119,32 +2128,30 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     const botYForCheck = Math.floor(bot.entity.position.y);
     const botXForCheck = Math.floor(bot.entity.position.x);
     const botZForCheck = Math.floor(bot.entity.position.z);
-    if (botYForCheck < 70) {
-      const blockDirectlyAbove = bot.blockAt(new Vec3(botXForCheck, botYForCheck + 1, botZForCheck));
-      const blockAbove2 = bot.blockAt(new Vec3(botXForCheck, botYForCheck + 2, botZForCheck));
-      // Count consecutive solid blocks to distinguish open cave (0-1 solid) from enclosed (2+)
-      let consecutiveSolidAbove = 0;
-      for (let checkDy = 1; checkDy <= 6; checkDy++) {
-        const b = bot.blockAt(new Vec3(botXForCheck, botYForCheck + checkDy, botZForCheck));
-        if (b && b.name !== "air" && b.name !== "cave_air" && b.name !== "void_air" && !isWaterBlock(b.name)) {
-          consecutiveSolidAbove++;
-        } else {
-          break;
-        }
+    // Session 90 [2026-03-27]: Removed Y<70 restriction — caves exist above Y=70 too.
+    // (old_growth_birch_forest cave at Y=73 hit this bug.) Check for ceiling regardless of Y.
+    const blockDirectlyAbove = bot.blockAt(new Vec3(botXForCheck, botYForCheck + 1, botZForCheck));
+    const blockAbove2 = bot.blockAt(new Vec3(botXForCheck, botYForCheck + 2, botZForCheck));
+    // Count consecutive solid blocks to distinguish open cave (0-1 solid) from enclosed (2+)
+    let consecutiveSolidAbove = 0;
+    for (let checkDy = 1; checkDy <= 6; checkDy++) {
+      const b = bot.blockAt(new Vec3(botXForCheck, botYForCheck + checkDy, botZForCheck));
+      if (b && b.name !== "air" && b.name !== "cave_air" && b.name !== "void_air" && !isWaterBlock(b.name)) {
+        consecutiveSolidAbove++;
+      } else {
+        break;
       }
-      // Use emergencyDigUp if there's a solid ceiling (1+ consecutive solid blocks directly above)
-      // This covers all cave scenarios: low ceiling (1-2 blocks), medium ceiling (3 blocks),
-      // and thick ceiling (4+ blocks). The old threshold of 4 missed the most common cave shapes.
-      const hasSolidCeiling = consecutiveSolidAbove >= 1;
-      // Exception: if we're at the very surface (block above is sky/open air at most 2 blocks up),
-      // keep the jump-place approach which works well on open terrain.
-      const isOpenAbove = (!blockDirectlyAbove || blockDirectlyAbove.name === "air" || blockDirectlyAbove.name === "cave_air" || blockDirectlyAbove.name === "void_air") &&
-                          (!blockAbove2 || blockAbove2.name === "air" || blockAbove2.name === "cave_air" || blockAbove2.name === "void_air");
-      if (hasSolidCeiling && !isOpenAbove) {
-        console.error(`[Pillar] Underground (Y=${botYForCheck}) with ${consecutiveSolidAbove} solid block(s) above (ceiling at Y+1=${blockDirectlyAbove?.name ?? 'null'}). Using emergencyDigUp() to escape cave.`);
-        bot.setControlState("sneak", false);
-        return emergencyDigUp(managed, 30);
-      }
+    }
+    // Use emergencyDigUp if there's a solid ceiling (1+ consecutive solid blocks directly above)
+    const hasSolidCeiling = consecutiveSolidAbove >= 1;
+    // Exception: if we're at the very surface (block above is sky/open air at most 2 blocks up),
+    // keep the jump-place approach which works well on open terrain.
+    const isOpenAbove = (!blockDirectlyAbove || blockDirectlyAbove.name === "air" || blockDirectlyAbove.name === "cave_air" || blockDirectlyAbove.name === "void_air") &&
+                        (!blockAbove2 || blockAbove2.name === "air" || blockAbove2.name === "cave_air" || blockAbove2.name === "void_air");
+    if (hasSolidCeiling && !isOpenAbove) {
+      console.error(`[Pillar] Solid ceiling detected at Y=${botYForCheck}: ${consecutiveSolidAbove} block(s) above (ceiling=${blockDirectlyAbove?.name ?? 'null'}). Using emergencyDigUp().`);
+      bot.setControlState("sneak", false);
+      return emergencyDigUp(managed, 30);
     }
   }
 
