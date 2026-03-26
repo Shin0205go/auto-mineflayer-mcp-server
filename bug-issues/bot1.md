@@ -63,6 +63,13 @@
 - **Error Message**: "Bot Claude1 not found"
 - **Status**: 死亡の可能性あり（keepInventoryでアイテム保持）
 
+## [2026-03-27] Bug: Session 97 - 接続が約30秒で自動切断される
+- **Cause**: bot.wait(30000)または gather() 実行中に約20-30秒で接続が切れる。mc_connect直後のstatus()は動くが、gather/wait中に "Not connected" エラーになる。再接続後も同じパターンが繰り返す。
+- **Coordinates**: (43, 76, 0)
+- **Last Actions**: wait(30000)→30秒でdisconnect, gather("birch_log")→20秒でdisconnect
+- **Error Message**: "Not connected to any server. Use minecraft_connect..."
+- **Status**: CRITICAL - 長時間の処理が全て失敗する
+
 ## [2026-03-27] Bug: Session 97 SUMMARY - bot API 総合機能不全レポート（コードレビュー優先対応要）
 - **Cause**: Session 95-97で以下の全てのbotAPIが機能不全:
   1. bot.gather() → 全タイムアウト（20-30秒）
