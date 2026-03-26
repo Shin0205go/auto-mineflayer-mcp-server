@@ -173,9 +173,11 @@ export async function minecraft_gather_resources(
         const hpCheckBot = botManager.getBot(username);
         if (hpCheckBot) {
           const gatherHp = hpCheckBot.health ?? 20;
-          const gatherHunger = (hpCheckBot as any).food ?? 20;
           const gatherHasFood = hpCheckBot.inventory.items().some((fi: any) => EDIBLE_FOOD_NAMES.has(fi.name));
-          const isFoodDesperate = gatherHunger === 0 && !gatherHasFood;
+          // Food-desperate: no food in inventory. If the bot has no food, it CANNOT eat to
+          // recover HP — gathering is the only way to escape the starvation deadlock.
+          // Use relaxed threshold (2) when no food, strict threshold (6) when food is available.
+          const isFoodDesperate = !gatherHasFood;
           const hpAbortThreshold = isFoodDesperate ? 2 : 6;
           if (gatherHp < hpAbortThreshold) {
             console.error(`[GatherResources] HP ABORT: HP=${gatherHp.toFixed(1)} (threshold=${hpAbortThreshold}, foodDesperate=${isFoodDesperate}) — too low to continue.`);
