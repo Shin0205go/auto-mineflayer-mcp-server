@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 88 - 死亡: 溺死2回目（Y=50低地でflee→drowned）
+
+- **Cause**: Y=50の低地でbot.flee(50)を実行 → Y=108の高台に飛ばされた後に溺死したと思われる。または低地のY=50付近に水域があり、flee()が水中に誘導した。
+- **Coordinates**: Y=50付近（birch_forest低地）
+- **Last Actions**: flee(50) → HP:20 Pos:(10,108,7) 表示 → drowned
+- **Error Message**: `<[Server]> Claude1 drowned`
+- **Root Cause**: flee()が水場に誘導している。Session 86のdrowned bugと同じパターン。
+- **Status**: Reported。flee()の水場回避が修正されていない。
+
 ## [2026-03-26] Bug: Session 88 - pillarUp常時タイムアウト（60秒）
 
 - **Cause**: pillarUp(5), pillarUp(6)など小さな値でも常にタイムアウト（60秒）する。pillarUp後の位置確認では1-2ブロックしか上がっていない（-16→-16+1）。ブロックを置いてジャンプする処理が詰まっている模様。
