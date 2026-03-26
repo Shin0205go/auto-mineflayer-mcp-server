@@ -1,3 +1,16 @@
+## [2026-03-27] Bug: Session 65 NEW FINDING - Bot disconnects after exactly ~3 seconds (server keepAlive timeout)
+
+- **Root Cause**: Minecraft server kicks bot after ~3 seconds of no packet activity during long operations.
+- **Evidence (exact timings)**:
+  - bot.moveTo() → "Not connected" at exactly 3027ms
+  - bot.equipArmor() → "Not connected" at exactly 3030ms
+  - bot.status() (~200ms) = WORKS, bot.place() (~800ms) = WORKS
+- **Fix needed**: Long-running operations (moveTo, combat, navigate, gather) need to send keep-alive/ping packets every 1-2 seconds during execution. Alternatively, reduce pathfinding timeout to <3s.
+- **Session state**: HP=6.9 Hunger=0 Y=77 birch_forest, 3s disconnect blocks all food gathering.
+- **Status**: Reported. New finding for code reviewer.
+
+---
+
 ## [2026-03-27] Bug: Session 97 FINAL - 全APIバグによりゲームプレイ完全停止、2回の昼夜サイクル生存のみ
 
 - **Session Summary**: Session 97 で2回の昼夜サイクルを生存（HP:6.9維持）だが、食料確保ゼロ
