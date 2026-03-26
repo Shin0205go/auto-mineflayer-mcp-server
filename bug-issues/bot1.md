@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 79 - Death: スケルトンから逃げて落下死 (2回目)
+
+- **Cause**: HP:3.8、Hunger:0の飢餓状態でスケルトンと戦闘。逃走中に高所から落下死。"Claude1 hit the ground too hard while trying to escape Skeleton"
+- **Coordinates**: x=119, y=70, z=16 付近
+- **Last Actions**: navigate("skeleton") → combat("skeleton") → 落下死
+- **Root Cause**: 食料ゼロ(gather/farmバグ継続) → HP飢餓ダメージ → 夜間戦闘で落下死
+- **Status**: Reported 2026-03-26 Session 79. 2回目の死亡。keepInventory ON。
+
 ## [2026-03-26] Bug: Session 79 - Death: ゾンビに殺された (pillarUp後夜間)
 
 - **Cause**: Hunger:0でHP:0.2の瀕死状態。pillarUp(5)でY=111まで上がったが、そこでゾンビに倒された。pillarUpが高所で止まり、夜間にゾンビが追いかけてきた。
