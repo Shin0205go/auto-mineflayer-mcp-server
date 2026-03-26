@@ -1,3 +1,13 @@
+## [2026-03-26] Bug: Session 85 - 死亡6: 溺死 (水中でdrowned×2に攻撃されながら脱出不能)
+
+- **Cause**: Y=53付近の水中でdrowned×2に攻撃されながらmoveTo/pillarUpが全て失敗。水中から脱出できずHP2→0で溺死。
+- **Coordinates**: x=0, y=53, z=3
+- **Last Actions**: pillarUp(25)実行後なぜかY=56→53の水中に戻った → moveTo(y+10)失敗×4 → drownedに攻撃される → "Claude1 drowned"
+- **Error Message**: Server: Claude1 drowned
+- **Context**: リスポーン後Y=89の場所でpillarUpしたが、水中のY=53に移動してしまった。pillarUpが水中では機能しない。moveTo()も水中では動作しない。
+- **Root Cause**: pillarUp()が水中にいる場合の対処なし。水中検出・脱出ロジックが必要。
+- **Status**: Reported。水中脱出ロジックが必要。wait()のoxygen depleting検出はあるが脱出できていない。
+
 ## [2026-03-26] Bug: Session 85 - 死亡5: Skeleton射殺 (夜間pillarUp中)
 
 - **Cause**: 夜間にpillarUp中、skeleton×2に囲まれ矢で射殺。pillarUp後もY=66にとどまり敵射程内だった
