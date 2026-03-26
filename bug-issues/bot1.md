@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 96 - combat()のドロップアイテム回収不能
+- **Cause**: bot.combat()でchickenとcowを倒したが、インベントリに食料が追加されなかった。アイテムドロップが発生しているがbotが拾えていない模様。
+- **Coordinates**: x=47, y=82, z=-3 (birch_forest biome)
+- **Last Actions**: combat("chicken") → "完了" but no raw_chicken in inventory. combat("cow") → 同様に食料取得なし。
+- **Error Message**: None thrown, combat reports success
+- **Status**: Reported - keepInventoryはON、adminも確認済み
+
+## [2026-03-27] Bug: Session 96 - 夜が終わらない（time stuckの可能性）
+- **Cause**: 10分以上リアルタイムで夜が継続。hostile mobs (skeleton x4, creeper x3, zombie, drowned)が全時間存在し続けた。
+- **Coordinates**: x=26, y=77, z=-5
+- **Last Actions**: wait(30000)を複数回呼び出し、エンティティが昼間レベルに減少しなかった
+- **Error Message**: None
+- **Status**: Reported
+
 ## [2026-03-27] Bug: Session 94 SUMMARY - 全移動系API機能不全、place()のみ動作
 - **Cause**: bot.moveTo(), bot.navigate(), bot.pillarUp(), bot.gather(), bot.farm(), bot.combat() が全てタイムアウト。place()のみ動作。pathfinderが完全スタック状態。
 - **Pattern**: moveTo(x,y,z)が「成功」してもほぼ同じ座標のまま。昼間なのにskeleton/zombie多数→屋根付きエリアにスタックしている可能性。
