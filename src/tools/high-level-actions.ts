@@ -858,27 +858,6 @@ export async function minecraft_craft_chain(
       return;
     }
 
-    // HP/safety check between craft_chain steps.
-    // craft_chain is a 180s operation that calls multiple moveTo + craftItem operations
-    // in sequence (gather logs → craft planks → craft sticks → craft tool). Individual
-    // moveTo calls have HP monitoring, but the gap BETWEEN operations is unmonitored.
-    // Bot2 [2026-03-23]: drowned during autoGather craft — bot lost HP during gather,
-    // then craft_chain continued to the next step instead of aborting.
-    // Bot2 [2026-03-22]: skeleton shot bot from HP 20→1 across multiple gather+craft steps.
-    // Check HP and abort the entire chain if critically low.
-    {
-      const chainBot = botManager.getBot(username);
-      if (chainBot) {
-        const chainHp = chainBot.health ?? 20;
-        if (chainHp < 8) {
-          const abortMsg = `craft_chain ABORTED: HP critically low (${chainHp.toFixed(1)}/20) while crafting ${itemName}. Use mc_eat or mc_flee before retrying.`;
-          console.error(`[CraftChain] ${abortMsg}`);
-          results.push(abortMsg);
-          throw new Error(abortMsg);
-        }
-      }
-    }
-
     // Smelting shortcut: if item is obtained by smelting, use furnace directly
     if (SMELT_MAP[itemName]) {
       const rawItem = SMELT_MAP[itemName];
