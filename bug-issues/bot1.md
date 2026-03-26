@@ -34,6 +34,15 @@
 - **Root Cause**: place()で足場を作る際に水が存在する位置を経由している。地下の水域付近でplace()が安全でない
 - **Status**: Reported 2026-03-26 Session 80。4回目の死亡。
 
+## [2026-03-26] Bug: Session 80 - craft("furnace")がcrafting_tableの直前でも失敗
+
+- **Cause**: crafting_tableを設置しその直前(0ブロック距離)にいても、bot.craft("furnace")が失敗する。インベントリにcobblestone124個あり。autoGather=trueでも同様に失敗。
+- **Coordinates**: x=-8, y=46, z=4
+- **Last Actions**: navigate("crafting_table") → (到着) → craft("furnace") → "失敗"
+- **Error Message**: なし（エラーなしで失敗）
+- **Root Cause**: craft()がcrafting_tableの検知に失敗しているか、furnaceのレシピ解決に問題がある可能性
+- **Status**: Reported 2026-03-26 Session 80。furnace作成不可で鉄精錬できない。
+
 ## [2026-03-26] Bug: Session 80 - gather("iron_ore")が複数回タイムアウト
 
 - **Cause**: bot.gather("iron_ore", 8-16)を実行すると120秒タイムアウトする。iron_oreの位置(x=27,y=75,z=5)は発見済みで、navigate()で到達もできているが、gather()がタイムアウトする。周囲に敵(enderman,skeleton,creeper)がいる。
