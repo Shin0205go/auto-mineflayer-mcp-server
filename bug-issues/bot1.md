@@ -7,6 +7,15 @@
 - **Root Cause**: flee()が水場に誘導している。Session 86のdrowned bugと同じパターン。
 - **Status**: Reported。flee()の水場回避が修正されていない。
 
+## [2026-03-26] Bug: Session 88 - 落下死 (navigate移動中に何度も繰り返す)
+
+- **Cause**: navigate(wheat, 200)実行中にY=107から遠くへ飛ばされた(-38,90,-55)状態でHP=2になった後、wait()のauto-flee中に落下死。navigation中の落下保護が機能していない。
+- **Coordinates**: Pos:(-38,90,-55) → 落下死
+- **Last Actions**: navigate(wheat,200)タイムアウト → HP=2 → wait()auto-flee → 落下
+- **Error Message**: `<[Server]> Claude1 hit the ground too hard`
+- **Pattern**: 同セッション内でzombie死亡(x1)、drowned(x2)、落下(x2)と合計5回の死亡。keepInventoryで継続。
+- **Status**: Reported。navigate移動中の安全チェックが不十分。flee()が水や崖に誘導するバグ。
+
 ## [2026-03-26] Bug: Session 88 - pillarUp常時タイムアウト（60秒）
 
 - **Cause**: pillarUp(5), pillarUp(6)など小さな値でも常にタイムアウト（60秒）する。pillarUp後の位置確認では1-2ブロックしか上がっていない（-16→-16+1）。ブロックを置いてジャンプする処理が詰まっている模様。
