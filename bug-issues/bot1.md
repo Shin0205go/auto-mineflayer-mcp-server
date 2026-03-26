@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 93 - 死亡 starvation+mob (Hunger 0 + HP 3.5 + 敵多数)
+- **Cause**: Hunger 0 + HP 3.5で食料なし。スケルトン×3、クリーパー×2に囲まれ、pillarUp中に接続切断。リスポーン後HP=9.3に回復。
+- **Coordinates**: (-14, 58, 5) 付近
+- **Last Actions**: flee → pillarUp → moveTo chest(失敗) → pillarUp中に接続切断(MCP error -32000)
+- **Error Message**: "MCP error -32000: Connection closed"
+- **Status**: Reported. 食料0状態での生存が不可能。combat/farmの食料取得バグが根本原因。
+
 ## [2026-03-27] Bug: Session 92 - 死亡38回目 drowning (moveTo が水中に誘導)
 - **Cause**: moveTo(-6, 61, 2)を呼び出したがbot実際にY=106の地上に移動し、水に落ちてdrownした。HP=9.2 + starvation状態で死亡。
 - **Coordinates**: Y=106付近 (溺死)
