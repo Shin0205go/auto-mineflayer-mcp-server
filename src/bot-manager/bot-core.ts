@@ -624,12 +624,39 @@ export class BotCore extends EventEmitter {
             }, 1000);
             this.reconnectTimeouts.set(config.username, timer);
           } else {
-            // Real disconnect (not death-triggered) — do not auto-reconnect.
-            // Let the caller (Claude Code loop / mc_connect) handle reconnection.
-            // This prevents zombie connections when MCP processes are replaced.
-            this.connectionConfigs.delete(config.username);
-            this.deathTimestamps.delete(config.username);
-            console.error(`[BotManager] ${config.username} will not auto-reconnect (real disconnect, managed by caller)`);
+            // Non-death disconnect: auto-reconnect after 2s delay.
+            // Previously "do not auto-reconnect" — but this caused the bot to be permanently
+            // disconnected between mc_execute calls. The Minecraft server kicks the bot when
+            // it sends no movement packets for ~3s between calls. Auto-reconnect ensures the
+            // bot is available for the next mc_execute without requiring manual mc_connect.
+            // Bug [Sessions 65-100]: all long-running operations failed because the bot
+            // disconnected after one call and wasn't reconnected until mc_connect was called again.
+            console.error(`[BotManager] ${config.username} disconnected (non-death). Auto-reconnecting in 2s...`);
+            const existingTimer = this.reconnectTimeouts.get(config.username);
+            if (existingTimer) {
+              clearTimeout(existingTimer);
+            }
+            const timer = setTimeout(async () => {
+              this.reconnectTimeouts.delete(config.username);
+              if (this.bots.has(config.username) || this.connectingPromises.has(config.username)) {
+                console.error(`[BotManager] ${config.username} already connected/connecting, skipping auto-reconnect`);
+                return;
+              }
+              // Only reconnect if config still exists (not explicitly disconnected via mc_disconnect)
+              const reconnectConfig = this.connectionConfigs.get(config.username);
+              if (!reconnectConfig) {
+                console.error(`[BotManager] ${config.username} config removed, skipping auto-reconnect`);
+                return;
+              }
+              try {
+                console.error(`[BotManager] Auto-reconnecting ${config.username} after non-death disconnect...`);
+                await this.connect(reconnectConfig);
+                console.error(`[BotManager] ${config.username} auto-reconnected successfully`);
+              } catch (err) {
+                console.error(`[BotManager] ${config.username} auto-reconnect failed:`, err);
+              }
+            }, 2000);
+            this.reconnectTimeouts.set(config.username, timer);
           }
         });
 
@@ -889,25 +916,26 @@ export class BotCore extends EventEmitter {
   }
 
   async disconnect(username: string): Promise<void> {
-    const managed = this.bots.get(username);
-    if (!managed) {
-      throw new Error(`Bot '${username}' not found`);
-    }
-
-    // Cancel any pending death-triggered reconnect so explicit disconnect is final
+    // Cancel any pending reconnect so explicit disconnect is final
     const existingTimer = this.reconnectTimeouts.get(username);
     if (existingTimer) {
       clearTimeout(existingTimer);
       this.reconnectTimeouts.delete(username);
     }
     this.deathTimestamps.delete(username);
+    this.connectionConfigs.delete(username); // Remove config to prevent auto-reconnect
+
+    const managed = this.bots.get(username);
+    if (!managed) {
+      // Bot not currently connected (may be between auto-reconnects) — config already cleared above
+      return;
+    }
 
     if (managed.particleInterval) {
       clearInterval(managed.particleInterval);
     }
     managed.bot.quit();
     this.bots.delete(username);
-    this.connectionConfigs.delete(username); // Remove config to prevent auto-reconnect
   }
 
   disconnectAll(): void {
