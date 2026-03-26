@@ -373,13 +373,14 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
   const isSimpleRecipe = simpleRecipes.includes(itemName) || itemName.endsWith("_planks");
 
-  // First check nearby (5 blocks) - but skip for simple recipes
-  // Using 5 blocks to be more forgiving of bot positioning
+  // First check nearby (6 blocks) - but skip for simple recipes
+  // Using 6 blocks (was 5) to be more forgiving of pathfinder settling at GoalNear range=3
+  // where the bot can stop up to ~4-5 blocks from the block center depending on geometry.
   let craftingTable: ReturnType<typeof bot.findBlock> = null;
   if (!isSimpleRecipe) {
     craftingTable = bot.findBlock({
       matching: craftingTableId,
-      maxDistance: 5,
+      maxDistance: 6,
     });
   }
 
@@ -392,13 +393,13 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
     if (farTable) {
       console.error(`[Craft] Found crafting table at ${farTable.position}, moving...`);
-      await safeNavigateToBlock(bot, farTable.position, 3, 10000);
+      await safeNavigateToBlock(bot, farTable.position, 2, 10000);
 
-      // Re-check nearby - use maxDistance 5 to account for pathfinding settling at goal distance 3
-      // This prevents false negatives when bot stops at ~3.5 blocks from table
+      // Re-check nearby - use maxDistance 6 to account for pathfinding settling at goal distance 2-3
+      // Bot can stop up to ~4-5 blocks from block center depending on geometry.
       craftingTable = bot.findBlock({
         matching: craftingTableId,
-        maxDistance: 5,
+        maxDistance: 6,
       });
     }
   }
@@ -1228,6 +1229,82 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
 
           console.error(`[Craft] Manual armor recipe created for ${itemName} using ${armorRecipe.material}`);
           recipes = [manualRecipe as any];
+        }
+      }
+    }
+
+    // Manual recipe fallback for tools and furnace when recipesAll returns 0 even with crafting table.
+    // Session 80 [2026-03-26]: iron_pickaxe, iron_sword, furnace all failed with no error message
+    // because this fallback only existed inside the simpleWoodenRecipes branch (line ~814).
+    // For the general path, recipes.length===0 meant craftableRecipes was empty → silent failure.
+    if (recipes.length === 0) {
+      const generalToolRecipes: Record<string, { material: string; shape: number[][]; sticks: number; materialCount: number }> = {
+        "stone_pickaxe":  { material: "cobblestone", shape: [[1,1,1],[0,2,0],[0,2,0]], sticks: 2, materialCount: 3 },
+        "iron_pickaxe":   { material: "iron_ingot",  shape: [[1,1,1],[0,2,0],[0,2,0]], sticks: 2, materialCount: 3 },
+        "golden_pickaxe": { material: "gold_ingot",  shape: [[1,1,1],[0,2,0],[0,2,0]], sticks: 2, materialCount: 3 },
+        "diamond_pickaxe":{ material: "diamond",     shape: [[1,1,1],[0,2,0],[0,2,0]], sticks: 2, materialCount: 3 },
+        "stone_axe":      { material: "cobblestone", shape: [[1,1],[1,2],[0,2]], sticks: 2, materialCount: 3 },
+        "iron_axe":       { material: "iron_ingot",  shape: [[1,1],[1,2],[0,2]], sticks: 2, materialCount: 3 },
+        "diamond_axe":    { material: "diamond",     shape: [[1,1],[1,2],[0,2]], sticks: 2, materialCount: 3 },
+        "stone_sword":    { material: "cobblestone", shape: [[1],[1],[2]], sticks: 1, materialCount: 2 },
+        "iron_sword":     { material: "iron_ingot",  shape: [[1],[1],[2]], sticks: 1, materialCount: 2 },
+        "diamond_sword":  { material: "diamond",     shape: [[1],[1],[2]], sticks: 1, materialCount: 2 },
+        "stone_shovel":   { material: "cobblestone", shape: [[1],[2],[2]], sticks: 2, materialCount: 1 },
+        "iron_shovel":    { material: "iron_ingot",  shape: [[1],[2],[2]], sticks: 2, materialCount: 1 },
+        "stone_hoe":      { material: "cobblestone", shape: [[1,1],[0,2],[0,2]], sticks: 2, materialCount: 2 },
+        "iron_hoe":       { material: "iron_ingot",  shape: [[1,1],[0,2],[0,2]], sticks: 2, materialCount: 2 },
+        "furnace":        { material: "cobblestone", shape: [[1,1,1],[1,0,1],[1,1,1]], sticks: 0, materialCount: 8 },
+      };
+
+      const generalToolRecipe = generalToolRecipes[itemName];
+      if (generalToolRecipe) {
+        let materialName = generalToolRecipe.material;
+        let materialItem = mcData.itemsByName[materialName];
+
+        // cobbled_deepslate substitutes for cobblestone
+        const materialInvCount = inventoryItems.filter(i => i.name === materialName).reduce((s, i) => s + i.count, 0);
+        if (materialInvCount < generalToolRecipe.materialCount && materialName === "cobblestone") {
+          const deepslateCount = inventoryItems.filter(i => i.name === "cobbled_deepslate").reduce((s, i) => s + i.count, 0);
+          if (deepslateCount >= generalToolRecipe.materialCount) {
+            materialName = "cobbled_deepslate";
+            materialItem = mcData.itemsByName[materialName];
+          }
+        }
+
+        const finalMaterialCount = inventoryItems.filter(i => i.name === materialName).reduce((s, i) => s + i.count, 0);
+        if (materialItem && finalMaterialCount >= generalToolRecipe.materialCount) {
+          const stickItem = mcData.itemsByName["stick"];
+          const stickCount = inventoryItems.filter(i => i.name === "stick").reduce((s, i) => s + i.count, 0);
+
+          if (generalToolRecipe.sticks === 0 || (stickItem && stickCount >= generalToolRecipe.sticks)) {
+            // Ensure crafting table is available for these 3x3 recipes
+            if (!craftingTable) {
+              const ctId = mcData.blocksByName.crafting_table?.id;
+              craftingTable = bot.findBlock({ matching: ctId, maxDistance: 32 });
+              if (craftingTable) {
+                await safeNavigateToBlock(bot, craftingTable.position, 2, 10000);
+                craftingTable = bot.findBlock({ matching: ctId, maxDistance: 6 });
+              }
+            }
+
+            if (craftingTable && materialItem) {
+              const inShape = generalToolRecipe.shape.map(row =>
+                row.map(cell => cell === 1 ? materialItem!.id : cell === 2 ? stickItem!.id : 0)
+              );
+              const ingredients = inShape.flat().filter(id => id !== 0);
+              const delta: Array<{ id: number; count: number }> = [
+                { id: item.id, count: 1 },
+                { id: materialItem.id, count: -generalToolRecipe.materialCount },
+              ];
+              if (generalToolRecipe.sticks > 0 && stickItem) {
+                delta.push({ id: stickItem.id, count: -generalToolRecipe.sticks });
+              }
+
+              const manualRecipe = { result: { id: item.id, count: 1 }, inShape, ingredients, delta, requiresTable: true };
+              console.error(`[Craft] Manual tool/furnace recipe created for ${itemName} using ${materialName}`);
+              recipes = [manualRecipe as any];
+            }
+          }
         }
       }
     }
