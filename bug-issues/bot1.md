@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 93-94総括 - CRITICAL: 食料・資源取得が完全機能不全
+- **Cause**: 以下の全ての食料/資源取得経路が機能していない:
+  1. bot.combat("cow"/"sheep"/"chicken"/"pig") → 全てsilent完了 → 食料ドロップ0
+  2. bot.gather("wheat") → silent完了 → 小麦0
+  3. bot.gather("iron_ore") → silent完了 → raw_iron0
+  4. bot.gather("hay_block") → silent完了 → hay_block0
+  5. bot.farm() → 多くの場合タイムアウト or 小麦0で完了
+  6. navigate("hay_block")で"発見"→gather("hay_block")→0
+  7. moveTo(x,y,z) → 目標外の座標に移動（Y方向特に不正確）
+- **Coordinates**: x=45, y=68, z=-7（朝時点）
+- **Last Actions**: 上記全て試行済み
+- **Error Message**: gather/combat はエラーなし。farm()はタイムアウト。
+- **Status**: CRITICAL. 全てのリソース取得が失敗。HP9.3 Hunger0で飢餓死亡ループが継続中。緊急コードレビュー必要。
+
 ## [2026-03-27] Bug: Session 93 - 死亡40-41回目 飢餓ダメージ（gather/combat全dropバグ継続）
 - **Cause**: gather("iron_ore")がraw_ironを0ドロップ。combat("cow"/"chicken"/"sheep")が肉を0ドロップ。空腹0継続→飢餓→死亡×2回
 - **Coordinates**: 死亡1: x=51 y=58 z=25付近、死亡2: y=104付近
