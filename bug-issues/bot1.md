@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 97 - gather()全タイムアウト、item entity 5個近くにあるが拾えない
+- **Cause**: nearbyEntities.item=5個あるが、moveTo短距離移動で近づいてもアイテムが自動回収されない。gather("feather")もタイムアウト。アイテム回収系が完全に機能不全。
+- **Coordinates**: x=27, y=75, z=-6
+- **Last Actions**: moveTo短距離×5回でitem entity付近を移動 → item数変わらず。gather("feather")→タイムアウト。
+- **Error Message**: "Execution timed out after 20000ms"
+- **Status**: CRITICAL - 食料/資源の回収が不可能
+
 ## [2026-03-27] Bug: Session 96 - combat()のドロップアイテム回収不能
 - **Cause**: bot.combat()でchickenとcowを倒したが、インベントリに食料が追加されなかった。アイテムドロップが発生しているがbotが拾えていない模様。
 - **Coordinates**: x=47, y=82, z=-3 (birch_forest biome)
