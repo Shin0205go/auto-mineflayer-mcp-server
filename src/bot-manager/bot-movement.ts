@@ -2130,26 +2130,29 @@ export async function pillarUp(managed: ManagedBot, height: number = 1, untilSky
     const botZForCheck = Math.floor(bot.entity.position.z);
     // Session 90 [2026-03-27]: Removed Y<70 restriction — caves exist above Y=70 too.
     // (old_growth_birch_forest cave at Y=73 hit this bug.) Check for ceiling regardless of Y.
+    // Session 91 [2026-03-27]: Also handle caves where Y+1 is cave_air but Y+2/+3 is solid.
+    // The consecutive-block check broke at cave_air gaps, missing "ceiling 2 blocks above."
+    // New approach: if any solid block exists within 4 blocks above AND bot is not at open surface,
+    // use emergencyDigUp.
     const blockDirectlyAbove = bot.blockAt(new Vec3(botXForCheck, botYForCheck + 1, botZForCheck));
     const blockAbove2 = bot.blockAt(new Vec3(botXForCheck, botYForCheck + 2, botZForCheck));
-    // Count consecutive solid blocks to distinguish open cave (0-1 solid) from enclosed (2+)
-    let consecutiveSolidAbove = 0;
-    for (let checkDy = 1; checkDy <= 6; checkDy++) {
+    // Check for ANY solid block within 4 blocks above (not just consecutive)
+    let solidBlockNearAbove = false;
+    let solidAtDy = -1;
+    for (let checkDy = 1; checkDy <= 4; checkDy++) {
       const b = bot.blockAt(new Vec3(botXForCheck, botYForCheck + checkDy, botZForCheck));
       if (b && b.name !== "air" && b.name !== "cave_air" && b.name !== "void_air" && !isWaterBlock(b.name)) {
-        consecutiveSolidAbove++;
-      } else {
+        solidBlockNearAbove = true;
+        solidAtDy = checkDy;
         break;
       }
     }
-    // Use emergencyDigUp if there's a solid ceiling (1+ consecutive solid blocks directly above)
-    const hasSolidCeiling = consecutiveSolidAbove >= 1;
-    // Exception: if we're at the very surface (block above is sky/open air at most 2 blocks up),
+    // Exception: if we're at the very surface (blocks above are sky/open air for ≥4 blocks),
     // keep the jump-place approach which works well on open terrain.
     const isOpenAbove = (!blockDirectlyAbove || blockDirectlyAbove.name === "air" || blockDirectlyAbove.name === "cave_air" || blockDirectlyAbove.name === "void_air") &&
                         (!blockAbove2 || blockAbove2.name === "air" || blockAbove2.name === "cave_air" || blockAbove2.name === "void_air");
-    if (hasSolidCeiling && !isOpenAbove) {
-      console.error(`[Pillar] Solid ceiling detected at Y=${botYForCheck}: ${consecutiveSolidAbove} block(s) above (ceiling=${blockDirectlyAbove?.name ?? 'null'}). Using emergencyDigUp().`);
+    if (solidBlockNearAbove && !isOpenAbove) {
+      console.error(`[Pillar] Solid block ${solidAtDy} above at Y=${botYForCheck}: ceiling=${bot.blockAt(new Vec3(botXForCheck, botYForCheck + solidAtDy, botZForCheck))?.name ?? 'null'}. Using emergencyDigUp().`);
       bot.setControlState("sneak", false);
       return emergencyDigUp(managed, 30);
     }
