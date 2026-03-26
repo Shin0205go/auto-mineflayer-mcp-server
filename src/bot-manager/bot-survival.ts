@@ -1310,10 +1310,19 @@ export async function fight(
   // push bot off cliff edges, causing fatal fall damage regardless of HP.
   // Bot1 Session 21b: "doomed to fall by Skeleton" during combat on elevated terrain.
   // Bot2 [2026-03-22]: "doomed to fall by Pillager/Skeleton" — knockback fall deaths.
-  const cliffCheck = isNearCliffEdge(bot);
-  if (cliffCheck.nearEdge && cliffCheck.maxFallDistance > 4) {
-    console.error(`[Fight] CLIFF EDGE DETECTED: ${cliffCheck.maxFallDistance}-block drop (${cliffCheck.edgeDirections.join(",")}). Combat knockback is lethal. Refusing to fight.`);
-    return `[REFUSED] Too dangerous to fight ${targetName} — you are near a cliff edge with a ${cliffCheck.maxFallDistance}-block drop (directions: ${cliffCheck.edgeDirections.join(", ")}). Combat knockback can push you off the edge, causing fatal fall damage. Move away from the cliff first (mc_navigate to safer terrain), then engage.`;
+  //
+  // EXCEPTION: passive mobs (cow, pig, sheep, chicken, etc.) do NOT knock back the bot,
+  // so cliff-edge REFUSED is irrelevant and only blocks legitimate food-animal hunts on
+  // elevated terrain (e.g. Y=108 mountain top). Skip cliff check for passive targets.
+  // For hostile mobs: raise threshold from >4 to >15 — a 5-15 block drop on a mountain
+  // is unlikely to be lethal (e.g. Y=108 plateau with nearby ledge at Y=104 triggers at 4
+  // blocks even though the actual terrain is safe). Only refuse at truly lethal heights.
+  if (!isFoodAnimalTarget) {
+    const cliffCheck = isNearCliffEdge(bot);
+    if (cliffCheck.nearEdge && cliffCheck.maxFallDistance > 15) {
+      console.error(`[Fight] CLIFF EDGE DETECTED: ${cliffCheck.maxFallDistance}-block drop (${cliffCheck.edgeDirections.join(",")}). Combat knockback is lethal. Refusing to fight.`);
+      return `[REFUSED] Too dangerous to fight ${targetName} — you are near a cliff edge with a ${cliffCheck.maxFallDistance}-block drop (directions: ${cliffCheck.edgeDirections.join(", ")}). Combat knockback can push you off the edge, causing fatal fall damage. Move away from the cliff first (mc_navigate to safer terrain), then engage.`;
+    }
   }
 
   // Enderman strategy: approach to ~12 blocks if far, then stare to provoke
