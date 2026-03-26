@@ -1,3 +1,13 @@
+## [2026-03-26] Bug: Session 84 - Y=52の洞窟内で溺死（5回目の死亡）
+
+- **Cause**: Y=40の洞窟から地上脱出のためにcobblestone pillarを試みていたところ、Y=52付近で溺死。洞窟内の水域に入った可能性。
+- **Coordinates**: Y=52付近（x=27, z=21付近）
+- **Last Actions**: bot.place("cobblestone") × 50回ループ（地上脱出試み） → drowned
+- **Error Message**: "Claude1 drowned"
+- **Root Cause**: 洞窟内でpillarUpしていた際に水中に移動してしまった。place()が水中ブロックを探して移動させた可能性。また、wait()のたびにエンダーマン自動fleeが発動して上昇を妨害されていた。
+- **Contributing bugs**: (1) gather("stone")がタイムアウト、(2) pillarUp()が足場なしで失敗、(3) wait()のfleeがpillarを妨害、(4) place()のループが水中に誘導
+- **Status**: Reported。リスポーン後にゲームプレイ再開。
+
 ## [2026-03-26] Bug: Session 84 - bot.combat()でドロップが収集されないバグ
 
 - **Cause**: bot.combat("cow"), bot.combat("sheep"), bot.combat("pig"), bot.combat("chicken") を4回実行。全て「成功」と返るが、インベントリにraw_meatが一切入らない。
