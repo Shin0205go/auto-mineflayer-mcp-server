@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 88 - navigate/gatherが全タイムアウト（pathfinder完全機能不全）
+
+- **Cause**: HP=20/Hunger=20でもnavigate("birch_log")が120秒タイムアウト、gather("birch_log")が60秒タイムアウト。Y=81の高台から木ブロックまでのパス探索が失敗し続ける。
+- **Coordinates**: (2.3, 81, -9.4)
+- **Last Actions**: gather(birch_log) → 60s timeout, navigate(birch_log) → 120s timeout
+- **Error Message**: `Execution timed out after 120000ms`
+- **Root Cause**: birch_forestの複雑な地形でpathfinderが正常に動作しない。mc_reload後も改善なし。
+- **Status**: Reported。コードレビュー緊急対応要請。
+
 ## [2026-03-26] Bug: Session 88 - 死亡: moveTo中に溺死9回目
 
 - **Cause**: birch_log(102,62,-4)へmoveTo中に溺死。moveTo()が水中経路を選択してドラウンド。
