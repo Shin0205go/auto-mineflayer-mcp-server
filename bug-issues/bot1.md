@@ -1,3 +1,11 @@
+## [2026-03-27] Bug: Session 88 - 完全pathfinderデッドロック（shelter建設後・Y=63洞窟内）
+- **Cause**: bot.build("shelter")が洞窟内(Y=63)でcobblestoneシェルターを建設した後、pathfinderが完全に詰まって一切移動不能になった
+- **Coordinates**: (-2.7, 63, -1.3) - 30分以上この場所から動けない
+- **Symptoms**: moveTo/navigate/gather全てが実行されるが位置が変わらない。timeout or 即座にreturn
+- **Duration**: ~30分以上デッドロック継続
+- **HP Status**: HP=0.3（starvation floor）、shelter壁がskeletonを防いで安定
+- **Status**: Reported. 緊急: bot.build()が狭い空間でpathfinder破壊するバグ
+
 ## [2026-03-27] Bug: Session 88 - 致命的ループ（根本原因・緊急）
 - **Cause**: 食料ゼロ + HP=0.3 + 地下Y=60 + 複数hostile + pillarUp=0効果 の組み合わせで脱出不可能ループ
 - **Pattern**:
