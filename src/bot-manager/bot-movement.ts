@@ -4210,6 +4210,32 @@ export async function digTunnel(
     throw new Error(`Cannot dig tunnel - no pickaxe! Need: wooden/stone/iron pickaxe. Have: ${inv}. Craft a pickaxe first.`);
   }
 
+  // Pre-flight hostile entity check: inform the agent if dangerous mobs are nearby.
+  // Does NOT refuse or abort — the agent decides whether to proceed.
+  // Session 83: skeleton arrows hit bot during tunnel("down"), causing HP drop → fall death.
+  // Surface this information so the agent can choose to flee/fight first.
+  let hostileWarning = "";
+  {
+    const HOSTILE_SCAN_RADIUS = 16;
+    const nearbyHostiles = Object.values(bot.entities)
+      .filter(e => e && e.name && isHostileMob(bot, e.name.toLowerCase()))
+      .map(e => {
+        const dist = bot.entity.position.distanceTo(e.position);
+        return { name: e.name as string, dist };
+      })
+      .filter(h => h.dist <= HOSTILE_SCAN_RADIUS)
+      .sort((a, b) => a.dist - b.dist);
+
+    if (nearbyHostiles.length > 0) {
+      const mobList = nearbyHostiles
+        .slice(0, 5)
+        .map(h => `${h.name}(${h.dist.toFixed(1)}m)`)
+        .join(", ");
+      hostileWarning = `[WARNING] Hostile mobs nearby: ${mobList}. Proceed with caution or flee first.`;
+      console.error(`[Tunnel] ⚠️ Hostile mobs detected before tunneling: ${mobList}`);
+    }
+  }
+
   let blocksDug = 0;
   const oresFound: Record<string, number> = {};
   const currentPos = {
@@ -4363,6 +4389,11 @@ export async function digTunnel(
 
   const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
   result += ` Inventory: ${newInventory || "empty"}`;
+
+  // Prepend hostile warning if present so the agent sees it immediately
+  if (hostileWarning) {
+    result = `${hostileWarning} | ${result}`;
+  }
 
   return result;
 }
