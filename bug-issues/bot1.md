@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 85 - 死亡3: 高所落下 (flee()後にY=55に落ちた)
+
+- **Cause**: flee(50)実行後、bot がY=55付近の崖下に落下して死亡
+- **Coordinates**: x=-39, y=55, z=-18 (birch_forest)
+- **Last Actions**: flee(50) → 逃走先がY=63→Y=55へ急落下 → "Claude1 fell from a high place"
+- **Error Message**: Server: Claude1 fell from a high place
+- **Context**: flee()が崖の端や高低差を考慮せずに経路生成している可能性。HP4.2で既にHP低下中だったため落下ダメージで死亡。
+- **Status**: Reported。**flee()の経路生成に崖落下防止ロジックが必要**
+
 ## [2026-03-26] Bug: Session 85 - 死亡: Zombie に殺された (HP回復中に)
 
 - **Cause**: HP1.3から4.7に回復途中にZombieに殺された。flee()で逃走したが、逃走先にcreeper×3/endermanがいた。逃走先の安全確認が不十分。
