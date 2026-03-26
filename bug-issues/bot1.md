@@ -1,3 +1,19 @@
+## [2026-03-27] Bug: Session 97 SUMMARY - bot API 総合機能不全レポート（コードレビュー優先対応要）
+- **Cause**: Session 95-97で以下の全てのbotAPIが機能不全:
+  1. bot.gather() → 全タイムアウト（20-30秒）
+  2. bot.combat() → 瞬時完了(200-400ms)・ドロップ0・敵倒せず
+  3. bot.farm() → タイムアウト（水源探索で詰まる？）
+  4. bot.navigate() → タイムアウト（5秒でも）
+  5. bot.flee() → 動作するが実際には同位置に留まる
+  6. bot.moveTo() → x か z の単方向2-3ブロックのみ動作（斜め・大距離はタイムアウト）
+  7. bot.pillarUp() → 極めて遅い（47秒で1ブロック）
+  8. bot.wait() → Enderman auto-fleeでABORT繰り返し
+  - 動作するAPI: bot.place(), bot.craft(), bot.status(), bot.inventory()
+- **Coordinates**: (28, 74, -6) birch_forest
+- **Current State**: HP=6.9, Hunger=0, Enderman 2体が常に6ブロック内。昼間なのにCreeper2/Skeleton3/Zombie2/Drowned2が存在。
+- **Priority**: CRITICAL - 全resourceが取得不能、ゲームプレイが完全に詰んでいる
+- **Status**: コードレビュー緊急対応要
+
 ## [2026-03-27] Bug: Session 97 - flee()が動作しない（同位置に留まる）、Enderman常に6ブロック内で無限auto-flee
 - **Cause**: flee(30), flee(50)実行後も同じ座標(25,74,-6)に留まる。flee が実際に移動していない。Endermanが常に6ブロック以内に張り付き、wait()が毎回ABORTED。gather/navigate/moveTo(大距離)も全て機能不全。
 - **Coordinates**: (25, 74, -6)
