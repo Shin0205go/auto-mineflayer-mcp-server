@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 92 - 死亡38回目 drowning (moveTo が水中に誘導)
+- **Cause**: moveTo(-6, 61, 2)を呼び出したがbot実際にY=106の地上に移動し、水に落ちてdrownした。HP=9.2 + starvation状態で死亡。
+- **Coordinates**: Y=106付近 (溺死)
+- **Last Actions**: moveTo(-6,61,2) → 実際 Y:106.2に移動 → "Claude1 drowned"
+- **Error Message**: "Claude1 drowned"
+- **Status**: Reported. moveTo()が目標座標と全く異なる位置に移動し水没死を引き起こす。
+
 ## [2026-03-27] Bug: Session 92 - gather()が全ての鉱石・石材タイプでタイムアウト（完全機能不全）
 - **Cause**: gather("iron_ore",3), gather("deepslate_iron_ore",3), gather("cobblestone",3) が全て60秒タイムアウトで失敗。stone_pickaxe所持、目標ブロックの近くに移動済みでも採掘開始されない。
 - **Coordinates**: Y=62-64付近 (洞窟内)
