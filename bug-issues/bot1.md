@@ -47,6 +47,13 @@
 - **Error Message**: "Not connected to any server. Use minecraft_connect(host="localhost", port=25565, username="Claude1", agentType="game") first."
 - **Status**: Reported - 再接続後も同じ問題が繰り返す可能性あり
 
+## [2026-03-27] Bug: Session 97 - farm()実行中に"Bot Claude1 not found"エラー・リスポーン疑い
+- **Cause**: farm()呼び出し12秒後に "Bot Claude1 not found" エラー。その後再接続すると位置が変わっていた(40,76,-2→37,73,7)。HPは6.9のまま（keepInventory ON）。
+- **Coordinates**: farm()前=(40,76,-2), farm()後=(37,73,7)
+- **Last Actions**: farm() → 12秒でBotNotFoundエラー → 再接続
+- **Error Message**: "Bot Claude1 not found"
+- **Status**: 死亡の可能性あり（keepInventoryでアイテム保持）
+
 ## [2026-03-27] Bug: Session 97 SUMMARY - bot API 総合機能不全レポート（コードレビュー優先対応要）
 - **Cause**: Session 95-97で以下の全てのbotAPIが機能不全:
   1. bot.gather() → 全タイムアウト（20-30秒）
