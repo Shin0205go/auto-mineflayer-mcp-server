@@ -1,3 +1,11 @@
+## [2026-03-27] Bug: Session 89 - gather/farm/pillarUp全ツール連続タイムアウト（Y=83付近）
+- **Cause**: gather("iron_ore",2), gather("birch_log",4), farm(), pillarUp(20) 全てが30-120秒でタイムアウト。ツールが実際には何もしないままタイムアウトする。
+- **Coordinates**: (-13, 83, 40) 付近
+- **Last Actions**: navigate(iron_ore) → gather(iron_ore,8) タイムアウト → gather(iron_ore,2) タイムアウト → gather(birch_log,4) タイムアウト → farm() タイムアウト
+- **Symptoms**: gatherが実行開始するが進行せず全てタイムアウト。石ピッケルはあるのに採掘できない。Creeperが常に追跡して中断される可能性あり。
+- **Error Message**: "Execution timed out after NNNms"が連続発生
+- **Status**: Reported. gather全般的に機能不全の可能性。敵の妨害もある。
+
 ## [2026-03-27] Bug: Session 89 - 死亡29回目 Skeleton射撃（地上Y=92、HP低+Hunger:0での戦闘）
 - **Cause**: Hunger:0・HP:9.3の状態でzombie戦闘中にSkeleton射撃を受けて死亡。HP低下中に戦闘を試みたのが問題。
 - **Coordinates**: (-2, 92, 36) 付近
