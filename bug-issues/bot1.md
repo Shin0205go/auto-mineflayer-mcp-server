@@ -1,3 +1,16 @@
+## [2026-03-26] Bug: Session 84 - クリティカル：全アイテム獲得手段が機能せずプレイ不可能
+
+- **Cause**: gather/combat/farm/smelt 全てが「成功」と返すがインベントリにアイテムが入らない。食料確保不可能。
+- **Coordinates**: x=-2, y=62, z=9 (birch_forest)
+- **Affected APIs**:
+  - `bot.gather("birch_log", 4)` → 成功メッセージだがインベントリ変化なし
+  - `bot.combat("cow/sheep/pig/chicken")` × 4回 → 成功だが raw_meat 入手なし
+  - `bot.farm()` → wheat:0, seeds:0（農場Y=79付近で発見済み）
+  - `bot.smelt("raw_iron", 3)` → 成功だがiron_ingot=0
+- **Root Cause推定**: アイテム収集後の pickup処理の欠如。または gather()がタイムアウト後に部分実行になっている。
+- **Impact**: 食料0 → 飢餓 → HP回復不可 → HP:1.3, Hunger:2の危機的状態
+- **Status**: Reported。緊急修正必要。このセッション中のプレイ継続は困難。
+
 ## [2026-03-26] Bug: Session 83 - 継続バグ総括（未解決・code-reviewer対応要請）
 
 ### 未解決バグ（優先度高）
