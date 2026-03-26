@@ -1,3 +1,11 @@
+## [2026-03-27] Bug: Session 90 - moveTo/pillarUp/flee が全てタイムアウト（エンティティ周辺でスタック）
+- **Cause**: クリーパー3体・スケルトン1体の周囲にいる状態でmoveTo/pillarUp/fleeを実行すると全てタイムアウト。ボットが(26,98,1)に固定されて動けない。
+- **Coordinates**: (26, 98, 1)
+- **Last Actions**: moveTo(15,98,4) × 2回, moveTo(9,96,4), pillarUp(5), flee(40) → 全てタイムアウト30-60秒
+- **Symptoms**: status()は即座に返る。moveTo/pillarUp/fleeは30-60秒後にタイムアウトエラー。位置は変わらない。
+- **Error Message**: "Execution timed out after 30000ms"
+- **Status**: Reported. 敵エンティティ近接時の移動系タイムアウトバグ。pathfinderが敵を避けようとして経路計算で詰まっている可能性。
+
 ## [2026-03-27] Bug: Session 89 - flee()が地下洞窟へ移動（根本的pathfinderバグ）
 - **Cause**: bot.flee(100)を実行するとYが下がる。地表に出る代わりに洞窟内を逃走ルートとして使っている。Y=67→flee→Y=60→flee→Y=48のように悪化する。
 - **Coordinates**: 付近 (4,60,-5) → (15,48,-9)
