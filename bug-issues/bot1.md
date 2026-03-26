@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 88 - pillarUp常時タイムアウト（60秒）
+
+- **Cause**: pillarUp(5), pillarUp(6)など小さな値でも常にタイムアウト（60秒）する。pillarUp後の位置確認では1-2ブロックしか上がっていない（-16→-16+1）。ブロックを置いてジャンプする処理が詰まっている模様。
+- **Coordinates**: x=-1, y=81, z=-16
+- **Last Actions**: pillarUp(6)実行 → 60秒タイムアウト → 1ブロック上がっただけ
+- **Error Message**: Execution timed out after 60000ms
+- **Status**: Reported。moveTo/gather/combat/pillarUp全機能不全でゲームプレイ不能状態。
+
 ## [2026-03-26] Bug: Session 88 - 死亡: Zombieに殺された（HP1.7、Hunger0、pillarUp中）
 
 - **Cause**: HP=1.7、Hunger=0の状態でpillarUp中にZombieに殺された。pillarUpがタイムアウト(60秒)で途中停止し、その間に近くのzombieにダメージを受けた。moveTo/combat/gatherが全て機能しない状態で食料確保できず、HP回復不能のまま長時間経過。
