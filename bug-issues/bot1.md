@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 117 UPDATE - combat/place後に即切断バグ確認, CRITICAL継続
+
+- **Cause**: bot.combat()やbot.place()を呼んだ直後（1-3秒）にサーバー切断が発生
+- **Coordinates**: (40.2, 76, -1.6) - 全セッション同じ
+- **Pattern**:
+  - bot.combat("cow") → "牛を倒した" ログ → 即切断
+  - bot.combat("chicken/pig") → 完了 → 即切断
+  - bot.combat("zombie") → "No zombie found" → 即切断
+  - bot.place("crafting_table") → 成功 → 即切断
+  - bot.navigate() → 即完了（実際の移動なし）
+  - bot.gather/moveTo/farm → 60秒タイムアウト
+- **Impact**: HP5.9 Hunger0 食料0が16セッション以上継続。食料確保不能。
+- **Status**: Reported Session 117. combat/place後の即切断バグ最優先修正必要。
+
 ## [2026-03-27] Bug: Session 117 - 死亡疑い (HP5.9 Hunger0 食料0状態から切断), CRITICAL継続
 
 - **Cause**: HP5.9 Hunger0 食料0の状態で鶏・豚を倒した直後に切断（死亡の可能性）
