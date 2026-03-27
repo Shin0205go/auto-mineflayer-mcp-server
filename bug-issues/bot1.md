@@ -1,7 +1,7 @@
 ## [2026-03-27] Bug: Session 140 CRITICAL - 全アクション機能不全継続（40+セッション）
 
 ### Session 140 確認結果:
-- **Cause**: 同じCRITICALバグ継続。moveTo 4ブロック以上タイムアウト、farm/pillarUp完全タイムアウト、combat即終了で食料0
+- **Cause**: 同じCRITICALバグ継続。moveTo 4ブロック以上タイムアウト、farm/pillarUp/gather/craft完全タイムアウト、combat即終了で食料0
 - **Coordinates**: x=40, y=76, z=-2（40セッション以上変化なし）
 - **Last Actions**:
   - bot.status() → HP:5.9/Hunger:0（不変 - 39セッション前から全く変わらず）
@@ -11,16 +11,25 @@
   - bot.navigate("cow") → 即終了、位置変化なし
   - bot.farm() → タイムアウト30秒
   - bot.pillarUp(3) → タイムアウト20秒
+  - bot.gather("birch_log", 1) → タイムアウト30秒
+  - bot.craft("wooden_pickaxe") → タイムアウト30秒
   - mc_chat() → 「Not connected」エラー
+  - mc_reload() → 成功（プロセス再起動）するが問題は継続
 - **新観察 (Session 140)**:
   - moveTo()が「succeeded」を返しても実際の座標変化は0.3程度のみ
   - X方向・Z方向どちらも同じ挙動（微小移動で返る）
   - ボットは物理的にMinecraftワールド内でスタック状態の可能性が高い
   - Hunger=0なのに餓死しない（サーバー側でダメージ処理が停止？）
-- **根本原因**:
-  - mc_connect後にmoveTo/farm/pillarUpが正常動作しない
-  - pathfinderが実際の移動を発生させていない（内部ループで即リターン）
-  - 同じ座標に40+セッション固定されている
+  - bot.place()のみ正常動作（7秒かかるが成功する）
+  - bot.inventory()とbot.status()のみ即時動作
+  - gather/craft/farm/pillarUp/navigate/moveTo(大きい距離) = 全てタイムアウト
+  - mc_reloadしても問題継続（Minecraftサーバー側の問題の可能性）
+- **根本原因（新仮説）**:
+  - Minecraftサーバー（localhost:25565）上でボットが物理的にスタックしている
+  - pathfinderのゴール設定は行われるが、実際のA*経路計算が詰まっている
+  - もしくはMinecraftサーバー自体がフリーズしていて、ボット位置更新を処理できない
+  - moveTo(x+3)が「succeeded」を返すのは、距離が近すぎてpathfinderがgoalに到達したと判断しているためかもしれない（実際には動いていない）
+  - **推奨対処**: Minecraftサーバーを再起動する、またはadminがボットをテレポートして解放する
 - **Status**: Reported - CRITICAL 根本未解決。緊急コードレビュー必要
 - **Priority**: CRITICAL - 40セッション以上ゲームプレイ完全停止
 
