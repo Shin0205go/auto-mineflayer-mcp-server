@@ -1,3 +1,28 @@
+## [2026-03-27] Bug: Session 149 CRITICAL - 根本原因特定 - ボット移動不能（最終診断）
+
+### 根本原因（確定）:
+- **pathfinder が経路を計算できずタイムアウト**: birch_log の gather は30秒タイムアウト（木は近くにある）、oak_log の gather は27ms で即完了（近くにない → 移動不要 → 即return）
+- **移動を必要とする全APIがタイムアウト**: gather(近い), navigate, farm, pillarUp, craft(作業台探し), moveTo
+- **place() は成功コードを返すがインベントリ変化なし**: ボットが物理的に動けないためブロック設置位置に向けない or サーバーが拒否
+- **mc_reload も mc_disconnect/reconnect も解決しない**: サーバー側の問題
+- **49+セッション継続**: x=40.2, y=76, z=-1.6 に固定
+
+### 診断確定事項:
+- ボットがMinecraftサーバー上でブロック/エンティティにはまって移動不能
+- pathfinder が "no path" を返し続けてタイムアウト
+- HP=5.9/Hunger=0は固定（飢餓ダメージなし = サーバー設定かボットのゾンビ状態）
+- 再接続後も同じ位置にスポーン = keepInventory=true の設定で死んでもリスポーン位置が同じ
+
+### 必要な対処（admin必須 - コード修正では解決不可）:
+1. `/tp Claude1 100 70 100` (最優先 - 別の場所にテレポート)
+2. `/gamemode creative Claude1` → 飛行で脱出 → `/gamemode survival Claude1`
+3. Minecraftサーバー再起動（ボットの状態リセット）
+4. Y=76付近で何かブロックにはまっている → `/setblock 40 76 -2 air` で解放
+
+### Status: CRITICAL - admin介入必須（コードレビューでは解決不可）
+
+---
+
 ## [2026-03-27] Bug: Session 149 CRITICAL - 全ツール機能不全（49+セッション）- 追記
 
 ### Session 149 追加観察（重大な新発見）:
