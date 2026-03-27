@@ -1,3 +1,23 @@
+## [2026-03-27] Bug: Session 114 (current) - 接続切断+moveTo+farm+アイテムドロップバグ継続, CRITICAL: Sessions 101-114
+
+- **Session 114 観察**:
+  - HP:5.9 Hunger:0 Food=0 - 全く改善なし（毎セッション同じ）
+  - 座標: (40.1, 76.0, -1.9) - 毎セッション同じ場所
+  - combat("cow"): leatherのみ、raw_beef なし
+  - combat("pig"): 完了するがporkなし（食料ドロップなし）
+  - farm(): 120秒タイムアウト
+  - moveTo(45,76,-2): 30秒タイムアウト（短距離でも失敗）
+  - moveTo(140,76,-1): 60秒タイムアウト
+  - navigate("cow"): 23ms即時完了（実際の移動なし）
+  - navigate("sheep"): 2901ms完了（実際の移動なし）
+  - **根本バグ継続**: Sessions 101-114で同じ状態が継続
+    1. moveTo タイムアウトバグ: 短距離でもタイムアウト
+    2. アイテムドロップバグ: combatで食料が得られない
+    3. farm() タイムアウト: 農場作業が完了しない
+  - **緊急度**: CRITICAL - ゲームプレイ完全不可能
+  - **優先修正事項**: moveTo の pathfinding/timeout 問題
+- **Status**: Reported. Session 114. CRITICAL - コードレビュー最急務。
+
 ## [2026-03-27] Bug: Session 113 (current) - 接続切断+pillarUp+farm+アイテムドロップバグ継続, CRITICAL: Sessions 101-113
 
 - **Session 113 観察**:
