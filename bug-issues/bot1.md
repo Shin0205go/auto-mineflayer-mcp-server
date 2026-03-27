@@ -1,3 +1,10 @@
+## [2026-03-27] Bug: Session 109 (current) - Bot fully stuck at (40,76,-2), CRITICAL: Sessions 101-109継続, moveTo/gather/craft/pillarUpがタイムアウト
+
+- **Session 109 追記**: 同じ状況継続。HP:5.9 Hunger:0 Food=0。moveTo(5ブロック)タイムアウト継続。pillarUpタイムアウト。navigateタイムアウト。bot.combat()後にNot connectedエラーで切断される。farm()120秒タイムアウト。ボットはX=40.1,Y=76,Z=-1.9から動けない。根本問題未解決。コードレビュー急務。
+- **Status**: Reported. Session 109. CRITICAL - コードレビュー急務。
+
+---
+
 ## [2026-03-27] Bug: Session 108 (current) - Bot fully stuck at (40,76,-2), CRITICAL: Sessions 101-108継続, moveTo/gather/craft/pillarUpがタイムアウト
 
 - **Session 108 追記**: 同じ状況継続。HP:5.9 Hunger:0 Food=0。bot.craft("furnace")がタイムアウト継続。bot.combat("cow")は成功するが生肉ドロップなし。チェスト(53,65,6)へのmoveTOが60秒でタイムアウト。根本問題未解決。
