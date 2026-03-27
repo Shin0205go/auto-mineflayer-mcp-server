@@ -23,6 +23,13 @@
   2. pathfinder完全リセット機能
   3. botが同じ座標から動けない場合のエスケープ機能
   4. moveTo/navigate/gatherのタイムアウト処理改善
+- **Session 119 Additional Findings**:
+  - bot.place("cobblestone", x, y, z) → 動作する（切断なし）
+  - bot.eat()（食料なし） → 動作する（切断なし）
+  - bot.flee(10) → "成功"と出るが直後のstatus()で切断エラー
+  - **動作する**: status(), inventory(), place(), eat()（食料なし）
+  - **切断を引き起こす**: combat(), flee(), chat()（mc_chat送信後も切断）
+  - **タイムアウト**: moveTo(), navigate(), gather(), craft(), farm()
 - **Status**: Reported Session 119. コードレビューアーによる根本修正が最優先。
 
 ## [2026-03-27] Bug: Session 118 UPDATE - wait()/combat() 切断パターン詳細調査
