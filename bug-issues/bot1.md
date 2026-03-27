@@ -1,3 +1,27 @@
+## [2026-03-27] Bug: Session 131 CRITICAL - 全アクション機能不全継続（31+セッション）
+
+### Session 131 確認結果:
+- **Cause**: 同じCRITICALバグ継続。全ゲームプレイAPIが機能しない
+- **Coordinates**: x=40, y=76, z=-2（31セッション以上変化なし）
+- **Last Actions**:
+  - bot.status() → HP:5.9/Hunger:0（タイムアウトまたは正常）
+  - bot.inventory() → 正常動作（32アイテム確認）
+  - bot.combat("chicken/pig/cow/sheep") → 成功ログだが食料ドロップなし
+  - bot.craft("furnace") → タイムアウト60秒
+  - bot.farm() → タイムアウト180秒
+  - bot.flee() → 成功ログだが位置変化なし
+  - bot.craft() → タイムアウト
+- **症状**: HP:5.9/Hunger:0固定、位置変化なし、31セッション継続
+- **重要追加観察**:
+  - bot.status()自体もタイムアウトする場合がある（60秒）
+  - bot.craft()は必ずタイムアウトする
+  - bot.combat()は即座に成功を返すが副作用なし（食料ドロップなし）
+  - bot.inventory()とbot.log()のみ確実に動作する
+- **Status**: Reported - CRITICAL 根本未解決。緊急コードレビュー必要
+- **Priority**: CRITICAL - 31セッション以上ゲームプレイ完全停止
+
+---
+
 ## [2026-03-27] Bug: Session 130 CRITICAL - 全アクション機能不全継続（30+セッション）
 
 ### Session 130 確認結果:
