@@ -1,3 +1,15 @@
+## [2026-03-27] Bug: Session 151 CRITICAL - moveTo部分的失敗・combat肉ドロップなし
+
+### Session 151 確認:
+- **Cause**: 近距離（2ブロック）の移動は成功するが、10ブロック先の移動はタイムアウト（30秒）。combat("cow/pig/sheep/chicken")が成功を返すが肉がインベントリに入らない。
+- **Coordinates**: x=40, y=76, z=-2（birch_forest）
+- **HP**: 5.9 Hunger: 0
+- **具体的な失敗**: moveTo(55, 76, -2) タイムアウト30秒。combat全4種成功コード返却→肉ドロップなし。
+- **Near-distance work**: moveTo(42, 76, -2) → 2.9秒で(41,76,-2)に到達（成功）
+- **Status**: Reported
+
+---
+
 ## [2026-03-27] Bug: Session 150 CRITICAL - 同一問題継続（50+セッション）- admin介入必須
 
 ### Session 150 確認:
