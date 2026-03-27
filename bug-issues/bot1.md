@@ -16,7 +16,16 @@
   - **23セッション以上改善なし。コードレビューア緊急対応必要**
 - **Coordinates**: x=40.2, y=76, z=-1.6
 - **New Finding**: flee()の直後にNot Connectedエラー。flee()が切断を引き起こしている
+- **Session 123 追加発見**:
+  - place() → 成功（cobblestoneを足元に設置できた）
+  - wait(5000)後のmoveTo(+3) → 成功（40.2→40.5に移動）
+  - wait(2000)後のmoveTo → "Not connected"エラー（wait中に切断される）
+  - **パターン**: wait() / flee() / moveTo(5+) / craft() / gather() が切断トリガーになる
+  - **成功するもの**: status(), inventory(), chat(), place(), moveTo(+3 以内, wait後のみ)
+  - **根本原因仮説**: 何らかの非同期処理（pathfinder/combat/farm/craft）が実行中に接続タイムアウトが発生している。wait()でもサーバー側でkick/disconnect
+  - **重要**: mc_reload直後は一時的に改善するが数回の実行で元に戻る
 - **Status**: 未解決 - コードレビューア緊急対応必要（23+セッション継続）
+- **Action Needed**: flee()/wait()が切断トリガーになっている原因を調査・修正。接続を維持したままアクションを実行できるようにする。
 
 ---
 
