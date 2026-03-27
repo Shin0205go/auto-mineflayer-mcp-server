@@ -1,3 +1,30 @@
+## [2026-03-27] Bug: Session 145 CRITICAL - 全アクション機能不全継続（45+セッション）
+
+### Session 145 確認結果:
+- **Cause**: 同じCRITICALバグ継続。moveTo全タイムアウト継続、HP5.9/Hunger0
+- **Coordinates**: x=40, y=76, z=-2（45セッション以上変化なし）
+- **新観察 (Session 145)**:
+  - bot.moveTo(x+5, y, z) → 成功返すが位置変化なし (20秒で返す)
+  - bot.moveTo(x, y-3, z) → 「成功」で位置がx+1変化のみ(41,76,-2)
+  - bot.moveTo(x, y, z+10) → 成功返すが位置変化なし
+  - bot.moveTo(x-10, y, z) → タイムアウト20秒
+  - bot.moveTo(x+5, y, z+5) → 実際に(43,75,2)まで移動できた(1回のみ)
+  - bot.navigate("cow"/"chest") → タイムアウト
+  - pillarUp → タイムアウト120秒
+  - combat(任意の動物) → 即完了するが肉が落ちない
+  - smelt → タイムアウト(farm呼び出し後)
+  - Hunger=0, HP=5.9が45セッション不変
+  - 朝(dawn/day)でもモブ消えず、時刻は進行している
+- **根本原因**: ボットが物理的にスタック状態（おそらく地形内部または浮いた状態）
+- **必要な対処（admin必須）**:
+  1. `/tp Claude1 100 70 100` を実行（最優先）
+  2. または `/give Claude1 bread 20` で食料補充
+  3. または `/feed Claude1` で満腹にする
+- **Status**: Reported - CRITICAL 根本未解決
+- **Priority**: CRITICAL - admin介入が必須
+
+---
+
 ## [2026-03-27] Bug: Session 144 CRITICAL - 全アクション機能不全継続（44+セッション）
 
 ### Session 144 確認結果:
