@@ -179,6 +179,15 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
       resolve(result);
     };
 
+    // Disconnect handler: resolve immediately when bot disconnects mid-navigation.
+    // Without this, moveToBasic hangs until the setInterval timeout fires (up to 55s),
+    // blocking the caller and preventing mc_execute from returning.
+    const onDisconnect = () => {
+      finish({ success: false, message: "Navigation aborted: bot disconnected" });
+    };
+    bot.once("end", onDisconnect);
+    cleanupCallbacks.push(() => bot.removeListener("end", onDisconnect));
+
     const onGoalReached = async () => {
       // Wait for physics to settle - bot.entity.position may not be updated immediately when event fires
       await delay(200);
@@ -3334,10 +3343,25 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
 
     // Wait for movement with proper completion check
     await new Promise<void>((resolve) => {
+      let fleeResolved = false;
+      const fleeFinish = () => {
+        if (fleeResolved) return;
+        fleeResolved = true;
+        clearInterval(check);
+        clearTimeout(timeout);
+        bot.removeListener("end", onFleeDisconnect);
+        resolve();
+      };
+
       const timeout = setTimeout(() => {
         try { bot.pathfinder.setGoal(null); } catch { /* bot may have disconnected */ }
-        resolve();
+        fleeFinish();
       }, fleeTimeoutMs);
+
+      // Disconnect handler: resolve immediately when bot disconnects mid-flee.
+      // Without this, flee hangs until fleeTimeoutMs (up to 45s), blocking mc_execute.
+      const onFleeDisconnect = () => { fleeFinish(); };
+      bot.once("end", onFleeDisconnect);
 
       const fleeStartTime = Date.now();
       let retryCount = 0; // Track how many direction retries we've done
@@ -3348,9 +3372,7 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
           const elapsed = Date.now() - fleeStartTime;
 
           if (currentFleeHandle.aborted) {
-            clearInterval(check);
-            clearTimeout(timeout);
-            resolve();
+            fleeFinish();
             return;
           }
 
@@ -3390,22 +3412,18 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
 
             if ((fleeFeetBlock && isWaterBlock(fleeFeetBlock.name)) || (fleeHeadBlock && isWaterBlock(fleeHeadBlock.name))) {
               console.error(`[Flee] WATER ABORT: Bot entered water at (${fleePos.x.toFixed(1)}, ${fleePos.y.toFixed(1)}, ${fleePos.z.toFixed(1)}). Stopping flee to prevent drowning.`);
-              clearInterval(check);
-              clearTimeout(timeout);
               try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
               // Try to swim up by holding jump
               try { bot.setControlState("jump", true); } catch { /* ignore */ }
               setTimeout(() => { try { bot.setControlState("jump", false); } catch { /* ignore */ } }, 3000);
-              resolve();
+              fleeFinish();
               return;
             }
             if (waterAhead) {
               console.error(`[Flee] WATER AHEAD ABORT: Water detected 1-2 blocks ahead of movement direction at (${fleePos.x.toFixed(1)}, ${fleePos.y.toFixed(1)}, ${fleePos.z.toFixed(1)}). Stopping flee to prevent entering water.`);
-              clearInterval(check);
-              clearTimeout(timeout);
               try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
               try { bot.setControlState("sprint", false); } catch { /* ignore */ }
-              resolve();
+              fleeFinish();
               return;
             }
           }
@@ -3414,10 +3432,8 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
           // terrain, achieving 50% of target distance is often sufficient to escape.
           // Waiting for 70% caused unnecessary timeout when 60% was already safe.
           if (distMoved >= distance * 0.5) {
-            clearInterval(check);
-            clearTimeout(timeout);
             try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
-            resolve();
+            fleeFinish();
             return;
           }
 
@@ -3450,17 +3466,13 @@ export async function flee(managed: ManagedBot, distance: number = 20): Promise<
                 }
               });
             } else {
-              clearInterval(check);
-              clearTimeout(timeout);
               try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
-              resolve();
+              fleeFinish();
             }
           }
         } catch {
           // Bot entity may be invalid if disconnected during flee
-          clearInterval(check);
-          clearTimeout(timeout);
-          resolve();
+          fleeFinish();
         }
       }, 200);
     });
