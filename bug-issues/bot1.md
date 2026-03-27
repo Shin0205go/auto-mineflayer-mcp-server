@@ -1,3 +1,29 @@
+## [2026-03-27] Bug: Session 132 CRITICAL - 全アクション機能不全継続（32+セッション）
+
+### Session 132 確認結果:
+- **Cause**: 同じCRITICALバグ継続。全ゲームプレイAPIが機能しない
+- **Coordinates**: x=40, y=76, z=-2（32セッション以上変化なし）
+- **Last Actions**:
+  - bot.status() → HP:5.9/Hunger:0（正常に取得できる）
+  - bot.inventory() → 正常動作（32アイテム確認済み）
+  - bot.eat() → 「成功」ログだがHP/Hunger変化なし（食料未消費）
+  - bot.combat("cow/chicken/pig") → 即座に「成功」だが食料ドロップなし
+  - bot.moveTo(x+20, y, z) → タイムアウト30秒（完全に機能しない）
+  - bot.pillarUp(5) → タイムアウト120秒（完全に機能しない）
+  - bot.navigate("cow") → 即座に完了だが位置変化なし（エンティティ見つからない）
+  - mc_chat(mode=get) → 接続エラー "Not connected to any server"（接続直後でも失敗）
+- **重要観察**:
+  - mc_connect成功後もmc_chatが「Not connected」エラー → 接続状態の不整合
+  - bot.status()のnearbyEntitiesが空オブジェクト{}
+  - bot.status()のnearbyResourcesがundefined
+  - 位置が32セッション以上x=40,y=76,z=-2から変化なし
+  - **APIが成功を返すのにゲームワールドへの副作用が全くない**
+  - bot.pillarUpとbot.moveToは完全にタイムアウト（Botがworld上で動けていない）
+- **Status**: Reported - CRITICAL 根本未解決。緊急コードレビュー必要
+- **Priority**: CRITICAL - 32セッション以上ゲームプレイ完全停止
+
+---
+
 ## [2026-03-27] Bug: Session 131 CRITICAL - 全アクション機能不全継続（31+セッション）
 
 ### Session 131 確認結果:
