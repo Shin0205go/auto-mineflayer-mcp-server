@@ -189,8 +189,11 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
     cleanupCallbacks.push(() => bot.removeListener("end", onDisconnect));
 
     const onGoalReached = async () => {
-      // Wait for physics to settle - bot.entity.position may not be updated immediately when event fires
-      await delay(200);
+      // Wait for physics to settle - bot.entity.position may not be updated immediately when event fires.
+      // Sessions 101-109: 200ms was insufficient when the server rubber-bands the bot back to its
+      // previous position ~500-1000ms after receiving movement packets. Increasing to 600ms catches
+      // most rubber-band scenarios before declaring success.
+      await delay(600);
       const pos = bot.entity.position;
       // Verify we're actually within range before declaring success
       const actualDist = pos.distanceTo(targetPos);
@@ -1140,6 +1143,11 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
 export async function moveTo(managed: ManagedBot, x: number, y: number, z: number): Promise<string> {
   const bot = managed.bot;
   const start = bot.entity.position;
+  // Snapshot start position BEFORE any movement so we can report actual displacement.
+  // Bug (Sessions 101-109): moveTo returned "success" but position was unchanged due to
+  // server-side rubber-banding. Without start position in the return value, the agent
+  // had no way to detect that the move was rejected server-side and kept retrying.
+  const startSnapshot = { x: start.x, y: start.y, z: start.z };
   const targetPos = new Vec3(Math.floor(x), Math.floor(y), Math.floor(z));
   const distance = start.distanceTo(targetPos);
 
@@ -1372,7 +1380,12 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
       if (result.success) {
         const isOre = targetBlock.name.includes("ore");
         const suffix = isOre ? ` (near ${targetBlock.name} - use minecraft_dig_block to mine it)` : "";
-        return `Moved near ${targetBlock.name} at (${candidate.pos.x.toFixed(1)}, ${candidate.pos.y.toFixed(1)}, ${candidate.pos.z.toFixed(1)})${suffix}` + getBriefStatus(managed);
+        const endPos2 = bot.entity.position;
+        const disp2 = Math.sqrt((endPos2.x - startSnapshot.x) ** 2 + (endPos2.y - startSnapshot.y) ** 2 + (endPos2.z - startSnapshot.z) ** 2);
+        const dispNote2 = disp2 < 0.5
+          ? ` [WARNING: bot barely moved (${disp2.toFixed(2)} blocks from start) — server may be rubber-banding.]`
+          : ` [moved ${disp2.toFixed(1)} blocks from (${startSnapshot.x.toFixed(1)},${startSnapshot.y.toFixed(1)},${startSnapshot.z.toFixed(1)})]`;
+        return `Moved near ${targetBlock.name} at (${candidate.pos.x.toFixed(1)}, ${candidate.pos.y.toFixed(1)}, ${candidate.pos.z.toFixed(1)})${suffix}${dispNote2}` + getBriefStatus(managed);
       }
       // Bug fix (Session 186): If a standable candidate attempt caused a fall,
       // do NOT try more candidates - the bot's position has changed due to falling
@@ -1556,7 +1569,21 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   }
 
   if (result.success) {
-    return result.message + getBriefStatus(managed);
+    // Report actual displacement from start so agent can detect server-side rubber-banding.
+    // Bug (Sessions 101-109): moveTo returned "Reached destination" but position was reset
+    // by the server to (40,76,-2) every time. The agent had no way to know the bot did not
+    // actually move. Including displacement allows the agent to detect cases where
+    // the pathfinder reported success but the server rejected the movement (< 0.5 blocks moved).
+    const endPos = bot.entity.position;
+    const actualDisplacement = Math.sqrt(
+      (endPos.x - startSnapshot.x) ** 2 +
+      (endPos.y - startSnapshot.y) ** 2 +
+      (endPos.z - startSnapshot.z) ** 2
+    );
+    const displacementNote = actualDisplacement < 0.5
+      ? ` [WARNING: bot barely moved (${actualDisplacement.toFixed(2)} blocks from start (${startSnapshot.x.toFixed(1)},${startSnapshot.y.toFixed(1)},${startSnapshot.z.toFixed(1)})) — server may be rubber-banding. Try bot.reconnect() or wait before retrying.]`
+      : ` [moved ${actualDisplacement.toFixed(1)} blocks from (${startSnapshot.x.toFixed(1)},${startSnapshot.y.toFixed(1)},${startSnapshot.z.toFixed(1)})]`;
+    return result.message + displacementNote + getBriefStatus(managed);
   }
 
   // When aborted due to hostile danger checks OR underground/fall safety checks, skip
