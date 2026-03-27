@@ -1,3 +1,26 @@
+## [2026-03-27] Bug: Session 142 CRITICAL - 全アクション機能不全継続（42+セッション）
+
+### Session 142 確認結果:
+- **Cause**: 同じCRITICALバグ継続。moveTo/farm/gather/craftが全タイムアウト、動物なし、食料0
+- **Coordinates**: x=40, y=76, z=-2（42セッション以上変化なし）
+- **Last Actions**:
+  - bot.status() → HP:5.9/Hunger:0（不変）
+  - bot.combat("cow"/"sheep"/"chicken"/"pig") → 即終了、周辺に動物なし
+  - bot.moveTo(50,76,-2) → タイムアウト120秒
+  - bot.farm() → タイムアウト120秒
+  - bot.eat() → 食料なし
+  - bot.navigate("chicken") → 即終了、位置変化なし
+- **新観察 (Session 142)**:
+  - mc_connect後にmc_chatがNot connectedエラー（接続状態が不安定）
+  - 再接続後は正常
+  - 状況は全く変化なし（座標/HP/Hunger同一）
+- **根本原因**: ボットが物理的にスタック状態。42セッション以上ゲームプレイ完全停止
+- **推奨対処**: adminがボットをテレポート（/tp Claude1 <open_area>）またはMinecraftサーバー再起動
+- **Status**: Reported - CRITICAL 根本未解決
+- **Priority**: CRITICAL
+
+---
+
 ## [2026-03-27] Bug: Session 141 CRITICAL - 全アクション機能不全継続（41+セッション）
 
 ### Session 141 確認結果:
