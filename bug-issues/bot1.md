@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 184 CRITICAL - 184セッション連続スタック継続 - admin /tp 必須
+
+### Session 184 確認:
+- **Cause**: 同一問題が184セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40, y=76, z=-2 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **症状**: moveTo/pillarUp/farm/navigate/combat 全てタイムアウト。動物狩猟でドロップ取得不可。bot.eat()も無効
+- **確認**: chicken x1が近くにいるがcombat後も食料インベントリに入らない
+- **根本原因**: 184セッション継続の同一バグ。コードレビューによる修正が機能していない可能性
+- **Status**: CRITICAL - admin介入必須（184セッション連続継続中）
+- **必要な対処**: `/tp Claude1 100 70 100` → `/give Claude1 bread 10`
+
+---
+
 ## [2026-03-27] Bug: Session 183 CRITICAL - 183セッション連続スタック継続 - admin /tp 必須
 
 ### Session 183 確認:
