@@ -1,3 +1,22 @@
+## [2026-03-27] Bug: Session 102 (current) - Bot fully stuck at (40,76,-2), all movement ops timeout
+
+- **Root Cause**: 既知のkeepaliveタイムアウトバグ継続。moveTo/farm/pillarUp/navigate全てタイムアウト。
+- **State**: HP=5.9 Hunger=0 Pos=(40.1, 76, -1.9) birch_forest
+- **Observed**:
+  - bot.moveTo(px+10, py, pz) → 30秒タイムアウト、位置変化なし
+  - bot.farm() → 60秒タイムアウト
+  - bot.pillarUp(3) → 20秒タイムアウト
+  - bot.navigate("cow") → 成功返却するが位置変化なし
+  - bot.combat("cow") → 成功返却するが食料ゼロのまま
+  - bot.flee(10) → 1.5秒で成功返却するが位置変化なし
+  - 唯一動く操作: status(), inventory(), flee()（但し移動なし）
+- **Food**: ゼロ。wheat_seeds x55 あり。bread作れない（小麦ゼロ）
+- **Inference**: Hunger=0, HP=5.9, botは飢餓ダメージ受けながらスタック。3秒keepalive問題で長操作不可
+- **Priority**: CRITICAL - keepalive修正なしではゲームプレイ完全不可
+- **Status**: Reported. Session 102.
+
+---
+
 ## [2026-03-27] Bug: Session 101 (current) - pillarUp timeout + combat drop bug continues
 
 - **Root Cause**: pillarUpが30秒タイムアウト。combat()成功返却するが肉ドロップなし。既知バグ継続。
