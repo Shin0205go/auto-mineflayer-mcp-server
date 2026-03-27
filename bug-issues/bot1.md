@@ -1,3 +1,25 @@
+## [2026-03-27] Bug: Session 123 CRITICAL - 全アクション機能不全継続（23+セッション）
+
+- **Session 123 確認結果**:
+  - status() / inventory() → 正常
+  - chat() → 成功（チャット送信できる）
+  - combat() → 成功ログが出るが位置変化なし・食料取得なし（近くに動物がいない、またはpathfinderが動いていない）
+  - flee() → 実行後に即「Not connected」エラー（flee()が切断を引き起こす可能性）
+  - moveTo(+3, y, z) → mc_reload直後のみ1回成功（位置が40.2→40.9に変化）
+  - moveTo(+10以上) → 全てタイムアウト
+  - navigate("cow") → 即座に完了するが位置変化なし
+  - craft("furnace") → 30秒タイムアウト
+  - gather("birch_log") → 成功ログが出るが取得なし
+  - **flee()が切断トリガーになっている可能性が高い**
+  - **mc_reloadでmoveTo短距離は一時的に成功するが、その後すぐ元の状態に戻る**
+  - **craft/gather/moveTo(10+)は全てタイムアウトまたは偽成功**
+  - **23セッション以上改善なし。コードレビューア緊急対応必要**
+- **Coordinates**: x=40.2, y=76, z=-1.6
+- **New Finding**: flee()の直後にNot Connectedエラー。flee()が切断を引き起こしている
+- **Status**: 未解決 - コードレビューア緊急対応必要（23+セッション継続）
+
+---
+
 ## [2026-03-27] Bug: Session 122 CRITICAL - 全アクション機能不全、接続不安定継続中（22+セッション）
 
 - **Session 122 確認結果**:
