@@ -14,9 +14,12 @@
 - **症状**: HP:5.9/Hunger:0固定、位置変化なし、31セッション継続
 - **重要追加観察**:
   - bot.status()自体もタイムアウトする場合がある（60秒）
-  - bot.craft()は必ずタイムアウトする
+  - bot.craft()は必ずタイムアウト、またはcobblestone消費なし・furnace生成なしで「成功」
+  - bot.place()は「成功」を返すがcrafting_table所持数変化なし（ワールドへの設置なし）
   - bot.combat()は即座に成功を返すが副作用なし（食料ドロップなし）
+  - bot.moveTo()は1-2ブロックは成功するが3ブロック以上はタイムアウト
   - bot.inventory()とbot.log()のみ確実に動作する
+  - **APIが成功を返すのにゲームワールドへの副作用が全くない** = サーバーへのパケット送信失敗またはbotがspawnしていない
 - **Status**: Reported - CRITICAL 根本未解決。緊急コードレビュー必要
 - **Priority**: CRITICAL - 31セッション以上ゲームプレイ完全停止
 
