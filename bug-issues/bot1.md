@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 150 CRITICAL - 同一問題継続（50+セッション）- admin介入必須
+
+### Session 150 確認:
+- **Cause**: 49セッション以上継続する同一CRITICALバグ。ゾンビ接続状態継続
+- **Coordinates**: x=40.2, y=76, z=-1.6（変化なし）
+- **HP**: 5.9 Hunger: 0（固定）
+- **Inventory**: 31アイテム（food系なし、wheat_seeds x55, torch x6, bone_meal x13等）
+- **moveTo(50,76,0)**: 35秒タイムアウト
+- **eat()**: 成功を返すが効果なし（食料なし）
+- **getMessages()**: メッセージなし
+- **Status**: CRITICAL - admin介入必須（/tp Claude1 100 70 100 を実行してください）
+
+---
+
 ## [2026-03-27] Bug: Session 149 CRITICAL - 根本原因特定 - ボット移動不能（最終診断）
 
 ### 根本原因（確定）:
