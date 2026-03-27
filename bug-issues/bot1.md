@@ -7,7 +7,14 @@
 - **動作確認**: moveTo 120秒タイムアウト。navigate/combat/farm 全て偽成功または即timeout
 - **根本原因**: pathfinderが動作していない。接続直後から位置が固定。移動APIが全て失敗
 - **必要対処**: admin が `/tp Claude1 0 70 0` を実行するか、pathfinder修正が必要
-- **Status**: CRITICAL - admin介入必須
+- **追加詳細**:
+  - moveTo(x+1, y, z) → 僅かに位置変化(x:40.2→40.5)するが目標に到達しない
+  - gather("oak_log") → 即座にreturn、偽成功（birch_forestにいるためoak_logなし）
+  - gather("birch_log") → 30秒タイムアウト（ブロックを見つけるが移動できない）
+  - pillarUp(3) → 20秒タイムアウト
+  - mc_chat → 接続直後に失敗。mc_execute内のbot.chat()のみ機能
+  - 結論: pathfinderはブロックを見つけられるが、ボットを物理的に移動させられない
+- **Status**: CRITICAL - admin介入必須 または code-reviewer による pathfinder 修正が必要
 
 ---
 
