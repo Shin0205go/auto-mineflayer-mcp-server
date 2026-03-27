@@ -1,21 +1,26 @@
 ## [2026-03-27] Bug: Session 170 CRITICAL - 170セッション連続スタック継続 - admin /tp 必須
 
-### Session 170 確認:
+### Session 170 確認 (詳細診断結果):
 - **Cause**: 同一問題が170セッション継続。ボットがx=40,y=76,z=-2にスタック
 - **Coordinates**: x=40, y=76, z=-2 (変化なし)
-- **HP**: 5.9 / Hunger: 0 (固定)
-- **Inventory**: food=0, cobblestone=185個+, wheat_seeds=55個, iron_sword=1, stone_pickaxe=4, bucket=1
-- **動作確認**:
-  - bot.status() → 成功（HP/Hungerは変化なし）
-  - bot.navigate("chicken") → 120秒タイムアウト（周辺にchickenとdrownedがいる）
-  - bot.navigate("water") → 120秒タイムアウト
-  - bot.moveTo(+30ブロック) → 120秒タイムアウト
-  - bot.combat("chicken/cow") → 完了するが食料ドロップなし
-  - bot.farm() → 完了するがHP/Hunger変化なし
-  - 全移動APIがタイムアウト
-- **根本原因**: pathfinder/movement APIが全て機能しない。drownedが近くにいてblockしている可能性
-- **緊急対処**: admin `/tp Claude1 100 70 100` が唯一の解決策
-- **Status**: CRITICAL - admin介入必須（170セッション継続中）
+- **HP**: 5.9 / Hunger: 0 (固定 - 餓死ダメージも受けていない)
+- **Inventory**: food=0, cobblestone=185個, wheat_seeds=55個, iron_sword=1, stone_pickaxe=4, bucket=1
+- **詳細診断**:
+  - bot.status() → 成功（HP/Hunger/Position変化なし）
+  - bot.moveTo(+2, +3ブロック) → 成功（位置は変わるが毎回x=40,y=76,z=-2付近に戻る）
+  - bot.moveTo(+4ブロック以上) → タイムアウトまたは元位置に戻る
+  - bot.navigate("chicken/water") → 120秒タイムアウト
+  - bot.combat("chicken") → 完了するがfeather増えず、raw_chicken増えず（鶏は死んでいない）
+  - bot.gather("cobblestone") → 完了するがcobblestone増えず（採掘されていない）
+  - bot.craft("bread") → タイムアウト
+  - bot.farm() → タイムアウト
+  - bot.pillarUp() → タイムアウト
+  - bot.eat() → 完了するがHunger変化なし
+  - nearbyResources → 常にundefined
+  - nearbyEntities → chicken:1が表示されるが倒せない
+- **根本原因**: Minecraftサーバーとbot間の通信は維持されているが、bot.* APIの大多数が無効化されている。ゲームの物理シミュレーションが完全に機能していない。bananasworld/frozen状態の可能性。または botがゲームの「スペクテーターモード」に近い状態。
+- **緊急対処**: admin `/tp Claude1 100 70 100` と `/gamemode survival Claude1` で状態リセット
+- **Status**: CRITICAL - admin介入必須（170セッション連続継続中）
 
 ---
 
