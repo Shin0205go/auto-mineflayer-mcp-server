@@ -1,3 +1,16 @@
+## [2026-03-27] Bug: Session 118 - CRITICAL継続 moveTo/pillarUp/farm/combat全機能不全
+
+- **Cause**: Sessions 101-118で同じバグが継続。moveTo/pillarUp/farm はタイムアウト。combat後即切断。
+- **Coordinates**: (40.2, 76, -1.6) - 全セッションで同じ座標から動けない
+- **HP/Hunger**: HP:5.9 Hunger:0 - 18セッション以上改善なし
+- **Broken in this session**:
+  - bot.moveTo(45, 76, 0) → タイムアウト
+  - bot.pillarUp(8) → タイムアウト
+  - bot.farm() → 60秒タイムアウト (夜間13010 tick)
+  - bot.combat("chicken/cow/pig") → 即完了だが食料ドロップなし、その後切断
+- **Working**: bot.status(), bot.inventory(), bot.flee() のみ
+- **Status**: Reported Session 118. コードレビューアーによる根本修正が必要。
+
 ## [2026-03-27] Bug: Session 117 UPDATE2 - "Bot Claude1 not found" + wait()後切断, CRITICAL
 
 - **Cause**: bot.craft()が"Bot Claude1 not found"を返す。bot.wait()呼び出し後も即切断。
