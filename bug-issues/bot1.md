@@ -1,3 +1,15 @@
+## [2026-03-27] Bug: Session 171 CRITICAL - 171セッション連続スタック継続 - admin /tp 必須
+
+### Session 171 確認:
+- **Cause**: 同一問題が171セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40, y=76, z=-2 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **状態**: bot.status()は成功するが全ての物理操作が無効。接続もすぐ切れる
+- **必要な対処**: admin `/tp Claude1 100 70 100` + `/gamemode survival Claude1`
+- **Status**: CRITICAL - admin介入必須（171セッション連続継続中）
+
+---
+
 ## [2026-03-27] Bug: Session 170 CRITICAL - 170セッション連続スタック継続 - admin /tp 必須
 
 ### Session 170 確認 (詳細診断結果):
