@@ -1,3 +1,21 @@
+## [2026-03-27] Bug: Session 106 (current) - Bot fully stuck at (40,76,-2), CRITICAL: combat後に切断される, Sessions 101-106 継続
+
+- **Root Cause**: 6セッション連続で同じバグ継続。combat()実行直後に "Not connected" エラーで切断される。
+- **Coordinates**: (40.1, 76, -2) birch_forest
+- **State**: HP=5.9 Hunger=0 Food=0
+- **Observed in Session 106**:
+  - bot.status() → 正常(300ms)
+  - bot.combat("cow") → "牛を狩った" ログ後すぐ切断エラー、食料ドロップなし
+  - bot.combat("pig") → 同様、狩った後切断
+  - bot.combat("chicken") → 同様
+  - bot.farm() → 120秒タイムアウト
+  - 毎回mc_connectで再接続が必要
+- **Pattern**: combat()がアイテムを取得できず即切断。6セッション(101-106)連続で同一現象。
+- **URGENT**: コードレビューが急務。combat後の切断バグとアイテムドロップ取得不具合の修正が必要。
+- **Status**: Reported. Session 106. CRITICAL.
+
+---
+
 ## [2026-03-27] Bug: Session 105 (current) - Bot fully stuck at (40,76,-2), CRITICAL: keepalive/movement bug continues Sessions 101-105
 
 - **Root Cause**: 5セッション連続で同じバグ継続。moveTo() 短距離(5ブロック)でも120秒タイムアウト。
