@@ -2,12 +2,19 @@
 
 - **Session 112 観察**:
   - HP:5.9 Hunger:0 Food=0 - 状況改善なし
-  - 接続直後のstatus確認は成功 (273ms)
-  - combat("cow", 8): Not connected エラー (1012ms) - 接続切断バグ継続
-  - bot位置: (40,76,-2) - 前セッションと同じ場所でスタック継続
+  - 接続直後のstatus確認は成功(273ms)、inventory確認も成功(5ms)
+  - combat("cow", 8): 1405ms完了 - エラーなし、しかし食料が0のまま（ドロップ取得バグ）
+  - combat("chicken", 8): 1006ms完了 - エラーなし、しかし食料が0のまま（同様）
+  - craft("furnace"): 10秒後にNot connected（接続切断バグ）
+  - smelt("beef"): "No furnace found" エラー(10652ms) - furnaceなし
+  - gather("oak_log", 3): 833ms完了 - しかし木材がinvに追加されない（gather効果なし）
+  - bot位置: (40,76,-2) - 前セッションと全く同じ場所でスタック継続
   - inventory: wheat_seeds x55, cobblestone x185, crafting_table x1, stone tools各種, iron_sword x1
-  - 根本バグ: 10秒程度でNot connected、moveTo/combat/waitの全操作で切断
-- **Status**: Reported. Session 112. CRITICAL - コードレビュー最急務。
+  - 根本バグ2種類:
+    1. 接続切断バグ: 複数秒の操作(craft/wait/moveTo)で必ずNot connected
+    2. アクション効果なしバグ: combat/gatherは完了するがアイテムが取得できない
+  - これら2バグの複合でゲームプレイが完全に不可能
+- **Status**: Reported. Session 112. CRITICAL - コードレビュー最急務。修正なしでは進行不可能。
 
 ---
 
