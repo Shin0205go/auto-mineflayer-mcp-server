@@ -1,3 +1,23 @@
+## [2026-03-27] Bug: Session 164 CRITICAL - 164セッション連続スタック継続 - admin /tp 必須
+
+### Session 164 確認:
+- **Cause**: 同一問題が164セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40.2, y=76, z=-1.6 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **動作確認**:
+  - bot.status() → 成功 (1193ms)
+  - bot.combat("cow/pig/sheep") → 動物見つからず失敗
+  - bot.combat("chicken") → ABORTED (22.3ブロック先、到達不能)
+  - bot.moveTo(45, 70, 0) → 30秒タイムアウト
+  - bot.navigate("birch_log") → 30秒タイムアウト
+  - bot.farm() → 60秒タイムアウト
+  - 全移動API機能せず (前セッション同様)
+- **根本原因**: pathfinder/movement APIが全て機能しない。bot.status()のみ正常
+- **緊急対処**: admin `/tp Claude1 100 70 100` が唯一の解決策
+- **Status**: CRITICAL - admin介入必須
+
+---
+
 ## [2026-03-27] Bug: Session 163 CRITICAL - 163セッション連続スタック継続 - admin /tp 必須
 
 ### Session 163 確認:
