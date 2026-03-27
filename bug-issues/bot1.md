@@ -1,3 +1,29 @@
+## [2026-03-27] Bug: Session 147 CRITICAL - 全アクション機能不全継続（47+セッション）
+
+### Session 147 確認結果:
+- **Cause**: 同じCRITICALバグ継続。moveTo全タイムアウト継続、HP5.9/Hunger0
+- **Coordinates**: x=40.2, y=76, z=-1.6（47セッション以上変化なし）
+- **新観察 (Session 147)**:
+  - bot.status() → HP:5.9, Hunger:0, NearbyEntities:{}, NearbyResources:undefined
+  - bot.flee() → 実行するが位置変化なし
+  - bot.combat("cow"/"pig"/"chicken") → 即完了するが食料なし（エンティティなし）
+  - bot.navigate("cow") → タイムアウトまたは即完了（見つからず）
+  - bot.farm() → タイムアウト120秒
+  - bot.moveTo(x+30, y, z) → タイムアウト120秒
+  - mc_connect後すぐにmc_chat/mc_executeで「Not connected」エラー → 接続が不安定
+  - wheat_seeds 55個保有、cobblestone 185個、iron_sword/stone_pickaxe×4あり
+  - 朝(4413 ticks)でも状態不変
+- **根本原因**: ボットが物理的にスタック状態。接続が不安定（connect後すぐ切断）。47セッション以上ゲームプレイ完全停止
+- **必要な対処（admin必須）**:
+  1. `/tp Claude1 100 70 100` を実行（最優先）
+  2. または `/feed Claude1` で食料補充
+  3. または `/give Claude1 bread 20`
+  4. Minecraftサーバーの再起動も検討
+- **Status**: Reported - CRITICAL 根本未解決 - 人間の介入が必須
+- **Priority**: CRITICAL
+
+---
+
 ## [2026-03-27] Bug: Session 146 CRITICAL - 全アクション機能不全継続（46+セッション）
 
 ### Session 146 確認結果:
