@@ -1,7 +1,7 @@
-## [2026-03-27] Bug: Session 177 CRITICAL - 177セッション連続スタック継続 - admin /tp 必須
+## [2026-03-27] Bug: Session 178 CRITICAL - 178セッション連続スタック継続 - admin /tp 必須
 
-### Session 177 確認:
-- **Cause**: 同一問題が177セッション継続。ボットがx=40,y=76,z=-2にスタック
+### Session 178 確認:
+- **Cause**: 同一問題が178セッション継続。ボットがx=40,y=76,z=-2にスタック
 - **Coordinates**: x=40.2, y=76, z=-1.6 (変化なし)
 - **HP**: 5.9 / Hunger: 0 (固定)
 - **症状**:
@@ -12,13 +12,15 @@
   - farm(): タイムアウト（30秒）
   - combat(cow/pig/sheep/chicken): 動くが食料ドロップなし（featherのみ）
   - flee(): 位置変化なし
+  - navigate + combat: 動くが食料ドロップ取得できない
+  - 接続後すぐに切断される（mc_chat失敗）
 - **確認済み**: 短距離(2ブロック)のみ移動可能。ほぼ全操作がタイムアウト
 - **インベントリ**: wheat_seeds 55個, cobblestone 185個, iron_sword, stone_sword等。食料0個
 - **必要な対処**:
   1. admin `/tp Claude1 100 70 100` でスタック解除（最優先）
   2. admin `/give Claude1 bread 10` で食料補給
   3. または `/gamemode creative Claude1` → 拠点設置 → `/gamemode survival Claude1`
-- **Status**: CRITICAL - admin介入必須（177セッション連続継続中）
+- **Status**: CRITICAL - admin介入必須（178セッション連続継続中）
 
 ---
 
