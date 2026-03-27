@@ -1,3 +1,16 @@
+## [2026-03-27] Bug: Session 153 CRITICAL - 153セッション連続スタック継続 - admin /tp 必須
+
+### Session 153 確認:
+- **Cause**: 同一問題が153セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40, y=76, z=-2 (変化なし)
+- **HP**: 5.9 Hunger: 0 (固定)
+- **動作確認**: moveTo(45,76,-2) 30秒タイムアウト。navigate全動物 → 即return(位置変化なし)
+- **combat**: 成功返却するが位置変化なし、ドロップなし
+- **必要対処**: admin が `/tp Claude1 100 70 100` を実行してボットを脱出させること
+- **Status**: CRITICAL - admin介入必須
+
+---
+
 ## [2026-03-27] Bug: Session 152 CRITICAL - 152セッション連続スタック継続 - admin /tp 必須
 
 ### Session 152 確認:
