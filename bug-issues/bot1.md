@@ -1,3 +1,20 @@
+## [2026-03-27] Bug: Session 104 (current) - Bot fully stuck at (40,76,-2), CRITICAL: keepalive bug continues Sessions 101-104
+
+- **Root Cause**: keepaliveタイムアウトバグ。combat()/moveTo()/farm()/pillarUp()全てタイムアウトまたは即返却で効果なし。
+- **Coordinates**: (40, 76, -2) birch_forest
+- **State**: HP=5.9 Hunger=0 Food=0
+- **Sessions Affected**: 101, 102, 103, 104 (連続4セッション同じバグ)
+- **Observed in Session 104**:
+  - bot.combat("cow") → 1.5秒即返却、食料ゼロのまま
+  - bot.farm() → 120秒タイムアウト
+  - bot.combat("pig", 4) → 300秒タイムアウト
+  - bot.flee() → 動作するが位置変化なし
+  - status()/inventory() → 正常動作
+- **Critical**: 4セッション継続で同じバグ。コードレビューが必要。
+- **Status**: Reported. Session 104.
+
+---
+
 ## [2026-03-27] Bug: Session 103 (current) - Bot fully stuck at (40,76,-2), all movement ops timeout, combat drops missing
 
 - **Root Cause**: 既知のkeepaliveタイムアウトバグ継続。moveTo/pillarUp/combat全てタイムアウトまたは即返却で効果なし。
