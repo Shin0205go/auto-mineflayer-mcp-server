@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 127 CRITICAL - 全アクション機能不全継続（27+セッション）
+
+### Session 127 確認結果:
+- **Cause**: combat()実行でアイテムドロップなし継続。chicken/pig/sheep/cow全て狩ったが肉0
+- **Coordinates**: x=40, y=76, z=-2（27セッション以上変化なし）
+- **Last Actions**: mc_reload成功→combat("cow/pig/chicken/sheep")×4回→インベントリ変化なし
+- **観察**: status()/inventory()は正常。combat()は成功ログだが肉ドロップ0継続
+- **HP**: 5.9、Hunger: 0（27+セッション変化なし）
+- **Error Message**: なし（combat自体は「成功」と報告されるが実際にはドロップなし）
+- **Status**: Reported - 緊急対応必要。コードレビュー要
+- **Priority**: CRITICAL - combat/farm/moveToが機能せずゲームプレイ完全停止
+
+---
+
 ## [2026-03-27] Bug: Session 126 CRITICAL - 全アクション機能不全継続（26+セッション）
 
 ### Session 126 確認結果:
