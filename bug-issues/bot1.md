@@ -1,3 +1,20 @@
+## [2026-03-27] Bug: Session 105 (current) - Bot fully stuck at (40,76,-2), CRITICAL: keepalive/movement bug continues Sessions 101-105
+
+- **Root Cause**: 5セッション連続で同じバグ継続。moveTo() 短距離(5ブロック)でも120秒タイムアウト。
+- **Coordinates**: (40, 76, -2) birch_forest
+- **State**: HP=5.9 Hunger=0 Food=0
+- **Observed in Session 105**:
+  - bot.moveTo(x+5, y, z) → 120秒タイムアウト
+  - bot.combat("chicken") → 瞬時返却、食料ドロップなし
+  - bot.navigate("chicken"/"cow") → 成功するが位置変化なし(40,76,-2のまま)
+  - bot.craft("furnace") → "success" だがインベントリに反映なし
+  - bot.farm() → 実行後 "Not connected" エラー
+  - status()/inventory() → 正常（300ms以内）
+- **Pattern**: 5セッション(101-105)連続で同一現象。コードレビューが急務。
+- **Status**: Reported. Session 105. NEEDS URGENT CODE FIX.
+
+---
+
 ## [2026-03-27] Bug: Session 104 (current) - Bot fully stuck at (40,76,-2), CRITICAL: keepalive bug continues Sessions 101-104
 
 - **Root Cause**: keepaliveタイムアウトバグ。combat()/moveTo()/farm()/pillarUp()全てタイムアウトまたは即返却で効果なし。
