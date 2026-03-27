@@ -1,3 +1,19 @@
+## [2026-03-27] Bug: Session 128 CRITICAL - 全アクション機能不全継続（28+セッション）
+
+### Session 128 確認結果:
+- **Cause**: moveTo/pillarUp/gather/combatが全てタイムアウト（30秒）またはドロップなし
+- **Coordinates**: x=40, y=76, z=-2（28セッション以上変化なし）
+- **Last Actions**:
+  - pillarUp(6) → 30秒タイムアウト
+  - moveTo(x, y, z-50) → 30秒タイムアウト
+  - navigate("cow") → 6ms成功ログだが効果なし
+  - combat("cow","chicken") → 成功ログだがドロップなし
+- **症状**: HP:5.9/Hunger:0固定、位置変化なし、夜明け後も同じ問題継続
+- **Status**: Reported - 28セッション継続中、緊急コードレビュー必要
+- **Priority**: CRITICAL - ゲームプレイ完全停止。根本原因未解決
+
+---
+
 ## [2026-03-27] Bug: Session 127 CRITICAL - 全アクション機能不全継続（27+セッション）
 
 ### Session 127 確認結果 (詳細調査):
