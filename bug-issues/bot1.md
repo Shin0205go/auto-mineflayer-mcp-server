@@ -1,3 +1,21 @@
+## [2026-03-27] Bug: Session 161 CRITICAL - 161セッション連続スタック継続 - admin /tp 必須
+
+### Session 161 確認:
+- **Cause**: 同一問題が161セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40, y=76, z=-2 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **動作確認**:
+  - bot.status() → 成功
+  - bot.flee() → 成功返却するが位置変化なし
+  - bot.navigate("cow") → 牛発見・倒したがraw_beefドロップなし (leatherのみ)
+  - bot.craft("furnace") → 30秒タイムアウト
+  - bot.farm() → 60秒タイムアウト
+  - bot.navigate("chicken") → 90秒タイムアウト
+- **根本原因**: pathfinder/movement APIが全て機能しない。bot.status()のみ正常
+- **Status**: CRITICAL - admin `/tp Claude1 100 70 100` または pathfinder根本修正 必須
+
+---
+
 ## [2026-03-27] Bug: Session 160 CRITICAL - 160セッション連続スタック継続 - admin /tp 必須
 
 ### Session 160 確認:
