@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 126 CRITICAL - 全アクション機能不全継続（26+セッション）
+
+### Session 126 確認結果:
+- **Cause**: moveTo/farm/craftが全てタイムアウト（60-120秒）、combat後ドロップなし継続
+- **Coordinates**: x=40, y=76, z=-2（25セッション以上変化なし）
+- **Last Actions**: moveTo(53,65,6)→60秒タイムアウト、farm()→120秒タイムアウト
+- **観察**: status()/inventory()は正常動作。combat()は「成功」ログだがアイテム取得0
+- **HP**: 5.9、Hunger: 0で変化なし（サーバー難易度Peaceful疑い）
+- **Error Message**: "Execution timed out after 60000ms/120000ms"
+- **Status**: Reported - 26セッション継続中、緊急対応必要
+- **Priority**: CRITICAL - ゲームプレイ完全停止状態
+
+---
+
 ## [2026-03-27] Bug: Session 125 CRITICAL - 全アクション機能不全継続（25+セッション）
 
 ### 追加調査結果（Session 125後半）:
