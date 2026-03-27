@@ -1,3 +1,25 @@
+## [2026-03-27] Bug: Session 137 CRITICAL - 全アクション機能不全継続（37+セッション）
+
+### Session 137 確認結果:
+- **Cause**: 同じCRITICALバグ継続。moveTo完全タイムアウト継続、combat動作せず食料0
+- **Coordinates**: x=40, y=76, z=-2（37セッション以上変化なし）
+- **Last Actions**:
+  - bot.status() → HP:5.9/Hunger:0（不変）
+  - bot.flee(20) → "成功"ログだが位置変化なし
+  - bot.navigate("cow") → 牛発見ログが出るがcombat("cow", 2) → 食料0のまま
+  - bot.moveTo(x+10, y, z) → タイムアウト30秒
+  - bot.moveTo(x, y, z+60) → タイムアウト180秒
+  - mc_chat() → 「Not connected」エラー
+- **重要観察**:
+  - bot.status()とbot.inventory()のみ正常動作
+  - HP/Hunger/位置が37セッション以上不変（5.9/0/40,76,-2）
+  - combatは引数のfleeAtHp未満でも実行され、食料0のまま終了
+  - mc_chatが毎回「Not connected」エラー
+- **Status**: Reported - CRITICAL 根本未解決。緊急コードレビュー必要
+- **Priority**: CRITICAL - 37セッション以上ゲームプレイ完全停止
+
+---
+
 ## [2026-03-27] Bug: Session 136 CRITICAL - 全アクション機能不全継続（36+セッション）
 
 ### Session 136 確認結果:
