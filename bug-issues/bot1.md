@@ -8,6 +8,14 @@
   - 接続が~10秒で自動切断される「keepaliveバグ」が根本原因。
   - HP:5.9 Hunger:0 Food=0 継続。combat成功でもドロップがinvに追加されない。
 - **Root Pattern**: 接続してから約10秒後に必ずNot connected。何らかの操作（wait/moveTo/combat）のどれかがトリガー。
+- **Session 110 追加観察**:
+  - mc_reload後: moveTo(2ブロック)成功(736ms)→切断→再接続→(40.1,76,-1.9)にリセット
+  - 毎回接続直後のpositionが(40.1,76.0,-1.9)で固定（移動が保持されない）
+  - farm()は60秒タイムアウト（接続中でも処理開始せずタイムアウト）
+  - navigate("chest")タイムアウト
+  - 朝(morning, ticks=107)でも同様のバグ継続
+  - **仮説**: ボットが「ゾンビ状態」にある - サーバー側では存在するが、MCP側の接続が不安定でkeepaliveが送れずサーバーから切断される。切断のたびにスポーン位置にリセットされる。
+  - **必要な修正**: keepalive送信の維持 + 切断後の位置保持 or 正しいリスポーン位置への移動
 - **Session 109 追記**: 同じ状況継続。HP:5.9 Hunger:0 Food=0。moveTo(5ブロック)タイムアウト継続。pillarUpタイムアウト。navigateタイムアウト。bot.combat()後にNot connectedエラーで切断される。farm()120秒タイムアウト。ボットはX=40.1,Y=76,Z=-1.9から動けない。根本問題未解決。コードレビュー急務。
 - **Status**: Reported. Session 110. CRITICAL - 接続10秒切断バグ。コードレビュー急務。
 
