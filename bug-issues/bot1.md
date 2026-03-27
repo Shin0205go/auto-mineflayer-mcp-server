@@ -1,3 +1,22 @@
+## [2026-03-27] Bug: Session 162 CRITICAL - 162セッション連続スタック継続 - admin /tp 必須
+
+### Session 162 確認:
+- **Cause**: 同一問題が162セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40.2, y=76, z=-1.6 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **Time**: midnight (ticks=20454)
+- **動作確認**:
+  - bot.status() → 成功
+  - bot.flee(30/50) → 「成功」返却するが位置変化なし (x=40.20, z=-1.60のまま)
+  - bot.combat("chicken") → 完了返却するがraw_chickenドロップなし、食料0
+  - bot.combat("cow/pig/sheep") → 動物見つからず失敗
+  - bot.pillarUp(5) → 120秒タイムアウト (midnight中)
+- **根本原因**: pathfinder/movement APIが全て機能しない。bot.status()のみ正常
+- **admin対応必要**: `/tp Claude1 100 70 100` で別の場所にテレポートするか、pathfinder根本修正が必要
+- **Status**: CRITICAL
+
+---
+
 ## [2026-03-27] Bug: Session 161 CRITICAL - 161セッション連続スタック継続 - admin /tp 必須
 
 ### Session 161 確認:
