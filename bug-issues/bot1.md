@@ -1,3 +1,23 @@
+## [2026-03-27] Bug: Session 160 CRITICAL - 160セッション連続スタック継続 - admin /tp 必須
+
+### Session 160 確認:
+- **Cause**: 同一問題が160セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40.2, y=76, z=-1.6 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **動作確認**:
+  - bot.status() → 成功
+  - bot.moveTo(45, 76, -1) → 15秒タイムアウト
+  - bot.navigate("chicken") → 失敗（64ブロック以内にいない）
+  - bot.pillarUp(3) → 30秒タイムアウト
+  - bot.flee(10) → 「成功」返却するが位置変化なし (x=40.20, z=-1.60のまま)
+  - bot.combat("chicken") → ABORTED (20.9ブロック先、到達不能)
+  - bot.place("cobblestone", ...) → "Block not placed (air)"
+- **根本原因**: pathfinder/物理移動API全て機能しない。flee()は成功返却するが実際の移動なし。place()も機能しない。bot.status()のみ正常動作。
+- **緊急対処**: admin `/tp Claude1 100 70 100` が唯一の解決策
+- **Status**: CRITICAL - admin介入必須
+
+---
+
 ## [2026-03-27] Bug: Session 159 CRITICAL - 159セッション連続スタック継続 - admin /tp 必須
 
 ### Session 159 確認:
