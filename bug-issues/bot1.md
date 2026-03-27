@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 154 CRITICAL - 154セッション連続スタック継続 - admin /tp 必須
+
+### Session 154 確認:
+- **Cause**: 同一問題が154セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40, y=76, z=-2 (変化なし)
+- **HP**: 5.9 Hunger: 0 (固定)
+- **Time**: midnight (ticks=20816)
+- **動作確認**: moveTo, navigate, farm, pillarUp すべてタイムアウト
+- **combat**: 呼び出し成功返却だが動物見つからず、食料ドロップなし
+- **必要対処**: admin が `/tp Claude1 100 70 100` を実行してボットを脱出させること
+- **Status**: CRITICAL - admin介入必須
+
+---
+
 ## [2026-03-27] Bug: Session 153 CRITICAL - 153セッション連続スタック継続 - admin /tp 必須
 
 ### Session 153 確認:
