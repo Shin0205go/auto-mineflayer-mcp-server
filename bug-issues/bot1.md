@@ -1,3 +1,34 @@
+## [2026-03-27] Bug: Session 141 CRITICAL - 全アクション機能不全継続（41+セッション）
+
+### Session 141 確認結果:
+- **Cause**: 同じCRITICALバグ継続。moveTo/gather/craft/farm/pillarUp全タイムアウト、combat動物なし、食料0
+- **Coordinates**: x=40.2, y=76, z=-1.6（41セッション以上変化なし）
+- **Last Actions**:
+  - bot.status() → HP:5.9/Hunger:0 (不変)
+  - bot.combat("cow"/"pig"/"chicken"/"sheep") → 即終了、周辺に動物なし
+  - bot.moveTo(+2) → 微小移動(40.5, 76, -0.6)のみ
+  - bot.moveTo(50, 76, 0) → タイムアウト60秒
+  - bot.navigate("cow") → 即戻り、位置変化なし
+  - bot.pillarUp(3) → タイムアウト30秒
+  - bot.gather("birch_log", 1) → タイムアウト45秒
+  - bot.craft("furnace") → タイムアウト30秒
+  - bot.farm() → タイムアウト20秒
+  - bot.place("crafting_table") → 成功(17秒)
+  - mc_chat(mode=send) → 成功（今回はmc_chatが機能）
+- **新観察 (Session 141)**:
+  - mc_chatがmode=sendで成功するようになった（前セッションでNot connected）
+  - placeのみ依然として機能（17秒かかる）
+  - status/inventory/place/chatのみ機能、他全てタイムアウト
+  - wheat_seeds 55個保持、cobblestone 180+個保持
+  - iron_sword保持済み
+  - birch_forest biomeにいる（夕方/sunset）
+- **根本原因**: ボットが物理的にスタック状態。pathfinderのゴール設定は行われるが経路計算が詰まっている。Minecraftサーバー側の問題の可能性。
+- **推奨対処**: adminがボットをテレポート（/tp Claude1 <open_area>）、またはMinecraftサーバー再起動
+- **Status**: Reported - CRITICAL 根本未解決。41セッション以上ゲームプレイ完全停止
+- **Priority**: CRITICAL
+
+---
+
 ## [2026-03-27] Bug: Session 140 CRITICAL - 全アクション機能不全継続（40+セッション）
 
 ### Session 140 確認結果:
