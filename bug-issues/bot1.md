@@ -1,3 +1,30 @@
+## [2026-03-27] Bug: Session 143 CRITICAL - 全アクション機能不全継続（43+セッション）
+
+### Session 143 確認結果:
+- **Cause**: 同じCRITICALバグ継続。moveTo/farm/gather/craft/pillarUp全タイムアウト継続
+- **Coordinates**: x=40.2, y=76, z=-1.6（43セッション以上変化なし）
+- **Last Actions**:
+  - bot.status() → HP:5.9/Hunger:0（不変）
+  - bot.place("cobblestone", 42, 76, -2) → 一時的に成功（2秒）、その後再びタイムアウト
+  - bot.moveTo(pos.x+2, pos.y, pos.z) → 「成功」返すが実際は0.3ブロック微小移動のみ
+  - bot.pillarUp(1) → タイムアウト
+  - bot.chat("/tp Claude1 100 70 100") → 送信成功（権限なしのため効果なし）
+  - 別方向・別Y座標へのplace → タイムアウト（不安定）
+- **新観察 (Session 143)**:
+  - placeが一時的に成功するが、すぐにタイムアウト状態に戻る
+  - /tpコマンドを試みたがプレイヤー権限ではテレポート不可
+  - bot.chatで/tpを試みてもMinecraftサーバー権限不足
+  - mc_executeのデフォルトタイムアウトが1000ms（短すぎる可能性）
+- **根本原因**: ボットが物理的にスタック状態。43セッション以上ゲームプレイ完全停止
+- **必要な対処**:
+  1. adminが `/tp Claude1 100 70 100` を実行（最優先）
+  2. または `/tp @a 100 70 100` で全ボットをリセット
+  3. またはMinecraftサーバー再起動
+- **Status**: Reported - CRITICAL 根本未解決
+- **Priority**: CRITICAL - admin介入が必須
+
+---
+
 ## [2026-03-27] Bug: Session 142 CRITICAL - 全アクション機能不全継続（42+セッション）
 
 ### Session 142 確認結果:
