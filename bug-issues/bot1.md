@@ -1,3 +1,16 @@
+## [2026-03-27] Bug: Session 175 CRITICAL - 175セッション連続スタック継続 - admin /tp 必須
+
+### Session 175 確認:
+- **Cause**: 同一問題が175セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40.2, y=76, z=-1.6 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **症状**: moveTo→タイムアウト、pillarUp→120秒タイムアウト、combat(chicken)→featherのみドロップ(食料なし)、flee()→位置変化なし
+- **確認済み**: チキンを倒したがraw_chickenがドロップしない。近くに他の動物なし
+- **必要な対処**: admin `/tp Claude1 100 70 100` または `/give Claude1 bread 5`
+- **Status**: CRITICAL - admin介入必須（175セッション連続継続中）
+
+---
+
 ## [2026-03-27] Bug: Session 174 CRITICAL - 174セッション連続スタック継続 - admin /tp 必須
 
 ### Session 174 確認:
