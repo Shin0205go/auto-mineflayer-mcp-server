@@ -1,3 +1,21 @@
+## [2026-03-27] Bug: Session 116 (current) - craft/moveTo/pillarUp/farm全タイムアウト継続, CRITICAL: Sessions 101-116
+
+- **Session 116 観察**:
+  - HP:5.9 Hunger:0 Food=0 - 全く改善なし（Sessions 101-116で同じ）
+  - 座標: (40.1, 76.0, -1.9) - 毎セッション同じ場所
+  - bot.craft("furnace"): 30秒タイムアウト（crafting_table設置後も）
+  - bot.moveTo(60, 76, 0): 30秒タイムアウト（短距離でも失敗）
+  - bot.pillarUp(5): 30秒タイムアウト
+  - bot.farm(): 120秒タイムアウト
+  - bot.combat("cow/pig/chicken/sheep/zombie"): 即時完了するが食料ドロップなし
+  - bot.navigate("cow/pig"): 即時完了（実際の移動なし）
+  - bot.status(): 正常動作
+  - bot.place("crafting_table"): 動作した（6秒）
+  - **根本バグ継続**: moveTo/craft/pillarUpのタイムアウトが全16セッションで継続
+  - **crafting_table設置後もcraft("furnace")タイムアウト** — 新観察
+  - **緊急度**: CRITICAL - Session 116まで継続。
+- **Status**: Reported. Session 116. CRITICAL - コードレビュー最急務。
+
 ## [2026-03-27] Bug: Session 115 (current) - gather/combat/moveTo全タイムアウト継続, CRITICAL: Sessions 101-115
 
 - **Session 115 観察**:
