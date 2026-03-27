@@ -1,3 +1,16 @@
+## [2026-03-27] Bug: Session 181 CRITICAL - 181セッション連続スタック継続 - admin /tp 必須
+
+### Session 181 確認:
+- **Cause**: 同一問題が181セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40.2, y=76, z=-1.6 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **症状**: moveTo/pillarUp/farm/navigate/combat 全てタイムアウト。bot.place()のみ動作する
+- **新知見**: bot.place()は動作。bot.moveTo(x+1)は0.3ブロック移動のみで完了するが10ブロック先はタイムアウト
+- **Status**: CRITICAL - admin介入必須（181セッション連続継続中）
+- **必要な対処**: `/tp Claude1 100 70 100` → `/give Claude1 bread 10`
+
+---
+
 ## [2026-03-27] Bug: Session 180 CRITICAL - 180セッション連続スタック継続 - admin /tp 必須
 
 ### Session 180 確認:
