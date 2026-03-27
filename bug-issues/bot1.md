@@ -1,14 +1,23 @@
 ## [2026-03-27] Bug: Session 127 CRITICAL - 全アクション機能不全継続（27+セッション）
 
-### Session 127 確認結果:
-- **Cause**: combat()実行でアイテムドロップなし継続。chicken/pig/sheep/cow全て狩ったが肉0
+### Session 127 確認結果 (詳細調査):
+- **Cause**: moveTo/gather/pillarUp/farmタイムアウト + combat後ドロップなし + navigate成功ログだが移動なし
 - **Coordinates**: x=40, y=76, z=-2（27セッション以上変化なし）
-- **Last Actions**: mc_reload成功→combat("cow/pig/chicken/sheep")×4回→インベントリ変化なし
-- **観察**: status()/inventory()は正常。combat()は成功ログだが肉ドロップ0継続
-- **HP**: 5.9、Hunger: 0（27+セッション変化なし）
-- **Error Message**: なし（combat自体は「成功」と報告されるが実際にはドロップなし）
-- **Status**: Reported - 緊急対応必要。コードレビュー要
-- **Priority**: CRITICAL - combat/farm/moveToが機能せずゲームプレイ完全停止
+- **Last Actions**:
+  - moveTo(45,76,0) → タイムアウト30秒
+  - gather("birch_log") → タイムアウト30秒
+  - pillarUp(3) → タイムアウト30秒
+  - farm() → 2.2秒で完了するが効果なし
+  - navigate("oak_log") → 成功ログだが位置変化なし
+  - combat("cow/pig/chicken/sheep") → 成功ログだがドロップなし
+- **観察**:
+  - status()/inventory()のみ正常動作
+  - HP:5.9/Hunger:0が固定（サーバー難易度Peaceful疑い強い）
+  - navigate/combat/farmは「成功」と返すがゲーム状態に影響なし
+  - botが実際にはゲームワールドで動いていない可能性
+- **Error Message**: "Execution timed out after 30000ms" (moveTo/gather/pillarUp)
+- **Status**: Reported - 27セッション継続中、緊急コードレビュー必要
+- **Priority**: CRITICAL - ゲームプレイ完全停止。根本原因未解決
 
 ---
 
