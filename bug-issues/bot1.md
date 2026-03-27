@@ -1,3 +1,31 @@
+## [2026-03-27] Bug: Session 139 CRITICAL - 全アクション機能不全継続（39+セッション）
+
+### Session 139 確認結果:
+- **Cause**: 同じCRITICALバグ継続。moveTo/farm完全タイムアウト継続、combat動作せず食料0
+- **Coordinates**: x=40, y=76, z=-2（39セッション以上変化なし）
+- **Last Actions**:
+  - bot.status() → HP:5.9/Hunger:0（不変 - 38セッション前から全く変わらず）
+  - bot.flee(20) → 実行されるが位置・HP変化なし
+  - bot.combat("cow") → 即終了、食料0のまま（肉ドロップなし）
+  - bot.moveTo(90, 76, -2) → タイムアウト120秒
+  - bot.farm() → タイムアウト120秒
+  - mc_chat(mode=send) → 「Not connected」エラー（mc_connect後も）
+- **重要観察**:
+  - bot.status()とbot.inventory()のみ正常動作
+  - HP/Hunger/位置が39セッション以上不変（5.9/0/40,76,-2）
+  - mc_chatが毎回「Not connected」エラー
+  - bot.moveTo/farm は全てタイムアウト
+  - wheat_seeds 55個あるが食料に変換できない
+- **根本原因の仮説**:
+  - pathfinderが(40, 76, -2)の地形で永久ループしている
+  - または物理ボット自体がMinecraftサーバー上で「stuck」状態
+  - mc_connectは成功するが、ボット自体が動けない状態
+  - mc_chatのNot connected問題はmc_connectとmc_chatで別の接続状態管理をしている可能性
+- **Status**: Reported - CRITICAL 根本未解決。緊急コードレビュー必要
+- **Priority**: CRITICAL - 39セッション以上ゲームプレイ完全停止
+
+---
+
 ## [2026-03-27] Bug: Session 138 CRITICAL - 全アクション機能不全継続（38+セッション）
 
 ### Session 138 確認結果:
