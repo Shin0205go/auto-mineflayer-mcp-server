@@ -10,6 +10,14 @@
   - bot.combat("pig", 4) → 300秒タイムアウト
   - bot.flee() → 動作するが位置変化なし
   - status()/inventory() → 正常動作
+- **Additional Session 104 Observations**:
+  - place("crafting_table", px+1, py, pz) → 成功（8.5秒）
+  - moveTo(px+1, py, pz) → 一見成功するが位置が(40.5,76,-1.5)に固定される
+  - moveTo後に位置が常に(40.5,76,-1.5)にリセットされる
+  - craft("furnace") → 45秒タイムアウト（crafting_table設置済みでも失敗）
+  - 2ブロック移動を3回繰り返すと3回目は位置変化なし
+- **Root Cause Hypothesis**: ボットがサーバー側でスタック状態。サーバーがクライアントの移動を拒否している可能性。
+  またはkeepalive応答後に接続がリセットされてボットがリスポーン位置に戻される。
 - **Critical**: 4セッション継続で同じバグ。コードレビューが必要。
 - **Status**: Reported. Session 104.
 
