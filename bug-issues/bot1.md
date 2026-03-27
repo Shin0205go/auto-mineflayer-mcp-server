@@ -1,3 +1,20 @@
+## [2026-03-27] Bug: Session 103 (current) - Bot fully stuck at (40,76,-2), all movement ops timeout, combat drops missing
+
+- **Root Cause**: 既知のkeepaliveタイムアウトバグ継続。moveTo/pillarUp/combat全てタイムアウトまたは即返却で効果なし。
+- **Coordinates**: (40.1, 76, -1.9) birch_forest
+- **State**: HP=5.9 Hunger=0 Food=0
+- **Last Actions**:
+  - bot.pillarUp(5) → 60秒タイムアウト
+  - bot.combat("cow") → 即返却するが食料ゼロのまま
+  - bot.moveTo(x+10, y, z) → 30秒タイムアウト、位置変化なし
+  - bot.combat("pig"/"chicken"/"sheep"/"cow") → "Not connected" エラー（操作中に切断）
+  - 再接続後 status() は動く（259ms）
+- **Pattern**: combat() 呼び出し後に接続が切れる。reconnect後も位置変化なし。
+- **Impact**: ゲームプレイ完全不可。飢餓でHP削れ続けている。
+- **Status**: Reported. Session 103.
+
+---
+
 ## [2026-03-27] Bug: Session 102 (current) - Bot fully stuck at (40,76,-2), all movement ops timeout
 
 - **Root Cause**: 既知のkeepaliveタイムアウトバグ継続。moveTo/farm/pillarUp/navigate全てタイムアウト。
