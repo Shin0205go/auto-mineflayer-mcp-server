@@ -8,7 +8,17 @@
   - bot.moveTo(53, 65, 6) → 60秒タイムアウト（チェストへ移動できず）
   - bot.flee() → 10秒後成功返却するがHP変化なし
 - **Context**: Chest at (53, 65, 6). 3秒keepalive問題の悪化か？
-- **Status**: Reported. Session 101.
+- **追加観察**:
+  - 位置(40,76,-2)にリスポーンし続ける（飢餓死亡の繰り返し）
+  - moveTo(px+1, py, pz)は1秒以内で成功するが、位置が毎回(40,76,-2)にリセット
+  - moveTo 2ブロック以上 or 1秒超える操作はすぐ切断/タイムアウト
+  - farm() 30秒タイムアウト
+  - 事実上ゲームプレイ完全停止状態
+- **必要な修正（優先度順）**:
+  1. keepaliveパケット実装（最重要 - これなしでは何も動かない）
+  2. combat()のドロップアイテム回収修正（食料が取れない）
+  3. farm()の高速化 or short-circuit（既存農場があればすぐ収穫）
+- **Status**: Reported. Session 101 end. Gameplay blocked.
 
 ---
 
