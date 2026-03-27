@@ -1,3 +1,20 @@
+## [2026-03-27] Bug: Session 136 CRITICAL - 全アクション機能不全継続（36+セッション）
+
+### Session 136 確認結果:
+- **Cause**: 同じCRITICALバグ継続。moveTo/pillarUp/farm/combat完全タイムアウト継続
+- **Coordinates**: x=40, y=76, z=-2（36セッション以上変化なし）
+- **Last Actions**:
+  - bot.status() → HP:5.9/Hunger:0（不変）
+  - bot.flee(15) → "成功"ログだが位置変化なし
+  - bot.combat("cow"/"chicken") → 即座に「Not found nearby」
+  - bot.moveTo(x+5, y, z) → タイムアウト30秒
+  - bot.farm() → タイムアウト120秒
+  - mc_chat() → 「Not connected」エラー
+- **Status**: Reported - CRITICAL 根本未解決。コードレビュー必要
+- **Priority**: CRITICAL - 36セッション以上ゲームプレイ完全停止
+
+---
+
 ## [2026-03-27] Bug: Session 135 CRITICAL - 全アクション機能不全継続（35+セッション）
 
 ### Session 135 確認結果:
