@@ -1,3 +1,20 @@
+## [2026-03-27] Bug: Session 118 UPDATE - wait()/combat() 切断パターン詳細調査
+
+- **Cause**: Sessions 101-118で同じバグが継続。moveTo/pillarUp/farm はタイムアウト。combat後即切断。
+- **Coordinates**: (40.2, 76, -1.6) - 全セッションで同じ座標から動けない
+- **HP/Hunger**: HP:5.9 Hunger:0 - 18セッション以上改善なし
+- **New Findings in Session 118**:
+  - bot.wait(5000) → 動作（切断なし）
+  - bot.wait(10000) → 切断
+  - bot.wait(5000) × 2回連続 → 動作
+  - bot.wait(5000) × 3回連続 → 切断
+  - bot.combat("cow") 昼間 → 即切断（"Nearby: {}"の後）
+  - bot.farm() 昼間 → 60秒タイムアウト
+- **Pattern**: wait()の切断はタイマー系の問題か。5秒以内は安全、それ以上は切断。
+- **Hypothesis**: Minecraftサーバーのタイムアウト設定、またはkeep-aliveパケット未送信が原因か。
+- **Working**: bot.status(), bot.inventory(), bot.chat() のみ
+- **Status**: Reported Session 118 Update. コードレビューアーによる根本修正が最優先。
+
 ## [2026-03-27] Bug: Session 118 - CRITICAL継続 moveTo/pillarUp/farm/combat全機能不全
 
 - **Cause**: Sessions 101-118で同じバグが継続。moveTo/pillarUp/farm はタイムアウト。combat後即切断。
