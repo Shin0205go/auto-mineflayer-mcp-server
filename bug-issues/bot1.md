@@ -1,8 +1,15 @@
-## [2026-03-27] Bug: Session 110 (current) - Bot fully stuck at (40,76,-2), CRITICAL: Sessions 101-110継続, moveTo/gather/craft/pillarUpがタイムアウト
+## [2026-03-27] Bug: Session 110 (current) - Bot connection drops after ~10s, CRITICAL: Sessions 101-110継続
 
-- **Session 110 追記**: 同じ状況継続。HP:5.9 Hunger:0 Food=0。bot.combat("cow"/"chicken")は成功するが食料ドロップなし（invに追加されない）。bot.build("shelter")で"Bot Claude1 not found"エラー。接続が不安定で実行中にNot connectedエラー頻発。Time=midnight(18846ticks)。根本的なボット移動/インタラクション系が全て機能不全。コードレビュー急務。
+- **Session 110 詳細分析**:
+  - mc_reload後: moveTo(2ブロック)は成功(3sec)。その直後のmoveTo(5ブロック)で切断。
+  - wait(10000ms)実行中に切断される。
+  - combat("cow")成功後、inv確認時に切断される。
+  - craft("furnace")成功。place("furnace")成功。
+  - 接続が~10秒で自動切断される「keepaliveバグ」が根本原因。
+  - HP:5.9 Hunger:0 Food=0 継続。combat成功でもドロップがinvに追加されない。
+- **Root Pattern**: 接続してから約10秒後に必ずNot connected。何らかの操作（wait/moveTo/combat）のどれかがトリガー。
 - **Session 109 追記**: 同じ状況継続。HP:5.9 Hunger:0 Food=0。moveTo(5ブロック)タイムアウト継続。pillarUpタイムアウト。navigateタイムアウト。bot.combat()後にNot connectedエラーで切断される。farm()120秒タイムアウト。ボットはX=40.1,Y=76,Z=-1.9から動けない。根本問題未解決。コードレビュー急務。
-- **Status**: Reported. Session 110. CRITICAL - コードレビュー急務。10セッション連続同一バグ。
+- **Status**: Reported. Session 110. CRITICAL - 接続10秒切断バグ。コードレビュー急務。
 
 ---
 
