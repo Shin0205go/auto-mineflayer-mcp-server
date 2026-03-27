@@ -1,3 +1,32 @@
+## [2026-03-27] Bug: Session 144 CRITICAL - 全アクション機能不全継続（44+セッション）
+
+### Session 144 確認結果:
+- **Cause**: 同じCRITICALバグ継続。moveTo/pillarUp全タイムアウト継続、HP5.9/Hunger0
+- **Coordinates**: x=40.2, y=76, z=-1.6（44セッション以上変化なし）
+- **Last Actions**:
+  - bot.status() → HP:5.9/Hunger:0（不変）
+  - bot.combat("cow"/"pig"/"chicken"/"sheep") → 即終了、周辺に動物なし（スケルトン2匹のみ）
+  - bot.flee(30) → タイムアウト/位置変化なし
+  - bot.moveTo(45, 70, 3) → タイムアウト30秒
+  - bot.pillarUp(5) → タイムアウト60秒
+  - bot.navigate("cow") → 即終了、位置変化なし
+  - bot.store("list") → チェスト(53,65,6)発見「18.6ブロック離れすぎ」
+- **新観察 (Session 144)**:
+  - Hunger=0でボットが動けない状態（飢餓によるダメージ）の可能性
+  - mc_chatもNot connectedエラー（接続状態不安定）
+  - チェストが近くにある(53,65,6)がY差=11でアクセス不可
+  - 全移動系APIが機能しない
+- **根本原因**: ボットが物理的にスタック状態。44セッション以上ゲームプレイ完全停止
+- **必要な対処（admin必須）**:
+  1. `/tp Claude1 100 70 100` を実行（最優先）
+  2. または `/tp @a 100 70 100` で全ボットをリセット
+  3. または `/feed Claude1` で食料補充
+  4. またはMinecraftサーバー再起動
+- **Status**: Reported - CRITICAL 根本未解決
+- **Priority**: CRITICAL - admin介入が必須
+
+---
+
 ## [2026-03-27] Bug: Session 143 CRITICAL - 全アクション機能不全継続（43+セッション）
 
 ### Session 143 確認結果:
