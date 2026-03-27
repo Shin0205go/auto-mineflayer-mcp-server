@@ -1,5 +1,13 @@
 ## [2026-03-27] Bug: Session 125 CRITICAL - 全アクション機能不全継続（25+セッション）
 
+### 追加調査結果（Session 125後半）:
+- place()は**1回だけ**動く。2回目以降は「Not connected」エラー
+- status()→place()→status()のシーケンスは成功
+- craft(), farm(), build(), flee(), combat()は全てタイムアウトか切断
+- **パターン**: place()を複数回呼ぶループが切断を引き起こす
+- **根本的な問題**: mc_execute内でawaitを複数回呼ぶと切断が発生する可能性
+- HP:5.9 Hunger:0が変化しない（飢餓ダメージが発生しない = サーバー難易度がPeacefulかもしれない）
+
 - **Session 125 確認結果**:
   - status() / inventory() → 正常（HP:5.9, Hunger:0, 位置: 40.2, 76, -1.6）
   - place() → 成功（crafting_table設置できた）
