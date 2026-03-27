@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 117 UPDATE2 - "Bot Claude1 not found" + wait()後切断, CRITICAL
+
+- **Cause**: bot.craft()が"Bot Claude1 not found"を返す。bot.wait()呼び出し後も即切断。
+- **Coordinates**: (40.2, 76, -1.6)
+- **Working**: bot.status(), bot.inventory(), bot.chat() のみ
+- **Broken**:
+  - bot.wait(2000) → 切断
+  - bot.combat() → 切断
+  - bot.place() → 切断
+  - bot.gather/moveTo/farm/navigate → タイムアウト
+  - bot.craft() → "Bot Claude1 not found" エラー
+- **Root Cause Hypothesis**: botManager内でClaude1ボットが正しく登録・参照できていない。切断がwait()でも起きるため、bot接続が非常に不安定。
+- **Status**: Reported Session 117 Update2. 最優先修正必要。
+
 ## [2026-03-27] Bug: Session 117 UPDATE - combat/place後に即切断バグ確認, CRITICAL継続
 
 - **Cause**: bot.combat()やbot.place()を呼んだ直後（1-3秒）にサーバー切断が発生
