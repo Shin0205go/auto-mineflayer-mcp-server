@@ -1,3 +1,20 @@
+## [2026-03-27] Bug: Session 122 CRITICAL - 全アクション機能不全、接続不安定継続中（22+セッション）
+
+- **Session 122 確認結果**:
+  - status() / inventory() → 正常（読み取り専用API）
+  - combat("pig") → navigate成功ログ後に即「Not connected」エラー
+  - navigate("pig") → 豚発見後にcombat実行で切断
+  - moveTo(x+50, y, z) → 120秒タイムアウト
+  - farm() → 120秒タイムアウト後に切断
+  - **22セッション以上改善なし。コードレビューア緊急対応が必要**
+  - 同じ座標 (40.2, 76, -1.6)、HP:5.9、Hunger:0 から変化なし
+  - 書き込み/アクション系API（place/chat/craft/combat/moveTo/flee/farm）は全滅
+  - **ゲームプレイ完全停止。コードレビューアの修正なしには進行不可能**
+- **Coordinates**: x=40.2, y=76, z=-1.6
+- **Status**: 未解決 - コードレビューア緊急対応必要（22+セッション継続）
+
+---
+
 ## [2026-03-27] Bug: Session 121 CRITICAL - 全アクション機能不全、接続が極めて不安定（継続中・20+セッション）
 
 - **Session 121 確認結果**:
