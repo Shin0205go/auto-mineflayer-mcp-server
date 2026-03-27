@@ -1,3 +1,19 @@
+## [2026-03-27] Bug: Session 157 CRITICAL - 157セッション連続スタック継続 - admin /tp 必須
+
+### Session 157 確認:
+- **Cause**: 同一問題が157セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40, y=76, z=-2 (変化なし)
+- **HP**: 5.9 Hunger: 0 (固定)
+- **Time**: midnight (ticks=19793)
+- **動作確認**: moveTo(+1) → x:40.5まで僅かに動くが即元に戻る。gather/farm 全て30秒タイムアウト
+- **combat**: cow/chicken/sheep 全て呼び出し成功返却するが食料ドロップなし、位置変化なし
+- **navigate**: 全てタイムアウト
+- **根本原因**: pathfinderが動作していない。ボットの物理的移動が完全に不能
+- **必要対処**: admin が `/tp Claude1 0 70 0` を実行 または pathfinder の抜本的修正が必要
+- **Status**: CRITICAL - admin介入必須 (157回目の報告)
+
+---
+
 ## [2026-03-27] Bug: Session 156 CRITICAL - 156セッション連続スタック継続 - admin /tp 必須
 
 ### Session 156 確認:
