@@ -1,3 +1,28 @@
+## [2026-03-27] Bug: Session 149 CRITICAL - 全アクション機能不全継続（49+セッション）
+
+### Session 149 確認結果:
+- **Cause**: 同じCRITICALバグ継続。HP5.9/Hunger0固定、全ナビゲーション系タイムアウト
+- **Coordinates**: x=40.2, y=76, z=-1.6（49セッション以上変化なし）
+- **新観察 (Session 149)**:
+  - bot.farm() → 120秒タイムアウト
+  - bot.gather("wheat", 3) → 30秒タイムアウト
+  - bot.navigate() → タイムアウト
+  - bot.craft("bread") → タイムアウト（wheatもない）
+  - インベントリ: wheat_seedsのみ55個（wheat=0）
+  - 朝(morning)になってもstuckは解消されない
+  - combat() は即完了（エンティティなし）
+  - moveTo()は"成功"するが位置変化なし
+- **根本原因**: ボットが物理的にスタック状態。ナビゲーション系全滅。49セッション以上ゲームプレイ完全停止
+- **必要な対処（admin必須）**:
+  1. `/tp Claude1 100 70 100` を実行（最優先）
+  2. または `/feed Claude1` で食料補充
+  3. または Minecraftサーバー再起動
+  4. ボットがx=40,y=76,z=-2付近のブロックにはまっている可能性
+- **Status**: Reported - CRITICAL 根本未解決 - 人間の介入が必須
+- **Priority**: CRITICAL
+
+---
+
 ## [2026-03-27] Bug: Session 148 CRITICAL - 全アクション機能不全継続（48+セッション）
 
 ### Session 148 確認結果:
