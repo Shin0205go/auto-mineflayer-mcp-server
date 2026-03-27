@@ -17,6 +17,16 @@
     2. アイテムドロップバグ: combat成功でも食料アイテムが取得できない（骨/羽/革のみ）
     3. pillarUp/moveTo タイムアウトバグ
   - **緊急度**: CRITICAL - Sessions 101-113で同じ状態が継続、ゲームプレイ完全不可能
+- **Session 113 追加観察** (朝morning):
+  - craft("furnace"): 15-20秒タイムアウト（作業台がインベントリにあるのに失敗）
+  - craft("furnace", 1, false): 同タイムアウト
+  - navigate("crafting_table"): 15秒タイムアウト（作業台がworld/invにあるが見つからない？）
+  - navigate("cow"): 3ms即時完了（実際の移動なし）
+  - navigate("chicken"): 277ms完了（実際の移動なし）
+  - combat("pig"): 完了するがporkなし（アイテム取得不可）
+  - gather("oak_log", 3): 完了するがlogなし（採掘効果なし）
+  - **パターン**: navigate/combat/gatherが即時完了するが世界と実際に相互作用していない
+  - **仮説**: botがspawnしているが、実際のMinecraftワールドと同期していない可能性
 - **Status**: Reported. Session 113. CRITICAL - コードレビュー最急務。修正なしでは進行不可能。
 
 ---
