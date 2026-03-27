@@ -910,9 +910,42 @@ export async function mc_execute(
     },
   };
 
+  // Wrap botApi in a Proxy that ensures the bot is connected before each async API call.
+  // Bug [Sessions 101-125]: mc_execute only checked connection ONCE at the start.
+  // If the bot disconnected during execution (e.g. after place(), flee(), combat()),
+  // the next await call hit requireSingleBot() immediately → "Not connected" error.
+  // The auto-reconnect fires 2s after disconnect, but the second await runs before that.
+  //
+  // This Proxy intercepts each botApi property access and wraps async functions to:
+  // 1. Check if bot is connected before calling
+  // 2. If not connected, wait up to 5s for auto-reconnect (same as mc_execute start)
+  // 3. Only throw "Not connected" if reconnect fails within the wait window
+  //
+  // Non-async functions (bot.log, bot.setControlState etc.) are passed through unchanged.
+  const reconnectWaitMs = 5000;
+  const botApiProxy = new Proxy(botApi, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== "function") return value;
+      // Wrap async functions with a pre-call connection check
+      return async (...args: unknown[]) => {
+        if (!botManager.isConnected()) {
+          console.error(`[mc_execute] Bot disconnected before calling bot.${String(prop)}() — waiting up to ${reconnectWaitMs}ms for auto-reconnect`);
+          try {
+            await botManager.waitForBot(reconnectWaitMs);
+            console.error(`[mc_execute] Bot reconnected, proceeding with bot.${String(prop)}()`);
+          } catch (_waitErr) {
+            throw new Error(`Not connected: bot.${String(prop)}() called while bot is disconnected and auto-reconnect timed out after ${reconnectWaitMs}ms. Call mc_connect to reconnect manually.`);
+          }
+        }
+        return (value as Function).apply(target, args);
+      };
+    },
+  });
+
   // Create sandboxed context - no require, process, eval, fs access
   const sandbox: Record<string, unknown> = {
-    bot: botApi,
+    bot: botApiProxy,
     console: {
       log: (...args: unknown[]) => {
         if (logs.length < MAX_LOG_LINES) {
