@@ -1,3 +1,26 @@
+## [2026-03-27] Bug: Session 113 (current) - 接続切断+pillarUp+farm+アイテムドロップバグ継続, CRITICAL: Sessions 101-113
+
+- **Session 113 観察**:
+  - HP:5.9 Hunger:0 Food=0 - 状況改善なし（前セッションと全く同じ）
+  - 座標: (40.1, 76.0, -1.9) - 毎セッション同じ場所にリセット
+  - combat("chicken"): feather/eggのみドロップ、raw_chicken なし（食料ドロップなし）
+  - combat("cow"): leatherのみドロップ、raw_beef なし（食料ドロップなし）
+  - pillarUp(3): 30秒タイムアウト
+  - pillarUp(6): 30秒タイムアウト
+  - farm(): 60秒タイムアウト
+  - navigate("wheat"): 30秒タイムアウト
+  - moveTo: 120秒タイムアウト（前セッションと同じ）
+  - wait(30000): Not connected エラー
+  - 時刻: midnight (ticks:21849) - 夜間で危険
+  - **根本バグ継続**: 3種類のバグが複合
+    1. 接続切断バグ: wait/moveTo/farm等でNot connected
+    2. アイテムドロップバグ: combat成功でも食料アイテムが取得できない（骨/羽/革のみ）
+    3. pillarUp/moveTo タイムアウトバグ
+  - **緊急度**: CRITICAL - Sessions 101-113で同じ状態が継続、ゲームプレイ完全不可能
+- **Status**: Reported. Session 113. CRITICAL - コードレビュー最急務。修正なしでは進行不可能。
+
+---
+
 ## [2026-03-27] Bug: Session 112 (current) - 接続切断バグ継続, CRITICAL: Sessions 101-112継続
 
 - **Session 112 観察**:
