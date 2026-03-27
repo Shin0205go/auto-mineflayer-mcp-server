@@ -1,3 +1,31 @@
+## [2026-03-27] Bug: Session 140 CRITICAL - 全アクション機能不全継続（40+セッション）
+
+### Session 140 確認結果:
+- **Cause**: 同じCRITICALバグ継続。moveTo 4ブロック以上タイムアウト、farm/pillarUp完全タイムアウト、combat即終了で食料0
+- **Coordinates**: x=40, y=76, z=-2（40セッション以上変化なし）
+- **Last Actions**:
+  - bot.status() → HP:5.9/Hunger:0（不変 - 39セッション前から全く変わらず）
+  - bot.moveTo(x+3, y, z) → 「成功」と言われるが位置は40.5に微小変化のみ（実際には3ブロック移動できていない）
+  - bot.moveTo(x+5以上, y, z) → タイムアウト（5〜60秒）
+  - bot.combat("cow") → 即終了、食料0のまま（動物が周辺に存在しない）
+  - bot.navigate("cow") → 即終了、位置変化なし
+  - bot.farm() → タイムアウト30秒
+  - bot.pillarUp(3) → タイムアウト20秒
+  - mc_chat() → 「Not connected」エラー
+- **新観察 (Session 140)**:
+  - moveTo()が「succeeded」を返しても実際の座標変化は0.3程度のみ
+  - X方向・Z方向どちらも同じ挙動（微小移動で返る）
+  - ボットは物理的にMinecraftワールド内でスタック状態の可能性が高い
+  - Hunger=0なのに餓死しない（サーバー側でダメージ処理が停止？）
+- **根本原因**:
+  - mc_connect後にmoveTo/farm/pillarUpが正常動作しない
+  - pathfinderが実際の移動を発生させていない（内部ループで即リターン）
+  - 同じ座標に40+セッション固定されている
+- **Status**: Reported - CRITICAL 根本未解決。緊急コードレビュー必要
+- **Priority**: CRITICAL - 40セッション以上ゲームプレイ完全停止
+
+---
+
 ## [2026-03-27] Bug: Session 139 CRITICAL - 全アクション機能不全継続（39+セッション）
 
 ### Session 139 確認結果:
