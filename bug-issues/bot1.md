@@ -1,3 +1,23 @@
+## [2026-03-27] Bug: Session 130 CRITICAL - 全アクション機能不全継続（30+セッション）
+
+### Session 130 確認結果:
+- **Cause**: 全ゲームプレイAPIが機能しない根本バグ継続中
+- **Coordinates**: x=40, y=76, z=-2（30セッション以上変化なし）
+- **Last Actions**:
+  - combat("cow") × 5回 → 成功ログだが肉ドロップなし（feather/eggはある→狩り自体は届かない）
+  - combat("chicken") → featherはあるが chicken meat なし
+  - navigate("cow") → 成功ログだが実際には移動なし
+  - flee() → 成功ログだが位置変化なし
+- **症状**: HP:5.9/Hunger:0固定、位置変化なし、30セッション継続
+- **Status**: Reported - CRITICAL 根本未解決。コードレビュー緊急必要
+- **根本原因候補**:
+  1. botがMinecraftサーバーに接続はしているが、実際のゲームワールドへのアクション送信に失敗
+  2. mc_execute sandbox内のbot.*APIがbotManagerと正しく接続されていない
+  3. botがspawnしていないかdead状態で全アクションがno-opになっている
+- **Priority**: CRITICAL - 30セッション以上ゲームプレイ完全停止
+
+---
+
 ## [2026-03-27] Bug: Session 129 CRITICAL - 全アクション機能不全継続（29+セッション）
 
 ### Session 129 確認結果:
