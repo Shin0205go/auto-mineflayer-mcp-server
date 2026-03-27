@@ -1,3 +1,25 @@
+## [2026-03-27] Bug: Session 107 (current) - Bot fully stuck at (40,76,-2), CRITICAL: Sessions 101-107継続, moveTo/gather/craft/pillarUpがタイムアウト
+
+- **Root Cause**: 7セッション連続で同じバグ継続。moveTo(5ブロック以上)が常にタイムアウト。
+- **Coordinates**: (40.1, 76, -2) birch_forest
+- **State**: HP=5.9 Hunger=0 Food=0
+- **Observed in Session 107**:
+  - bot.status() → 正常(300ms)
+  - bot.moveTo(+1ブロック) → 成功(1.6sec)、ただし実際の位置は変化なし(40.5,76,-1.5のまま)
+  - bot.moveTo(5ブロック以上) → 毎回タイムアウト
+  - bot.pillarUp(3) → タイムアウト
+  - bot.gather("birch_log") → タイムアウト
+  - bot.craft("furnace") → レシピ見つからない（crafting_table設置済みでも）
+  - bot.place("cobblestone") → 成功(8sec)
+  - bot.place("crafting_table") → 成功(7sec)
+  - bot.eat() → 成功するが食料0のためHP/hunger変化なし
+  - 切断は発生しなくなったが、ボットは事実上動けない
+- **Pattern**: moveTo/gather系操作がtimeoutする。ボットはy=76の同じ場所に固定されている。
+- **URGENT**: コードレビューが急務。moveTo/gather/pillarUpのタイムアウト修正が必要。Sessions 101-107継続。
+- **Status**: Reported. Session 107. CRITICAL.
+
+---
+
 ## [2026-03-27] Bug: Session 106 (current) - Bot fully stuck at (40,76,-2), CRITICAL: combat後に切断される, Sessions 101-106 継続
 
 - **Root Cause**: 6セッション連続で同じバグ継続。combat()実行直後に "Not connected" エラーで切断される。
