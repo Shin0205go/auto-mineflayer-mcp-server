@@ -1,3 +1,16 @@
+## [2026-03-27] Bug: Session 156 CRITICAL - 156セッション連続スタック継続 - admin /tp 必須
+
+### Session 156 確認:
+- **Cause**: 同一問題が156セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40, y=76, z=-2 (変化なし)
+- **HP**: 5.9 Hunger: 0 (固定)
+- **動作確認**: moveTo 120秒タイムアウト。navigate/combat/farm 全て偽成功または即timeout
+- **根本原因**: pathfinderが動作していない。接続直後から位置が固定。移動APIが全て失敗
+- **必要対処**: admin が `/tp Claude1 0 70 0` を実行するか、pathfinder修正が必要
+- **Status**: CRITICAL - admin介入必須
+
+---
+
 ## [2026-03-27] Bug: Session 155 CRITICAL - 155セッション連続スタック継続 - admin /tp 必須
 
 ### Session 155 確認:
