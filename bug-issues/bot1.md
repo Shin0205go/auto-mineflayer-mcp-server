@@ -1,3 +1,22 @@
+## [2026-03-27] Bug: Session 163 CRITICAL - 163セッション連続スタック継続 - admin /tp 必須
+
+### Session 163 確認:
+- **Cause**: 同一問題が163セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40.2, y=76, z=-1.6 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **Time**: midnight
+- **Inventory**: food=0, cobblestone=185個, wheat_seeds=55個, iron_sword=1, stone_pickaxe=4
+- **NearbyEntities**: drowned x1, chicken x1
+- **動作確認**:
+  - bot.status() → 成功 (260ms)
+  - bot.combat("chicken") → ABORTED (21.5ブロック先、到達不能) 13638ms
+  - 全移動API機能せず (前セッション同様)
+- **根本原因**: pathfinder/movement APIが全て機能しない。bot.status()のみ正常
+- **緊急対処**: admin `/tp Claude1 100 70 100` が唯一の解決策
+- **Status**: CRITICAL - admin介入必須
+
+---
+
 ## [2026-03-27] Bug: Session 162 CRITICAL - 162セッション連続スタック継続 - admin /tp 必須
 
 ### Session 162 確認:
