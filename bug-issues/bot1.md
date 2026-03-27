@@ -1,3 +1,24 @@
+## [2026-03-27] Bug: Session 170 CRITICAL - 170セッション連続スタック継続 - admin /tp 必須
+
+### Session 170 確認:
+- **Cause**: 同一問題が170セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40, y=76, z=-2 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **Inventory**: food=0, cobblestone=185個+, wheat_seeds=55個, iron_sword=1, stone_pickaxe=4, bucket=1
+- **動作確認**:
+  - bot.status() → 成功（HP/Hungerは変化なし）
+  - bot.navigate("chicken") → 120秒タイムアウト（周辺にchickenとdrownedがいる）
+  - bot.navigate("water") → 120秒タイムアウト
+  - bot.moveTo(+30ブロック) → 120秒タイムアウト
+  - bot.combat("chicken/cow") → 完了するが食料ドロップなし
+  - bot.farm() → 完了するがHP/Hunger変化なし
+  - 全移動APIがタイムアウト
+- **根本原因**: pathfinder/movement APIが全て機能しない。drownedが近くにいてblockしている可能性
+- **緊急対処**: admin `/tp Claude1 100 70 100` が唯一の解決策
+- **Status**: CRITICAL - admin介入必須（170セッション継続中）
+
+---
+
 ## [2026-03-27] Bug: Session 169 CRITICAL - 169セッション連続スタック継続 - admin /tp 必須
 
 ### Session 169 確認:
