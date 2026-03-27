@@ -1,15 +1,28 @@
-## [2026-03-27] Bug: Session 119 UPDATE - combat後即切断が継続、食料ドロップも獲得できず
+## [2026-03-27] Bug: Session 119 CRITICAL - 全アクション機能不全、接続が極めて不安定
 
-- **Cause**: Sessions 101-119で同じバグが継続。combat後に即切断される（"完了"と表示されるが切断）。
+- **Cause**: Sessions 101-119で同じバグが継続。ほぼ全てのbot.*アクションが機能しない。
 - **Coordinates**: (40.2, 76, -1.6) - 全セッションで同じ座標から動けない
 - **HP/Hunger**: HP:5.9 Hunger:0 - 19セッション以上改善なし
 - **New Findings in Session 119**:
   - bot.combat("cow") → "牛狩り完了"と出るが直後に "Not connected" エラー
   - bot.combat("chicken") → "鶏狩り完了"と出るが直後に "Not connected" エラー
+  - bot.moveTo(x+1, y, z) → タイムアウト（20秒）
+  - bot.navigate("crafting_table") → タイムアウト（20秒）
+  - bot.gather("birch_log", 3) → タイムアウト（30秒）
+  - bot.chat() → 送信後即切断
   - 食料アイテムはインベントリに入らない（combat完了後切断するため）
-  - bot.status()/inventory()は正常動作
+  - bot.status()/inventory()のみ正常動作
 - **Critical**: 19セッション以上、同じHP5.9/Hunger0の状態から抜け出せない
-- **Root Cause Hypothesis**: combat()がbot.kill()等のイベントリスナーを登録し、それが切断を引き起こすか、またはcombat完了時のクリーンアップバグ
+- **Root Cause Hypothesis**:
+  1. combat()完了後にbotが切断される（イベントリスナーのリークか）
+  2. moveTo/navigate/gatherはpathfinderがスタックしてタイムアウト
+  3. mc_chat()送信後も切断が発生（接続が不安定すぎる）
+  4. 座標(40.2, 76, -1.6)周辺の地形問題でpathfinder完全機能停止の可能性
+- **Recommended Fix**:
+  1. combat()のエラーハンドリングと切断防止
+  2. pathfinder完全リセット機能
+  3. botが同じ座標から動けない場合のエスケープ機能
+  4. moveTo/navigate/gatherのタイムアウト処理改善
 - **Status**: Reported Session 119. コードレビューアーによる根本修正が最優先。
 
 ## [2026-03-27] Bug: Session 118 UPDATE - wait()/combat() 切断パターン詳細調査
