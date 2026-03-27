@@ -1,3 +1,30 @@
+## [2026-03-27] Bug: Session 146 CRITICAL - 全アクション機能不全継続（46+セッション）
+
+### Session 146 確認結果:
+- **Cause**: 同じCRITICALバグ継続。moveTo全タイムアウト継続、HP5.9/Hunger0
+- **Coordinates**: x=40.2, y=76, z=-1.6（46セッション以上変化なし）
+- **新観察 (Session 146)**:
+  - bot.moveTo(45,75,5) → 1回だけ成功(42,75,3)に移動。しかし次のタイムアウト後は40.2,76,-1.6に戻る
+  - bot.navigate("cow"/"chest") → タイムアウトまたは即完了（見つからず）
+  - bot.pillarUp(3) → タイムアウト30秒
+  - bot.place("cobblestone") → Block not placed（Y=75に石、Y=76はair）
+  - bot.combat(全動物) → No X found nearby（周辺に動物ゼロ）
+  - navigate("chest") → タイムアウト
+  - moveTo(53,65,6) → タイムアウト30秒
+  - Hunger=0, HP=5.9が不変
+  - cobblestone 185個保有（石ツール・スワード・pickaxe3本あり）
+  - wheat_seeds 55個保有（パン材料の小麦は0）
+  - 移動タイムアウト後は常に同じ座標(40.2,76,-1.6)に戻る→サーバー側でボット位置がリセットされている可能性
+- **根本原因**: ボットが物理的にスタック状態。位置リセット発生。46セッション以上ゲームプレイ完全停止
+- **必要な対処（admin必須）**:
+  1. `/tp Claude1 100 70 100` を実行（最優先）
+  2. または `/feed Claude1` で食料補充
+  3. または `/give Claude1 bread 20`
+- **Status**: Reported - CRITICAL 根本未解決
+- **Priority**: CRITICAL - admin介入が必須
+
+---
+
 ## [2026-03-27] Bug: Session 145 CRITICAL - 全アクション機能不全継続（45+セッション）
 
 ### Session 145 確認結果:
