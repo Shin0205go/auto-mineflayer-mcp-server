@@ -1,3 +1,23 @@
+## [2026-03-27] Bug: Session 125 CRITICAL - 全アクション機能不全継続（25+セッション）
+
+- **Session 125 確認結果**:
+  - status() / inventory() → 正常（HP:5.9, Hunger:0, 位置: 40.2, 76, -1.6）
+  - place() → 成功（crafting_table設置できた）
+  - combat("chicken") → 成功ログだがraw_chickenドロップなし
+  - combat("cow") → 成功ログだが肉ドロップなし
+  - flee() → 実行後に「Not connected」エラー
+  - craft("furnace") → タイムアウト（15-45秒）
+  - farm() → 120秒タイムアウト継続
+  - **HP:5.9、Hunger:0、位置(40.2, 76, -1.6)から25セッション以上変化なし**
+  - craft()が作業台設置でハングして切断を引き起こしている可能性
+  - combat後のドロップアイテムが一切取得できない（feather/rawFood/cooked全て0）
+  - **緊急**: craft()とfarm()のタイムアウト原因を特定・修正が必要
+- **Coordinates**: x=40.2, y=76, z=-1.6
+- **Status**: 未解決 - 25セッション継続、緊急対応必要
+- **Action Needed**: craft()タイムアウト修正、combat後ドロップ収集修正、farm()ハング修正
+
+---
+
 ## [2026-03-27] Bug: Session 124 CRITICAL - 全アクション機能不全継続（24+セッション）
 
 - **Session 124 確認結果**:
