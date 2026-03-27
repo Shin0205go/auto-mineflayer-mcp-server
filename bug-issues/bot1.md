@@ -1,3 +1,21 @@
+## [2026-03-27] Bug: Session 159 CRITICAL - 159セッション連続スタック継続 - admin /tp 必須
+
+### Session 159 確認:
+- **Cause**: 同一問題が159セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40.2, y=76, z=-1.6 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **動作確認**:
+  - bot.status() → 成功 (246ms)
+  - bot.craft("furnace") → 120秒タイムアウト
+  - bot.farm() → 120秒タイムアウト
+  - bot.navigate("chicken") → 120秒タイムアウト
+  - bot.combat("cow") → 3277ms完了するが食料取得なし
+  - bot.flee() → 完了するが位置変化なし
+- **根本原因**: pathfinder/movement APIが全て機能しない。bot.status()のみ正常
+- **Status**: CRITICAL - admin `/tp Claude1 100 70 100` または pathfinder根本修正 必須
+
+---
+
 ## [2026-03-27] Bug: Session 158 CRITICAL - 158セッション連続スタック継続 - admin /tp 必須
 
 ### Session 158 確認:
