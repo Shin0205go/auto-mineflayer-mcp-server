@@ -1,3 +1,16 @@
+## [2026-03-27] Bug: Session 174 CRITICAL - 174セッション連続スタック継続 - admin /tp 必須
+
+### Session 174 確認:
+- **Cause**: 同一問題が174セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40.2, y=76, z=-1.6 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **症状**: moveTo→タイムアウト、farm()→タイムアウト、pillarUp→タイムアウト、combat()→食料ドロップなし
+- **確認済み**: 近くに動物なし、食料アイテムなし
+- **必要な対処**: admin `/tp Claude1 100 70 100` または `/give Claude1 bread 5`
+- **Status**: CRITICAL - admin介入必須（174セッション連続継続中）
+
+---
+
 ## [2026-03-27] Bug: Session 173 CRITICAL - 173セッション連続スタック継続 - admin /tp 必須
 
 ### Session 173 確認:
