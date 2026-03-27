@@ -5,10 +5,15 @@
 - **Coordinates**: x=40, y=76, z=-2 (変化なし)
 - **HP**: 5.9 Hunger: 0 (固定)
 - **動作確認**: moveTo, navigate, farm, pillarUp 全てタイムアウト（60秒）
-- **combat**: chicken/cow呼び出し成功返却するが食料ドロップなし
-- **必要対処**: admin が `/tp Claude1 100 70 100` を実行してボットを脱出させること
-- **根本原因候補**: ボットが地形にはまっているかサーバー側の問題。pillarUp/moveToが全てタイムアウトするのはpathfinderの問題か地形スタック
-- **Status**: CRITICAL - admin介入必須
+- **combat**: chicken/cow/sheep/pig 全て「成功」返却するが食料ドロップなし、位置変化なし
+- **navigate**: navigate("cow")が即座に「成功」返却するが位置変化なし（偽成功）
+- **gather**: gather("oak_log")が「成功」返却するがインベントリ変化なし（偽成功）
+- **place**: place()のみ機能している可能性（crafting_table, furnace設置成功と返却）
+- **craft**: craft("furnace")成功返却、インベントリには変化あり
+- **flee**: flee()が稀に位置変化させるが次のstatus()では元に戻る
+- **根本原因候補**: ボットの物理的な移動が全くできない状態。navigate/moveTo/combat/gatherなど移動を伴うAPIが全て失敗または偽成功。pathfinderが動作していない可能性が高い
+- **必要対処**: admin が `/tp Claude1 0 70 0` または別の場所へTPすること、またはpathfinderバグの修正
+- **Status**: CRITICAL - admin介入必須 または code-reviewer による pathfinder 修正が必要
 
 ---
 
