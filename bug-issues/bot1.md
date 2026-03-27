@@ -1,3 +1,18 @@
+## [2026-03-27] Bug: Session 115 (current) - gather/combat/moveTo全タイムアウト継続, CRITICAL: Sessions 101-115
+
+- **Session 115 観察**:
+  - HP:5.9 Hunger:0 Food=0 - 全く改善なし（Sessions 101-115で同じ）
+  - 座標: (40.1, 76.0, -1.9) - 毎セッション同じ場所
+  - Time: midnight (ticks:20643)
+  - gather("wheat", 5): 60秒タイムアウト
+  - combat("cow"): 完了するがHP/hunger変わらず、食料ドロップなし
+  - combat("chicken"): 完了するがHunger変わらず
+  - eat(): 呼んでも効果なし（食料アイテムがinventoryにない）
+  - flee(): 完了するが接続すぐ切れる
+  - **根本バグ同じ**: gather/farm/moveTaタイムアウト + 食料アイテムドロップなし
+  - **緊急度**: CRITICAL - Session 115まで継続。コードレビュー最急務。
+- **Status**: Reported. Session 115. CRITICAL.
+
 ## [2026-03-27] Bug: Session 114 (current) - 接続切断+moveTo+farm+アイテムドロップバグ継続, CRITICAL: Sessions 101-114
 
 - **Session 114 観察**:
