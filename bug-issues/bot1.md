@@ -1,3 +1,24 @@
+## [2026-03-27] Bug: Session 158 CRITICAL - 158セッション連続スタック継続 - admin /tp 必須
+
+### Session 158 確認:
+- **Cause**: 同一問題が158セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40.2, y=76, z=-1.6 (実質変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定 - 毎セッション同じ)
+- **Biome**: birch_forest
+- **Inventory**: wheat_seeds 55個、cobblestone 185個、bone_meal 13個、石ツール複数 - 食料なし
+- **動作確認**:
+  - moveTo(50, 76, 0) → 60秒タイムアウト
+  - flee() → 成功返却だが位置変化なし (x=40, z=-2のまま)
+  - combat("cow") → 成功返却するが食料ドロップなし
+  - combat("sheep") → 成功返却するが食料なし
+  - pillarUp(3) → タイムアウト（以前のセッションの記録から）
+- **根本原因**: pathfinderが全く機能しない。ボットの物理移動が完全停止
+- **緊急対処必要**: admin `/tp Claude1 100 70 100` か pathfinder根本修正
+- **追記**: 158回連続で同じ問題。code-reviewerによるpathfinder修正が急務
+- **Status**: CRITICAL - admin介入または pathfinder修正 必須
+
+---
+
 ## [2026-03-27] Bug: Session 157 CRITICAL - 157セッション連続スタック継続 - admin /tp 必須
 
 ### Session 157 確認:
