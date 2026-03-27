@@ -1,3 +1,17 @@
+## [2026-03-27] Bug: Session 119 UPDATE - combat後即切断が継続、食料ドロップも獲得できず
+
+- **Cause**: Sessions 101-119で同じバグが継続。combat後に即切断される（"完了"と表示されるが切断）。
+- **Coordinates**: (40.2, 76, -1.6) - 全セッションで同じ座標から動けない
+- **HP/Hunger**: HP:5.9 Hunger:0 - 19セッション以上改善なし
+- **New Findings in Session 119**:
+  - bot.combat("cow") → "牛狩り完了"と出るが直後に "Not connected" エラー
+  - bot.combat("chicken") → "鶏狩り完了"と出るが直後に "Not connected" エラー
+  - 食料アイテムはインベントリに入らない（combat完了後切断するため）
+  - bot.status()/inventory()は正常動作
+- **Critical**: 19セッション以上、同じHP5.9/Hunger0の状態から抜け出せない
+- **Root Cause Hypothesis**: combat()がbot.kill()等のイベントリスナーを登録し、それが切断を引き起こすか、またはcombat完了時のクリーンアップバグ
+- **Status**: Reported Session 119. コードレビューアーによる根本修正が最優先。
+
 ## [2026-03-27] Bug: Session 118 UPDATE - wait()/combat() 切断パターン詳細調査
 
 - **Cause**: Sessions 101-118で同じバグが継続。moveTo/pillarUp/farm はタイムアウト。combat後即切断。
