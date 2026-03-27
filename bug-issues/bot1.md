@@ -1,3 +1,31 @@
+## [2026-03-27] Bug: Session 135 CRITICAL - 全アクション機能不全継続（35+セッション）
+
+### Session 135 確認結果:
+- **Cause**: 同じCRITICALバグ継続。moveTo/pillarUp/farm()完全タイムアウト継続
+- **Coordinates**: x=40, y=76, z=-2（35セッション以上変化なし）
+- **Last Actions**:
+  - bot.status() → HP:5.9/Hunger:0（不変）
+  - bot.inventory() → 正常動作（32アイテム確認。wheat_seeds x55, cobblestone x185）
+  - bot.flee(20) → 成功ログだが位置変化なし
+  - bot.combat("cow/pig/sheep/chicken") → 即座に「Not found nearby」
+  - bot.navigate("cow") → "cow発見"ログだがcombatに引き渡せず食料0
+  - bot.moveTo(x+2, y, z) → 成功（ただし実際の位置変化なし。x=40.5表示）
+  - bot.moveTo(x+5以上) → タイムアウト60-120秒
+  - bot.pillarUp(5) → タイムアウト60秒
+  - bot.farm() → タイムアウト60秒
+  - bot.wait(28000) × 多数 → 成功（唯一正常動作）
+  - mc_chat(mode=get) → 「Not connected」エラー
+- **重要観察**:
+  - bot.wait()とbot.status()のみ正常動作
+  - 短距離moveTo(2ブロック)は成功するが5ブロック以上はタイムアウト
+  - HP/Hunger/位置が35セッション以上不変（5.9/0/40,76,-2）
+  - mc_chatが毎回「Not connected」エラー
+  - Minecraftサーバーへの実質的な接続なし
+- **Status**: Reported - CRITICAL 根本未解決。緊急コードレビュー必要
+- **Priority**: CRITICAL - 35セッション以上ゲームプレイ完全停止
+
+---
+
 ## [2026-03-27] Bug: Session 134 CRITICAL - 全アクション機能不全継続（34+セッション）
 
 ### Session 134 確認結果:
