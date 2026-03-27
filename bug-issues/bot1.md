@@ -1,3 +1,20 @@
+## [2026-03-27] Bug: Session 129 CRITICAL - 全アクション機能不全継続（29+セッション）
+
+### Session 129 確認結果:
+- **Cause**: moveTo/gather/pillarUp/combat/farmが全て機能しない（タイムアウトまたはドロップなし）
+- **Coordinates**: x=40, y=76, z=-2（29セッション以上変化なし）
+- **Last Actions**:
+  - combat("cow/chicken/pig/zombie") → 成功ログだが食料ドロップなし
+  - farm() → 120秒タイムアウト
+  - bot.eat() → 実行されるが効果なし（食料なし）
+  - bot.flee() → 成功ログだが位置変化なし
+- **症状**: HP:5.9/Hunger:0固定、位置変化なし
+- **Status**: Reported - 29セッション継続中、緊急コードレビュー必要
+- **Priority**: CRITICAL - ゲームプレイ完全停止。根本原因未解決
+- **重要**: bot.status()とbot.inventory()のみ正常動作。他の全bot.*APIは成功を返すが副作用なし
+
+---
+
 ## [2026-03-27] Bug: Session 128 CRITICAL - 全アクション機能不全継続（28+セッション）
 
 ### Session 128 確認結果:
