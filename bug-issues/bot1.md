@@ -1,3 +1,16 @@
+## [2026-03-27] Bug: Session 117 - 死亡疑い (HP5.9 Hunger0 食料0状態から切断), CRITICAL継続
+
+- **Cause**: HP5.9 Hunger0 食料0の状態で鶏・豚を倒した直後に切断（死亡の可能性）
+- **Coordinates**: (40.2, 76, -1.6)
+- **Last Actions**: bot.navigate("chicken") → bot.combat("chicken") → bot.navigate("pig") → bot.combat("pig") → 切断
+- **Error Message**: "Not connected to any server"
+- **Observation**:
+  - 動物を倒してもドロップが取得できない（beefなし、leatherのみ）
+  - Hunger0のまま食事不能
+  - bot.navigate("cow") が即時完了するが食料ドロップなし
+  - moveTo全タイムアウト継続
+- **Status**: Reported. Session 117. 死亡バグ + 食料ドロップ取得バグ継続。
+
 ## [2026-03-27] Bug: Session 116 (current) - craft/moveTo/pillarUp/farm全タイムアウト継続, CRITICAL: Sessions 101-116
 
 - **Session 116 観察**:
