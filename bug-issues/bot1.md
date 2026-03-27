@@ -1,13 +1,23 @@
 ## [2026-03-27] Bug: Session 120 CRITICAL - 全アクション機能不全、接続が極めて不安定（継続中）
 
-- **Session 120 追加情報**:
-  - status() → 正常動作（HP:5.9 Hunger:0 @ x=40 y=76 z=-2）
-  - eat()（食料なし） → 正常動作（切断なし）
-  - place() → place()実行後に切断発生（Session 119の報告と一致）
-  - 結論: status()/eat()のみ安全。他は全て切断を引き起こす
+- **Session 120 詳細テスト結果**:
+  - status() → 正常 (HP:5.9 Hunger:0 @ x=40 y=76 z=-2)
+  - inventory() → 正常
+  - eat() (食料なし) → 正常（切断なし）
+  - wait() → 正常
+  - getMessages() → 正常（"No new messages"）
+  - drop("dirt", 1) → 正常（切断なし）
+  - place("cobblestone", x, y-1, z) → 切断発生
+  - chat() → 切断発生
+  - craft("furnace") → タイムアウト30秒
+  - combat("cow") → 切断発生（flee()後）
+  - **パターン**: サーバーへのパケット送信が必要なAPIは全て切断/タイムアウト
+  - **読み取り専用API（status/inventory/wait/getMessages）は動作する**
+  - **書き込み/アクション系API（place/chat/craft/combat/moveTo/flee）は全滅**
   - 19+セッション連続で同じHP5.9/Hunger0/同じ座標から進展なし
-  - **緊急要件**: 接続安定化 + 少なくとも1つのアクション（eat/combat/moveTo）を確実に動作させること
-- **Status**: 未解決
+  - **根本原因仮説**: botのpacket送信チャンネルが壊れているかsocketが半切断状態
+  - **緊急要件**: 接続の完全リセット + packet送信の修正
+- **Status**: 未解決（コードレビューア対応待ち）
 
 ---
 
