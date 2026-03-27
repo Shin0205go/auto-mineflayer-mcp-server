@@ -1,3 +1,26 @@
+## [2026-03-27] Bug: Session 168 CRITICAL - 168セッション連続スタック継続 - admin /tp 必須
+
+### Session 168 確認:
+- **Cause**: 同一問題が168セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40.2, y=76, z=-1.6 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **Inventory**: food=0, cobblestone=185個+, wheat_seeds=55個, iron_sword=1, stone_pickaxe=4
+- **動作確認**:
+  - bot.status() → 成功（HP/Hungerは変化なし）
+  - bot.combat("chicken/cow/pig/sheep") → 食料ドロップなし、移動なし
+  - bot.flee(10) → 完了するが次回status()で位置が(40,76,-2)に戻る
+  - bot.pillarUp(5) → 30秒タイムアウト
+  - bot.moveTo() → 全てタイムアウト
+  - bot.gather("birch_log") → 60秒タイムアウト
+  - bot.farm() → 120秒タイムアウト
+  - bot.navigate("chicken") → 120秒タイムアウト
+  - 全移動・農場・採掘APIが機能しない
+- **根本原因**: pathfinder/movement APIが全て機能しない。bot.status()とbot.flee()のみ応答するが位置変化なし
+- **緊急対処**: admin `/tp Claude1 100 70 100` が唯一の解決策
+- **Status**: CRITICAL - admin介入必須（168セッション継続中）
+
+---
+
 ## [2026-03-27] Bug: Session 167 CRITICAL - 167セッション連続スタック継続 - admin /tp 必須
 
 ### Session 167 確認:
