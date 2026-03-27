@@ -1,3 +1,20 @@
+## [2026-03-27] Bug: Session 111 (current) - Bot fully stuck at (40,76,-2), CRITICAL: Sessions 101-111継続
+
+- **Session 111 観察**:
+  - HP:5.9 Hunger:0 Food=0 - 状況改善なし
+  - pillarUp: 120秒タイムアウト
+  - moveTo(45,70,0): 60秒タイムアウト
+  - moveTo(53,65,6): 120秒タイムアウト
+  - combat("cow"): 成功するがドロップ取得できない（食料0継続）
+  - combat("chicken")+combat("pig"): 完了するが食料0
+  - flee(10): Not connected エラー（10秒切断バグ継続）
+  - farm(): 120秒タイムアウト
+  - ボットは(40.1, 76, -1.9)から動けない。接続10秒切断バグ継続。
+  - **根本問題**: ボットスタック + 接続不安定 + アイテムドロップ取得失敗が複合している
+- **Status**: Reported. Session 111. CRITICAL - コードレビュー最急務。
+
+---
+
 ## [2026-03-27] Bug: Session 110 (current) - Bot connection drops after ~10s, CRITICAL: Sessions 101-110継続
 
 - **Session 110 詳細分析**:
