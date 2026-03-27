@@ -1,3 +1,24 @@
+## [2026-03-27] Bug: Session 176 CRITICAL - 176セッション連続スタック継続 - admin /tp 必須
+
+### Session 176 確認:
+- **Cause**: 同一問題が176セッション継続。ボットがx=40,y=76,z=-2にスタック
+- **Coordinates**: x=40.2, y=76, z=-1.6 (変化なし)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **症状**:
+  - moveTo(5ブロック以上) → タイムアウト。1-2ブロック移動は成功
+  - combat("chicken") 3回試行 → raw_chicken がドロップしない（featherのみ）
+  - farm() → 成功するが食料なし（小麦未成長）
+  - navigate("wheat") → タイムアウト
+  - pillarUp() → タイムアウト
+- **新発見**: 1-2ブロックのmoveToは成功。chicken がいるが食料をドロップしない
+- **必要な対処**:
+  1. admin `/tp Claude1 100 70 100` でスタック解除
+  2. admin `/give Claude1 bread 10` で食料補給
+  3. または `/gamemode creative Claude1` → 拠点設置 → `/gamemode survival Claude1`
+- **Status**: CRITICAL - admin介入必須（176セッション連続継続中）
+
+---
+
 ## [2026-03-27] Bug: Session 175 CRITICAL - 175セッション連続スタック継続 - admin /tp 必須
 
 ### Session 175 確認:
