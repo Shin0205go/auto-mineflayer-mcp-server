@@ -1,12 +1,15 @@
-## [2026-03-27] Bug: Session 151 CRITICAL - moveTo部分的失敗・combat肉ドロップなし
+## [2026-03-27] Bug: Session 151 CRITICAL - gather/navigate/pillarUp全タイムアウト、combat肉ドロップなし
 
-### Session 151 確認:
-- **Cause**: 近距離（2ブロック）の移動は成功するが、10ブロック先の移動はタイムアウト（30秒）。combat("cow/pig/sheep/chicken")が成功を返すが肉がインベントリに入らない。
-- **Coordinates**: x=40, y=76, z=-2（birch_forest）
-- **HP**: 5.9 Hunger: 0
-- **具体的な失敗**: moveTo(55, 76, -2) タイムアウト30秒。combat全4種成功コード返却→肉ドロップなし。
-- **Near-distance work**: moveTo(42, 76, -2) → 2.9秒で(41,76,-2)に到達（成功）
-- **Status**: Reported
+### Session 151 確認（最終診断）:
+- **Cause**: 以下のAPIが全てタイムアウト: gather(), navigate(), pillarUp(), farm()
+- **唯一動くAPI**: status(), moveTo(近距離2-3ブロック), combat()（成功返却だが肉ドロップなし）, place()（応答あり）
+- **Coordinates**: x=40, y=76, z=-2（birch_forest、150セッション以上同じ座標）
+- **HP**: 5.9 Hunger: 0（固定、回復不能）
+- **食料**: 0（combat成功→肉ドロップなし → 食料確保不能）
+- **根本問題**: gather/navigateがタイムアウトするため、全ての進行が止まっている
+- **Status**: Reported - admin介入か根本的なコード修正が必要
+
+---
 
 ---
 
