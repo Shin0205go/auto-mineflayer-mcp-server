@@ -72,3 +72,25 @@
 
 - **Cause**: craft('crafting_table'), craft('bread'), farm() が60-90秒でタイムアウト。
 - **Status**: Reported - Session 97
+
+---
+
+## [2026-03-28] Bug: bot.dig()が異常に遅い + pathfinder.goto永久タイムアウト (Session 102)
+
+- **Cause**: bot.dig(block)で1ブロック掘るのに約14秒かかる。stone_pickaxeで石を掘っているにもかかわらず非常に遅い。pathfinder.gotoは60秒でタイムアウトし移動できない。
+- **Coordinates**: x=3.9, y=61.5, z=3.3 (掘削場所)
+- **Last Actions**: stone_pickaxeを装備してbot.dig(stoneBlock)を呼び出し。14秒後に完了。
+- **Error Message**: "Execution timed out after 60000ms" (dig loop), pathfinder.goto timeout
+- **Status**: Reported - Session 102 (2026-03-28)
+- **Notes**: 以前のセッション(101)でも同じpathfinder問題が報告済み。未修正のまま継続している。
+
+---
+
+## [2026-03-28] Bug: 謎のリスポーン/テレポート (Session 102)
+
+- **Cause**: bot.dig()ループが60秒タイムアウト後、座標がY=61からY=107に変化し、HP=20/Hunger=20に回復。インベントリは保持されている。
+- **Coordinates**: 開始: x=1.6, y=61, z=4.6 → 終了: x=-20.6, y=107, z=1.6
+- **Last Actions**: bot.dig()ループが60秒タイムアウトで中断
+- **Error Message**: タイムアウトエラーのみ
+- **Status**: Reported - Session 102 (2026-03-28)
+- **Notes**: 死亡→リスポーン（keepInventory ON）と推測される。死因不明。地下Y=61で掘削中に落下か敵か？
