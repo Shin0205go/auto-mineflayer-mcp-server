@@ -1,3 +1,21 @@
+## [2026-03-25] Bug: Session 65 FINAL - All major APIs broken simultaneously (CRITICAL SUMMARY)
+
+- **Cause**: Accumulated bugs causing complete gameplay failure in Session 65:
+  1. gather() - ALWAYS times out (45-90s) for any block type (birch_log, cobblestone, iron_ore, oak_log). Navigate finds block but gather never completes.
+  2. bot.dig() - Can dig blocks but items do NOT go to inventory (inventory unchanged before/after dig).
+  3. moveTo() - Upward movement broken: target Y=85 results in bot going to Y=55-67 instead. Pathfinder routes downward through cave systems.
+  4. pillarUp() - Times out after 50s or completes but Y unchanged.
+  5. tunnel("up") - Either "No pickaxe" error (despite having one) or times out after 30s.
+  6. farm() - Completes in <2s with no effect. wheat_seeds: 55, but no wheat harvested even near water source.
+  7. craft() with autoGather=true - Times out after 60s.
+  8. Connection drops every few mc_execute calls requiring constant reconnect.
+- **Coordinates**: Area around (0-50, 55-110, -30 to 30) - spawn area
+- **Deaths this session**: 6+ deaths (zombie, skeleton, creeper, starvation/drowning, HP=0)
+- **Root cause**: Combination of terrain destruction (massive cave systems from previous dig ops) + pre-existing gather/moveTo bugs + connection instability
+- **Status**: Session 65 complete. All major APIs need review. Recommend full reset + code fixes before next session.
+
+---
+
 ## [2026-03-26] Bug: Session 76+ - wheat gather() success but items not in inventory (disappear)
 - **Cause**: bot.gather("wheat", 3) reports "Gathered 3 wheat. Harvested wheat at..." but post-gather inventory shows 0 wheat. Items are being harvested but not collected into inventory.
 - **Coordinates**: (31,97,-1), (36,96,-2), (36,96,-1) - wild wheat plants on mountain surface
