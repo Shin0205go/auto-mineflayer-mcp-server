@@ -4,6 +4,18 @@
 
 ---
 
+## [2026-03-28] Bug: 地下閉じ込め - 全移動API機能不全
+
+- **Cause**: gather('iron_ore'), navigate(iron_ore), flee(), pillarUp(), moveTo() が全てタイムアウト（30-90秒）。地下に閉じ込められて脱出不能。
+- **Coordinates**: X:3, Y:62, Z:27（地下）
+- **Last Actions**: gather('iron_ore')タイムアウト→navigate タイムアウト→flee タイムアウト→pillarUp(40)タイムアウト（Y=52→54に2ブロック移動のみ）→pillarUp(5)タイムアウト→moveTo(x,95,z)タイムアウト
+- **Error Message**: "Execution timed out after Xms" が全操作で発生
+- **Status**: Reported
+- **HP/Hunger**: HP:16, Hunger:1 危険状態
+- **Nearby Enemies**: zombie x2, skeleton x1, creeper x1
+
+---
+
 ### [2026-03-23] bot.combat()がドロップを取得しない - 即時完了バグ
 
 - **Cause**: `bot.combat("cow")` が成功を返すが、インベントリに肉(beef/raw_beef)が追加されない。5回連続で同症状。実行時間が1ループ約1.6秒と極端に短く、実際には牛を見つけて倒していない可能性が高い。
