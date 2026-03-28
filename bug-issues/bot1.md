@@ -1,3 +1,11 @@
+## [2026-03-26] Bug: Session 76+ - wheat gather() success but items not in inventory (disappear)
+- **Cause**: bot.gather("wheat", 3) reports "Gathered 3 wheat. Harvested wheat at..." but post-gather inventory shows 0 wheat. Items are being harvested but not collected into inventory.
+- **Coordinates**: (31,97,-1), (36,96,-2), (36,96,-1) - wild wheat plants on mountain surface
+- **Last Actions**: gather("wheat",3) → success message showing 3 harvested → inventory check → wheat:0
+- **Error Message**: "Gather wheat: Gathered 3 wheat... Wheat in inventory: 0"
+- **Root Cause**: gather() may be harvesting the block but the item drop is not being picked up (pickup radius too small, or item falls out of range). The "inventory: 0" check at the end of gather() shows this.
+- **Status**: Reported (Session 76+)
+
 ## [2026-03-25] Bug: Session 70 SUMMARY - gather() broken for ALL blocks + combat drops broken + frequent disconnects
 
 - **Critical Bug List**:
