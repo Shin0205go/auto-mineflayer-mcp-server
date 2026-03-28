@@ -312,6 +312,41 @@ x=5, y=77, z=8 付近
 
 ### Status: Reported
 
+## 2026-03-28: HP枯渇 + pathfinder外部制御で地下から脱出不可 (Session 154 - CRITICAL)
+
+### 現象
+- 地下Y=42で HP=3 食料なし状態
+- pathfinder.goto() が全て "The goal was changed before it could be completed!" で失敗（外部ボットが制御）
+- ladderを19本保有しているが設置できない（placeBlockが機能しない）
+- bot.setControlState('jump') も機能しない（Y座標が変わらない）
+- Hunger=17なのに食料がないためHP回復不可
+- コントロール入力が一切機能しない → 完全に動けない状態
+
+### 座標
+- x=-2, y=42, z=13
+
+### 直前の行動
+1. 鉄採掘のため地下へ降りる（pathfinder使用）
+2. タイムアウト後 HP=3 に低下（ダメージ源不明）
+3. pillarUp試み → setControlState無効で失敗
+4. surface移動試み → goal changed で失敗
+5. ladder設置試み → placeBlockが機能しない
+
+### 根本原因
+- 複数botがpathfinderのgoalを相互に干渉している
+- 単一のmc_execute実行後にClaude6のbot接続が切れる（他のbotがpathfinderを上書き）
+- HP回復手段なし（食料なし、移動不可、攻撃もHP消費するため不可）
+
+### 影響
+- 死亡の可能性（HP=3で食料なし）
+- 全ての移動・アクションが不可能
+
+### 調査が必要なファイル
+- `src/tools/mc-execute.ts` — pathfinder ゴール管理
+- `src/daemon.ts` — 複数bot間のpathfinder干渉防止
+
+### Status: Reported
+
 ## 2026-03-28: bot.log / bot.status is not a function (Session 152)
 
 ### 現象
