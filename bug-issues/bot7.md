@@ -604,3 +604,13 @@
 - **Impact**: Claude7は実質的にゲームプレイ不可能。HP・Hunger確認、移動、採掘、食料確保等が全て不可。
 - **Additional**: デーモンポート3099が既に使用中の状態でも mc-execute が "Daemon not running" エラーを返すことがあり、接続不安定。
 - **Status**: Reported - CRITICAL BUG - ゲームプレイブロッカー
+
+## 2026-03-28 Session (new): bot.status/gather/eat/navigate が undefined (再発 + goalsもundefined)
+
+- **Cause**: mc-connect直後にbot.*カスタムAPIが全て undefined。さらに`goals`もundefinedになる場合がある（デーモン再起動直後）。
+- **Coordinates**: x=5, y=79, z=5
+- **Last Actions**: npm run daemon → mc-connect Claude7 → mc-execute "typeof bot.status" → undefined
+- **Error Message**: bot.status is not a function / goals is undefined
+- **Root Cause**: mc-executeサンドボックスがカスタムAPI（status, gather, eat, navigate等）をbotオブジェクトに追加していない。再接続後も状態が引き継がれない可能性あり。
+- **Workaround**: 生のmineflayer APIと bot.pathfinder.goto(new goals.GoalNear(...)) で代替可能（goals objectは2回目の接続では利用可能）。
+- **Status**: Reported - 2026-03-28
