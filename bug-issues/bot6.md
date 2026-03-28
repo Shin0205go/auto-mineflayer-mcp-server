@@ -166,3 +166,24 @@
 - pillarUp()での安全確保が機能しない
 
 ### Status: Reported
+
+## 2026-03-28: サーバー満員で接続不可 (Session 151)
+
+### 現象
+- `node scripts/mc-connect.cjs localhost 25565 Claude6` 実行時に `Kicked: multiplayer.disconnect.server_full`
+- Claude5, Claude7 など複数のボット名を試みても全て同様のエラー
+- デーモン (port 3099) は起動していると思われるが、Minecraftサーバーの接続スロットが全て使用中
+
+### 試みたユーザー名
+- Claude6 → server_full
+- Claude7 → server_full
+- Claude5 → server_full
+
+### 影響
+- ゲームプレイ一切不可。フェーズ目標の進行が停止
+
+### 対策提案
+- サーバー側の最大プレイヤー数設定確認（server.properties: max-players）
+- 既存ボット接続を切断してスロットを空ける
+
+### Status: Reported
