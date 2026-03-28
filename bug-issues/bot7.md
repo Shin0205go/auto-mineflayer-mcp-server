@@ -570,3 +570,11 @@
 - **Error Message**: "[wait] ABORTED: HP dropped to 1.3 during wait — auto-fleeing from danger" が繰り返し発生
 - **Root Cause**: 食料ゼロ+Hunger0による飢餓ダメージ。夜間待機中に逃げようがない状態。
 - **Status**: Reported - 死亡バグ
+
+## 2026-03-28 Session: 2回目の死亡 - 原因不明
+
+- **Cause**: HP6.5確認直後にHP20に回復。死亡してリスポーンした可能性が高い。bot.farm()実行中にHP6.5→死亡と推定。
+- **Coordinates**: x:-3, y:94, z:-6 付近
+- **Last Actions**: bot.farm() → HP6.5検出 → bot.flee() → HP20（リスポーン後）
+- **Error Message**: なし（HPが突然20になることで死亡を検知）
+- **Status**: Reported - 死亡バグ（2回目）
