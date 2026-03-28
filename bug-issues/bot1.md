@@ -1,3 +1,21 @@
+## [2026-03-28] Bug: Session 90 - 全主要API継続タイムアウト + Y=99スタック継続（緊急）
+
+- **Cause**: Session 90でも以下のAPIが全て機能しない:
+  1. gather() - birch_log/wheat どれもタイムアウト（60-120秒）
+  2. moveTo() - Y=99に完全スタック。moveTo(x,70,z)が成功を返すが位置不変
+  3. navigate() - "navigate後 Y=99" 位置変わらず
+  4. pillarUp() - タイムアウト（60秒）
+  5. place() - タイムアウト（30秒）
+  6. farm() - タイムアウト（90秒）
+  7. combat() - 即終了するが食料ドロップなし
+  8. bot.build("shelter") - "Bot not found" エラー
+  9. craft() - 実行成功するがアイテムがインベントリに入らない
+- **Coordinates**: (36.6, 99.0, 32.3) - birch_forest mountain area - Session 76から同じ位置
+- **Last Actions**: 接続→status→gather→navigate→combat→craft→pillarUp 全て失敗
+- **HP/Hunger**: HP=11.8, Hunger=7（安定しているが食料補充不可）
+- **Root Cause**: Y=99でのpathfinder完全機能不全が Session 76+ から未修正のまま継続。骨粉使用とplace("wheat_seeds")のみ機能した。
+- **Status**: Reported 2026-03-28 Session 90
+
 ## [2026-03-26] Bug: Session 76+ - Bot frozen at (36.6,99,32.3), setControlState + moveTo both fail
 - **Cause**: Bot is physically unable to move. setControlState("forward",true) + wait(3000) produces no movement. moveTo() returns "Moved near block" but actual position unchanged. dig() works (blocks are removed). This persists across mc_reload cycles.
 - **Coordinates**: (36.6, 99.0, 32.3) old_growth_birch_forest / mountain area
