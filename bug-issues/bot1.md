@@ -6714,3 +6714,11 @@ Bot needs to explore further (200+ blocks) to find animals.
   - 31個のitemが長時間 (5+分) ground に残存
 - **Impact**: 採掘・伐採が完全に無意味。鉄・木材の収集不可。Phase 6 blaze rod収集後の回収も不可能。
 - **Status**: CRITICAL - Phase 6 進行不能。auto-pickup修正が最優先。
+
+## [2026-03-29] Bug: Spider に殺された (overworld, Y=65付近)
+
+- **Cause**: birch_log採取中、近くのSpiderに攻撃された。bot.pathfinderが木の採掘に集中していたため敵検知が遅れた。
+- **Coordinates**: (141-145, 65, -25 付近)
+- **Last Actions**: birch_logを採掘中。inventory full解消のためnetherrack等をdropした後、木材収集を試みていた。
+- **Evidence**: chat message "Claude1 was slain by Spider"
+- **Status**: Reported. keepInventoryでアイテム保持。
