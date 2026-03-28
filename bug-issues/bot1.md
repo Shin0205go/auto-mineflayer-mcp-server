@@ -1,3 +1,13 @@
+## [2026-03-25] Bug: Session 75 - Bot trapped in cave (Y=44-70), ALL movement APIs fail to reach surface
+
+- **Cause**: Bot spawned/fell into a large cave system near world spawn (0, 44, 0) in birch_forest biome. Once inside, ALL movement APIs (moveTo, flee, pillarUp, navigate, gather) oscillate within the cave and cannot find a path to the surface.
+- **Coordinates**: (-2, 60, 5) and nearby. Cave spans roughly Y=44-75 near (0,60,0).
+- **Evidence**: moveTo(100, 70, 0) returns pos (-2, 61, 8). moveTo(300, 70, 300) returns (-3, 61, 9). 10 consecutive moveTo calls all return within 5 blocks of origin. pillarUp(20) only moves 1 block. flee(200) stays at origin.
+- **Mob Situation**: 6-17 skeletons, 6-17 creepers, 3-6 zombies constantly present. This is likely due to a dungeon/cave spawner.
+- **Impact**: Bot cannot reach surface, cannot farm, cannot escape. Death spiral.
+- **Fix Suggestion**: If bot detects Y<65 AND cannot reach Y>70 after 3 moveTo attempts, use gather() to dig straight up (mine blocks above current Y). Need "escape tunnel" logic.
+- **Status**: Reported - CRITICAL
+
 ## [2026-03-25] Bug: Session 92d - gather()timeout→地下侵入→mob包囲→HP=3.3脱出不可
 
 - **Cause**: gather("birch_log", 16)が120秒タイムアウト。その間にpathfinderが地下洞窟に誘導。タイムアウト後Y=61に移動、zombie+skeleton+endermanに囲まれた。HP=3.3で脱出不可。
