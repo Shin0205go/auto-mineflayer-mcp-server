@@ -435,6 +435,16 @@
 - **Root Cause**: src/tools/mc-execute.ts のサンドボックス構築時に高レベルAPIが正しく注入されていない可能性
 - **Status**: Reported - コードレビューアーによる調査が必要
 
+## [2026-03-28] pathfinder.goto() goal constantly cancelled - "The goal was changed before it could be completed!"
+
+- **Cause**: bot.pathfinder.goto() を呼ぶと、ほぼ毎回 "The goal was changed before it could be completed!" または "Path was stopped before it could be completed!" エラーが発生。移動できない。敵モブなし、HP正常(12-17)、昼間でも発生。
+- **Coordinates**: (7, 64, 2), (11, 84, 2), (5, 62, 4) など複数の場所で発生
+- **Last Actions**: GoalNear, GoalNearXZ 両方で発生。bot.pathfinder.stop() 後の再試行でも発生。5ブロックの短距離でも発生。
+- **Error Message**: "The goal was changed before it could be completed!" / "Path was stopped before it could be completed!"
+- **Impact**: ゲームプレイ上の移動が全て不可能。食料確保のための動物狩り、農場移動、チェスト操作など全てのタスクが実行不可。
+- **Root Cause Hypothesis**: auto-flee機能やその他のバックグラウンドプロセスがpathfinderのgoalを継続的にリセットしている可能性。HP<8でfleeが発動する設定があるが、今回はHP=12-17でも発生。
+- **Status**: CRITICAL - Reported
+
 ## [2026-03-28] goals オブジェクトがmc-executeスコープに未注入
 
 - **Cause**: bot-api/SKILL.mdには`goals`がスコープに注入されていると記載があるが、実際には`typeof goals === 'undefined'`になっている。GoalNear等のpathfinderゴールが使えない。
