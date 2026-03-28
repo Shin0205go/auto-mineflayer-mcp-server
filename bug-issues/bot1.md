@@ -1,3 +1,13 @@
+## [2026-03-28] Bug: Session 98b - サーバー満員でClaude1が再接続できない
+
+- **Cause**: デーモン再起動後にClaude1がMinecraftサーバーに接続しようとしたが "Kicked: multiplayer.disconnect.server_full" で拒否された
+- **Coordinates**: N/A（接続できていない）
+- **Last Actions**: daemon停止 → npm run daemon 再起動 → mc-connect.cjs実行 → server_full エラー
+- **Error Message**: "Error: Kicked: {\"translate\":\"multiplayer.disconnect.server_full\"}"
+- **Status**: Reported - 他のボット（Claude2-7等）がスロットを占有している可能性あり
+
+---
+
 ## [2026-03-28] Bug: Session 98 - HP=1.3 wait()でauto-flee無限ループ、夜間ファントム死亡
 
 - **Cause**: pillarUp後に高所(Y=103)でwait()したが、HP=1.3の状態でファントムから攻撃を受けてwait()が10回以上連続でABORT。auto-fleeが発動しても実際には逃げられず同位置でHPが減り続け死亡
