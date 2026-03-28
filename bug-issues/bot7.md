@@ -587,3 +587,9 @@
 - **Error Message**: なし
 - **Root Cause**: mob drop bugでアイテムが取得できない + flee中も攻撃を受け続ける
 - **Status**: Reported - 死亡バグ（3回目）
+
+## 2026-03-28 Session: デーモンがクラッシュ - 接続不可
+
+- **Cause**: bot.wait()実行後にデーモンがクラッシュ。npm run daemonで再起動したが、サーバーが満員のためClaude7が再接続できない。
+- **Error Message**: "Daemon not running. Start with: npm run daemon" / "Kicked: multiplayer.disconnect.server_full"
+- **Status**: Reported - デーモンクラッシュバグ
