@@ -1,3 +1,14 @@
+## [2026-03-25] Bug: Session 65 death #5 - "Claude1 was slain by Zombie" during combat(chicken) - morning
+
+- **Cause**: combat("chicken", 10) called at HP=4.9. Timed out after 30s. After reconnect, HP=4.9→20 suggests death occurred. Server: "Claude1 was slain by Zombie". Zombie attacked while trying to combat chicken.
+- **Coordinates**: Y=70 approx (morning, Y=69.8 before combat)
+- **Last Actions**: farm() → combat("chicken", 10) → timeout → reconnect → HP=4.9 → flee → HP=20 (death)
+- **Root Cause**: combat() called at low HP (4.9) in hostile area with creepers×3, skeleton×1, zombie nearby. combat() with wrong target doesn't avoid nearby threats.
+- **Fix Needed**: combat() should not target passive mobs when hostile mobs are within 8 blocks. bot should flee hostiles first.
+- **Status**: Reported. Session 65. Death #5.
+
+---
+
 ## [2026-03-25] Bug: Session 65 death #4 - HP=0 during bot.wait() flee loop - midnight
 
 - **Cause**: bot.wait() was executing. HP dropped to 0 during auto-flee (Hunger=0 starvation + hostile damage). "ABORTED: HP dropped to 0.0 during wait". Bot auto-fled but HP=0 → death.
