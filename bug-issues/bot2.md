@@ -4,6 +4,17 @@
 
 ---
 
+## [2026-03-28] Bug: daemon再起動後にserver_full - Claude2接続不能
+
+- **Cause**: デーモン再起動後、他のボット（Claude1-7）が自動再接続してサーバーをserver_full状態にした。Claude2が接続できない。
+- **Coordinates**: N/A (接続前)
+- **Last Actions**: daemon停止 → npm run daemon で再起動 → mc-connect.cjs実行 → "Kicked: multiplayer.disconnect.server_full" エラー
+- **Error Message**: Error: Kicked: {"translate":"multiplayer.disconnect.server_full"}
+- **Status**: Reported - Session 97 (2026-03-28)
+- **Notes**: サーバーのmax-players設定を確認する必要あり。または他のボットの自動再接続を無効化する必要あり。
+
+---
+
 ## [2026-03-28] Bug: craft()タイムアウト + farm()タイムアウト - CRITICAL
 
 - **Cause**: craft('crafting_table'), craft('bread'), farm() が60-90秒でタイムアウト。クラフト系API全般が機能不全。
