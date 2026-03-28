@@ -15,20 +15,14 @@ import { getAgentType } from "./agent-state.js";
 import { botManager, bumpBotManagerVersion } from "./bot-manager/index.js";
 import { registry } from "./tool-handler-registry.js";
 
-// Eagerly import high-level-actions to populate registry.highLevel at startup.
-// Bot1/Bot2 [2026-03-22]: mc_craft/mc_gather/mc_build crashed with
-// "Cannot read properties of undefined (reading 'minecraft_craft_chain')"
-// because registry.highLevel was only set when high-level-actions.ts was loaded,
-// but no static import existed — only the dynamic import inside mc_reload.
-// On first boot, getHighLevel() returned undefined, crashing all craft/gather/build calls.
-import "./tools/high-level-actions.js";
+// (high-level-actions removed — agents write mineflayer code directly in mc_execute)
 
 // Tool definitions for tools/list and CallTool
 const allToolDefs: Record<string, { description: string; inputSchema: object }> = {
   ...coreTools,
   // Hot-reload tool
   mc_reload: {
-    description: "Hot-reload tool implementations after code changes. Re-imports core-tools and high-level-actions modules without restarting the MCP server process. Call after `npm run build` to reflect code changes. Stdio connection is preserved.",
+    description: "Hot-reload tool implementations after code changes. Re-imports core-tools module without restarting the MCP server process. Call after `npm run build` to reflect code changes. Stdio connection is preserved.",
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -166,16 +160,8 @@ async function reloadModules(): Promise<string> {
   const errors: string[] = [];
 
   const modules = [
-    { name: 'high-level-actions', path: 'tools/high-level-actions.js' },
     { name: 'core-tools', path: 'tools/core-tools.js' },
-    // bot-manager sub-modules: these contain fight/attack/collectNearbyItems.
-    // Static ESM imports cache the startup version; cache-busting here loads fresh code.
-    // BotManager.fight() and .attack() use _importBotSurvival() with the version stamp
-    // set by bumpBotManagerVersion() below to pick up the newly loaded code.
-    // Bot1 Session 70: 627a514 fixed inventoryBefore timing but mc_reload x3 still showed
-    // 0 drops because bot-survival.ts was never part of the reload list.
-    { name: 'bot-survival', path: 'bot-manager/bot-survival.js' },
-    { name: 'bot-items', path: 'bot-manager/bot-items.js' },
+    { name: 'mc-execute', path: 'tools/mc-execute.js' },
   ];
 
   for (const mod of modules) {
@@ -189,10 +175,7 @@ async function reloadModules(): Promise<string> {
     }
   }
 
-  // Bump the bot-manager version so BotManager.fight()/.attack() pick up the
-  // freshly loaded bot-survival.js and bot-items.js via _importBotSurvival().
   bumpBotManagerVersion();
-  console.error(`[mc_reload] bumpBotManagerVersion() called — fight/attack now use v=${v}`);
 
   // Reload viewer-server: stop the old HTTP server, import fresh code, restart.
   // viewer-server now reads botManager directly on each request, so no re-attach needed.
