@@ -1279,6 +1279,15 @@ Session 89 Timeline:
 - **影響**: crafting_tableをクラフトできない → furnaceをクラフトできない → bread作れない → 食料ゼロのまま
 - **Status**: 記録のみ。コード修正はcode-reviewerエージェントが担当。
 
+## [2026-03-28] 死亡 #58 — 高所落下（y=110から落下）
+
+- **Cause**: navigate/combat実行中にy=110の高所から落下して死亡
+- **Coordinates**: (-4.5, 110, -7.5) — リスポーン地点
+- **Last Actions**: dawn後にnavigate('cow')を実行 → y=110の高所に誘導された後落下
+- **Error Message**: "Claude3 fell from a high place"
+- **keepInventory**: true（アイテム保持確認）
+- **Status**: Reported
+
 ## [2026-03-28] バグ #57 — combat()後に食料ドロップが入手できない + HP自然回復しない
 
 - **Cause**: bot.combat('chicken'/'pig'/'cow')を実行しても食料アイテムが一切インベントリに入らない。またhunger=12-14の状態でHP=4.2が全く回復しない（10秒待機後も変化なし）
