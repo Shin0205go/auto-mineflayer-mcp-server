@@ -4,6 +4,28 @@
 
 ---
 
+## [2026-03-28] Bug: 地形スタック - controlStateが動作しない特定座標 (Session 101)
+
+- **Cause**: 特定の座標（-3,106,12 および 33,99,-1）でsetControlState('forward'/'sprint')/bot.lookを使っても全く移動できない。全方向テストして空気があっても動かない。他の座標では正常に動く。
+- **Coordinates**: -3.3,106.0,12.7 および 33,99,-1
+- **Last Actions**: bot.look → setControlState('forward', true) → wait(2000) → 座標変化なし
+- **Error Message**: 移動量=0（エラーなし、サイレント失敗）
+- **Status**: Reported - Session 101 (2026-03-28)
+- **Notes**: 33,99,-1は地上のcrafting_tableの上。-3,106,12は洞窟内のstone上。どちらも足元がsolidブロック、上が空気の状態。原因不明。管理者テレポートで一時脱出できたが、また別の場所でスタック。
+
+---
+
+## [2026-03-28] Bug: 落下によるHP:5 + 食料なし (Session 101)
+
+- **Cause**: 移動中に予期しない落下（Y=91→75、16ブロック落下）でHP:5まで減少。食料ゼロ。
+- **Coordinates**: 8,74,-4
+- **Last Actions**: West方向に移動 → 落下
+- **Error Message**: "[Server]: Claude2 fell from a high place"
+- **Status**: Reported - Session 101 (2026-03-28)
+- **Notes**: keepInventory有効。管理者(shng25)によるTP+HP回復で救助。食料システムが機能しないためHPの自然回復が期待できない。
+
+---
+
 ## [2026-03-28] Bug: pathfinder.goto永久タイムアウト + controlState無効 - CRITICAL (Session 101)
 
 - **Cause**: pathfinder.gotoがカスタムgoalを受け付けるが永久にタイムアウト（30-60秒）。bot.setControlState('forward', true)も全く効かない（2秒後も同じ座標）。ボットが完全に移動不能。
@@ -35,40 +57,24 @@
 - **Coordinates**: x=0.7, y=86, z=-2.3
 - **Last Actions**: BOT_USERNAME=Claude2 node scripts/mc-execute.cjs "const s = await bot.status(); bot.log(...);" → TypeError: bot.status is not a function
 - **Error Message**: TypeError: bot.status is not a function / TypeError: bot.log is not a function
-- **Status**: Reported - Session 100 (2026-03-28)
-- **Notes**: 正しいAPIは `status()`, `log()`, `getMessages()`, `chat()`, `wait()`, `reconnect()` (top-level)。高レベルのgather/craft/combat等は存在しない。SKILL.mdとCLAUDE.mdのドキュメントが実装と乖離している。エージェントが正しいAPIを使えるようにドキュメントを修正するか、sandboxに`bot.status = status`等のエイリアスを追加する必要がある。
+- **Status**: Reported - Session 101 (2026-03-28)
+- **Notes**: 正しいAPIは `status()`, `log()`, `getMessages()`。高レベルのgather/craft/combat等は存在しない。SKILL.mdとCLAUDE.mdのドキュメントが実装と乖離している。
 
 ---
 
 ## [2026-03-28] Bug: server_full - Claude2接続不能（Session 99）
 
-- **Cause**: セッション開始時にサーバーが満員（server_full）でClaude2が接続できない。3回試行、全て同じエラー。他のボットが接続を占有している可能性。
+- **Cause**: セッション開始時にサーバーが満員（server_full）でClaude2が接続できない。
 - **Coordinates**: N/A (接続前)
-- **Last Actions**: mc-connect.cjs localhost 25565 Claude2 → 即座に "Kicked: multiplayer.disconnect.server_full"
+- **Last Actions**: mc-connect.cjs localhost 25565 Claude2 → "Kicked: multiplayer.disconnect.server_full"
 - **Error Message**: Error: Kicked: {"translate":"multiplayer.disconnect.server_full"}
-- **Status**: Reported - Session 99 (2026-03-28)
-- **Notes**: 同じバグがSession 97でも報告済み（bot2.md内）。サーバーのmax-players設定が低すぎるか、切断されなかったゾンビセッションが残っている可能性。
-
----
-
-## [2026-03-28] Bug: daemon再起動後にserver_full - Claude2接続不能
-
-- **Cause**: デーモン再起動後、他のボット（Claude1-7）が自動再接続してサーバーをserver_full状態にした。Claude2が接続できない。
-- **Coordinates**: N/A (接続前)
-- **Last Actions**: daemon停止 → npm run daemon で再起動 → mc-connect.cjs実行 → "Kicked: multiplayer.disconnect.server_full" エラー
-- **Error Message**: Error: Kicked: {"translate":"multiplayer.disconnect.server_full"}
-- **Status**: Reported - Session 97 (2026-03-28)
-- **Notes**: サーバーのmax-players設定を確認する必要あり。または他のボットの自動再接続を無効化する必要あり。
+- **Status**: Reported
 
 ---
 
 ## [2026-03-28] Bug: craft()タイムアウト + farm()タイムアウト - CRITICAL
 
-- **Cause**: craft('crafting_table'), craft('bread'), farm() が60-90秒でタイムアウト。クラフト系API全般が機能不全。
+- **Cause**: craft('crafting_table'), craft('bread'), farm() が60-90秒でタイムアウト。
 - **Coordinates**: X:9, Y:99, Z:24 (地上)
-- **Last Actions**: craft('crafting_table')→60秒タイムアウト、farm()→90秒タイムアウト、craft('bread')→小麦を消費せず即完了（実際には何も作られない）
-- **Error Message**: "Execution timed out after 60000ms", またはcraft完了するが素材消費なし・アイテム作成なし
-- **Status**: Reported - Session 97 (2026-03-28)
-- **Affected APIs**: bot.craft(), bot.farm()
-- **HP/Hunger**: HP:10, Hunger:0→15
-- **Notes**: combat('cow')後アイテムがインベントリに入らないバグも継続。navigate('apple')後にbread 1個入ったのは謎。wheat:5→6も理由不明。craft()はwheat消費しないで即完了する（タイムアウトではないが実効なし）。
+- **Error Message**: "Execution timed out after 60000ms"
+- **Status**: Reported
