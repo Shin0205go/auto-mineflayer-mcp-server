@@ -7,8 +7,6 @@
 
 import { botManager } from "../bot-manager/index.js";
 import { checkDangerNearby, isHostileMob, EDIBLE_FOOD_NAMES } from "../bot-manager/minecraft-utils.js";
-import { setAgentType } from "../agent-state.js";
-import { registry } from "../tool-handler-registry.js";
 import { lastSleepTick } from "../bot-manager/bot-survival.js";
 
 // ─── mc_status ───────────────────────────────────────────────────────────────
@@ -337,9 +335,6 @@ export async function mc_connect(
     throw new Error("Username is required");
   }
 
-  // Always set game agent type for core tools
-  setAgentType("game");
-
   await botManager.connect({ host, port, username, version });
   _lastConnectArgs = { host, port, username, version };
 
@@ -375,8 +370,3 @@ export async function mc_reconnect(): Promise<string> {
   return `Reconnected to ${params.host}:${params.port} as ${params.username}`;
 }
 
-// ─── Registry registration (for hot-reload) ─────────────────────────────────
-
-registry.coreTools = {
-  mc_status, mc_chat, mc_connect, mc_reconnect,
-};

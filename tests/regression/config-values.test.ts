@@ -131,23 +131,7 @@ describe("mc_status nearbyEntities (core-tools.ts)", () => {
   });
 });
 
-// ─── 5. bot.moveTo() calls botManager.moveTo() directly ──────────────────────
-
-describe("bot.moveTo() in mc-execute sandbox", () => {
-  const src = readSrc("src/tools/mc-execute.ts");
-
-  it("moveTo calls botManager.moveTo() directly (not mc_navigate)", () => {
-    expect(src).toContain("botManager.moveTo(username, x, y, z)");
-  });
-
-  it("moveTo definition does not reference mc_navigate", () => {
-    // Extract the moveTo function body (next ~200 chars after 'moveTo:')
-    const moveToIdx = src.indexOf("moveTo: async (x: number");
-    expect(moveToIdx).toBeGreaterThan(-1);
-    const moveToBlock = src.substring(moveToIdx, moveToIdx + 300);
-    expect(moveToBlock).not.toContain("mc_navigate");
-  });
-});
+// ─── 5. (removed — bot.moveTo wrapper deleted, agents use mineflayer pathfinder directly) ──────
 
 // ─── 6. combat phantom kill (attackCount === 0 + target gone) ─────────────────
 
@@ -175,73 +159,9 @@ describe("combat phantom kill detection (bot-survival.ts)", () => {
   });
 });
 
-// ─── 7. farm() auto-flee on abort ─────────────────────────────────────────────
+// ─── 7. (removed — farm() wrapper deleted, agents write mineflayer code directly) ──────
 
-describe("farm() auto-flee on abort (core-tools.ts)", () => {
-  const src = readSrc("src/tools/core-tools.ts");
-
-  it("mid-farm hostile detection calls mc_flee", () => {
-    expect(src).toContain("Hostile detected during farming");
-    // After hostile detection, mc_flee must be called
-    const idx = src.indexOf("Hostile detected during farming");
-    expect(idx).toBeGreaterThan(-1);
-    const afterAbort = src.substring(idx, idx + 500);
-    expect(afterAbort).toContain("mc_flee");
-  });
-
-  it("mid-farm low HP triggers flee", () => {
-    // The HP check during farming should also call mc_flee
-    // Look for the HP<10 farm abort
-    const matches = [...src.matchAll(/midFarmHp\s*<\s*10/g)];
-    expect(matches.length).toBeGreaterThan(0);
-    // After that check, mc_flee should be called
-    const idx = src.indexOf("midFarmHp < 10");
-    expect(idx).toBeGreaterThan(-1);
-    const afterHpCheck = src.substring(idx, idx + 300);
-    expect(afterHpCheck).toContain("mc_flee");
-  });
-});
-
-// ─── 8. wait() HP abort logic ─────────────────────────────────────────────────
-
-describe("wait() HP abort logic (mc-execute.ts)", () => {
-  const src = readSrc("src/tools/mc-execute.ts");
-
-  it("HP < 3 is absolute abort floor regardless of HP stability", () => {
-    expect(src).toContain("hp < 3");
-  });
-
-  it("HP < 6 only aborts if HP has actually dropped (hpDroppedSinceStart >= 1)", () => {
-    expect(src).toContain("hp < 6 && hpDroppedSinceStart >= 1");
-  });
-
-  it("tracks waitStartHp for stable-HP detection", () => {
-    expect(src).toContain("waitStartHp");
-    expect(src).toContain("const hpDroppedSinceStart = waitStartHp - hp");
-  });
-
-  it("abort condition is: hp < 6 && hpDroppedSinceStart >= 1 (hp<3 absolute floor removed — caused infinite abort loop at stable low HP)", () => {
-    // hp < 3 absolute floor was removed because it caused the bot to get stuck in an
-    // infinite abort loop when HP was stable at < 3 (e.g., respawn bug). The bot should
-    // wait even at very low HP as long as HP isn't actively dropping.
-    expect(src).toMatch(
-      /if\s*\(\s*hp\s*<\s*6\s*&&\s*hpDroppedSinceStart\s*>=\s*1\s*\)/
-    );
-  });
-
-  it("does NOT abort on hp < 6 alone (prevents infinite abort loop at stable low HP)", () => {
-    // There should be no standalone hp < 6 abort without the hpDroppedSinceStart guard
-    // The only hp < 6 check should be paired with hpDroppedSinceStart
-    const hpLt6Matches = [...src.matchAll(/hp\s*<\s*6/g)];
-    for (const match of hpLt6Matches) {
-      const context = src.substring(Math.max(0, match.index! - 20), match.index! + 60);
-      // Each hp < 6 should either be in the compound condition or in a comment
-      const isInCompound = context.includes("hpDroppedSinceStart") || context.includes("hp < 3");
-      const isComment = context.includes("//") || context.includes("`");
-      expect(isInCompound || isComment).toBe(true);
-    }
-  });
-});
+// ─── 8. (removed — wait() wrapper deleted from mc-execute, agents use setTimeout directly) ──────
 
 // ─── 9. HP regen warning in status() ──────────────────────────────────────────
 

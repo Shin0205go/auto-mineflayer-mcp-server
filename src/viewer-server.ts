@@ -15,6 +15,13 @@ import * as os from "os";
 import * as path from "path";
 import { Vec3 } from "vec3";
 import { botManager } from "./bot-manager/index.js";
+import { mc_execute } from "./tools/mc-execute.js";
+import { mc_connect, mc_chat } from "./tools/core-tools.js";
+import { validate, getStep } from "./harness/validator.js";
+import { getCurrentPhase, setCurrentPhase, loadPlan } from "./harness/phase-state.js";
+
+// Load plan once at startup (re-read per request for hot edit support)
+function getPlan() { return loadPlan(); }
 
 const PID_FILE = path.join(os.tmpdir(), "mineflayer-viewer.pid");
 
@@ -561,6 +568,15 @@ function renderStatusPage(): string {
 
 // --- HTTP Server -------------------------------------------------------
 
+function readBody(req: http.IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => resolve(body));
+    req.on("error", reject);
+  });
+}
+
 export function stopViewerServer(): Promise<void> {
   return new Promise((resolve) => {
     if (viewerCloseFn) { try { viewerCloseFn(); } catch {} viewerCloseFn = null; }
@@ -584,6 +600,101 @@ export function stopViewerServer(): Promise<void> {
 function createRequestHandler(port: number): http.RequestListener {
   return (req, res) => {
     const url = req.url ?? "/";
+
+    // POST /api/execute - mc_execute をHTTP経由で実行（フェーズバリデーション付き）
+    if (url === "/api/execute" && req.method === "POST") {
+      readBody(req).then(async (body) => {
+        try {
+          const { code, timeout, username } = JSON.parse(body);
+
+          // Phase validation: reject code that references out-of-scope actions
+          const plan = getPlan();
+          const phase = getCurrentPhase();
+          const step = getStep(plan, phase);
+          if (step) {
+            const v = validate(code, step);
+            if (!v.allowed) {
+              res.writeHead(403, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: `PHASE_BLOCKED: ${v.reason}` }));
+              return;
+            }
+          }
+
+          const result = await mc_execute(code, timeout || 120000, username);
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify({ result }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(e) }));
+        }
+      });
+      return;
+    }
+
+    // GET /api/phase - 現在のフェーズを取得
+    if (url === "/api/phase" && req.method === "GET") {
+      const phase = getCurrentPhase();
+      const plan = getPlan();
+      const step = getStep(plan, phase);
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ phase, step }));
+      return;
+    }
+
+    // POST /api/phase - フェーズを更新 { phase: N }
+    if (url === "/api/phase" && req.method === "POST") {
+      readBody(req).then((body) => {
+        try {
+          const { phase } = JSON.parse(body);
+          if (typeof phase !== "number" || phase < 1 || phase > 8) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "phase must be a number 1-8" }));
+            return;
+          }
+          setCurrentPhase(phase);
+          const plan = getPlan();
+          const step = getStep(plan, phase);
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify({ ok: true, phase, step }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(e) }));
+        }
+      });
+      return;
+    }
+
+    // POST /api/connect - mc_connect をHTTP経由で実行
+    if (url === "/api/connect" && req.method === "POST") {
+      readBody(req).then(async (body) => {
+        try {
+          const args = JSON.parse(body);
+          const result = await mc_connect(args);
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify({ result }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(e) }));
+        }
+      });
+      return;
+    }
+
+    // POST /api/chat - mc_chat をHTTP経由で実行
+    if (url === "/api/chat" && req.method === "POST") {
+      readBody(req).then(async (body) => {
+        try {
+          const args = JSON.parse(body);
+          const result = await mc_chat(args.message);
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify({ result }));
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(e) }));
+        }
+      });
+      return;
+    }
 
     // Stop endpoint: allows a new process to evict a stale old process
     if (url === "/__stop") {

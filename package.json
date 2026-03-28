@@ -8,10 +8,9 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev": "tsc --watch | while IFS= read -r line; do echo \"$line\"; case \"$line\" in *'Found 0 errors'*) kill -USR1 $(pgrep -f 'node.*dist/index.js') 2>/dev/null && echo '[dev] Sent SIGUSR1 → tools/list_changed' ;; esac; done",
+    "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "start": "node dist/index.js",
-    "start:proxy": "node dist/mcp-proxy.js"
+    "daemon": "node dist/daemon.js"
   },
   "keywords": [
     "mcp",
@@ -23,7 +22,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
     "canvas": "^3.2.1",
     "dotenv": "^16.3.1",
     "minecraft-data": "^3.78.0",

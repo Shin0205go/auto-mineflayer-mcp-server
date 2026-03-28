@@ -85,46 +85,6 @@ describe("result slot recovery (bot-crafting.ts)", () => {
   });
 });
 
-// ─── 3. Underground escape in gather() ────────────────────────────────────────
+// ─── 3. (removed — high-level-actions.ts gather() wrapper deleted) ────────────
 
-describe("underground escape in gather() (high-level-actions.ts)", () => {
-  const hlaSrc = readFileSync(resolve("src/tools/high-level-actions.ts"), "utf-8");
-
-  it("triggers surface escape when failedPositions >= 3 AND bot Y < 62", () => {
-    // Session 96 / 92d: bot stuck underground at Y<62, gather() times out endlessly.
-    // Fix: when 3+ blocks are unreachable AND bot is deep underground, escape to Y=80.
-    expect(hlaSrc).toContain("gatherBot.entity.position.y < 62");
-    expect(hlaSrc).toContain("auto-escaped underground");
-  });
-
-  it("uses moveTo(x, 80, z) to escape underground", () => {
-    // Target Y=80 puts bot above most cave systems (most caves end by Y=72).
-    const escapeIdx = hlaSrc.indexOf("gatherBot.entity.position.y < 62");
-    expect(escapeIdx).toBeGreaterThan(-1);
-    const escapeBlock = hlaSrc.substring(escapeIdx, escapeIdx + 400);
-    expect(escapeBlock).toContain("80");
-    expect(escapeBlock).toContain("moveTo");
-  });
-});
-
-// ─── 4. emergencyDigUp condition for deep underground ─────────────────────────
-
-describe("emergencyDigUp deepUnderground condition (bot-movement.ts)", () => {
-  const moveSrc = readFileSync(resolve("src/bot-manager/bot-movement.ts"), "utf-8");
-
-  it("triggers emergencyDigUp when bot is at Y<62 even if target Y is similar", () => {
-    // Session 96 bug: bot at Y=60, target at Y=61 (diff=1).
-    // Old condition: targetIsHigher = (y - currentBotY) > 5 → false for diff=1 → no escape.
-    // New condition: deepUnderground = currentBotY < 62 && y >= currentBotY - 2 → true → escape.
-    expect(moveSrc).toContain("deepUnderground");
-    expect(moveSrc).toMatch(/currentBotY\s*<\s*62\s*&&\s*y\s*>=\s*currentBotY\s*-\s*2/);
-  });
-
-  it("deepUnderground condition OR'd with targetIsHigher for emergencyDigUp trigger", () => {
-    const deepIdx = moveSrc.indexOf("deepUnderground");
-    expect(deepIdx).toBeGreaterThan(-1);
-    // Find the if statement that uses both conditions
-    const block = moveSrc.substring(Math.max(0, deepIdx - 100), deepIdx + 300);
-    expect(block).toContain("targetIsHigher || deepUnderground");
-  });
-});
+// ─── 4. (removed — bot-movement.ts emergencyDigUp wrapper deleted) ────────────
