@@ -1,3 +1,11 @@
+## [2026-03-28] Bug: Session 100 - bot.* 高レベルAPI（bot.status, bot.gather等）が全てundefined
+
+- **Cause**: mc-execute.cjs内でbot.status, bot.gather, bot.craft, bot.combat等の高レベルAPIが全てundefinedになっている。rawのmineflayer bot（bot.health, bot.entity.position等）は使えるがラッパーAPIが使えない
+- **Coordinates**: x=8.5, y=119, z=7.5
+- **Last Actions**: mc-connect.cjs で接続後にbot.status()を呼んだがTypeError: bot.status is not a function
+- **Error Message**: "TypeError: bot.status is not a function", "TypeError: bot.log is not a function"
+- **Status**: Reported - rawのbot APIで代替してゲームプレイを継続中
+
 ## [2026-03-28] Bug: Session 99 - サーバー満員でClaude1が接続できない（継続）
 
 - **Cause**: mc-connect.cjs実行時に "Kicked: multiplayer.disconnect.server_full" で拒否され続けている
