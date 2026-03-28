@@ -473,6 +473,15 @@
 - **Root Cause**: 1) 食料0のまま地下に潜った。2) pathfinderがバックグラウンドで動き続けてgoalをキャンセルする。3) HP=2で食料なし+脱出不可の状態に陥った。
 - **Status**: Reported - pathfinder background cancellation bug需要修正
 
+## [2026-03-28] HP stuck at 2.1 - cannot heal without food, trapped underground
+
+- **Cause**: HP=2.1 で地下Y=40に固定。食料なし(hunger=14)でHP回復不可。Hunger=18以上が必要だが食料アイテムが全くない。地上への経路はpathfinderがgoalキャンセルで動けない。setControlStateでのpillarUpも実行中にMultiple Bots Connectedエラーで切断される。
+- **Coordinates**: x=-17, y=40, z=-9
+- **Last Actions**: GoalY(80)でY=80を目指すがY=40で止まる。pillarUp(cobblestone)もコード実行中に切断。
+- **Error Message**: HP=2.1で固定。"Multiple bots connected"エラーで頻繁に切断。
+- **Impact**: ゲームプレイ継続不可状態。食料取得も脱出も不可能。
+- **Status**: CRITICAL - 現在進行中
+
 ## [2026-03-28] Repeated disconnection - Multiple Bots Connected error
 
 - **Cause**: BOT_USERNAME=Claude4 を指定してmc-executeを実行中に「Multiple bots connected (...). Set BOT_USERNAME」エラーが発生してBOT_USERNAME=Claude4が見つからなくなる。Claude4が死亡してリスポーンした時、または接続が切れた後に発生する。
