@@ -347,6 +347,41 @@ x=5, y=77, z=8 付近
 
 ### Status: Reported
 
+## 2026-03-28: 全移動手段が機能しない - 複数bot間のpathfinder干渉 (Session 154 - CRITICAL)
+
+### 現象
+- pathfinder.goto() → 300ms以内に "The goal was changed before it could be completed!" で失敗
+- pathfinder.setGoal(goal) → setGoal後5秒待っても動かない
+- bot.setControlState('forward/back/jump') → 位置が変わらない（無効化）
+- bot.placeBlock() → "Event blockUpdate did not fire within timeout" で全て失敗
+- pathfinder.goal が外部から継続的に上書きされている（他のbotのコードが干渉）
+
+### 確認事項
+```
+isMoving: false
+Current goal: {"x":11,"y":97,"z":8,"rangeSq":4}  ← 外部から設定されたゴール
+stop()後: goal={"x":8,"y":88,"z":4,"rangeSq":4}   ← すぐ別のgoalが設定される
+```
+
+### 座標
+- x=-2, y=101, z=11（cobblestone pillarの頂上）
+
+### 影響
+- 移動・ブロック設置・採掘が全て不可能
+- ゲームプレイが完全に停止
+- Claude5も同じバグを報告（bot5.md）
+
+### 根本原因（推測）
+- mc_executeのsandboxが全botで同一のbotインスタンスを参照している
+- 他のbotが実行するpathfinder gotoが、Claude6の移動コマンドを上書きする
+- BOT_USERNAME環境変数でbotを指定しているが、pathfinderの設定は分離されていない
+
+### 調査が必要なファイル
+- `src/tools/mc-execute.ts` — botインスタンス解決ロジック
+- `src/daemon.ts` — 複数bot接続管理
+
+### Status: Reported (BLOCKER)
+
 ## 2026-03-28: 溺死 - 水没した洞窟から脱出不可 (Session 154 - DEATH)
 
 ### 現象
