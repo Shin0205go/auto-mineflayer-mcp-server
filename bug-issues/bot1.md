@@ -1,3 +1,17 @@
+## [2026-03-28] Bug: Session 185+ CRITICAL - ゴムバンド現象継続 - 185セッション以上継続中
+
+### Session 185 確認:
+- **Cause**: 同一問題継続。ボットがX=33~40, Y=74~76エリアに固定。食料ドロップ取得不可。
+- **Coordinates**: X=33, Y=74, Z=8 (変動あるが常に同エリアに戻る)
+- **HP**: 5.9 / Hunger: 0 (固定)
+- **症状**: 全移動API(moveTo/pillarUp/flee/navigate)がゴムバンドで戻る。combat()は実行されるがドロップなし。farm()は120秒タイムアウト。
+- **追加症状**: craft("furnace") や craft("crafting_table")は"成功"するがインベントリに追加されない（世界に自動設置される可能性）
+- **新知見**: bot.build("shelter")は動作する。navigate()は数ブロック移動可能。pillarUpは内部でHP落下バグがある。
+- **Status**: CRITICAL - admin介入必須（185+セッション連続継続中）
+- **必要な対処**: `/tp Claude1 100 70 100` → `/give Claude1 bread 10`
+
+---
+
 ## [2026-03-27] Bug: Session 184 CRITICAL - ゴムバンド現象 - サーバーが位置をリセット
 
 ### Session 184 詳細調査結果:
