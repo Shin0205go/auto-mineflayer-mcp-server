@@ -4,6 +4,17 @@
 
 ---
 
+## [2026-03-28] Bug: ボット宙浮き・移動不能 + 多数のbot.* API未定義 (Session 102)
+
+- **Cause**: 再接続後にY=102.00で完全に固定。setControlState('jump')してもbot.entity.positionが変化しない。また bot.gather, bot.status, bot.flee, bot.moveTo, bot.navigate, bot.eat, bot.farm, bot.combat, bot.equipArmor がすべてundefined（bot.craftのみ動作）。pathfinder.gotoは90秒タイムアウト。
+- **Coordinates**: x=-21, y=102, z=0
+- **Last Actions**: mc-connect.cjs で再接続後、bot.entity.position.y=102.00でfloating状態。setControlState/bot.dig/pathfinder.gotoが全て機能しない。
+- **Error Message**: pathfinder.goto: "Execution timed out after 90000ms", bot.dig: 0ブロック採掘（サイレント失敗）
+- **Status**: Reported - Session 102 (2026-03-28)
+- **Notes**: bot.farm/bot.gather/bot.flee等の高レベルAPIがundefinedなのはsandbox構成の問題と思われる。宙浮きはmineflayerのエンティティ状態がリセットされていない可能性。
+
+---
+
 ## [2026-03-28] Bug: 溺死 + ゾンビ死亡 (Session 101) - CRITICAL DEATHS
 
 - **Cause**:
