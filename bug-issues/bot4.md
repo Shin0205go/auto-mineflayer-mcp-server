@@ -435,6 +435,16 @@
 - **Root Cause**: src/tools/mc-execute.ts のサンドボックス構築時に高レベルAPIが正しく注入されていない可能性
 - **Status**: Reported - コードレビューアーによる調査が必要
 
+## [2026-03-28] Daemon crashes repeatedly - socket hang up
+
+- **Cause**: npm run daemon が起動してもすぐにクラッシュする。mc-execute.cjs を実行するとdaemonが落ちて "socket hang up" / "Daemon not running" エラーになる。一部の操作(setControlState, await wait)でのみ発生する可能性。
+- **Coordinates**: N/A
+- **Last Actions**: bot.setControlState('forward', true) + await wait(1500) 後にdaemon crash。または複数回のmc-executeのみで発生。
+- **Error Message**: "Daemon not running. Start with: npm run daemon" + "socket hang up"
+- **Impact**: ゲームプレイが頻繁に中断される。接続→作業→crash→再接続のサイクルが繰り返される。
+- **Pattern**: 数回のmc-execute後に毎回クラッシュ。一部の短いコードは成功するが、長い処理やsetControlState使用でcrash。
+- **Status**: CRITICAL - Reported
+
 ## [2026-03-28] pathfinder.goto() goal constantly cancelled - "The goal was changed before it could be completed!"
 
 - **Cause**: bot.pathfinder.goto() を呼ぶと、ほぼ毎回 "The goal was changed before it could be completed!" または "Path was stopped before it could be completed!" エラーが発生。移動できない。敵モブなし、HP正常(12-17)、昼間でも発生。
