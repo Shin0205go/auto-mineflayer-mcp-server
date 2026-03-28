@@ -605,6 +605,15 @@
 - **Additional**: デーモンポート3099が既に使用中の状態でも mc-execute が "Daemon not running" エラーを返すことがあり、接続不安定。
 - **Status**: Reported - CRITICAL BUG - ゲームプレイブロッカー
 
+## 2026-03-28 Session: CRITICAL - daemon crashes immediately after startup
+
+- **Cause**: `npm run daemon` を実行するとデーモンが起動(PID表示)した直後にクラッシュし、mc-connectが "socket hang up" または "Daemon not running" で失敗する。
+- **Coordinates**: N/A
+- **Last Actions**: npm run daemon → PID表示 → mc-connect → Daemon not running
+- **Error Message**: "socket hang up" / "Daemon not running. Start with: npm run daemon"
+- **Additional**: 複数回再起動を試みたが毎回クラッシュ。接続できても数秒後に "Daemon not running" エラーが発生する。
+- **Status**: Reported - CRITICAL BUG - 2026-03-28
+
 ## 2026-03-28 Session: CRITICAL - pathfinder "goal was changed" 連続エラー
 
 - **Cause**: `await bot.pathfinder.goto(...)` が毎回 "The goal was changed before it could be completed!" エラーで失敗する。bot.pathfinder.isMoving() が true を返し続ける。
