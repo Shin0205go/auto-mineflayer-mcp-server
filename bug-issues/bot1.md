@@ -1,3 +1,16 @@
+## [2026-03-29] Bug: CRITICAL - ブレイズ戦闘中に溶岩逃走死亡 (Phase 6 最重要)
+
+- **Cause**: ブレイズの火の玉ダメージを受けたbot pathfinderが逃走ルートとして溶岩を選択。「Claude1 tried to swim in lava to escape Blaze」。要塞周辺が溶岩海に囲まれているため、逃走すると必ず溶岩に落下。
+- **Death count**: 10回以上（同セッション）。keepInventoryのため装備保持。
+- **Root Cause**: pathfinder flee logic does NOT avoid lava when fleeing from combat. liquidCost設定しても逃走経路では無視される可能性。
+- **Spawner Location**: the_nether (290, 77, -97) - confirmed.
+- **Fortress Entry Point**: 安全に到達可能な座標 (291, 78, -88) - pathfinderで到達済み。
+- **Required Fix**:
+  1. pathfinder flee路でliquidCostを適用すること
+  2. OR ブレイズ戦闘中に逃走を無効化してその場でHP管理すること
+  3. OR creeperFlee相当のblaze対応追加
+- **Status**: CRITICAL - Phase 6が進行不能。コードレビューアー修正必須。
+
 ## [2026-03-29] Bug: CRITICAL - ネザー探索中に繰り返し死亡（Phase 6）
 
 - **Cause**: ネザー探索中に複数回HP=0に低下→overworld復帰（keepInventoryによりアイテム保持）。死亡原因は不明：piglins（距離52体以上）、magma cube（100+m先）、ghast、溶岩転落の可能性。食料ゼロで探索継続のため回復不可。
