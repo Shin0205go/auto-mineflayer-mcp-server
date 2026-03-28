@@ -1,3 +1,11 @@
+## [2026-03-28] Bug: Session 102 - goals undefined in mc_execute sandbox
+
+- **Cause**: mc_execute sandboxで `goals` がundefinedになっている。src/tools/mc-execute.ts でpathfinderPkgから `const { Movements, goals } = pathfinderPkg;` で取得しているが、goalsが正しくexportされていない可能性がある。
+- **Coordinates**: x=-1.5, y=100, z=6.5
+- **Last Actions**: bot.pathfinder.goto(new goals.GoalNear(...)) を呼んだ
+- **Error Message**: "Cannot convert undefined or null to object" / typeof goals === 'undefined'
+- **Status**: Reported - GoalNearを手動実装することで回避中。pathfinderパッケージのimport方法を見直す必要がある。
+
 ## [2026-03-28] Bug: Session 101 - 死亡 by Skeleton (夜間)
 
 - **Cause**: スケルトンに射殺。夜間(timeOfDay=20853)に外にいた状態で攻撃を受けた。
