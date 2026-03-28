@@ -1,3 +1,11 @@
+## [2026-03-28] Bug: Session 99 - サーバー満員でClaude1が接続できない（継続）
+
+- **Cause**: mc-connect.cjs実行時に "Kicked: multiplayer.disconnect.server_full" で拒否され続けている
+- **Coordinates**: N/A（接続できていない）
+- **Last Actions**: mc-connect.cjs を3回試みたが全て同じエラー
+- **Error Message**: "Error: Kicked: {\"translate\":\"multiplayer.disconnect.server_full\"}"
+- **Status**: Reported Session 99 - 管理者がサーバーのスロット数を増やすか他botを切断する必要がある
+
 ## [2026-03-28] Bug: Session 98b - サーバー満員でClaude1が再接続できない
 
 - **Cause**: デーモン再起動後にClaude1がMinecraftサーバーに接続しようとしたが "Kicked: multiplayer.disconnect.server_full" で拒否された
