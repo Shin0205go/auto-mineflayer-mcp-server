@@ -15,6 +15,17 @@
 
 ---
 
+## [2026-03-28] Bug: 溺死 - Y=62移動中 (Session 102)
+
+- **Cause**: 移動中（前進+スプリント）に水中に落下して溺死。pathfinderが使えないためcontrolState手動移動に頼っていたが地形確認なしで移動したため水域に落下。
+- **Coordinates**: x=1.7, y=62, z=2.7 付近
+- **Last Actions**: forward+sprint で農場エリアに向けて移動中
+- **Error Message**: "[Server]: Claude2 drowned"
+- **Status**: Reported - Session 102 (2026-03-28)
+- **Notes**: pathfinder不機能のためcontrolState手動移動を使っているが、地形チェックなしの前進移動は水/崖落下の危険がある。リスポーン後Y=114の高所。keepInventoryでアイテム保持。
+
+---
+
 ## [2026-03-28] Bug: 溺死 + ゾンビ死亡 (Session 101) - CRITICAL DEATHS
 
 - **Cause**:
