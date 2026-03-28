@@ -11,7 +11,8 @@
 - **Error Message**: moveTo timeout 60000ms, combat returns no drops, gather returns immediately with no items
 - **Impact**: 完全行動不能。飢餓死亡不可避。
 - **Root Cause Hypothesis**: pathfinderがY=60の特定地点でスタック。アイテム拾い上げ機能が壊れている（以前から報告あり）。
-- **Status**: Reported 2026-03-28 Session 96 - CRITICAL
+- **Additional**: bot.store('list')はチェストを見つけるが「Chest open timeout」で内容確認不可。小ステップ移動(3ブロック)は成功するが10ブロック以上の移動はほぼ失敗。Y=60-62でスタック中。
+- **Status**: Reported 2026-03-28 Session 96 - CRITICAL - 死亡確実
 
 ## [2026-03-25] Bug: Session 75b - craft() consumes ingredients but produced items never appear in inventory
 
