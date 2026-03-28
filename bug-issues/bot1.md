@@ -6699,3 +6699,18 @@ Bot needs to explore further (200+ blocks) to find animals.
 - **Cause**: Stone pickaxe durability depleted during mining loop, but bot continued mining iron_ore with bare hands. Mining iron_ore without pickaxe yields 0 raw_iron in Minecraft (wrong tool = no drops). Mining loop logged "success" but got 0 raw_iron.
 - **Impact**: ~30 iron ore blocks mined with 0 yield, wasting 300+ seconds.
 - **Fix Needed**: Check pickaxe durability before each dig. If durability < 5, stop and craft new pickaxe.
+
+## [2026-03-29] Bug: CRITICAL - auto-pickup完全故障。mined itemsが足元にあるのに回収不能
+
+- **Cause**: bot.dig()でブロックを採掘しても、ドロップアイテムが自動回収されない。bot.entity.positionとitem entityが0.4ブロック以内でも回収されない。
+- **Coordinates**: (78,63,-31) 付近に31個のitem entityが積み上がっている
+- **Last Actions**: iron_ore/oak_logを採掘 → item entity生成確認 → botがそのまま上を歩いても回収されない → GoalBlockで正確に同じ座標に移動しても未回収
+- **Evidence**:
+  - bot.dig() 実行後 entity type=other, objectType=Item が生成される
+  - entities.filter(e => e.name==='item') で31個検出
+  - bot.entity.position と item entity の距離が0.4mでも未回収
+  - bot.pickup = undefined (API存在しない)
+  - pathfinder GoalBlock/GoalNear で完全同位置移動でも未回収
+  - 31個のitemが長時間 (5+分) ground に残存
+- **Impact**: 採掘・伐採が完全に無意味。鉄・木材の収集不可。Phase 6 blaze rod収集後の回収も不可能。
+- **Status**: CRITICAL - Phase 6 進行不能。auto-pickup修正が最優先。
