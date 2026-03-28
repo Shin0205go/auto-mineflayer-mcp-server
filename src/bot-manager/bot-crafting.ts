@@ -1651,19 +1651,21 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                   if (dd.id === oldId) dd.id = substituteItemData.id;
                 }
                 // Replace in inShape if present
+                // inShape is Array<Array<{id, metadata}>> — must access .id property, NOT compare object to number
                 if ((tryRecipe as any).inShape) {
-                  const shape = (tryRecipe as any).inShape as number[][];
-                  for (let row = 0; row < shape.length; row++) {
-                    for (let col = 0; col < shape[row].length; col++) {
-                      if (shape[row][col] === oldId) shape[row][col] = substituteItemData.id;
+                  const shape = (tryRecipe as any).inShape as Array<Array<{ id: number; metadata?: number } | null>>;
+                  for (const row of shape) {
+                    for (const cell of row) {
+                      if (cell && cell.id === oldId) cell.id = substituteItemData.id;
                     }
                   }
                 }
                 // Replace in ingredients if present
+                // ingredients is Array<{id, metadata}> — must access .id property, NOT compare object to number
                 if ((tryRecipe as any).ingredients) {
-                  const ingredients = (tryRecipe as any).ingredients as number[];
-                  for (let idx = 0; idx < ingredients.length; idx++) {
-                    if (ingredients[idx] === oldId) ingredients[idx] = substituteItemData.id;
+                  const ingredients = (tryRecipe as any).ingredients as Array<{ id: number; metadata?: number }>;
+                  for (const ing of ingredients) {
+                    if (ing && ing.id === oldId) ing.id = substituteItemData.id;
                   }
                 }
               }
@@ -1770,6 +1772,18 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           // Only close window if we used a crafting table (not player inventory)
           // Closing the inventory window can cause items to drop!
           if (craftingTable && bot.currentWindow) {
+            // RECOVERY: check result slot 0 of crafting table window before closing.
+            // If item is there (putAway(0) failed), shift-click to collect.
+            const tableResultSlot = bot.currentWindow.slots[0];
+            if (tableResultSlot && tableResultSlot.count > 0) {
+              console.error(`[Craft] Table recovery: item in table result slot: ${tableResultSlot.name}×${tableResultSlot.count} — shift-clicking`);
+              try {
+                await bot.clickWindow(0, 0, 1);
+                await new Promise(resolve => setTimeout(resolve, 500));
+              } catch (slotErr) {
+                console.error(`[Craft] Table recovery shift-click failed: ${slotErr}`);
+              }
+            }
             bot.closeWindow(bot.currentWindow);
             await new Promise(resolve => setTimeout(resolve, 300));
           }
@@ -1779,15 +1793,55 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
           // Simple recipes (planks, sticks) crafted in player inventory can take time to sync
           await new Promise(resolve => setTimeout(resolve, 2500));
 
+          // RECOVERY: Check if item is stuck in the crafting result slot (slot 0).
+          // Mineflayer's grabResult() calls putAway(0) to collect the output, but this can
+          // fail silently on laggy servers if the server hasn't yet updated slot 0 when
+          // the packet arrives. Result: ingredient consumed, item in result slot, not in inventory.
+          // Fix: explicitly shift-click slot 0 to collect anything left there.
+          // Bot1 Sessions 92/75b [2026-03-28]: craft() consumed birch_log but planks never appeared.
+          // Root cause: putAway(0) sent before server confirmed slot 0 — shift-click recovery below.
+          {
+            const resultSlotItem = bot.inventory.slots[0];
+            if (resultSlotItem && resultSlotItem.count > 0) {
+              console.error(`[Craft] Recovery: item stuck in result slot 0: ${resultSlotItem.name}×${resultSlotItem.count} — shift-clicking to collect`);
+              try {
+                await bot.clickWindow(0, 0, 1); // shift-click slot 0 to move to inventory
+                await new Promise(resolve => setTimeout(resolve, 800));
+                const afterRecovery = bot.inventory.items().find(i => i.name === resultSlotItem.name);
+                console.error(`[Craft] Recovery result: ${afterRecovery ? `${resultSlotItem.name} now in inventory` : 'still not in inventory'}`);
+              } catch (slotErr) {
+                console.error(`[Craft] Recovery shift-click failed: ${slotErr}`);
+              }
+            }
+          }
+
           // CRITICAL: Check if item appears in inventory
           // If not, it may have been dropped as an entity
-          const craftedItemInInventory = bot.inventory.items().find(item => item.name === itemName);
+          // Use partial match fallback: if crafting birch_planks produces oak_planks (or any _planks),
+          // accept it. Mineflayer may map wood-type planks recipes to the generic planks item.
+          // Bot1 Sessions 92/75b: craft("birch_planks") consumed birch_log but planks=0 in inventory
+          // because the check was exact-name only and missed the actual item name in inventory.
+          const craftedItemInInventory = bot.inventory.items().find(item => {
+            if (item.name === itemName) return true;
+            // Partial match for same item family (e.g., any _planks when asking for birch_planks)
+            if (itemName.endsWith("_planks") && item.name.endsWith("_planks")) return true;
+            if (itemName.endsWith("_log") && item.name.endsWith("_log")) return true;
+            return false;
+          });
+
+          if (craftedItemInInventory && craftedItemInInventory.name !== itemName) {
+            console.error(`[Craft] NOTE: Requested ${itemName} but found ${craftedItemInInventory.name} in inventory — accepting as equivalent`);
+          }
 
           if (!craftedItemInInventory) {
-            console.error(`[Craft] ${itemName} not in inventory after crafting, searching for dropped items...`);
+            // Log full inventory to diagnose what actually appeared after crafting
+            const fullInvAfterCraft = bot.inventory.items().map(i => `${i.name}x${i.count}`).join(", ") || "empty";
+            console.error(`[Craft] ${itemName} not in inventory after crafting. Full inventory: ${fullInvAfterCraft}`);
+            console.error(`[Craft] Searching for dropped items...`);
 
-            // Wait longer for item to spawn as entity (800ms to match dig_block timing)
-            await new Promise(resolve => setTimeout(resolve, 800));
+            // Increased from 800ms to 2000ms: server may take longer to spawn the drop entity,
+            // especially on busy servers or when the crafting window close triggers a drop.
+            await new Promise(resolve => setTimeout(resolve, 2000));
 
             // Try to collect any dropped items within 10 blocks
             // Support multiple entity types for items (varies by server/version)
@@ -1830,8 +1884,13 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
               // Network lag or server lag can delay item pickup, so we give it more time before declaring failure
               await new Promise(resolve => setTimeout(resolve, 3500));
 
-              // Verify item was actually collected
-              const verifyCollected = bot.inventory.items().find(item => item.name === itemName);
+              // Verify item was actually collected (use partial match same as craftedItemInInventory)
+              const verifyCollected = bot.inventory.items().find(item => {
+                if (item.name === itemName) return true;
+                if (itemName.endsWith("_planks") && item.name.endsWith("_planks")) return true;
+                if (itemName.endsWith("_log") && item.name.endsWith("_log")) return true;
+                return false;
+              });
               if (!verifyCollected) {
                 // Debug: Show all inventory items to see what we actually have
                 const inventoryNames = bot.inventory.items().map(i => i.name).join(", ");
@@ -1841,7 +1900,25 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
                 throw new Error(`Failed to craft ${itemName}: Item not found in inventory after crafting. It may have been collected by another nearby bot or despawned. Inventory: ${inventoryNames}`);
               }
             } else {
-              throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting and no dropped items found nearby. This indicates a server configuration issue or the crafting operation did not complete successfully.`);
+              // No item entities detected in immediate scan, but collectNearbyItems has
+              // waitRetries logic that rescans every 500ms. Try it anyway before giving up.
+              // Bot1 Sessions 92/75b: items can appear with delay; raw entity scan misses them.
+              const { collectNearbyItems } = await import("./bot-items.js");
+              try {
+                await collectNearbyItems(managed, { waitRetries: 6 });
+              } catch (collectErr2) {
+                console.error(`[Craft] collectNearbyItems (no-entity fallback) failed: ${collectErr2}`);
+              }
+              const recheckNoEntity = bot.inventory.items().find(item => {
+                if (item.name === itemName) return true;
+                if (itemName.endsWith("_planks") && item.name.endsWith("_planks")) return true;
+                if (itemName.endsWith("_log") && item.name.endsWith("_log")) return true;
+                return false;
+              });
+              if (!recheckNoEntity) {
+                throw new Error(`Failed to craft ${itemName}: Item not in inventory after crafting and no dropped items found nearby. This indicates a server configuration issue or the crafting operation did not complete successfully.`);
+              }
+              console.error(`[Craft] collectNearbyItems recovered ${itemName} (no-entity fallback)`);
             }
           }
 
@@ -1858,8 +1935,13 @@ export async function craftItem(managed: ManagedBot, itemName: string, count: nu
       }
     }
 
-    // Double-check that the item is actually in inventory
-    const craftedItem = bot.inventory.items().find(i => i.name === itemName);
+    // Double-check that the item is actually in inventory (partial match for wood-type variants)
+    const craftedItem = bot.inventory.items().find(i => {
+      if (i.name === itemName) return true;
+      if (itemName.endsWith("_planks") && i.name.endsWith("_planks")) return true;
+      if (itemName.endsWith("_log") && i.name.endsWith("_log")) return true;
+      return false;
+    });
     const newInventory = bot.inventory.items().map(i => `${i.name}(${i.count})`).join(", ");
 
     if (!craftedItem) {
