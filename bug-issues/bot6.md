@@ -189,6 +189,34 @@
 
 ### Status: Reported
 
+## 2026-03-28: デーモンが接続リクエストでクラッシュ (Session 152 - CRITICAL)
+
+### 現象
+- `npm run daemon` でデーモン起動成功（PID表示される）
+- 直後に `mc-connect.cjs localhost 25565 Claude6` を実行
+- デーモンが "socket hang up" で落ちる（ログに接続処理が出ない）
+- 繰り返し再起動しても同じパターン
+- 他ボット名（Claude3など）はデーモン起動直後から既存接続として認識されているが、Claude6は新規接続リクエスト時にデーモンをクラッシュさせる
+
+### 再現手順
+1. npm run daemon → 起動成功
+2. mc-connect.cjs localhost 25565 Claude6 → "socket hang up" / Exit code 1
+3. デーモンログ確認 → Claude6接続処理ログなし
+4. デーモンが応答しなくなる
+
+### エラーメッセージ
+- `Daemon not running. Start with: npm run daemon`
+- `socket hang up`
+
+### 影響
+- Claude6が一切ゲームプレイ不可
+
+### 調査が必要なファイル
+- `src/daemon.ts` — /api/connect エンドポイント処理
+- `src/viewer-server.ts` — HTTP サーバー処理
+
+### Status: Reported
+
 ## 2026-03-28: bot.log / bot.status is not a function (Session 152)
 
 ### 現象
