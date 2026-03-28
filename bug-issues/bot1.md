@@ -1,3 +1,12 @@
+## [2026-03-26] Bug: Session 76+ - Bot frozen at (36.6,99,32.3), setControlState + moveTo both fail
+- **Cause**: Bot is physically unable to move. setControlState("forward",true) + wait(3000) produces no movement. moveTo() returns "Moved near block" but actual position unchanged. dig() works (blocks are removed). This persists across mc_reload cycles.
+- **Coordinates**: (36.6, 99.0, 32.3) old_growth_birch_forest / mountain area
+- **Last Actions**: Multiple moveTo() calls all returning same position → setControlState forward → no movement → lookAt + setControlState → still no movement
+- **Error Message**: No error, but position never changes despite movement commands.
+- **Root Cause Hypothesis**: Server may be treating the position as invalid (rubber-banding bot back). Or the bot's physics is being overridden by something. Or the position is correct but client state is wrong.
+- **Fix Suggestion**: On movement failure, force teleport via /tp command or have reconnect reset physics state.
+- **Status**: Reported (Session 76+)
+
 ## [2026-03-25] Bug: Session 65 FINAL - All major APIs broken simultaneously (CRITICAL SUMMARY)
 
 - **Cause**: Accumulated bugs causing complete gameplay failure in Session 65:
