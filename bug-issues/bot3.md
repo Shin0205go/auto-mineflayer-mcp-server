@@ -1231,3 +1231,16 @@ Session 89 Timeline:
   2. pillarUp()が呼び出し後50秒経過しても位置変化なし（実行されていない可能性）
   3. 食料ゼロなのにeat()できない
 - **Status**: 記録のみ。コード修正はcode-reviewerエージェントが担当。
+
+## バグ #54 — moveTo()完全無効（位置変化ゼロ） (2026-03-28 現セッション)
+
+- **状況**: HP=10.3, Hunger=12, 昼間。食料ゼロ。
+- **座標**: (-16〜-21, 57-61, 2-8) — birch_forest
+- **発生経緯**:
+  1. moveTo(pos.x + 100, pos.y, pos.z) → 位置変化ゼロまたは1-2ブロックのみ
+  2. 複数方向（100,0,0 / 0,0,100 / -100,0,0 / 0,0,-100）に移動試行 → 全て-16〜-19程度の範囲内
+  3. navigate('cow') → 位置変化ゼロ
+  4. 昼間だがzombie×1-2, skeleton×1, creeper×2が常時存在（屋根下か洞窟内）
+- **インベントリ**: stone_axe, stone_sword, stone_hoe, cobblestone x64, dirt x52, wheat_seeds x11等
+- **根本原因推定**: pathfinderが全方向ブロックされている。地形的に囲まれている可能性
+- **Status**: 記録のみ。コード修正はcode-reviewerエージェントが担当。
