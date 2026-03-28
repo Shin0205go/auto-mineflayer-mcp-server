@@ -347,6 +347,34 @@ x=5, y=77, z=8 付近
 
 ### Status: Reported
 
+## 2026-03-28: 溺死 - 水没した洞窟から脱出不可 (Session 154 - DEATH)
+
+### 現象
+- Claude6が水没した洞窟（Y=32-42）に閉じ込められ溺死
+- サーバーログ: "Claude6 drowned"
+- pathfinderが外部制御（goal changed）で移動できず
+- 四方を石に囲まれ上方向が水で塞がれた状態で脱出不可
+
+### 座標
+- 死亡時: Y=32付近（water + stone に囲まれた空間）
+- リスポーン: x=2, y=87, z=2
+
+### 直前の行動
+1. 鉄採掘のため地下Y=42へ移動中にHP低下
+2. 水中に落下
+3. pathfinder.goto(y=80) が y=34 で「完了」と誤報告（バグ）
+4. 溺死
+
+### keepInventory
+- ON のため全アイテム保持（diamond x3, obsidian x7, iron_sword, stone_pickaxe x2等）
+
+### 根本原因
+- pathfinderが外部のbotに制御され正常に動作しない
+- 水中での自動脱出機能がない
+- 地下移動中のHP監視が不十分
+
+### Status: Reported (DEATH)
+
 ## 2026-03-28: bot.log / bot.status is not a function (Session 152)
 
 ### 現象
