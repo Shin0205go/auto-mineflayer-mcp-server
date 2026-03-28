@@ -1,3 +1,12 @@
+## [2026-03-28] Bug: Session 91 - combat後に食料ドロップしない問題継続
+
+- **Cause**: bot.combat("cow")、bot.combat("chicken")、bot.combat("pig") を実行しても食料がインベントリに入らない。Session 90と同様のドロップ問題継続。
+- **Coordinates**: (-2, 74, -8) - birch_forest
+- **Last Actions**: combat("cow") → food:[] / combat("chicken") → food:[] / combat("pig") → food:[]
+- **Error Message**: エラーなし、しかし食料がドロップしない。
+- **HP/Hunger**: HP:9.4, Hunger:0 (空腹度0で危険)
+- **Status**: Reported 2026-03-28 Session 91
+
 ## [2026-03-28] Bug: Session 90 - 全主要API継続タイムアウト + Y=99スタック継続（緊急）
 
 - **Cause**: Session 90でも以下のAPIが全て機能しない:
