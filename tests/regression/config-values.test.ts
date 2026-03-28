@@ -68,13 +68,14 @@ describe("collectNearbyItems (bot-items.ts)", () => {
     expect(src).not.toMatch(/new goals\.GoalNear\([^)]*Math\.round\(itemPos\.y\)/);
   });
 
-  it("GoalNear range is 2", () => {
-    // Pattern: GoalNear(x, Math.ceil(itemPos.y), z, 2)
+  it("GoalNear range is 1 (not 2 — range=2 left bot outside auto-pickup range, Sessions 58-65)", () => {
+    // Fix [Sessions 58-65]: GoalNear(2) stopped pathfinder at 2 blocks from item,
+    // outside Minecraft's ~1-block auto-pickup range. Changed to GoalNear(1).
     const goalNearMatch = src.match(
       /new goals\.GoalNear\(\s*Math\.round\(itemPos\.x\),\s*Math\.ceil\(itemPos\.y\),\s*Math\.round\(itemPos\.z\),\s*(\d+)/
     );
     expect(goalNearMatch).not.toBeNull();
-    expect(goalNearMatch![1]).toBe("2");
+    expect(goalNearMatch![1]).toBe("1");
   });
 
   it("canDig is set to false during item collection", () => {
@@ -219,9 +220,12 @@ describe("wait() HP abort logic (mc-execute.ts)", () => {
     expect(src).toContain("const hpDroppedSinceStart = waitStartHp - hp");
   });
 
-  it("abort condition is exactly: hp < 3 || (hp < 6 && hpDroppedSinceStart >= 1)", () => {
+  it("abort condition is: hp < 6 && hpDroppedSinceStart >= 1 (hp<3 absolute floor removed — caused infinite abort loop at stable low HP)", () => {
+    // hp < 3 absolute floor was removed because it caused the bot to get stuck in an
+    // infinite abort loop when HP was stable at < 3 (e.g., respawn bug). The bot should
+    // wait even at very low HP as long as HP isn't actively dropping.
     expect(src).toMatch(
-      /if\s*\(\s*hp\s*<\s*3\s*\|\|\s*\(hp\s*<\s*6\s*&&\s*hpDroppedSinceStart\s*>=\s*1\)\)/
+      /if\s*\(\s*hp\s*<\s*6\s*&&\s*hpDroppedSinceStart\s*>=\s*1\s*\)/
     );
   });
 
