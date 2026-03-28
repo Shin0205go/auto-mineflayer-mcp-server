@@ -1,3 +1,14 @@
+## [2026-03-25] Bug: Session 65 death #4 - HP=0 during bot.wait() flee loop - midnight
+
+- **Cause**: bot.wait() was executing. HP dropped to 0 during auto-flee (Hunger=0 starvation + hostile damage). "ABORTED: HP dropped to 0.0 during wait". Bot auto-fled but HP=0 → death.
+- **Coordinates**: Unknown (Y=55 area, midnight)
+- **Last Actions**: flee(30) → wait(25s) → wait(25s) → wait(20s) → HP dropped to 0 → auto-fled → HP still 0 → death
+- **Root Cause**: Hunger=0 for extended period causes continuous starvation damage. When combined with hostile mob attacks, HP reaches 0 inside wait(). flee() after HP=0 doesn't prevent death.
+- **Fix Needed**: wait() should abort much earlier when HP < 3 (not just flee, but actually stop and return). Also bot.flee() should not be called when HP=0 (dead).
+- **Status**: Reported. Session 65. Death #4.
+
+---
+
 ## [2026-03-25] Bug: Session 74 - Continuous falling death loop (CRITICAL)
 - **Cause**: Bot spawns at Y=82 surface but immediately falls to Y=50-60 underground and cannot escape. flee()/navigate()/pillarUp() all cause MCP disconnection OR push bot deeper underground. bot.wait() auto-flees from skeleton which causes disconnect. Net result: bot dies repeatedly (~10+ deaths), always returns to Y=50-60 cave.
 - **Coordinates**: Cave near (0-(-40), 46-65, 0-25) - massive cave system around spawn
