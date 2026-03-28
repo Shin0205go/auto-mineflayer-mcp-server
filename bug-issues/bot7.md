@@ -578,3 +578,12 @@
 - **Last Actions**: bot.farm() → HP6.5検出 → bot.flee() → HP20（リスポーン後）
 - **Error Message**: なし（HPが突然20になることで死亡を検知）
 - **Status**: Reported - 死亡バグ（2回目）
+
+## 2026-03-28 Session: 3回目の死亡 - flee中にHP2.5まで下がり死亡
+
+- **Cause**: HP11 Hunger12でゾンビと戦闘。腐肉ドロップなし（mob drop bug継続）。逃走中にさらに攻撃を受けHP2.5→死亡。
+- **Coordinates**: 不明（flee中）
+- **Last Actions**: bot.combat('zombie') → rotten_flesh未取得 → bot.flee(30) → HP2.5 → 死亡（HP20リスポーン）
+- **Error Message**: なし
+- **Root Cause**: mob drop bugでアイテムが取得できない + flee中も攻撃を受け続ける
+- **Status**: Reported - 死亡バグ（3回目）
