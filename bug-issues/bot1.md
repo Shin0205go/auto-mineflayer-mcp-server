@@ -1,3 +1,15 @@
+## [2026-03-25] Bug: Session 92 CRITICAL - craft() 全アイテムでアイテム返さない
+
+- **Cause**: bot.craft() が素材を消費するがクラフト結果をインベントリに返さない。全アイテムで再現。
+  - craft("bread", 1): wheat 5→2消費、bread=0
+  - craft("birch_planks", 16): birch_log 4→3消費、planks=0
+- **Coordinates**: (45.7, 97, 40.3)
+- **Last Actions**: craft("birch_planks", 16) → birch_log consumed → "Item not found in inventory after crafting"
+- **Error Message**: "Item not found in inventory after crafting. It may have been collected by another nearby bot or despawned."
+- **Root Cause**: crafting処理後のinventory確認タイミングの問題か、別エンティティがアイテムを拾う。Phase 1進行が完全に不可能。
+- **Impact**: CRITICAL - craftingなしではPhase 1完了不可
+- **Status**: Reported 2026-03-25 Session 92 CRITICAL
+
 ## [2026-03-25] Bug: Session 92b - 死亡: "Claude1 was slain by Zombie" during gather("birch_log")
 
 - **Cause**: gather()がtimeout中にzombieに攻撃された。gather()はHP/hunger安全チェックを行わない。
