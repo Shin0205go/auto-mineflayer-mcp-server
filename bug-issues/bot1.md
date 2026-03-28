@@ -1,3 +1,13 @@
+## [2026-03-28] Bug: Session 98 - HP=1.3 wait()でauto-flee無限ループ、夜間ファントム死亡
+
+- **Cause**: pillarUp後に高所(Y=103)でwait()したが、HP=1.3の状態でファントムから攻撃を受けてwait()が10回以上連続でABORT。auto-fleeが発動しても実際には逃げられず同位置でHPが減り続け死亡
+- **Coordinates**: x=10.5, y=102, z=38.2
+- **Last Actions**: 真夜中(tick=21793)、高所pillarUp後にwait(30000)を呼んだ。HP=3.3→1.3まで低下後死亡
+- **Error Message**: "[wait] ABORTED: HP dropped to 1.3 during wait — auto-fleeing from danger" が10回以上繰り返し
+- **Status**: Reported
+
+---
+
 ## [2026-03-28] Bug: Session 97 - Claude1 Phantom死亡
 
 - **Cause**: Claude1がファントムに倒された。夜間活動中に空中からファントムに攻撃を受けた。
