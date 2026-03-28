@@ -1,3 +1,14 @@
+## [2026-03-28] Bug: Session 97 - Claude1 Phantom死亡
+
+- **Cause**: Claude1がファントムに倒された。夜間活動中に空中からファントムに攻撃を受けた。
+- **Coordinates**: 不明（チャットメッセージのみ確認）
+- **Last Actions**: 夜間外出中。睡眠なしで日数経過によりファントムが出現したと推定。
+- **Error Message**: `[Server] Claude1 was slain by Phantom`
+- **Status**: Reported 2026-03-28 Session 97
+- **推奨修正**: 夜間はシェルター待機または就寝を強制。ファントム対策として就寝チェックをゲームループに追加。
+
+---
+
 ## [2026-03-28] Bug: Session 96 CRITICAL - moveTo/gather/combat全機能不全 → 食料確保不能 → 飢餓死亡確実
 
 - **Cause**: moveTo()が実行してもbotの位置が変わらない（タイムアウトするか目標地点と異なる場所に着く）。combat()が敵を倒してもアイテムドロップなし。gather()が瞬時に完了するが素材が増えない。これら3つの主要APIが全て機能不全のため食料確保が不可能。
