@@ -14,6 +14,27 @@
 
 ---
 
+## [2026-03-28] Bug: Session 99 - デーモンが頻繁にクラッシュして mc-execute が使用不可
+
+- **Cause**: npm run daemon でデーモンを起動しても、数回のmc-execute.cjs呼び出し後にクラッシュして終了する。"Daemon not running" エラーが繰り返し発生する。Claude1/Claude3/Claude4の再接続処理が衝突している可能性。
+- **Coordinates**: (8, 103, 58)
+- **Last Actions**: mc-connect.cjs 接続成功 → mc-execute.cjs 1-2回実行 → デーモンクラッシュ → 再起動が必要
+- **Error Message**: `Daemon not running. Start with: npm run daemon` / `socket hang up`
+- **Status**: Reported 2026-03-28 Session 99 - CRITICAL
+- **推奨**: daemon.ts の終了条件を確認。複数ボット（Claude1/3/4/5）接続時のエラーハンドリング改善。
+
+---
+
+## [2026-03-28] Bug: Session 99 - status() が bot.health と矛盾した値を返す
+
+- **Cause**: bot.health が 2.33（HP低下状態）なのに、status() は hp:20 を返した。status() の値が古い可能性がある。
+- **Coordinates**: (8, 103, 58)
+- **Last Actions**: bot.health で raw HP 確認 → status() 呼び出し → 異なる値
+- **Error Message**: なし（サイレントな不一致）
+- **Status**: Reported 2026-03-28 Session 99
+
+---
+
 ## [2026-03-28] Bug: Session 98 - SKILL.md の bot.* API と実際の mc-execute sandbox が不一致
 
 - **Cause**: SKILL.mdには `bot.status()`, `bot.gather()`, `bot.combat()`, `bot.moveTo()`, `bot.log()` 等のAPIが記載されているが、実際のmc-execute.ts sandboxには `bot` (raw mineflayer bot), `status()`, `log()`, `getMessages()`, `chat()`, `wait()`, `reconnect()` のみ定義されている。高レベルAPI (gather, combat, moveTo, navigate, flee, pillarUp, craft, smelt, eat, equipArmor, place, build, farm, store, drop) は一切sandboxに含まれていない。
