@@ -119,6 +119,20 @@
 
 ### Status: Reported
 
+## 2026-03-28: デーモン停止 + サーバー満員 (Session 150)
+
+### 現象
+- mc-execute.cjs実行中にデーモンが予告なく停止（Exit code 1: Daemon not running）
+- 再起動後、`bot.status is not a function` / `bot.log is not a function` エラー
+- mc-connect.cjs が `multiplayer.disconnect.server_full` でキック
+
+### 状況
+- セッション中のgather()実行後にデーモンが落ちた
+- npm run daemonでバックグラウンド再起動後もbot.*APIが初期化されない
+- 他の複数ボットがすでに接続しているためMax Player数に達している
+
+### Status: Reported
+
 ## 2026-03-28: 繰り返し死亡 - 地形スタック + 食料なし (Session 150 続き)
 
 ### 現象
