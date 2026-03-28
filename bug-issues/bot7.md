@@ -593,3 +593,14 @@
 - **Cause**: bot.wait()実行後にデーモンがクラッシュ。npm run daemonで再起動したが、サーバーが満員のためClaude7が再接続できない。
 - **Error Message**: "Daemon not running. Start with: npm run daemon" / "Kicked: multiplayer.disconnect.server_full"
 - **Status**: Reported - デーモンクラッシュバグ
+
+## 2026-03-28 Session: CRITICAL - bot.* APIが一切使用不可（status, gather, eat等）
+
+- **Cause**: デーモン再起動後、mc-execute.cjsで bot.status / bot.gather / bot.eat / bot.flee / bot.navigate 等のカスタムAPIが全て "is not a function" エラー。bot.craft のみ利用可能。
+- **Coordinates**: 不明（接続成功したが操作不可）
+- **Last Actions**: npm run daemon → mc-connect → mc-execute → TypeError: bot.status is not a function
+- **Error Message**: "TypeError: bot.status is not a function"
+- **Root Cause**: mc-executeサンドボックスがカスタムbot.*ラッパーAPIをセットアップしていない。生のMineflayerボットが渡されており、高レベルAPIが欠落。bot.craftのみ何らかの理由でMineflayer本体に存在する。
+- **Impact**: Claude7は実質的にゲームプレイ不可能。HP・Hunger確認、移動、採掘、食料確保等が全て不可。
+- **Additional**: デーモンポート3099が既に使用中の状態でも mc-execute が "Daemon not running" エラーを返すことがあり、接続不安定。
+- **Status**: Reported - CRITICAL BUG - ゲームプレイブロッカー
