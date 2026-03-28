@@ -605,6 +605,17 @@
 - **Additional**: デーモンポート3099が既に使用中の状態でも mc-execute が "Daemon not running" エラーを返すことがあり、接続不安定。
 - **Status**: Reported - CRITICAL BUG - ゲームプレイブロッカー
 
+## 2026-03-28 Session: CRITICAL - pathfinder "goal was changed" 連続エラー
+
+- **Cause**: `await bot.pathfinder.goto(...)` が毎回 "The goal was changed before it could be completed!" エラーで失敗する。bot.pathfinder.isMoving() が true を返し続ける。
+- **Coordinates**: x=-1, y=109, z=-8 (接続直後)
+- **Last Actions**: mc-connect → mc-execute goto → Error immediately in 3-6ms
+- **Error Message**: "Error: The goal was changed before it could be completed!"
+- **Root Cause**: pathfinderが内部で常時ゴールを更新し続けている。デーモン内のコードがbotのpathfinderを別のgoroutine/callbackで制御している可能性。bot.pathfinder.stop()でも解決しない。
+- **Workaround**: bot.setControlState + wait でダイレクト移動（pathfinderを使わない）
+- **Impact**: navigation不能。農場・鉱山への移動ができない。
+- **Status**: Reported - 2026-03-28
+
 ## 2026-03-28 Session (new): bot.status/gather/eat/navigate が undefined (再発 + goalsもundefined)
 
 - **Cause**: mc-connect直後にbot.*カスタムAPIが全て undefined。さらに`goals`もundefinedになる場合がある（デーモン再起動直後）。
