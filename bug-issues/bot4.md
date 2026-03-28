@@ -416,3 +416,12 @@
 - **Root Cause**: セッション開始前から食料0の状態が続いていた。食料確保なしに敵だらけのエリアに放置されたことが根本原因。
 - **Status**: Reported - food shortage prevention needed
 
+## [2026-03-28] Server Full - Cannot Connect (Claude4)
+
+- **Cause**: Minecraftサーバーが満員(server_full)のため、Claude4ボットが接続できない。
+- **Coordinates**: N/A (接続前)
+- **Last Actions**: node scripts/mc-connect.cjs localhost 25565 Claude4 を複数回試みるが全て失敗
+- **Error Message**: "Error: Kicked: {"translate":"multiplayer.disconnect.server_full"}"
+- **Impact**: ゲームプレイ完全停止。他のボットスロットが埋まっているか、サーバーのmax-playersに達している。
+- **Status**: Reported - サーバー管理者の対応が必要（他ボット切断 or max-players増加）
+
