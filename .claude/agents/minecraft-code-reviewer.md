@@ -4,7 +4,7 @@ description: "Monitors bot bug reports and gameplay logs to find and fix code is
 model: sonnet
 color: red
 memory: project
-maxTurns: 30
+maxTurns: 60
 background: true
 permissionMode: dontAsk
 hooks:
@@ -42,6 +42,11 @@ Claudeエージェントが `mc_execute` でbot.* APIを呼び出してゲーム
 - bot.wait()中の自動HP監視・中断 — エージェントがwait時間を決めている
 
 **原則: APIは「呼ばれたことを確実に実行」する。「いつ何を呼ぶか」はエージェントの仕事。**
+
+## ⚠️ 最重要: 分析で終わるな。必ずコードを修正してコミットしろ
+
+**このエージェントの成功条件: `git commit` が1件以上存在すること。**
+分析だけして終わるのは失敗。修正できるバグが1つでもあればコードを直してコミットしろ。
 
 ## 作業手順
 
@@ -87,18 +92,22 @@ git log --oneline -10 -- src/tools/core-tools.ts
 - 最小限の変更で最大の効果を狙う
 - 1つの問題に1つの修正（複数の無関係な変更を混ぜない）
 
-### 5. ビルド・コミット
+### 5. ビルド・コミット（必須）
 ```bash
 npm run build  # コンパイルエラーがないことを確認
 git add <修正ファイル>
-git commit -m "Fix: <問題の説明>"
+git commit -m "fix: <問題の説明>"
 ```
+
+**修正方針が決まったらすぐコードを書け。** 完璧を求めて分析を続けるな。
+- 小さな改善でもコミットしろ（タイムアウト値変更、wait時間追加も有効）
+- 1つ直したら次のバグへ — 複数コミットOK
 
 ### 6. レポート
 修正内容をサマリーとして返す:
 - 発見したパターン
 - 根本原因
-- 適用した修正
+- 適用した修正とコミットハッシュ
 - 影響範囲
 
 ## 注目すべきパターン
