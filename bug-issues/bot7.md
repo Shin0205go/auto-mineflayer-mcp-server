@@ -641,6 +641,17 @@
 - **Note**: エージェントはdaemon再起動不可（外部管理）。コードレビューアーがデーモンクラッシュ原因を修正する必要あり。
 - **Status**: Reported - CRITICAL BUG - 2026-03-28
 
+## 2026-03-28 Session: CRITICAL - daemon auto-navigates bot into caves/underground
+
+- **Cause**: デーモンが自律的にpathfinderのゴールを設定し続けており、ボットを自動的に洞窟や地下に連れ込む。エージェントがgoto()でゴールを設定しても、すぐに "The goal was changed" エラーが発生する。
+- **Coordinates**: 複数箇所（x=20,y=74,z=-3; x=16,y=107,z=73; x=27,y=68,z=-8など）
+- **Last Actions**: mc-execute goto() → 即座にgoal changedエラー → bot.entity.positionが地下/洞窟内に変わる
+- **Error Message**: "The goal was changed before it could be completed!"
+- **Root Cause**: デーモン(src/daemon.ts またはbot-manager)がbotのpathfinderを常時制御している。エージェントのgoto()コマンドがデーモンのゴール更新と競合している。
+- **Impact**: エージェントはナビゲーション不能。botが勝手に移動して洞窟に落ちる。食料確保・農場移動・拠点移動が全て不可能。
+- **Additional**: bot.pathfinder.stop()でもデーモンが再度ゴールを設定するため効果がない。
+- **Status**: Reported - CRITICAL BUG - 2026-03-28
+
 ## 2026-03-28 Session: CRITICAL - pathfinder "goal was changed" 連続エラー
 
 - **Cause**: `await bot.pathfinder.goto(...)` が毎回 "The goal was changed before it could be completed!" エラーで失敗する。bot.pathfinder.isMoving() が true を返し続ける。
