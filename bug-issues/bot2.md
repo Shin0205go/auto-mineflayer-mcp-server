@@ -4,6 +4,19 @@
 
 ---
 
+## [2026-03-28] Bug: craft()タイムアウト + farm()タイムアウト - CRITICAL
+
+- **Cause**: craft('crafting_table'), craft('bread'), farm() が60-90秒でタイムアウト。クラフト系API全般が機能不全。
+- **Coordinates**: X:9, Y:99, Z:24 (地上)
+- **Last Actions**: craft('crafting_table')→60秒タイムアウト、farm()→90秒タイムアウト、craft('bread')→小麦を消費せず即完了（実際には何も作られない）
+- **Error Message**: "Execution timed out after 60000ms", またはcraft完了するが素材消費なし・アイテム作成なし
+- **Status**: Reported - Session 97 (2026-03-28)
+- **Affected APIs**: bot.craft(), bot.farm()
+- **HP/Hunger**: HP:10, Hunger:0→15
+- **Notes**: combat('cow')後アイテムがインベントリに入らないバグも継続。navigate('apple')後にbread 1個入ったのは謎。wheat:5→6も理由不明。craft()はwheat消費しないで即完了する（タイムアウトではないが実効なし）。
+
+---
+
 ## [2026-03-28] Bug: 地下閉じ込め - 全移動API機能不全（CRITICAL）
 
 - **Cause**: gather('iron_ore'), navigate(iron_ore), flee(), pillarUp(), moveTo() が全てタイムアウト（30-90秒）。地下に閉じ込められて脱出不能。Claude1・3も同症状。システム全体の問題。
