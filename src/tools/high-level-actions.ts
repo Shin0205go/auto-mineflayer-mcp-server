@@ -132,7 +132,29 @@ export async function minecraft_gather_resources(
       // Session 65: birch_log at Y=93-103 — all 5 instances unreachable, timeout fired first.
       if (failedPositions.size >= 3) {
         console.error(`[GatherResources] ${failedPositions.size} positions unreachable — all nearby ${item.name} appear inaccessible.`);
-        results.push(`${item.name}: ${collected}/${targetCount} (${failedPositions.size} blocks found but all unreachable — try moving to a different area)`);
+        // UNDERGROUND ESCAPE: If bot is underground (Y<65) and pathfinder can't reach blocks,
+        // auto-trigger escape by calling moveTo with a high Y target (which internally calls
+        // emergencyDigUp when underground + target is higher). Without this, the bot is
+        // permanently stuck underground with all gather/moveTo calls failing until manually escaped.
+        // Session 96 [2026-03-28]: bot at Y=60 with all 3 nearby oak_log unreachable — bot
+        // reported "try moving to a different area" but moveTo was also broken, causing deadlock.
+        // Session 28 [2026-03-28]: multiple bots at Y=57-71 with same pattern — no escape possible.
+        const gatherBot = botManager.getBot(username);
+        if (gatherBot && gatherBot.entity.position.y < 62) {
+          const botPos = gatherBot.entity.position;
+          console.error(`[GatherResources] Bot underground (Y=${botPos.y.toFixed(0)}) with unreachable blocks — auto-triggering surface escape via moveTo`);
+          try {
+            // moveTo with Y=80 auto-triggers emergencyDigUp when bot is underground (Y<70) and target is higher
+            const escapeResult = await botManager.moveTo(username, botPos.x, 80, botPos.z);
+            console.error(`[GatherResources] Underground escape result: ${escapeResult}`);
+            results.push(`${item.name}: ${collected}/${targetCount} (blocks unreachable — auto-escaped underground: ${escapeResult.substring(0, 80)}. Retry gather() from new position)`);
+          } catch (escapeErr) {
+            console.error(`[GatherResources] Underground escape failed: ${escapeErr}`);
+            results.push(`${item.name}: ${collected}/${targetCount} (${failedPositions.size} blocks found but all unreachable — bot underground at Y=${botPos.y.toFixed(0)}, escape failed)`);
+          }
+        } else {
+          results.push(`${item.name}: ${collected}/${targetCount} (${failedPositions.size} blocks found but all unreachable — try moving to a different area)`);
+        }
         break;
       }
 

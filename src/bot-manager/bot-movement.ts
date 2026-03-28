@@ -1676,7 +1676,13 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
   // above old Y<62 threshold. old_growth_birch_forest has caves up to Y=73.
   const currentBotY = bot.entity.position.y;
   const targetIsHigher = y - currentBotY > 5;
-  if (currentBotY < 70 && targetIsHigher) {
+  // Also escape when deeply underground (Y<62) even if target Y is similar or lower.
+  // Session 96 [2026-03-28]: bot at Y=60, target at Y=61 — targetIsHigher=false (only 1 block up),
+  // so escape didn't trigger. Bot was stuck underground with moveTo completely ineffective.
+  // Fix: if bot is below sea level (Y<62) AND pathfinder failed AND target is not below bot,
+  // auto-trigger emergencyDigUp to escape the cave first.
+  const deepUnderground = currentBotY < 62 && y >= currentBotY - 2;
+  if (currentBotY < 70 && (targetIsHigher || deepUnderground)) {
     console.error(`[Move] Underground escape: bot at Y=${currentBotY.toFixed(1)} (underground) with target Y=${y} (${(y - currentBotY).toFixed(0)} blocks up). Pathfinder failed — auto-triggering emergencyDigUp.`);
     try {
       const escapeResult = await emergencyDigUp(managed, 40);
