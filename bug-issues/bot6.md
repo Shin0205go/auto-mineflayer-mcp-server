@@ -217,6 +217,69 @@
 
 ### Status: Reported
 
+## 2026-03-28: デーモン頻繁クラッシュ + pathfinder外部割り込み (Session 153 - CRITICAL)
+
+### 現象
+- mc-execute.cjsを数回実行するだけでデーモンがクラッシュ (Exit code 1: Daemon not running)
+- 同一セッション内で4回以上クラッシュ、毎回npm run daemon + mc-connect.cjsで再接続が必要
+- pathfinder.isMoving()が true のまま止まらない（stop()/setGoal(null)しても）
+- bot.pathfinder.goto() が全て "The goal was changed before it could be completed!" で失敗
+- background commandが残留してpathfinderのgoalを外部から変更している可能性
+
+### 再現手順
+1. mc-connect.cjs で接続
+2. pathfinder.goto() を実行
+3. "The goal was changed" エラーで失敗
+4. 数回繰り返すとデーモンがクラッシュ (Exit code 1)
+5. isMoving: true が stop() 後も解除されない
+
+### 座標
+x=14, y=78, z=2 付近で繰り返し発生
+
+### 影響
+- 移動が全くできない (pathfinderが外部から制御される)
+- デーモンが頻繁にクラッシュして作業継続不可
+
+### 調査が必要なファイル
+- `src/daemon.ts` — クラッシュの原因
+- `src/tools/mc-execute.ts` — pathfinder ゴール管理、background実行の残留
+
+### Status: Reported
+
+## 2026-03-28: goals未注入 + bot.* 高レベルAPI全てundefined (Session 153 - CRITICAL)
+
+### 現象
+- mc_execute内で `goals` オブジェクトが `undefined` → `new goals.GoalNear(...)` でエラー
+- SKILL.mdには `goals` はスコープに注入済みと記載されているが実際はundefined
+- `bot.moveTo`, `bot.navigate`, `bot.flee`, `bot.pillarUp`, `bot.gather`, `bot.smelt`, `bot.eat`, `bot.combat`, `bot.equipArmor`, `bot.place`, `bot.build`, `bot.farm`, `bot.store`, `bot.drop`, `bot.status` が全てundefined
+- `bot.craft` と `bot.inventory` のみ動作
+
+### 確認コード
+```js
+log('goals type: ' + typeof goals);  // → "undefined"
+log('moveTo: ' + typeof bot.moveTo); // → "undefined"
+log('craft: ' + typeof bot.craft);   // → "function" (これだけ動く)
+```
+
+### 座標
+x=5, y=77, z=8 付近
+
+### 直前の行動
+1. 接続 (Claude6) → 成功
+2. bot.health / bot.food / bot.inventory.items() → 正常動作
+3. goals.GoalNear → TypeError: Cannot read properties of undefined
+4. bot.moveTo → TypeError: bot.moveTo is not a function
+5. 全高レベルAPI確認 → bot.craft以外全てundefined
+
+### 影響
+- 移動・採掘・食事・戦闘・農場作業が全て不可
+- ゲームプレイが極めて制限される
+
+### 調査が必要なファイル
+- `src/tools/mc-execute.ts` — bot API オブジェクト構築、goals/Movements注入ロジック
+
+### Status: Reported
+
 ## 2026-03-28: bot.log / bot.status is not a function (Session 152)
 
 ### 現象
