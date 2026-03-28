@@ -14,6 +14,17 @@
 
 ---
 
+## [2026-03-28] Bug: Session 100 - ゾンビに夜間に殺される（防具なし屋外待機中）
+
+- **Cause**: 夜間(time=22993)にY=66付近で屋外待機中にゾンビに殺された。防具なし・食料なし（wheat x2のみ）の状態で夜間にオープンエリアにいた。
+- **Coordinates**: (4, 66, 2)付近
+- **Last Actions**: 朝を待つためにwait()で待機中 → HP: 20 → 15 → 13 → "Claude5 was slain by Zombie"
+- **Error Message**: `Claude5 was slain by Zombie`
+- **Status**: Reported 2026-03-28 Session 100
+- **推奨**: 夜間は自動的にシェルターに入るか、pillarUpして待機する処理が必要。
+
+---
+
 ## [2026-03-28] Bug: Session 99 - デーモンが頻繁にクラッシュして mc-execute が使用不可
 
 - **Cause**: npm run daemon でデーモンを起動しても、数回のmc-execute.cjs呼び出し後にクラッシュして終了する。"Daemon not running" エラーが繰り返し発生する。Claude1/Claude3/Claude4の再接続処理が衝突している可能性。
