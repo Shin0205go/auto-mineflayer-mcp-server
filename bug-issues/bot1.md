@@ -1,3 +1,13 @@
+## [2026-03-28] Bug: Session 102 - goals undefined in mc_execute sandbox (WORKAROUND FOUND)
+
+- **Cause**: mc_execute sandboxで `goals` がundefinedになっている。src/tools/mc-execute.ts の `const { Movements, goals } = pathfinderPkg;` でgoalsが正しくexportされていない。
+- **Coordinates**: x=-1.5, y=100, z=6.5
+- **Last Actions**: bot.pathfinder.goto(new goals.GoalNear(...)) を呼んだ
+- **Error Message**: "Cannot convert undefined or null to object" / typeof goals === 'undefined'
+- **Workaround**: `const pfPkg = await import('mineflayer-pathfinder'); const pfGoals = pfPkg.default.goals;` でgoalsを取得可能
+- **Fix needed**: mc-execute.ts の goals インポートを修正。`const { Movements, goals } = pathfinderPkg;` → `const { Movements } = pathfinderPkg; const goals = pathfinderPkg.default?.goals ?? pathfinderPkg.goals;`
+- **Status**: Reported - Workaroundで継続中
+
 ## [2026-03-28] Bug: Session 102 - goals undefined in mc_execute sandbox
 
 - **Cause**: mc_execute sandboxで `goals` がundefinedになっている。src/tools/mc-execute.ts でpathfinderPkgから `const { Movements, goals } = pathfinderPkg;` で取得しているが、goalsが正しくexportされていない可能性がある。
