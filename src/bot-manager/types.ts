@@ -42,4 +42,5 @@ export interface ManagedBot {
   particleInterval: NodeJS.Timeout | null;
   serverHasItemPickupDisabled?: boolean;  // Track if server blocks item pickup
   serverHasItemPickupDisabledTimestamp?: number;  // Timestamp when flag was set (ms since epoch)
+  mcExecuteActive?: boolean;  // True while mc_execute is running code — background flee handlers should not override pathfinder
 }

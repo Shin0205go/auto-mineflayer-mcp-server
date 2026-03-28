@@ -1,6 +1,7 @@
 import mineflayer from "mineflayer";
 import { Vec3 } from "vec3";
 import { EventEmitter } from "events";
+import { AsyncLocalStorage } from "async_hooks";
 import pkg from "mineflayer-pathfinder";
 const { pathfinder, Movements, goals } = pkg;
 import type { BotConfig, ManagedBot, GameEvent } from "./types.js";
@@ -8,6 +9,9 @@ import { isHostileMob, isPassiveMob, isWaterBlock, EDIBLE_FOOD_NAMES } from "./m
 import { equipArmor } from "./bot-items.js";
 import { safeSetGoal } from "./pathfinder-safety.js";
 import { lastSleepTick } from "./bot-survival.js";
+
+// AsyncLocalStorage for per-request bot username context (multi-bot support)
+export const currentBotContext = new AsyncLocalStorage<string>();
 
 // Mamba向けの簡潔ステータスを付加するか（デフォルトはfalse=Claude向け）
 const APPEND_BRIEF_STATUS = process.env.APPEND_BRIEF_STATUS === "true";
@@ -64,17 +68,21 @@ export class BotCore extends EventEmitter {
     return first.done ? null : first.value;
   }
 
-  // Get the only bot or throw error (for single-bot mode)
+  // Get the only bot or throw error (for single-bot mode).
+  // In multi-bot mode, checks AsyncLocalStorage context set by mc_execute(username).
   requireSingleBot(): string {
+    // Check async context first (set by mc_execute when username is provided)
+    const contextUsername = currentBotContext.getStore();
+    if (contextUsername && this.bots.has(contextUsername)) return contextUsername;
+
     const username = this.getFirstBotUsername();
     if (!username) {
-      // Provide helpful error message suggesting to connect first
-      const botUsername = process.env.BOT_USERNAME || "Claude";
-      const mcHost = process.env.MC_HOST || "localhost";
-      const mcPort = process.env.MC_PORT || "25565";
-      throw new Error(
-        `Not connected to any server. Use minecraft_connect(host="${mcHost}", port=${mcPort}, username="${botUsername}", agentType="game") first.`
-      );
+      throw new Error(`Not connected to any server. Connect first with: node scripts/mc-connect.cjs localhost 25565 ClaudeN`);
+    }
+    // Multi-bot: if more than one bot connected and no context, refuse to guess
+    if (this.bots.size > 1) {
+      const names = [...this.bots.keys()].join(", ");
+      throw new Error(`Multiple bots connected (${names}). Set BOT_USERNAME=<name> env var to specify which bot to control.`);
     }
     return username;
   }
@@ -82,14 +90,17 @@ export class BotCore extends EventEmitter {
   // Wait up to maxWaitMs for a bot to become available (e.g. during death-triggered reconnect).
   // Returns the username once connected, or throws if timeout is reached.
   async waitForBot(maxWaitMs: number = 8000): Promise<string> {
+    const contextUsername = currentBotContext.getStore();
     const pollInterval = 200;
     const deadline = Date.now() + maxWaitMs;
     while (Date.now() < deadline) {
+      if (contextUsername && this.bots.has(contextUsername)) return contextUsername;
       const username = this.getFirstBotUsername();
       if (username) return username;
       await new Promise(r => setTimeout(r, pollInterval));
     }
     // Final check
+    if (contextUsername && this.bots.has(contextUsername)) return contextUsername;
     const username = this.getFirstBotUsername();
     if (username) return username;
     const botUsername = process.env.BOT_USERNAME || "Claude";
@@ -180,6 +191,7 @@ export class BotCore extends EventEmitter {
 
     for (const entity of Object.values(bot.entities)) {
       if (entity === bot.entity) continue;
+      if (!entity.position) continue;
       const dist = entity.position.distanceTo(pos);
       const entityName = entity.name || "unknown";
 
@@ -329,6 +341,21 @@ export class BotCore extends EventEmitter {
         if (soulFireBlock) movements.blocksToAvoid.add(soulFireBlock.id);
 
         bot.pathfinder.setMovements(movements);
+
+        // Guard: validate goal objects before they reach pathfinder internals.
+        // Agents sometimes pass plain {x,y,z} objects which lack isValid()/hasChanged()/isEnd()
+        // causing uncaught TypeError("stateGoal.isValid is not a function") every physics tick.
+        {
+          const origSetGoal = bot.pathfinder.setGoal.bind(bot.pathfinder);
+          (bot.pathfinder as any).setGoal = (goal: any, dynamic?: boolean) => {
+            if (goal !== null && goal !== undefined &&
+                (typeof goal.isValid !== "function" || typeof goal.isEnd !== "function")) {
+              console.error(`[Pathfinder] INVALID goal rejected (missing isValid/isEnd): ${JSON.stringify(goal)}`);
+              return;
+            }
+            origSetGoal(goal, dynamic);
+          };
+        }
 
         // Extend pathfinder think timeout for long-distance navigation.
         // Default thinkTimeout=5000ms is insufficient for 100-200 block paths through hilly terrain
@@ -552,10 +579,10 @@ export class BotCore extends EventEmitter {
                 food: bot.food,
               });
             }
-          } else if (entity.position.distanceTo(bot.entity.position) < 10) {
+          } else if (entity.position?.distanceTo(bot.entity.position) < 10) {
             addEvent("entity_hurt", `${entity.name || "Entity"} took damage nearby`, {
               entityName: entity.name,
-              distance: entity.position.distanceTo(bot.entity.position).toFixed(1),
+              distance: entity.position?.distanceTo(bot.entity.position).toFixed(1),
             });
           }
         });
@@ -563,6 +590,7 @@ export class BotCore extends EventEmitter {
         // Entity spawned nearby
         bot.on("entitySpawn", (entity) => {
           if (entity.name && isHostileMob(bot, entity.name.toLowerCase())) {
+            if (!entity.position) return;
             const dist = entity.position.distanceTo(bot.entity.position);
             if (dist < 20) {
               addEvent("hostile_spawn", `${entity.name} spawned ${dist.toFixed(1)} blocks away!`, {
@@ -771,11 +799,21 @@ export class BotCore extends EventEmitter {
         // Proactive Creeper flee: detect Creeper within 7 blocks and sprint away immediately
         // This fires every physics tick (~50ms) to catch Creepers before they explode
         let creeperFleeActive = false;
+        let creeperFleeLastEndTime = 0; // Timestamp when last flee ended (for cooldown)
         bot.on("physicsTick", () => {
           if (creeperFleeActive) return; // Throttle: avoid re-triggering while already fleeing
+          // 500ms cooldown after flee ends to prevent rapid re-triggering that spams setGoal
+          if (Date.now() - creeperFleeLastEndTime < 500) return;
+          // Do not override pathfinder while mc_execute is running agent code.
+          // Without this check, creeperFlee fires every ~50ms and calls safeSetGoal(),
+          // which emits pathfinder goal-changed events that cancel any goto() the agent issued.
+          // Bug [2026-03-28]: HP=2 bot in cave → physicsTick fires creeperFlee every tick →
+          // every agent pathfinder.goto() immediately throws "goal was changed before completion".
+          // Agent still receives hostile_spawn / entityHurt events and can decide to flee itself.
+          if (managedBot.mcExecuteActive) return;
           const creeper = Object.values(bot.entities).find(
             e => e !== bot.entity && e.name?.toLowerCase() === "creeper" &&
-            e.position.distanceTo(bot.entity.position) < 7
+            e.position?.distanceTo(bot.entity.position) < 7
           );
           if (creeper) {
             // Bug fix (Session 186): Do NOT flee when inside a portal block.
@@ -804,6 +842,7 @@ export class BotCore extends EventEmitter {
               console.error(`[CreeperFlee] Suppressed: bot is ${creeperFleeInPortal ? "inside" : "near"} portal block, standing still for teleportation.`);
               return;
             }
+            if (!creeper.position) return;
             const dist = creeper.position.distanceTo(bot.entity.position);
             const dir = bot.entity.position.minus(creeper.position).normalize();
             const fleeTarget = bot.entity.position.plus(dir.scaled(12));
@@ -836,6 +875,7 @@ export class BotCore extends EventEmitter {
               bot.setControlState("sprint", false);
               bot.setControlState("forward", false);
               creeperFleeActive = false;
+              creeperFleeLastEndTime = Date.now(); // Record end time for 500ms cooldown
               try {
                 if (bot.pathfinder.movements) {
                   bot.pathfinder.movements.maxDropDown = 2; // Restore to safe default
