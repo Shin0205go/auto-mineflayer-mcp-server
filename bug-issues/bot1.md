@@ -1,3 +1,12 @@
+## [2026-03-25] Bug: Session 92 - bread craft: wheat消費するがbreadがインベントリに入らない
+
+- **Cause**: bot.craft("bread", 1) が wheat 5→2に減少させるが bread=0のまま。"Item not found in inventory after crafting" エラー。crafting_table at (46,91,-17)の近く(1ブロック以内)で実行。
+- **Coordinates**: (46.5, 92, -16.5)
+- **Last Actions**: navigate to crafting_table → craft("bread", 1) → wheat consumed but bread=0
+- **Error Message**: "Item not found in inventory after crafting. It may have been collected by another nearby bot or despawned."
+- **Root Cause**: craftingが完了するがbreadアイテムがbotのインベントリに渡されない。wheat despawnまたは別botが拾う可能性。
+- **Status**: Reported 2026-03-25 Session 92
+
 ## [2026-03-28] Bug: Session 91 - 死亡 (HP:0.4でゾンビ戦闘、食料取得不可が根本原因)
 
 - **Cause**: combat()後に食料ドロップなし、farm()・gather()も機能しないため食料補充不可。Hunger:0, HP:0.4の状態でzombie combat→ダメージ→死亡。
