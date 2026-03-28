@@ -1,3 +1,12 @@
+## [2026-03-28] Bug: Session 105 - BOT_USERNAME env var intermittently ignored, Multiple bots error
+
+- **Cause**: `BOT_USERNAME=Claude1 node scripts/mc-execute.cjs` が間欠的に "Multiple bots connected (Claude3, Claude2, Claude6, Claude5, Claude7, Claude4). Set BOT_USERNAME=<name> env var" エラーを返す。同じコマンドを繰り返すと成功することがある。他のボット(Claude2-7)が同時接続中に発生頻度が高い。
+- **Coordinates**: x=4, y=64, z=42
+- **Last Actions**: BOT_USERNAME=Claude1で複数回コマンドを試みた
+- **Error Message**: "Error: Multiple bots connected (Claude3, Claude2, Claude6, Claude5, Claude7, Claude4). Set BOT_USERNAME=<name> env var to specify which bot to control."
+- **Impact**: Claude1の操作が完全に止まる。何回かリトライすれば成功することもある。
+- **Status**: Reported
+
 ## [2026-03-28] Bug: Session 104 - CRITICAL ゲームプレイ完全停止 (複合バグ)
 
 - **Cause**: 以下の複合バグにより実質ゲームプレイ不可能な状態に陥っている
