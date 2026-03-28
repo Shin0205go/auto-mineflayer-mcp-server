@@ -1,5 +1,23 @@
 # Claude3 死亡記録
 
+## [2026-03-28] Bug: bot.* API wrapper missing - status/gather/craft/etc all undefined
+
+- **Cause**: When connected as Claude3, bot.status/bot.gather/bot.craft/bot.log/bot.eat etc. are all undefined. Only native Mineflayer API is available. The high-level bot.* API wrappers are not being injected into the mc-execute sandbox.
+- **Coordinates**: Connected to localhost:25565
+- **Last Actions**: Connected via `node scripts/mc-connect.cjs`, then executed `BOT_USERNAME=Claude3 node scripts/mc-execute.cjs "const s = await bot.status(); ..."` - got `TypeError: bot.status is not a function`
+- **Error Message**: `TypeError: bot.status is not a function`, `TypeError: bot.log is not a function`, `TypeError: bot.getMessages is not a function`
+- **Additional**: `return typeof bot.status` returns `undefined` - the wrapper is completely absent
+- **Impact**: ALL gameplay is blocked. Cannot check HP, hunger, inventory, or take any actions
+- **Status**: Reported
+
+## [2026-03-28] Bug: mc-execute returns exit code 143 (timeout/kill) for native bot.health access
+
+- **Cause**: When trying to access native `bot.health` or `bot.entity.position` via mc-execute with BOT_USERNAME=Claude3, the process exits with code 143 (SIGTERM/timeout)
+- **Coordinates**: N/A
+- **Last Actions**: `BOT_USERNAME=Claude3 MC_TIMEOUT=5000 node scripts/mc-execute.cjs "return bot.health + ''"`
+- **Error Message**: Exit code 143 (no output)
+- **Status**: Reported
+
 ## 死亡 #latest (2026-03-28) — ファントムに殺された
 
 - **死因**: Phantom に攻撃され死亡 ("Claude3 was doomed to fall by Phantom")
