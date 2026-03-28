@@ -1,3 +1,11 @@
+## [2026-03-28] Bug: Session 100b - 死亡（デーモン再起動後にHP=2.3で発見）
+
+- **Cause**: デーモンが停止して再起動後、Claude1がHP=2.3の状態で発見。おそらく敵から攻撃を受けて死亡しリスポーン。
+- **Coordinates**: リスポーン地点 x=0, y=86, z=-3
+- **Last Actions**: デーモン再起動 → 接続後HP=2.3を検出 → HPが即座に20に変化（リスポーン後）
+- **Error Message**: N/A
+- **Status**: Reported - keepInventory=ONでアイテム保持。diamond_sword確認済み。
+
 ## [2026-03-28] Bug: Session 100 - bot.* 高レベルAPI（bot.status, bot.gather等）が全てundefined
 
 - **Cause**: mc-execute.cjs内でbot.status, bot.gather, bot.craft, bot.combat等の高レベルAPIが全てundefinedになっている。rawのmineflayer bot（bot.health, bot.entity.position等）は使えるがラッパーAPIが使えない
