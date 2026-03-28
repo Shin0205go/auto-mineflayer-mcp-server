@@ -561,3 +561,12 @@
 - ✅ Team coordinated emergency response
 - ❌ Food distribution failed (item sync bug)
 - ❌ Eternal night persists
+
+## 2026-03-28 Session: 死亡 - HP1.3 Hunger0 飢餓死
+
+- **Cause**: 接続時HP3.3/Hunger0の緊急状態。食料ゼロ。夜間(midnight)で敵多数。pillarUpしてY=104に逃げたが飢餓ダメージで継続的にHPが下がった。wait()がABORTED連続、HP1.3まで下がり死亡。
+- **Coordinates**: x:12.7, y:104, z:53.6 (死亡推定地点)
+- **Last Actions**: bot.flee() → bot.pillarUp(8) → bot.wait(30000) → HP1.3で死亡
+- **Error Message**: "[wait] ABORTED: HP dropped to 1.3 during wait — auto-fleeing from danger" が繰り返し発生
+- **Root Cause**: 食料ゼロ+Hunger0による飢餓ダメージ。夜間待機中に逃げようがない状態。
+- **Status**: Reported - 死亡バグ
