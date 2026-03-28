@@ -607,11 +607,12 @@
 
 ## 2026-03-28 Session: CRITICAL - daemon crashes immediately after startup
 
-- **Cause**: `npm run daemon` を実行するとデーモンが起動(PID表示)した直後にクラッシュし、mc-connectが "socket hang up" または "Daemon not running" で失敗する。
+- **Cause**: デーモンが起動(PID表示)した直後にクラッシュし、mc-connectが "socket hang up" または "Daemon not running" で失敗する。接続直後にもクラッシュする（mc-connect後5秒以内にDaemon not running）。
 - **Coordinates**: N/A
-- **Last Actions**: npm run daemon → PID表示 → mc-connect → Daemon not running
+- **Last Actions**: npm run daemon → PID表示 → mc-connect → Connected → mc-execute → Daemon not running
 - **Error Message**: "socket hang up" / "Daemon not running. Start with: npm run daemon"
-- **Additional**: 複数回再起動を試みたが毎回クラッシュ。接続できても数秒後に "Daemon not running" エラーが発生する。
+- **Additional**: mc-connect自体はたまに成功するが、その直後のmc-executeで必ずDaemon not runningになる。デーモンがmc-connect処理で何らかのエラーを起こしてクラッシュしている可能性が高い。
+- **Note**: エージェントはdaemon再起動不可（外部管理）。コードレビューアーがデーモンクラッシュ原因を修正する必要あり。
 - **Status**: Reported - CRITICAL BUG - 2026-03-28
 
 ## 2026-03-28 Session: CRITICAL - pathfinder "goal was changed" 連続エラー
