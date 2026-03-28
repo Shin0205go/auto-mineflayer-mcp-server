@@ -193,6 +193,28 @@
 
 ---
 
+## [2026-03-28] Bug: Session 101 - bot.placeBlock() がblockUpdateイベントタイムアウトで失敗
+
+- **Cause**: bot.placeBlock()を呼び出すと "Event blockUpdate:(x, y, z) did not fire within timeout of 5000ms" エラーが発生する。複数の場所（dirt, iron_ore, stone）で試みたが全て同じエラー。ブロック設置コマンドはサーバーに届いているかもしれないが、blockUpdateイベントが返ってこない。
+- **Coordinates**: (16, 107, 73) 付近
+- **Last Actions**: crafting_tableをdirtブロック(16, 106, 73)の上に設置しようとした → blockUpdateタイムアウト
+- **Error Message**: `Event blockUpdate:(16, 107, 73) did not fire within timeout of 5000ms`
+- **Status**: Reported 2026-03-28 Session 101 - CRITICAL
+- **推奨**: bot.placeBlock()の実装を確認。blockUpdateのタイムアウト時間を延ばすか、イベント待ちをスキップする実装に変更する。
+
+---
+
+## [2026-03-28] Bug: Session 101 - pathfinderが長距離移動中に"goal was changed"エラーを繰り返す
+
+- **Cause**: 長距離移動（20ブロック以上）でpathfinder.goto()を呼ぶと "The goal was changed before it could be completed!" エラーが頻発する。自動flee処理かauto-escape処理が移動中にpathfinderを横取りしている可能性がある。短距離（10ブロック以下）では問題ない。
+- **Coordinates**: (16, 107, 73) → (3, 93, 61) の移動時
+- **Last Actions**: 複数回の長距離pathfinder.goto() → "goal was changed" エラー
+- **Error Message**: `The goal was changed before it could be completed!`, `Path was stopped before it could be completed!`
+- **Status**: Reported 2026-03-28 Session 101
+- **推奨**: 長距離移動時の自動flee/escape処理の無効化オプションを追加。または段階的移動（ウェイポイント経由）で回避。
+
+---
+
 ### [2026-02-17] Respawn HP/Hunger Recovery Bug - keepInventory ON but healing broken ✅ **FIXED**
 - **症状**: `minecraft_respawn()` を実行しても HP/Hunger が 20/20 に回復しない。keepInventory=true でアイテムは保持されるが、HP/Hunger は元の値のまま。
 - **発生例**: Claude5 respawn実行 → HP 1/20 Hunger 11/20 → respawn実行 → 同じく HP 1/20 Hunger 11/20 (変わらず)
