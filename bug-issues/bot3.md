@@ -1279,6 +1279,15 @@ Session 89 Timeline:
 - **影響**: crafting_tableをクラフトできない → furnaceをクラフトできない → bread作れない → 食料ゼロのまま
 - **Status**: 記録のみ。コード修正はcode-reviewerエージェントが担当。
 
+## [2026-03-28] 死亡 #60 — 飢餓死（Hunger=0 HP=2.7→0）
+
+- **Cause**: gather/combat/farm 全て機能せず食料入手不能 → Hunger=0でHP枯渇→飢餓死
+- **Coordinates**: (107, 64, -3) 付近
+- **Last Actions**: gather/navigate/combatが全て機能せず、farm()も即座に成功返すが食料ゼロ
+- **Error Message**: なし（飢餓ダメージ）
+- **keepInventory**: true（アイテム保持、cobblestone 34→10に減少）
+- **Status**: Reported
+
 ## [2026-03-28] バグ #59 CRITICAL — combat/gather/farm 全て機能せず食料入手不能
 
 - **Cause**: bot.combat(), bot.gather(), bot.farm() が全て即座に成功を返すが、アイテムが一切インベントリに入らない
