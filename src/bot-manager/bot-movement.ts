@@ -1547,6 +1547,41 @@ export async function moveTo(managed: ManagedBot, x: number, y: number, z: numbe
       }
     } else {
       console.error(`[Move] Manual escape had no effect (moved ${escapedDist.toFixed(2)} blocks < 1.0). Pathfinder likely unable to compute path from this terrain.`);
+
+      // MULTI-DIRECTION ESCAPE: At high elevations (Y>75), cliff-edge bots can be
+      // completely stuck when the target direction is the cliff face.
+      // Session 57 / Bot3 Bug #57 [2026-03-28]: Y=88-91 birch forest, stone N/E/W + cliff S.
+      // Forward toward target = cliff → no movement. Try all 4 cardinal directions.
+      // Bot1/Bot3: all movement APIs fail simultaneously at Y=88-91 high places.
+      if (botY > 75) {
+        console.error(`[Move] High-elevation stuck (Y=${botY.toFixed(1)}). Trying 4 cardinal directions to break deadlock...`);
+        const escapeAngles = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]; // N, E, S, W
+        for (const angle of escapeAngles) {
+          const tryStart = bot.entity.position.clone();
+          try {
+            bot.look(angle, 0, true);
+            await delay(100);
+            bot.setControlState("forward", true);
+            bot.setControlState("jump", true);
+            bot.setControlState("sprint", true);
+            await delay(800);
+            bot.clearControlStates();
+            await delay(200);
+          } catch (_) { try { bot.clearControlStates(); } catch (_2) {} }
+          const movedDist = bot.entity.position.distanceTo(tryStart);
+          if (movedDist >= 0.8) {
+            console.error(`[Move] Multi-dir escape: moved ${movedDist.toFixed(1)} blocks at angle ${(angle * 180 / Math.PI).toFixed(0)}°`);
+            result = await moveToBasic(managed, x, y, z);
+            if (!result.success && allowDigFallback) {
+              result = await moveToBasic(managed, x, y, z, { allowDig: true });
+            }
+            if (result.success) {
+              console.error(`[Move] Recovered via multi-direction escape`);
+            }
+            break;
+          }
+        }
+      }
     }
   }
 
