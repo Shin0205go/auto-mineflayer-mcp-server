@@ -217,6 +217,19 @@
 
 ### Status: Reported
 
+## 2026-03-28: サーバー満員でClaude6切断 (Session 153)
+
+### 現象
+- 複数ボット(Claude1-7)が同時接続でmax_playersに達し、Claude6がkickされる
+- mc-connect.cjs: `Kicked: multiplayer.disconnect.server_full`
+- 接続中にも自動切断される（他のbotのexecuteの影響）
+
+### 影響
+- ゲームプレイが定期的に中断される
+- 接続・再接続のオーバーヘッドが大きい
+
+### Status: Reported
+
 ## 2026-03-28: インベントリが別botと混在 (Session 153)
 
 ### 現象
