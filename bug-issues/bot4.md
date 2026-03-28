@@ -407,3 +407,12 @@
 - **現在位置**: (28.7, -15, -6.5)
 - **ステータス**: ✅ COMPLETED - 次タスク待機中
 
+## [2026-03-28] Death by Starvation - HP=1.3 Hunger=0 柱の上
+
+- **Cause**: セッション開始時にHP=3.3 Hunger=0 食料なし。周囲に zombie x3, skeleton x5, witch x1, creeper x5 がいる状態。pillarUpでY=104に避難したが、飢餓ダメージが継続。wait()で待機中にHP=1.3まで落下し、最終的に死亡してリスポーン。
+- **Coordinates**: (-3, 102, 26) → リスポーン後 (0, 78, 4)
+- **Last Actions**: flee() → pillarUp(8) → wait(30000) → HP 3.3 → 1.3 → death
+- **Error Message**: "ABORTED: HP dropped to 1.3 during wait — auto-fleeing from danger" x11回
+- **Root Cause**: セッション開始前から食料0の状態が続いていた。食料確保なしに敵だらけのエリアに放置されたことが根本原因。
+- **Status**: Reported - food shortage prevention needed
+
