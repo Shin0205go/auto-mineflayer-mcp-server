@@ -602,6 +602,16 @@
 - **Error Message**: "Daemon not running. Start with: npm run daemon" / "Kicked: multiplayer.disconnect.server_full"
 - **Status**: Reported - デーモンクラッシュバグ
 
+## 2026-03-28 Session: placeBlock always times out with "blockUpdate event not fired"
+
+- **Cause**: `bot.placeBlock(refBlock, new Vec3(0,1,0))` が常に "Event blockUpdate:(x,y,z) did not fire within timeout of 5000ms" でタイムアウトする。
+- **Coordinates**: x=144, y=80, z=-141 (草の上), x=123, y=84, z=-157 (diorite上) 他でも同様
+- **Last Actions**: equip crafting_table -> placeBlock(below, Vec3(0,1,0)) -> timeout
+- **Error Message**: "Event blockUpdate:(144, 80, -141) did not fire within timeout of 5000ms"
+- **Root Cause**: サーバーからのblockUpdateパケットが届いていないか、placeBlockの実装に問題がある。
+- **Impact**: crafting_tableを設置できない → stone_pickaxeをクラフトできない → 地形を掘り抜けない
+- **Status**: Reported - 2026-03-28
+
 ## 2026-03-28 Session: CRITICAL - bot.* APIが一切使用不可（status, gather, eat等）
 
 - **Cause**: デーモン再起動後、mc-execute.cjsで bot.status / bot.gather / bot.eat / bot.flee / bot.navigate 等のカスタムAPIが全て "is not a function" エラー。bot.craft のみ利用可能。
