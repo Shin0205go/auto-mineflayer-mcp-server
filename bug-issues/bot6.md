@@ -217,6 +217,25 @@
 
 ### Status: Reported
 
+## 2026-03-28: インベントリが別botと混在 (Session 153)
+
+### 現象
+- mc_execute実行ごとにインベントリ内容が全く異なるbotのものに変わる
+- セッション開始時: wheat_seeds 99個, stone_pickaxe 4本, iron_sword 1本
+- 後続: netherrack 15個, diamond_sword 1本, iron_sword 3本, cobblestone 202個
+- さらに後続: wheat_seeds 99個に戻る
+- 一貫性がなく「自分のインベントリ」が不明瞭
+
+### 影響
+- どのアイテムが利用可能か判断できない
+- クラフト計画が立てられない
+
+### 調査が必要なファイル
+- `src/tools/mc-execute.ts` — botインスタンス解決ロジック（接続のたびに別botを参照している？）
+- `src/daemon.ts` — 複数bot接続管理
+
+### Status: Reported
+
 ## 2026-03-28: デーモン頻繁クラッシュ + pathfinder外部割り込み (Session 153 - CRITICAL)
 
 ### 現象
