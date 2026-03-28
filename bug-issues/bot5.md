@@ -14,6 +14,17 @@
 
 ---
 
+## [2026-03-28] Bug: Session 100 - バックグラウンドタスクがpathfinderを継続的に制御する
+
+- **Cause**: mc-execute.cjsをバックグラウンドで実行した際（run_in_background=true）、そのコマンドが完了しても内部でpathfinderのゴールを継続的に変更し続ける。bot.pathfinder.stop()を呼んでもisMoving=trueのまま。新しいpathfinder.goto()を呼ぶと"The goal was changed before it could be completed!"エラーになる。
+- **Coordinates**: Y=60-110付近をランダムに移動中
+- **Last Actions**: 3つのバックグラウンドタスク（be1134gen, be5bruex7, bj9uc78vq）を実行後、pathfinder制御が戻らなくなった
+- **Error Message**: `The goal was changed before it could be completed!`, `Path was stopped before it could be completed!`
+- **Status**: Reported 2026-03-28 Session 100 - CRITICAL
+- **推奨**: バックグラウンドタスクの完了時にpathfinder.stop()を確実に呼ぶか、タスクIDの管理システムを追加する。
+
+---
+
 ## [2026-03-28] Bug: Session 100 - ゾンビに夜間に殺される（防具なし屋外待機中）
 
 - **Cause**: 夜間(time=22993)にY=66付近で屋外待機中にゾンビに殺された。防具なし・食料なし（wheat x2のみ）の状態で夜間にオープンエリアにいた。
