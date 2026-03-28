@@ -1,3 +1,14 @@
+## [2026-03-28] Bug: Session 107 - 死亡: 飢餓死 (Hunger=0, HP=4→0)
+
+- **Cause**: 地下水没地形にスタックし飢餓ダメージで死亡。食料確保API失敗 + pathfinder地形スタックの複合問題。
+- **Coordinates**: x=8, y=46, z=5 (地下洞窟・水没エリア)
+- **Last Actions**: 水没した洞窟から脱出試み → HP=4まで飢餓ダメージ → 死亡 → リスポーン (x=8, y=96, z=5, HP=20, Hunger=20)
+- **Root Cause**:
+  1. placeBlock()がblockUpdateタイムアウトで失敗 → pillarUp不可
+  2. pathfinderが水中・高低差地形でタイムアウト/goal changed
+  3. 食料ゼロの状態で地下に閉じ込められた
+- **Status**: Reported (death confirmed)
+
 ## [2026-03-28] Bug: Session 106 - CRITICAL 飢餓スタック: 地下Y=42に閉じ込め、食料確保不可能
 
 - **Cause**: pathfinderが地下洞窟から地上へ脱出できない。GoalNearで長距離移動中にタイムアウト/goal changed。直接controlStateでの移動も機能しない。食料0、Hunger=1で飢餓死寸前。
