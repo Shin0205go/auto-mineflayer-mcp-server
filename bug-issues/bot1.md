@@ -1,3 +1,11 @@
+## [2026-03-28] Bug: Session 100c - CRITICAL デーモン頻繁停止（ゲームプレイ不可能）
+
+- **Cause**: npm run daemon がバックグラウンドプロセスとして安定動作しない。各Bashセッションが終了するとデーモンも停止する。別のBashセッションからのコマンドがデーモンを見つけられない。
+- **Coordinates**: N/A
+- **Last Actions**: npm run daemon をバックグラウンドで起動 → node scripts/mc-connect.cjs で接続成功 → 別の操作でデーモンが停止 → 繰り返し
+- **Error Message**: "Daemon not running. Start with: npm run daemon" が繰り返し
+- **Status**: Reported CRITICAL - デーモンが安定して動かないとゲームプレイが全くできない。デーモンの起動管理を改善が必要。
+
 ## [2026-03-28] Bug: Session 100b - 死亡（デーモン再起動後にHP=2.3で発見）
 
 - **Cause**: デーモンが停止して再起動後、Claude1がHP=2.3の状態で発見。おそらく敵から攻撃を受けて死亡しリスポーン。
