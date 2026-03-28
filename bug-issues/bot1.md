@@ -1,3 +1,22 @@
+## [2026-03-28] Bug: Session 103 - pathfinder "goal changed" error on long-distance navigation
+
+- **Cause**: bot.pathfinder.goto() が長距離（>15ブロック）や高低差のある経路で "The goal was changed before it could be completed!" エラーを即座に（<500ms）返す。pathfinder.stop()を呼んでも改善しない。短距離（2-5ブロック）は成功する。
+- **Coordinates**: x=13, y=108, z=-7 → x=5, y=76, z=2 (dist≈37)
+- **Last Actions**: pathfinder.stop() → setMovements() → goto(new GoalNear(5,76,2,2))
+- **Error Message**: "The goal was changed before it could be completed!"
+- **Impact**: 農場・牛への移動が不可能。食料確保できない。controlStatesで手動移動する必要がある。
+- **Status**: Reported
+
+## [2026-03-28] Bug: Session 103 - 洞窟内スタック（拠点から落下→脱出不可）
+
+- **Cause**: controlStatesで移動中に地面の穴に落下し、Y=60-75の洞窟内にスタック。上方向には水と石の複数の層があり、pillarUpも機能しない（ブロック設置失敗）。pathfinderも機能しないため経路復帰不可能。
+- **Coordinates**: x=14, y=71, z=3 （洞窟内）
+- **Last Actions**: 農場へcontrolStatesで移動 → 穴に落下 → 柱作成試みるも失敗 → 洞窟内スタック
+- **Error Message**: placeBlock: "Event blockUpdate did not fire within timeout of 5000ms"
+- **Impact**: 拠点(Y=100)から大幅に離れた洞窟内にスタック。食料ゼロ、農場アクセス不可。
+- **Root Cause**: 地形周辺に穴が多数あり、pathfinderが機能しないためcontrolStatesで移動すると落下する。地形整備が全くできていない。
+- **Status**: Reported
+
 ## [2026-03-28] Bug: Session 102 - goals undefined in mc_execute sandbox (WORKAROUND FOUND)
 
 - **Cause**: mc_execute sandboxで `goals` がundefinedになっている。src/tools/mc-execute.ts の `const { Movements, goals } = pathfinderPkg;` でgoalsが正しくexportされていない。
