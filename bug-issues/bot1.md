@@ -1,3 +1,23 @@
+## [2026-03-28] Bug: Session 106 - CRITICAL 飢餓スタック: 地下Y=42に閉じ込め、食料確保不可能
+
+- **Cause**: pathfinderが地下洞窟から地上へ脱出できない。GoalNearで長距離移動中にタイムアウト/goal changed。直接controlStateでの移動も機能しない。食料0、Hunger=1で飢餓死寸前。
+- **Coordinates**: x=-1, y=42, z=9 (地下洞窟、水に囲まれた地形)
+- **Last Actions**: 食料を探してチェストへ移動試み → pathfinder失敗 → 地下へ落下 → 脱出不可
+- **Error Messages**:
+  - "The goal was changed before it could be completed!"
+  - "No path to the goal!"
+  - "Execution timed out after 30000ms"
+  - "Event blockUpdate did not fire within timeout of 5000ms" (placeBlock失敗)
+- **HP/Status**: HP=13, Hunger=1, Time=20449(夜), 食料ゼロ
+- **Root Cause**:
+  1. placeBlock()がblockUpdateタイムアウトで常に失敗 → pillarUpで脱出不可
+  2. pathfinderがY差のある目標に到達できない（地下Y=42 → 地上Y=65+）
+  3. GoalY()は動くが目標Y方向でなく下に向かう
+  4. setControlState('forward')は地形を無視して穴に落ちる
+- **Impact**: ゲームプレイ完全停止。BOT_USERNAMEエラーも頻発。
+- **Fix Priority**: CRITICAL - placeBlock修正 + pathfinder高低差対応が最優先
+- **Status**: Reported
+
 ## [2026-03-28] Bug: Session 105 - BOT_USERNAME env var intermittently ignored, Multiple bots error
 
 - **Cause**: `BOT_USERNAME=Claude1 node scripts/mc-execute.cjs` が間欠的に "Multiple bots connected (Claude3, Claude2, Claude6, Claude5, Claude7, Claude4). Set BOT_USERNAME=<name> env var" エラーを返す。同じコマンドを繰り返すと成功することがある。他のボット(Claude2-7)が同時接続中に発生頻度が高い。
