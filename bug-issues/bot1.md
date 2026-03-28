@@ -1,3 +1,19 @@
+## [2026-03-28] Bug: Session 104 - CRITICAL ゲームプレイ完全停止 (複合バグ)
+
+- **Cause**: 以下の複合バグにより実質ゲームプレイ不可能な状態に陥っている
+  1. pathfinder.goto() が "The goal was changed before it could be completed!" で即時失敗（長距離）
+  2. controlStatesによる手動移動が洞窟の穴に落下する原因になる
+  3. placeBlock()によるpillarUp失敗（blockUpdateタイムアウト）
+  4. 農場到達不可 → 食料ゼロ
+  5. 洞窟内Y=76スタック（75体のモブ、夜間）
+- **Coordinates**: x=-13, y=76, z=58 (洞窟内)
+- **Last Actions**: 農場(9,96,35)へ向かう途中で洞窟に落下、脱出できない
+- **Error Message**: "The goal was changed before it could be completed!", "Event blockUpdate did not fire"
+- **HP/Status**: HP=14, Hunger=11, Time=16393(夜), 食料ゼロ, 75体モブ
+- **Root Cause**: pathfinderが長距離経路を見つけられない + 地形に穴だらけ = 移動不可能
+- **Fix Priority**: CRITICAL - pathfinderの修正が最優先。goals未定義の修正も未完了。
+- **Status**: Reported
+
 ## [2026-03-28] Bug: Session 103 - pathfinder "goal changed" error on long-distance navigation
 
 - **Cause**: bot.pathfinder.goto() が長距離（>15ブロック）や高低差のある経路で "The goal was changed before it could be completed!" エラーを即座に（<500ms）返す。pathfinder.stop()を呼んでも改善しない。短距離（2-5ブロック）は成功する。
