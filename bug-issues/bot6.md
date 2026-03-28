@@ -169,6 +169,7 @@
 
 ## 2026-03-28: サーバー満員で接続不可 (Session 151)
 
+
 ### 現象
 - `node scripts/mc-connect.cjs localhost 25565 Claude6` 実行時に `Kicked: multiplayer.disconnect.server_full`
 - Claude5, Claude7 など複数のボット名を試みても全て同様のエラー
@@ -185,5 +186,39 @@
 ### 対策提案
 - サーバー側の最大プレイヤー数設定確認（server.properties: max-players）
 - 既存ボット接続を切断してスロットを空ける
+
+### Status: Reported
+
+## 2026-03-28: bot.log / bot.status is not a function (Session 152)
+
+### 現象
+- mc-connect.cjs が "Connected to localhost:25565 as Claude6" と成功を報告
+- しかしmc-execute.cjs で `bot.log('test')` → `TypeError: bot.log is not a function`
+- `bot.status()` も同様に `TypeError: bot.status is not a function`
+- デーモンログにClaude6接続のエントリが一切出ない（Claude3の接続は見える）
+- デーモンを複数回再起動しても同じ現象が続く
+
+### 座標
+- 不明（bot.status()が使えないため確認不可）
+
+### 直前の行動
+1. npm run daemon でデーモン起動（PID 89734）
+2. mc-connect.cjs localhost 25565 Claude6 → "Connected" と表示
+3. mc-execute.cjs "bot.log('test')" → TypeError: bot.log is not a function
+4. デーモンログを確認 → Claude6接続ログなし（Claude3のみ）
+
+### エラーメッセージ
+- `TypeError: bot.log is not a function`
+- `TypeError: bot.status is not a function`
+
+### 根本原因（推測）
+- mc-connect.cjs がHTTPリクエストを送るが、デーモン側でClaude6のbotインスタンスが作られていない
+- または接続に成功したように見えるが、bot APIオブジェクトが正しく初期化されていない
+- mc-execute.cjsがどのbotインスタンスを参照するかの解決ロジックに問題がある可能性
+
+### 調査が必要なファイル
+- `src/daemon.ts` — 接続処理とbotインスタンス管理
+- `scripts/mc-connect.cjs` — 接続リクエスト送信ロジック
+- `scripts/mc-execute.cjs` — botインスタンス解決ロジック
 
 ### Status: Reported
