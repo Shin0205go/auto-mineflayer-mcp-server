@@ -1,3 +1,23 @@
+## [2026-03-25] Bug: Session 74 - Continuous falling death loop (CRITICAL)
+- **Cause**: Bot spawns at Y=82 surface but immediately falls to Y=50-60 underground and cannot escape. flee()/navigate()/pillarUp() all cause MCP disconnection OR push bot deeper underground. bot.wait() auto-flees from skeleton which causes disconnect. Net result: bot dies repeatedly (~10+ deaths), always returns to Y=50-60 cave.
+- **Coordinates**: Cave near (0-(-40), 46-65, 0-25) - massive cave system around spawn
+- **Pattern**: spawn(Y=82) → flee from hostile → underground(Y=60) → fall → Y=50 → mob attacks → die → repeat
+- **Key Tool Failures**: flee(X) disconnects; wait(5000) auto-flees→disconnects; navigate to Y=90 routes underground; pillarUp went DOWN Y:68→57; moveTo(x,90,z) stays underground
+- **Root Cause**: Spawn area has massive cave system. All escape mechanisms either don't work underground or cause MCP disconnection. Bot cannot regen HP (hunger=0/food API broken).
+- **Evidence**: HP=20 appearing 10+ times per session from keepInventory respawns; Y bouncing 46-82; experience_orbs seen multiple times (death drops)
+- **Fix Needed**: (1) flee() must not cause MCP disconnection; (2) wait() auto-flee must not cause disconnect; (3) pillarUp must go UP not down; (4) Set/fix bot spawn point away from cave area
+- **Status**: Reported - Session 74 CRITICAL
+
+## [2026-03-28] Bug: Death - Drowned kill (Session 185+)
+
+- **Cause**: Claude1 was slain by Drowned while underground/near water
+- **Coordinates**: Unknown (death message in chat)
+- **Last Actions**: gather iron_ore, navigate to items, HP dropping from fall damage
+- **Context**: Part of ongoing rubber-band bug sessions (185+)
+- **Status**: Reported. keepInventory protected items.
+
+---
+
 ## [2026-03-28] Bug: Session 185+ CRITICAL - ゴムバンド現象継続 - 185セッション以上継続中
 
 ### Session 185 確認:
