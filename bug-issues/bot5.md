@@ -14,6 +14,28 @@
 
 ---
 
+## [2026-03-28] Bug: Session 102 - PHASE_BLOCKEDが所持済みアイテムの装備を禁止する
+
+- **Cause**: diamond_swordをすでにインベントリに持っているにも関わらず、`bot.equip(diamond_sword, 'hand')`を呼び出すと "PHASE_BLOCKED: [Phase 1: Base establishment] prohibits diamond_sword — this belongs to a later phase" エラーが発生する。アイテムを持っているのに使用できない。
+- **Coordinates**: (12, 85, 2)
+- **Last Actions**: diamond_sword を equip しようとした → PHASE_BLOCKED エラー
+- **Error Message**: `PHASE_BLOCKED: [Phase 1: Base establishment] prohibits "diamond_sword" — this belongs to a later phase`
+- **Status**: Reported 2026-03-28 Session 102 - CRITICAL
+- **推奨**: PHASE_BLOCKEDは新規入手を制限すべきで、すでに持っているアイテムの使用・装備は制限すべきでない。フェーズチェックのロジックを修正する必要がある。
+
+---
+
+## [2026-03-28] Bug: Session 102 - pathfinder GoalNear/GoalBlock が短距離(3-10ブロック)でも "goal was changed" エラー
+
+- **Cause**: GoalNear/GoalBlock を使った移動が、3〜10ブロックの短距離でも "The goal was changed before it could be completed!" エラーで失敗する。Session 101では長距離でのみ報告されたが、今回は短距離でも同様に発生。GoalBlock (距離3) で成功した例もあるが、GoalNear はほぼ毎回失敗する。
+- **Coordinates**: (12, 85, 2) → (7, 80, 9) など複数箇所で発生
+- **Last Actions**: 複数回 GoalNear/GoalBlock で移動を試みる → 90%以上失敗
+- **Error Message**: `The goal was changed before it could be completed!`
+- **Status**: Reported 2026-03-28 Session 102
+- **推奨**: 自動flee/escape処理がpathfinderを横取りしている。短距離移動中は auto-flee を無効化する実装が必要。
+
+---
+
 ## [2026-03-28] Bug: Session 100 - バックグラウンドタスクがpathfinderを継続的に制御する
 
 - **Cause**: mc-execute.cjsをバックグラウンドで実行した際（run_in_background=true）、そのコマンドが完了しても内部でpathfinderのゴールを継続的に変更し続ける。bot.pathfinder.stop()を呼んでもisMoving=trueのまま。新しいpathfinder.goto()を呼ぶと"The goal was changed before it could be completed!"エラーになる。
