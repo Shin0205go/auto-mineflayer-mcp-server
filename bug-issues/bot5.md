@@ -14,6 +14,17 @@
 
 ---
 
+## [2026-03-28] Bug: Session 102 - 全pathfinder移動が "goal was changed" で機能不全、水中スタック
+
+- **Cause**: GoalNear/GoalBlock/GoalXZ 全ての移動方法が "The goal was changed before it could be completed!" で失敗し続ける。水中(Y=85 water)にスタックしており、controlState('forward'/'jump')でも脱出不可。セッション開始から継続してpathfinderが機能不全。バックグラウンドタスクの残存pathfinder制御が原因と考えられる。
+- **Coordinates**: (12, 85, 2) - water block
+- **Last Actions**: GoalNear/GoalBlock/GoalXZ を10回以上試みる → 全て失敗、水中スタック
+- **Error Message**: `The goal was changed before it could be completed!`
+- **Status**: Reported 2026-03-28 Session 102 - CRITICAL - 行動不能
+- **推奨**: セッション開始時に bot.pathfinder.stop() を確実に呼ぶ。または前セッションのpathfinder状態を完全リセットする仕組みを追加する。
+
+---
+
 ## [2026-03-28] Bug: Session 102 - PHASE_BLOCKEDが所持済みアイテムの装備を禁止する
 
 - **Cause**: diamond_swordをすでにインベントリに持っているにも関わらず、`bot.equip(diamond_sword, 'hand')`を呼び出すと "PHASE_BLOCKED: [Phase 1: Base establishment] prohibits diamond_sword — this belongs to a later phase" エラーが発生する。アイテムを持っているのに使用できない。
