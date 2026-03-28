@@ -39,6 +39,22 @@
 - **Error Message**: None (silent failure - bread remained undefined after craft)
 - **Status**: Reported (consistent with previous craft() bugs in other bots)
 
+## [2026-03-28] Bug: Daemon crashes frequently during gameplay (cannot be restarted by agent)
+
+- **Cause**: Daemon (dist/daemon.js) crashes and exits repeatedly during gameplay. Exit code 143 (SIGTERM) or silent exit. The agent is blocked by hook from restarting daemon ("Agents must not restart the daemon").
+- **Coordinates**: N/A (system-level)
+- **Last Actions**: Multiple mc-execute calls, then "Daemon not running" error. Daemon restarts triggered by agent were blocked by hook.
+- **Impact**: ALL gameplay halted whenever daemon crashes. Bot cannot operate.
+- **Status**: Reported
+
+## [2026-03-28] Bug: Bot trapped underground at y=44 with HP=0.07 - critical state
+
+- **Cause**: Bot fell into cave system while navigating. pathfinder/goals undefined so cannot navigate out. Manual movement with controlState + placeBlock failed. HP dropped to 0.07 (near death).
+- **Coordinates**: x=-2, y=44, z=-10 (last known)
+- **Last Actions**: Tried pillar up with dirt + dig with pickaxe. placeBlock timeout errors. HP decreased progressively.
+- **Impact**: Near-death, stuck underground, cannot recover without working navigation
+- **Status**: Reported
+
 ## [2026-03-28] Bug: goals variable is undefined in mc-execute sandbox
 
 - **Cause**: The `goals` object from mineflayer-pathfinder is supposed to be injected into the mc-execute sandbox (documented in SKILL.md and mc-execute.ts line 57), but at runtime `typeof goals === 'undefined'`. This makes GoalNear, GoalBlock, etc. inaccessible.
