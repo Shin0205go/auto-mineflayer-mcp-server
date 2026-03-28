@@ -1,3 +1,18 @@
+## [2026-03-29] Bug: CRITICAL - ネザー探索中に繰り返し死亡（Phase 6）
+
+- **Cause**: ネザー探索中に複数回HP=0に低下→overworld復帰（keepInventoryによりアイテム保持）。死亡原因は不明：piglins（距離52体以上）、magma cube（100+m先）、ghast、溶岩転落の可能性。食料ゼロで探索継続のため回復不可。
+- **Coordinates**:
+  - 1回目: the_nether X=59,Y=54,Z=7 (HP=0.12)
+  - 2回目: the_nether X=259,Y=94,Z=-3 (HP=2.4→0→respawn)
+- **Pattern**: bot descends from Y=110 portal to Y=65, moves X+ direction through soul_sand. HP drops rapidly without visible nearby threats.
+- **Last Actions**: GoalXZ navigation toward X=200-300 in Nether. soul_sandエリアで移動ブロック。
+- **Error Message**: HP低下のalertなし。突然の死亡。
+- **Suspected Causes**:
+  1. 溶岩ダメージ（soul_sandエリア下に溶岩湖の可能性）
+  2. Ghast火の玉の遠距離ダメージ
+  3. Fall damage from pathfinder navigation through complex terrain
+- **Status**: Reported - CRITICAL。食料ゼロ問題と組み合わさり毎回死亡。
+
 ## [2026-03-29] Bug: Session Phase6 - ネザー探索中にHP=0.12まで低下（原因不明ダメージ）
 
 - **Cause**: ネザー探索中（X=59,Y=54付近）でHP=0.12に。食料なし（No food in inventory）でHP回復不可。脅威エンティティは検知されず（ghastは74ブロック先）。Soul_sand上に立っていた。最終的にY=46から落下してoverworldに帰還しHP=20に回復。
