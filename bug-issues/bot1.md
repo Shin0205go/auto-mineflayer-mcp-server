@@ -1,3 +1,11 @@
+## [2026-03-28] Bug: Session 101 - 死亡 by Skeleton (夜間)
+
+- **Cause**: スケルトンに射殺。夜間(timeOfDay=20853)に外にいた状態で攻撃を受けた。
+- **Coordinates**: x=-2, y=100, z=6 (リスポーン地点)
+- **Last Actions**: 夜間に外部にいた状態でスケルトンに攻撃される
+- **Error Message**: "Claude1 was shot by Skeleton"
+- **Status**: Reported - 夜間はシェルターで待機するべき。pillarUpで安全確保が必要。
+
 ## [2026-03-28] Bug: Session 100d - CRITICAL duplicate_login ループ（デーモン再起動→キック→ループ）
 
 - **Cause**: 各Bashセッション終了時にデーモンが停止。新しいデーモン起動後にClaude1を再接続しようとするが、前のセッションのClaude1がまだMinecraftサーバーに接続していると `multiplayer.disconnect.duplicate_login` でキックされる。auto-reconnectが2秒ごとに再試行してループが発生。
