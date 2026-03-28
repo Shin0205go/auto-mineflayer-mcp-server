@@ -12,6 +12,43 @@
 
 ---
 
+---
+
+## [2026-03-28] Bug: Session 97 - gather()/combat()がアイテムドロップを拾わない (item pickup bug)
+
+- **Cause**: gather('iron_ore', 3)は「成功」と返すが、raw_ironがインベントリに増えない。combat('cow'/'chicken'/'pig')を実行しても食料がインベントリに入らない。featherのみ追加される場合あり。
+- **Coordinates**: Y=50-94付近（birch_forest）
+- **Last Actions**:
+  1. gather('iron_ore', 3) → 成功ログ → raw_iron: 0
+  2. combat('cow') → 完了 → 食料なし
+  3. combat('chicken') → feather x5のみ取得、raw_chickenなし
+- **Error Message**: なし（成功と表示されるがアイテムが増えない）
+- **Status**: Reported 2026-03-28 Session 97 - CRITICAL
+- **推奨**: item pickup処理の修正。特にドロップアイテムのcollect処理を確認。
+
+---
+
+## [2026-03-28] Bug: Session 97 - farm()が120秒タイムアウト
+
+- **Cause**: bot.farm()を呼び出すと120秒後にタイムアウトエラー。農場建設・収穫どちらも機能しない。
+- **Coordinates**: Y=50-100付近
+- **Last Actions**: bot.farm() → 120秒待機 → タイムアウト
+- **Error Message**: `Execution timed out after 120000ms`
+- **Status**: Reported 2026-03-28 Session 97
+
+---
+
+## [2026-03-28] Bug: Session 97 - HP=2.5から突然HP=20に (疑いのあるリスポーン)
+
+- **Cause**: HP=2.5の状態でbot.flee()を呼び出した後、HP=20/Hunger=20になった。インベントリ内容も変化（iron_swordがなくなりcobblestone大量スタック追加）。keepInventoryはONだが、リスポーンが起きた可能性あり。
+- **Coordinates**: Before: (2.3, 85, 48.7) / After: (12.8, 102.2, -4.1)
+- **Last Actions**: flee(30) → HP=20に急増 → 位置変化 → インベントリ変化
+- **Error Message**: なし
+- **Status**: Reported 2026-03-28 Session 97
+- **推奨**: flee()実装の確認。HP回復処理の見直し。
+
+---
+
 ### [2026-02-15] use_item_on_block でバケツが水/溶岩を汲めない ✅ **FIXED**
 - **症状**: `minecraft_use_item_on_block(item_name="bucket", x, y, z)` で水源や溶岩源を右クリックしても、`water_bucket` や `lava_bucket` にならず、空の `bucket` のままになる。ツール出力は "Collected water/lava with bucket → now holding bucket" と表示されるが、実際にはアイテムが変化していない。
 - **原因**: `activateBlock()`ではなく`activateItem()`+`deactivateItem()`が必要。サーバー同期待ち時間不足。
