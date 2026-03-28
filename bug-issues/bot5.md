@@ -14,6 +14,17 @@
 
 ---
 
+## [2026-03-28] Bug: Session 98 - mc-execute sandbox で bot.* API ラッパーが使用不可
+
+- **Cause**: 接続直後、mc-execute.cjs でコードを実行すると `bot.status()`, `bot.log()`, `bot.gather()` 等の bot.* API ラッパーが全て "not a function" エラーになる。`Object.keys(bot)` でチェックするとraw mineflayer botオブジェクトのみ存在し、カスタムAPIラッパーが初期化されていない。
+- **Coordinates**: (8.4, 103, 58.7)
+- **Last Actions**: mc-connect.cjs で接続成功 → mc-execute.cjs で bot.status() 呼び出し → TypeError: bot.status is not a function
+- **Error Message**: `TypeError: bot.status is not a function`, `TypeError: bot.log is not a function`, `TypeError: bot.getMessages is not a function`
+- **Status**: Reported 2026-03-28 Session 98 - CRITICAL
+- **推奨**: mc-execute.ts の bot API オブジェクト構築処理を確認。接続後のサンドボックス初期化フローを確認。
+
+---
+
 ## [2026-03-28] Bug: Session 97 - gather()/combat()がアイテムドロップを拾わない (item pickup bug)
 
 - **Cause**: gather('iron_ore', 3)は「成功」と返すが、raw_ironがインベントリに増えない。combat('cow'/'chicken'/'pig')を実行しても食料がインベントリに入らない。featherのみ追加される場合あり。
