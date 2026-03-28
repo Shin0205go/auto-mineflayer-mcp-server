@@ -242,3 +242,28 @@ describe("wait() HP abort logic (mc-execute.ts)", () => {
     }
   });
 });
+
+// ─── 9. HP regen warning in status() ──────────────────────────────────────────
+
+describe("HP regen warning in mc_status (core-tools.ts)", () => {
+  const src = readSrc("src/tools/core-tools.ts");
+
+  it("warns when HP < 10 and hunger < 18 that HP will NOT regenerate", () => {
+    // Bot3 Bug #57 [2026-03-28]: bot at HP=4.2, hunger=12, waited 10s expecting HP to recover.
+    // In Minecraft, natural HP regeneration requires hunger >= 18. At hunger 1-17, no regen.
+    expect(src).toContain("HP WILL NOT REGENERATE NATURALLY");
+    expect(src).toContain("hunger must be >= 18 for natural HP regen");
+  });
+
+  it("HP regen warning fires when HP < 10 AND food < 18 AND food > 0 (not starvation)", () => {
+    // The warning is for the mid-range case (hunger 1-17, HP low) — not starvation (food=0).
+    // Starvation (food=0) already has its own STARVATION warning.
+    const warnIdx = src.indexOf("HP WILL NOT REGENERATE NATURALLY");
+    expect(warnIdx).toBeGreaterThan(-1);
+    // Find the enclosing if condition
+    const before = src.substring(Math.max(0, warnIdx - 300), warnIdx);
+    expect(before).toContain("health < 10");
+    expect(before).toContain("food < 18");
+    expect(before).toContain("food > 0");
+  });
+});
