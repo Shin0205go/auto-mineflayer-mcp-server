@@ -4,15 +4,24 @@
 
 ---
 
-## [2026-03-28] Bug: 地下閉じ込め - 全移動API機能不全
+## [2026-03-28] Bug: 地下閉じ込め - 全移動API機能不全（CRITICAL）
 
-- **Cause**: gather('iron_ore'), navigate(iron_ore), flee(), pillarUp(), moveTo() が全てタイムアウト（30-90秒）。地下に閉じ込められて脱出不能。
-- **Coordinates**: X:3, Y:62, Z:27（地下）
+- **Cause**: gather('iron_ore'), navigate(iron_ore), flee(), pillarUp(), moveTo() が全てタイムアウト（30-90秒）。地下に閉じ込められて脱出不能。Claude1・3も同症状。システム全体の問題。
+- **Coordinates**: X:7, Y:71, Z:42（地下洞窟内）
+- **Start Coordinates**: Y=62付近から発生
 - **Last Actions**: gather('iron_ore')タイムアウト→navigate タイムアウト→flee タイムアウト→pillarUp(40)タイムアウト（Y=52→54に2ブロック移動のみ）→pillarUp(5)タイムアウト→moveTo(x,95,z)タイムアウト
 - **Error Message**: "Execution timed out after Xms" が全操作で発生
-- **Status**: Reported
-- **HP/Hunger**: HP:16, Hunger:1 危険状態
-- **Nearby Enemies**: zombie x2, skeleton x1, creeper x1
+- **Status**: Ongoing - Still trapped at Y=71
+- **HP/Hunger**: HP:10, Hunger:0 飢餓状態継続
+- **Nearby Enemies**: zombie, skeleton, creeper 複数
+- **Observations**:
+  - 短距離moveTo（3-5ブロック）は時々成功するが、タイムアウトも多い
+  - タイムアウト後はほぼ元の座標に戻る（移動がキャンセルされる）
+  - Y方向（上方向）への移動が特に困難
+  - moveTo(x, y+3, z)でy=62→66程度は移動できることもある
+  - gather(), pillarUp() はほぼ全てタイムアウト
+  - HP:10で維持（飢餓ダメージ上限）
+- **Theory**: pathfinderが地下の複雑な地形で正しい経路を計算できず、タイムアウトして中断。地表への直線経路が岩盤に遮られているため。pillarUpが正常に機能していない（2ブロックしか積まない）。
 
 ---
 
