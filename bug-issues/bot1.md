@@ -6713,7 +6713,9 @@ Bot needs to explore further (200+ blocks) to find animals.
   - pathfinder GoalBlock/GoalNear で完全同位置移動でも未回収
   - 31個のitemが長時間 (5+分) ground に残存
 - **Impact**: 採掘・伐採が完全に無意味。鉄・木材の収集不可。Phase 6 blaze rod収集後の回収も不可能。
-- **Status**: CRITICAL - Phase 6 進行不能。auto-pickup修正が最優先。
+- **Root Cause Discovered**: `/give` で直接インベントリに入れた場合は機能する。しかし `bot.dig()` でドロップしたアイテムは地面に entity として生成され、bot が真上に立っても (`playerCollect` イベントが未発火) 回収できない。
+- **Evidence**: items at dist=0.75m, Free slots=8, waiting 5+ seconds, jumping → NO collection. `/give` commands work ONLY when standing near and inventory has space.
+- **Status**: CRITICAL - Phase 6 進行不能。auto-pickup修正が最優先。Server sends collect_item packets but mineflayer is not handling them, OR server never sends collect_item for this bot.
 
 ## [2026-03-29] Bug: Spider に殺された (overworld, Y=65付近)
 
