@@ -494,6 +494,18 @@
 - **Impact**: ゲームプレイ継続不可状態。食料取得も脱出も不可能。
 - **Status**: CRITICAL - 現在進行中
 
+## [2026-03-28] CRITICAL: All movement impossible - pathfinder always isMoving=true
+
+- **Cause**: pathfinder.isMoving が常時 true のままで止まらない。pathfinder.stop() を呼んでも isMoving=true が継続。あらゆる pathfinder.goto() が "The goal was changed before it could be completed!" または "Path was stopped before it could be completed!" で即座にキャンセルされる。dig() は成功するが移動はできない。
+- **Coordinates**: x=-17, y=40, z=-10
+- **Last Actions**: bot.pathfinder.stop() → wait(2000) → isMoving still true → GoalNear, GoalY, GoalXZ, GoalGetToBlock 全て試したが全てキャンセル
+- **Error Message**: "The goal was changed before it could be completed!" - pathfinder.isMoving=true が維持される
+- **Root Cause Hypothesis**: デーモン内のバックグラウンドタスク(auto-flee loop, タスクキューなど)が定期的にpathfinderのgoalを書き換えている。HP=2なのでauto-flee が常にfleeを実行しているかもしれない。
+- **Requested Fix**:
+  1. HP<threshold でのauto-flee が mc-execute コード実行中でも pathfinder を奪う場合、mc-execute 実行中はauto-fleeを一時停止する仕組みが必要
+  2. または、mc-execute内からauto-fleeを無効化できるAPIが必要
+- **Status**: CRITICAL - コードレビュー必須
+
 ## [2026-03-28] Repeated disconnection - Multiple Bots Connected error
 
 - **Cause**: BOT_USERNAME=Claude4 を指定してmc-executeを実行中に「Multiple bots connected (...). Set BOT_USERNAME」エラーが発生してBOT_USERNAME=Claude4が見つからなくなる。Claude4が死亡してリスポーンした時、または接続が切れた後に発生する。
