@@ -1,3 +1,12 @@
+## [2026-03-28] Bug: Session 91 - 死亡 (HP:0.4でゾンビ戦闘、食料取得不可が根本原因)
+
+- **Cause**: combat()後に食料ドロップなし、farm()・gather()も機能しないため食料補充不可。Hunger:0, HP:0.4の状態でzombie combat→ダメージ→死亡。
+- **Coordinates**: (-5, 49, -3) - 地下
+- **Last Actions**: combat("zombie") → HP:0.4 → flee()タイムアウト → moveTo()地下へ落下 → 死亡
+- **Error Message**: keepInventoryONのためアイテム保持、stone_pickaxeが1個消失確認
+- **Root Cause**: combat/gather/farm APIが食料を返さないバグ（Session 90から継続）
+- **Status**: Reported 2026-03-28 Session 91 - 死亡確認
+
 ## [2026-03-28] Bug: Session 91 - combat後に食料ドロップしない問題継続
 
 - **Cause**: bot.combat("cow")、bot.combat("chicken")、bot.combat("pig") を実行しても食料がインベントリに入らない。Session 90と同様のドロップ問題継続。
