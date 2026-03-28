@@ -1,3 +1,11 @@
+## [2026-03-28] Bug: Session 100d - CRITICAL duplicate_login ループ（デーモン再起動→キック→ループ）
+
+- **Cause**: 各Bashセッション終了時にデーモンが停止。新しいデーモン起動後にClaude1を再接続しようとするが、前のセッションのClaude1がまだMinecraftサーバーに接続していると `multiplayer.disconnect.duplicate_login` でキックされる。auto-reconnectが2秒ごとに再試行してループが発生。
+- **Coordinates**: x=8, y=119, z=7
+- **Last Actions**: npm run daemon & → sleep → node scripts/mc-execute.cjs → daemon終了 → 次の接続でduplicate_loginループ開始
+- **Error Message**: "multiplayer.disconnect.duplicate_login" が連続で発生（7回以上）
+- **Status**: Reported CRITICAL - デーモン再起動時に前の接続を正しくクリーンアップする仕組みが必要。auto-reconnect間隔を延ばすか、duplicate_loginを検出して停止すべき。
+
 ## [2026-03-28] Bug: Session 100c - CRITICAL デーモン頻繁停止（ゲームプレイ不可能）
 
 - **Cause**: npm run daemon がバックグラウンドプロセスとして安定動作しない。各Bashセッションが終了するとデーモンも停止する。別のBashセッションからのコマンドがデーモンを見つけられない。
