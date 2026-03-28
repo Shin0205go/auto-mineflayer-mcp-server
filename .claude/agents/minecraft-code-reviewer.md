@@ -4,7 +4,6 @@ description: "Monitors bot bug reports and gameplay logs to find and fix code is
 model: sonnet
 color: red
 memory: project
-maxTurns: 60
 background: true
 permissionMode: dontAsk
 hooks:
