@@ -4,6 +4,17 @@
 
 ---
 
+## [2026-03-28] Bug: server_full - Claude2接続不能（Session 99）
+
+- **Cause**: セッション開始時にサーバーが満員（server_full）でClaude2が接続できない。3回試行、全て同じエラー。他のボットが接続を占有している可能性。
+- **Coordinates**: N/A (接続前)
+- **Last Actions**: mc-connect.cjs localhost 25565 Claude2 → 即座に "Kicked: multiplayer.disconnect.server_full"
+- **Error Message**: Error: Kicked: {"translate":"multiplayer.disconnect.server_full"}
+- **Status**: Reported - Session 99 (2026-03-28)
+- **Notes**: 同じバグがSession 97でも報告済み（bot2.md内）。サーバーのmax-players設定が低すぎるか、切断されなかったゾンビセッションが残っている可能性。
+
+---
+
 ## [2026-03-28] Bug: daemon再起動後にserver_full - Claude2接続不能
 
 - **Cause**: デーモン再起動後、他のボット（Claude1-7）が自動再接続してサーバーをserver_full状態にした。Claude2が接続できない。
