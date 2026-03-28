@@ -13,6 +13,22 @@
 - **追加バグ**: combat('chicken'), combat('cow'), combat('pig')がいずれも食料ドロップなし（インベントリ変化なし）
 - **Status**: Reported
 
+## [2026-03-28] Bug: craft('bread') fails silently - wheat consumed but no bread
+
+- **Cause**: bot.craft('bread') with 4 wheat in inventory returned without error but no bread appeared
+- **Coordinates**: x=-2, y=54, z=-4
+- **Last Actions**: Called bot.craft('bread') with wheat=4 in inventory
+- **Error Message**: None (silent failure - bread remained undefined after craft)
+- **Status**: Reported (consistent with previous craft() bugs in other bots)
+
+## [2026-03-28] Bug: Multiple deaths - zombie at Y=54, drowned at Y=54 (underground)
+
+- **Cause**: Bot ended up underground (Y=54) and was killed by zombie, then drowned
+- **Coordinates**: x=-2, y=54, z=-4
+- **Last Actions**: farm() call, then bot was at Y=54 underground with hostile mobs
+- **Note**: farm() may have moved bot underground into dangerous territory
+- **Status**: Reported
+
 ## 死亡 #1
 
 - **死因**: Zombified Piglin に殺された
