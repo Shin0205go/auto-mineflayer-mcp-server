@@ -473,6 +473,18 @@
 - **Root Cause**: 1) 食料0のまま地下に潜った。2) pathfinderがバックグラウンドで動き続けてgoalをキャンセルする。3) HP=2で食料なし+脱出不可の状態に陥った。
 - **Status**: Reported - pathfinder background cancellation bug需要修正
 
+## [2026-03-28] CRITICAL SESSION SUMMARY - Multiple compounding bugs preventing gameplay
+
+- **Situation**: Claude4 が複数のバグにより完全にゲームプレイ不能状態
+- **Active bugs**:
+  1. HP=2.1でY=40洞窟に閉じ込め（食料なし）
+  2. pathfinder.goto()が "goal was changed" で毎回キャンセル
+  3. mc-executeコード実行のたびにdaemonが "Multiple bots connected" エラーで切断
+  4. GoalY(80)でY=80への上昇も不可能
+  5. pillarUpコードが実行中に切断される
+- **Root Cause Hypothesis**: pathfinderのバックグラウンド処理がgoalをキャンセルし続けている。またdaemonが複数ボット接続時にClaude4を見つけられなくなることがある。
+- **Status**: CRITICAL - コードレビューアーによる根本的な修正が必要
+
 ## [2026-03-28] HP stuck at 2.1 - cannot heal without food, trapped underground
 
 - **Cause**: HP=2.1 で地下Y=40に固定。食料なし(hunger=14)でHP回復不可。Hunger=18以上が必要だが食料アイテムが全くない。地上への経路はpathfinderがgoalキャンセルで動けない。setControlStateでのpillarUpも実行中にMultiple Bots Connectedエラーで切断される。
