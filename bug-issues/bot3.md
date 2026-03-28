@@ -1215,3 +1215,19 @@ Session 89 Timeline:
   2. Hunger=0 で一部アクション制限
   3. HP=0.4 でも飢餓ダメージが止まっている（MinecraftのHard以外では HP=0.5以下で飢餓ダメージ停止）
 - **Status**: HP=0.4で生存中。飢餓ダメージ停止（仕様）。combat食料入手バグ継続。記録のみ（コード修正禁止）
+
+## バグ #53 — flee()タイムアウト + pillarUp()位置変化なし (2026-03-28 現セッション)
+
+- **状況**: HP=2, Hunger=4, 食料ゼロ。周囲に zombie×2, skeleton×3, creeper×1
+- **座標**: (-3.5, 58, 11.5) — birch_forest
+- **発生経緯**:
+  1. 接続時 HP:2, Hunger:4 — 緊急状態
+  2. `bot.flee(30)` → 120秒タイムアウト（完了せず）
+  3. `bot.pillarUp(10)` → 50秒後に返却されるが位置変化なし (y=58→58)
+  4. 時刻: ticks=23713, phase=dawn — 夜明け直前
+- **インベントリ**: stone_axe, stone_sword, stone_hoe, wheat_seeds x11, wheat x1, cobblestone x65, dirt x52等。食料ゼロ。
+- **根本原因**:
+  1. flee()が120秒で完了しない（タイムアウトバグ継続）
+  2. pillarUp()が呼び出し後50秒経過しても位置変化なし（実行されていない可能性）
+  3. 食料ゼロなのにeat()できない
+- **Status**: 記録のみ。コード修正はcode-reviewerエージェントが担当。
