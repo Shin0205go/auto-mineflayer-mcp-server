@@ -1,3 +1,12 @@
+## [2026-03-25] Bug: Session 92 - 死亡: starvation (Hunger=0, HP=1.8, food完全入手不可)
+
+- **Cause**: bread craft bug + no animal drops = food完全入手不可。Hunger=0まで下がり死亡。
+- **Coordinates**: (200, 85, 100) 付近
+- **Last Actions**: craft("bread")→wheat消費→bread=0、combat(cow/pig/chicken)→全て"Not found"、wide area search→no animals found anywhere
+- **Error Message**: "Claude1 fell from a high place" (死亡メッセージ)
+- **Root Cause**: 2つのバグが複合: (1) craft("bread")がwheatを消費するがbreadを返さない、(2) world内にanimalsが見つからない/combatでドロップを返さない
+- **Status**: Reported 2026-03-25 Session 92
+
 ## [2026-03-28] Bug: Session 91 - gather()全ブロックタイムアウト継続（CRITICAL）
 
 - **Cause**: gather()が全てのブロックタイプでタイムアウト：
