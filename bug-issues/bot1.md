@@ -1,3 +1,12 @@
+## [2026-03-25] Bug: Session 92c - 死亡: "Claude1 was slain by Spider" inside shelter
+
+- **Cause**: build("shelter")で作ったシェルターがスパイダーに破られた/壁に隙間があった
+- **Coordinates**: (45.7, 97, 40.3) 付近
+- **Last Actions**: bot.wait(30000) 待機中 → spider attack → death
+- **Error Message**: "Claude1 was slain by Spider"
+- **Root Cause**: bot.build("shelter")の構造物がスパイダーを完全にブロックしない（天井なし、または壁に隙間）
+- **Status**: Reported 2026-03-25 Session 92c
+
 ## [2026-03-25] Bug: Session 92 CRITICAL - craft() 全アイテムでアイテム返さない
 
 - **Cause**: bot.craft() が素材を消費するがクラフト結果をインベントリに返さない。全アイテムで再現。
