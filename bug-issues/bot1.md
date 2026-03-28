@@ -1,3 +1,12 @@
+## [2026-03-25] Bug: Session 92d - gather()timeout→地下侵入→mob包囲→HP=3.3脱出不可
+
+- **Cause**: gather("birch_log", 16)が120秒タイムアウト。その間にpathfinderが地下洞窟に誘導。タイムアウト後Y=61に移動、zombie+skeleton+endermanに囲まれた。HP=3.3で脱出不可。
+- **Coordinates**: (-15.9, 59, 17.5)
+- **Last Actions**: gather("birch_log", 16) → timeout at 120s → found at Y=61 underground → flee()失敗 → moveTo(surface)がY=59に止まる → pillarUp(5)がY=60に止まる
+- **Error Message**: gather timeout 120000ms → "Claude1 was slain by [Mob]" (expected)
+- **Root Cause**: gather()のpathfinderが地下通路を選択する。地下でtimeoutすると脱出API全て失敗。
+- **Status**: Reported 2026-03-25 Session 92d
+
 ## [2026-03-25] Bug: Session 92c - 死亡: "Claude1 was slain by Spider" inside shelter
 
 - **Cause**: build("shelter")で作ったシェルターがスパイダーに破られた/壁に隙間があった
