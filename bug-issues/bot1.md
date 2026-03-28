@@ -1,3 +1,18 @@
+## [2026-03-25] Bug: Session 70 SUMMARY - gather() broken for ALL blocks + combat drops broken + frequent disconnects
+
+- **Critical Bug List**:
+  1. **gather() returns 0 for ALL blocks**: iron_ore (timeout 115s), cobblestone (timeout 115s), deepslate_iron_ore (0). Bot navigates to block but fails to mine/collect it. gather("iron_ore",5) times out at 120s returning 0 raw_iron.
+  2. **combat() drops 0 items**: cow, pig, sheep, chicken, zombie, skeleton, drowned - ALL return 0 food/drops. ESM cache fix (627a514) did NOT resolve this.
+  3. **Bot disconnects between mc_execute calls**: After mc_connect succeeds, 2nd mc_execute fails at 1ms with "Not connected". Workaround: do everything in ONE mc_execute call.
+  4. **build("shelter") fails**: "Bot Claude1 not found" error when build() called.
+  5. **Deaths x6+**: Multiple deaths from mob swarms near spawn (Y=73-109 mountain).
+
+- **What DID work**: craft(), smelt(), inventory(), wait(), flee(), navigate(), bot.chat(), mc_chat
+- **Phase 3 COMPLETED**: Crafted stone_pickaxe x2 and stone_sword via manual crafting chain
+- **Phase 4 BLOCKED**: gather(iron_ore) completely broken - can't get raw_iron
+- **Remaining inventory**: iron_sword x1 (gained from unknown mechanism), stone_pickaxe x4, coal x3, charcoal x2
+- **Status**: Reported - code reviewer please fix gather() block mining
+
 ## [2026-03-25] Bug: Session 65 death #5 - "Claude1 was slain by Zombie" during combat(chicken) - morning
 
 - **Cause**: combat("chicken", 10) called at HP=4.9. Timed out after 30s. After reconnect, HP=4.9→20 suggests death occurred. Server: "Claude1 was slain by Zombie". Zombie attacked while trying to combat chicken.
