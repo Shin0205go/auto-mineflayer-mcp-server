@@ -1,3 +1,12 @@
+## [2026-03-25] Bug: Session 92b - 死亡: "Claude1 was slain by Zombie" during gather("birch_log")
+
+- **Cause**: gather()がtimeout中にzombieに攻撃された。gather()はHP/hunger安全チェックを行わない。
+- **Coordinates**: (4.3, 82, -1) 付近
+- **Last Actions**: gather("birch_log", 4) timeout → zombie attack → death
+- **Error Message**: "Claude1 was slain by Zombie" + "Execution timed out after 60000ms"
+- **Root Cause**: gather() API がタイムアウト中に敵対mobs check/flee を行わない。安全チェックがない。
+- **Status**: Reported 2026-03-25 Session 92b
+
 ## [2026-03-25] Bug: Session 92 - 死亡: starvation (Hunger=0, HP=1.8, food完全入手不可)
 
 - **Cause**: bread craft bug + no animal drops = food完全入手不可。Hunger=0まで下がり死亡。
