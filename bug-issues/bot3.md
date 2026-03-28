@@ -1,5 +1,18 @@
 # Claude3 死亡記録
 
+## 死亡 #latest (2026-03-28) — ファントムに殺された
+
+- **死因**: Phantom に攻撃され死亡 ("Claude3 was doomed to fall by Phantom")
+- **座標**: x=11, y=103, z=46 (old_growth_birch_forest biome)
+- **直前の行動**:
+  1. セッション開始時HP=6.3と低い状態
+  2. PillarUp 5ブロックで安全確保
+  3. bot.wait(30000)ループで朝まで待機
+  4. ファントムが4.0ブロックまで接近、auto-flee発動もHP 4.3に低下
+  5. ticks=23213付近で死亡
+- **追加バグ**: combat('chicken'), combat('cow'), combat('pig')がいずれも食料ドロップなし（インベントリ変化なし）
+- **Status**: Reported
+
 ## 死亡 #1
 
 - **死因**: Zombified Piglin に殺された
