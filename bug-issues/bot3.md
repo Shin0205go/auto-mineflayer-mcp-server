@@ -1195,3 +1195,23 @@ Session 89 Timeline:
   3. 食料なし + hp=1で死亡不可避
 - **keepInventory**: 有効（インベントリ保持確認: stone_pickaxe, stone_axe, stone_sword, stone_hoe, cobblestone x45等）
 - **Status**: リスポーン成功。HP 20/20, Hunger 20/20。Phase 1/3 継続中。
+
+## 問題 #52 — HP=0.4/Hunger=0/食料ゼロ・完全デッドロック (2026-03-28 現セッション)
+
+- **状況**: 接続時 HP=9.4/Hunger=0、食料ゼロ。飢餓ダメージでHP=0.4まで低下。combat後も食料が入手できない。
+- **座標**: (-1.5, 74, -7.5) → 地下 (-5, 49, -3) → (地上付近) birch_forest
+- **時系列**:
+  1. 接続時: HP=9.4, Hunger=0、食料ゼロ
+  2. bot.flee(30) → 逃走成功（敵から離れた）
+  3. bot.combat("pig/chicken/sheep/cow") → 全て撃破成功報告だが hunger変化なし、食料入手できず
+  4. bot.farm() → wheat 1個のみ（パン作成不可、3個必要）
+  5. birch_leaves採掘 → リンゴ出ず（birchではリンゴドロップしない）
+  6. oak_leaves navigate成功 → gather後リンゴ0個
+  7. HP: 9.4→8.4→7.4→0.4まで低下（飢餓ダメージ）
+  8. Y=49の地下にいる。石ツール保有、wheat_seeds x11
+- **インベントリ**: stone_axe, stone_pickaxe, stone_sword, stone_hoe, coal x1, wheat x1, wheat_seeds x11, cobblestone x77+, dirt x52, diorite x12, gravel x4, stick x3
+- **根本原因**:
+  1. bot.combat後に食料アイテムがインベントリに入らない（バグ #40 継続）
+  2. Hunger=0 で一部アクション制限
+  3. HP=0.4 でも飢餓ダメージが止まっている（MinecraftのHard以外では HP=0.5以下で飢餓ダメージ停止）
+- **Status**: HP=0.4で生存中。飢餓ダメージ停止（仕様）。combat食料入手バグ継続。記録のみ（コード修正禁止）
