@@ -1,3 +1,35 @@
+## [2026-03-29] Bug: Session Phase6 - ネザー探索中にHP=0.12まで低下（原因不明ダメージ）
+
+- **Cause**: ネザー探索中（X=59,Y=54付近）でHP=0.12に。食料なし（No food in inventory）でHP回復不可。脅威エンティティは検知されず（ghastは74ブロック先）。Soul_sand上に立っていた。最終的にY=46から落下してoverworldに帰還しHP=20に回復。
+- **Coordinates**: the_nether, X=59, Y=54, Z=7
+- **Last Actions**: GoalXZ移動でX=200付近まで探索、タイムアウト繰り返し。食料ゼロでネザー探索継続。
+- **Error Message**: HP=0.12000083923339844（half-heart以下）。突然低下した原因不明。
+- **Status**: Reported. 要調査: なぜHPが急激に低下したか、食料なしネザー探索のリスク
+
+## [2026-03-29] Bug: Session - 飢餓死 + HP低下死 (Phase5期間)
+
+- **Cause**: 地下洞窟水没エリアで食料ゼロ・HP低下により死亡 × 複数回。
+  1. 地下水域 (y=37) でHP=8→水中採掘減速。食料なし(Food=10)でHP回復不可 → 死亡 (HP=8 → 0)
+  2. 地下探索中にHP=3.37, Food=0でほぼ確実死亡 (Phase5完了直後)
+- **Coordinates**: 1回目: (-3, 37, 11) → リスポーン (54, 63, 7); 2回目: (32, 59, 57)
+- **Root Cause**:
+  1. 食料ゼロ時に地下採掘作業を継続した
+  2. 地下水没エリアでの採掘はobsidian 1ブロック75秒 (5x減速)
+  3. placeBlock() blockUpdateタイムアウトでpillarUp不可
+  4. pathfinder zombie goal interference による移動妨害
+- **Status**: Reported (deaths confirmed, keepInventory preserved items)
+
+---
+
+## [2026-03-28] Bug: Session 2 - HP=2 in underground Y=16, natural regen blocked
+
+- **Cause**: GoalY(16) navigation to Y=16 resulted in HP dropping to 2 instantly. No mobs visible nearby. Likely fall damage or mob attack during pathfinder navigation through caves.
+- **Coordinates**: (-16, 16, 8)
+- **Last Actions**: GoalY(16) navigation completed successfully, checked HP → 2
+- **Error Message**: None (HP just showed 2 when checked)
+- **Status**: Reported. Bot survived by eating bread and returning to surface.
+- **Additional**: HP natural regen stopped at 7.8 even with Food=17 for 30+ seconds, suggesting a regen bug.
+
 ## [2026-03-28] Bug: Session 107 - 死亡: 飢餓死 (Hunger=0, HP=4→0)
 
 - **Cause**: 地下水没地形にスタックし飢餓ダメージで死亡。食料確保API失敗 + pathfinder地形スタックの複合問題。
@@ -6602,3 +6634,40 @@ Bot needs to explore further (200+ blocks) to find animals.
 - **Root Cause**: 地下洞窟でpathfinderが地上への経路を見つけられない。place()で足場を作っても反映されない可能性。
 - **Impact**: 地下閉じ込め状態。HP=3.5, Hunger=0で脱出不可能。
 - **Status**: Reported. moveTo()のY軸経路探索修正必要。地下洞窟での脱出ルーチン必要。
+
+## Session - 2026-03-28 Underground Death
+- **死因**: 不明（おそらく地下Y=35付近で窒息または溶岩）
+- **状況**: pathfinder canDig=true で GoalNear(x, 16, z, 3) を実行中
+- **座標**: Y=35付近 (approx -3, 35, 10)
+- **直前の行動**: pathfinder.setGoal で Y=16に降りようとして地下に潜った
+- **問題**: canDig=true でpathfinderがブロックを掘りながら急降下すると窒息リスク
+- **対策案**: 階段状に安全に降りる、またはbranchMiningにはcanDig=falseで手動採掘すべき
+
+## Session - 2026-03-28 Multiple Deaths (Drowning + Fall)
+- **死因1**: 溺死 (Claude1 drowned)
+- **死因2**: 高所からの落下 (Claude1 fell from a high place)
+- **状況**: 地下Y=35付近での鉄採掘中
+- **問題**: 
+  1. pathfinder canDig=true で地下洞窟内を移動中に水源に落ちた
+  2. または zombie pathfinder goalが地上Y=108から急降下させて溺死/落下
+  3. mc_execute timeout後にzombie gotoが残り不制御なナビゲーション
+- **根本原因**: mc_execute timeout時にpathfinder.setGoal(null)が呼ばれない → zombie goto → 制御不能な移動 → 死亡
+- **対策**: mc_execute timeoutハンドラでpathfinder.setGoal(null)を呼ぶ（修正エージェント起動済み）
+
+## [2026-03-29] Bug: Zombie Pathfinder - mc_execute timeout zombies cause repeated drowning deaths
+
+- **Cause**: When mc_execute times out (Promise.race), the internal async function keeps running as a "zombie". The zombie calls bot.pathfinder.goto() in its loop, overriding the next execution's setGoal() via goal_updated event. This causes:
+  1. New goto() calls to immediately fail with "GoalChanged"
+  2. Navigation 3-40 blocks taking 60-180 seconds instead of seconds
+  3. Zombie navigating bot into water → drowning deaths
+- **Coordinates**: Various (Y=17 cave, Y=65 area, Y=113 mountain)
+- **Deaths**: Claude1 drowned ×3 during this session from zombie navigation
+- **Root Cause**: Promise.race() does NOT cancel the underlying AsyncFunction. setGoal(null) in catch block only stops current goto() but zombie loops and calls goto() again.
+- **Fix Applied**: Added `aborted` flag to mc-execute.ts. When timeout fires, `aborted=true`. The `wait()` function checks this flag and throws "Execution aborted" to terminate zombie loops.
+- **Status**: Partial fix deployed. Zombies now stop on next wait() call. But zombies in long pathfinder.goto() still run until goto() resolves/rejects.
+
+## [2026-03-29] Bug: Stone pickaxe durability not tracked - mining without tool causes 0 drops
+
+- **Cause**: Stone pickaxe durability depleted during mining loop, but bot continued mining iron_ore with bare hands. Mining iron_ore without pickaxe yields 0 raw_iron in Minecraft (wrong tool = no drops). Mining loop logged "success" but got 0 raw_iron.
+- **Impact**: ~30 iron ore blocks mined with 0 yield, wasting 300+ seconds.
+- **Fix Needed**: Check pickaxe durability before each dig. If durability < 5, stop and craft new pickaxe.
