@@ -1,3 +1,18 @@
+## [2026-03-28] Bug: Session 96 CRITICAL - moveTo/gather/combat全機能不全 → 食料確保不能 → 飢餓死亡確実
+
+- **Cause**: moveTo()が実行してもbotの位置が変わらない（タイムアウトするか目標地点と異なる場所に着く）。combat()が敵を倒してもアイテムドロップなし。gather()が瞬時に完了するが素材が増えない。これら3つの主要APIが全て機能不全のため食料確保が不可能。
+- **Coordinates**: (-21, 60, 22) → Y=60付近でスタック
+- **Last Actions**:
+  1. moveTo(-6, 61, 2) → 68秒かかるも現在地変わらず、チェスト依然25ブロック先
+  2. combat('cow')×3回 → 牛発見するも食料ドロップなし
+  3. gather('oak_leaves', 5)×5回 → 0.2秒で完了するがappleなし
+  4. bot.farm()×2回 → 71秒かかるがwheat増えず
+  5. HP=3.3, Hunger=1（飢餓ダメージ開始）
+- **Error Message**: moveTo timeout 60000ms, combat returns no drops, gather returns immediately with no items
+- **Impact**: 完全行動不能。飢餓死亡不可避。
+- **Root Cause Hypothesis**: pathfinderがY=60の特定地点でスタック。アイテム拾い上げ機能が壊れている（以前から報告あり）。
+- **Status**: Reported 2026-03-28 Session 96 - CRITICAL
+
 ## [2026-03-25] Bug: Session 75b - craft() consumes ingredients but produced items never appear in inventory
 
 - **Cause**: bot.craft("birch_planks") consumed 1 birch_log (birch_log count dropped from 2 to 1) but 0 birch_planks appeared in inventory. Error message: "Item not in inventory after crafting and no dropped items found nearby." The crafting table placement and crafting MAY be working server-side, but the resulting item either drops to the ground (item pickup broken) or is not being registered in inventory. Affects: birch_planks, crafting_table, furnace, bread.
