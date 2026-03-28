@@ -1279,6 +1279,22 @@ Session 89 Timeline:
 - **影響**: crafting_tableをクラフトできない → furnaceをクラフトできない → bread作れない → 食料ゼロのまま
 - **Status**: 記録のみ。コード修正はcode-reviewerエージェントが担当。
 
+## [2026-03-28] バグ #57 — combat()後に食料ドロップが入手できない + HP自然回復しない
+
+- **Cause**: bot.combat('chicken'/'pig'/'cow')を実行しても食料アイテムが一切インベントリに入らない。またhunger=12-14の状態でHP=4.2が全く回復しない（10秒待機後も変化なし）
+- **Coordinates**: (-10, 88, 30) — birch_forest、Y=88（高所）
+- **Last Actions**:
+  1. 接続時HP=4.2、hunger=14
+  2. bot.flee(30) → 効果なし（HP変わらず）
+  3. bot.combat('chicken') → 実行成功報告するがfoodアイテムゼロ
+  4. bot.navigate('cow') + bot.combat('cow') → 食料ゼロ
+  5. bot.pillarUp(5) → 高所に退避
+  6. bot.wait(10000/15000) → HP 4.2のまま変化なし（hunger=12-13でも回復なし）
+- **Error Message**: なし（silentに失敗）
+- **NearbyEntities**: enderman×1, bat×1, chicken×1
+- **Inventory**: diorite×6, stone_axe×1, flint×1, coal×1, stick×3, birch_sapling×1, cobblestone×36, crafting_table×2, stone_sword×1, stone_hoe×1, gravel×1, wheat_seeds×10, dirt×51, egg×3, wheat×1（食料ゼロ）
+- **Status**: Reported
+
 ## バグ #54 — moveTo()完全無効（位置変化ゼロ） (2026-03-28 現セッション)
 
 - **状況**: HP=10.3, Hunger=12, 昼間。食料ゼロ。
