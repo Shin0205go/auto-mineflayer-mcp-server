@@ -425,3 +425,22 @@
 - **Impact**: ゲームプレイ完全停止。他のボットスロットが埋まっているか、サーバーのmax-playersに達している。
 - **Status**: Reported - サーバー管理者の対応が必要（他ボット切断 or max-players増加）
 
+## [2026-03-28] bot.* High-level APIs Mostly Unavailable in mc-execute Sandbox
+
+- **Cause**: mc-executeのサンドボックス内でbot.status(), bot.gather(), bot.navigate(), bot.flee(), bot.pillarUp(), bot.eat(), bot.combat(), bot.equipArmor(), bot.place(), bot.build(), bot.farm(), bot.store(), bot.drop() などの高レベルAPIが全てundefinedになっている。bot.craft()のみ利用可能。
+- **Coordinates**: (5, 79, 5)
+- **Last Actions**: node scripts/mc-execute.cjs でbot.*関数をtypeof確認
+- **Error Message**: bot.status: undefined, bot.gather: undefined, bot.navigate: undefined (etc)
+- **Impact**: ほぼすべての高レベルゲームプレイAPIが使えない。低レベルのmineflayer APIのみで作業が必要。
+- **Root Cause**: src/tools/mc-execute.ts のサンドボックス構築時に高レベルAPIが正しく注入されていない可能性
+- **Status**: Reported - コードレビューアーによる調査が必要
+
+## [2026-03-28] goals オブジェクトがmc-executeスコープに未注入
+
+- **Cause**: bot-api/SKILL.mdには`goals`がスコープに注入されていると記載があるが、実際には`typeof goals === 'undefined'`になっている。GoalNear等のpathfinderゴールが使えない。
+- **Coordinates**: (5, 79, 5)
+- **Last Actions**: mc-executeでgoalsを参照しようとした
+- **Error Message**: "Cannot read properties of undefined (reading 'GoalNear')"
+- **Impact**: pathfinderによる移動が使えない。ゲームプレイ全体に深刻な影響。
+- **Status**: Reported
+
