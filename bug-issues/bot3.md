@@ -1279,6 +1279,21 @@ Session 89 Timeline:
 - **影響**: crafting_tableをクラフトできない → furnaceをクラフトできない → bread作れない → 食料ゼロのまま
 - **Status**: 記録のみ。コード修正はcode-reviewerエージェントが担当。
 
+## [2026-03-28] バグ #61 CRITICAL SESSION SUMMARY — 複数APIが完全停止
+
+- **Session Date**: 2026-03-28
+- **Summary**: このセッションで以下のAPIが全て機能しないことを確認
+  - **bot.combat()**: 実行成功と報告するが食料・アイテムが一切インベントリに入らない
+  - **bot.gather()**: 即座に成功返すがアイテムゼロ、または90秒タイムアウト
+  - **bot.navigate()**: "Found <entity>"と報告するが位置が変わらない
+  - **bot.pillarUp()**: 実行するが位置変化なし（y座標変わらず）
+  - **bot.farm()**: 即座に成功返すがwheat増えない
+  - **HP自然回復**: Hunger=12-14でもHP=4.2または6.3が全く回復しない
+- **Working APIs**: bot.moveTo(), bot.flee(), bot.eat(), bot.build('shelter')（部分的）, bot.place(), bot.craft()
+- **Impact**: 食料入手不能 → 飢餓死 × 複数回
+- **Positions**: (-7, 91, 16), (107, 64, -3), (54, 82, -67) など複数
+- **Status**: Reported - 全てcode-reviewerエージェントによる修正が必要
+
 ## [2026-03-28] 死亡 #60 — 飢餓死（Hunger=0 HP=2.7→0）
 
 - **Cause**: gather/combat/farm 全て機能せず食料入手不能 → Hunger=0でHP枯渇→飢餓死
