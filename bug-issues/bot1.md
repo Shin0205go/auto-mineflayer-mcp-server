@@ -1,3 +1,12 @@
+## [2026-03-25] Bug: Session 75b - craft() consumes ingredients but produced items never appear in inventory
+
+- **Cause**: bot.craft("birch_planks") consumed 1 birch_log (birch_log count dropped from 2 to 1) but 0 birch_planks appeared in inventory. Error message: "Item not in inventory after crafting and no dropped items found nearby." The crafting table placement and crafting MAY be working server-side, but the resulting item either drops to the ground (item pickup broken) or is not being registered in inventory. Affects: birch_planks, crafting_table, furnace, bread.
+- **Coordinates**: (-15, 60, 15)
+- **Last Actions**: craft("birch_planks", 8) → log consumed → no planks in inventory → same error repeated 3x
+- **Error Message**: "Item not in inventory after crafting and no dropped items found nearby. This indicates a server configuration issue or the crafting operation did not complete successfully."
+- **Pattern**: Same root cause as combat() drops bug - items are being produced but the bot's item collection mechanism is not picking them up. Either auto-pickup is broken or items are appearing in wrong location.
+- **Status**: Reported
+
 ## [2026-03-25] Bug: Session 75 - Bot trapped in cave (Y=44-70), ALL movement APIs fail to reach surface
 
 - **Cause**: Bot spawned/fell into a large cave system near world spawn (0, 44, 0) in birch_forest biome. Once inside, ALL movement APIs (moveTo, flee, pillarUp, navigate, gather) oscillate within the cave and cannot find a path to the surface.
