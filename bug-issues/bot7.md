@@ -579,6 +579,14 @@
 - **Error Message**: なし（HPが突然20になることで死亡を検知）
 - **Status**: Reported - 死亡バグ（2回目）
 
+## 2026-03-28 Session: 4回目の死亡推定 - デーモンクラッシュ中に死亡
+
+- **Cause**: デーモンがクラッシュ(Exit code 143)した後に再接続すると、HP20/Hunger16/位置がリスポーン地点に変わっていた。デーモンクラッシュ中に飢餓またはmobによるダメージで死亡した可能性が高い。
+- **Coordinates**: 死亡前: x=-7, y=91, z=51, HP18, Hunger11。再接続後: x=15, y=106, z=55 HP20 Hunger16
+- **Last Actions**: lookAt + setControlState forward + wait(8000) → daemon crash (exit 143) → reconnect → HP/position changed
+- **Root Cause**: デーモンクラッシュ中はエージェントが操作不可。その間にbotが無防備で死亡。
+- **Status**: Reported - 4回目の死亡 - 2026-03-28
+
 ## 2026-03-28 Session: 3回目の死亡 - flee中にHP2.5まで下がり死亡
 
 - **Cause**: HP11 Hunger12でゾンビと戦闘。腐肉ドロップなし（mob drop bug継続）。逃走中にさらに攻撃を受けHP2.5→死亡。
