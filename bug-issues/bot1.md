@@ -1,3 +1,17 @@
+## [2026-03-28] Bug: Session 91 - gather()全ブロックタイムアウト継続（CRITICAL）
+
+- **Cause**: gather()が全てのブロックタイプでタイムアウト：
+  1. gather("grass", 20) → 120秒タイムアウト
+  2. gather("birch_log", 4) → 60秒タイムアウト
+  3. gather("birch_log", 1) → 30秒タイムアウト
+  4. craft("crafting_table", 1, true) autoGather → 90秒タイムアウト
+  5. craft("stone_pickaxe", 1, true) autoGather → 即完了するが石ピッケルなし
+  6. pillarUp(5) → 60秒タイムアウト / pillarUp(8) → 51秒で完了するがY変わらず
+- **Coordinates**: (-3, 61, 8) - birch_forest
+- **Impact**: 木材収集不可→crafting_table作成不可→石ピッケル補充不可。ゲーム進行完全ブロック。
+- **Root Cause**: Session 65から継続する gather()タイムアウトバグ。navigate()は機能するが、gather()が実際にブロックを収集しない。
+- **Status**: Reported 2026-03-28 Session 91 - CRITICAL、修正が必要
+
 ## [2026-03-25] Bug: Session 92 - bread craft: wheat消費するがbreadがインベントリに入らない
 
 - **Cause**: bot.craft("bread", 1) が wheat 5→2に減少させるが bread=0のまま。"Item not found in inventory after crafting" エラー。crafting_table at (46,91,-17)の近く(1ブロック以内)で実行。
