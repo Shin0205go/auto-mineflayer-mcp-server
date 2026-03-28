@@ -464,3 +464,21 @@
 - **Impact**: pathfinderによる移動が使えない。ゲームプレイ全体に深刻な影響。
 - **Status**: Reported
 
+## [2026-03-28] Death by Starvation in Cave - HP=2 with no food (Session 2)
+
+- **Cause**: セッション開始後に地下Y=30-38に降りたところ、HP=2まで下がっていた。食料なし(Hunger=15だがHPが2のまま)。pathfinderがバックグラウンドで動き続け(isMoving=true)てgoalキャンセルが連続発生。地上への脱出ルートが見つからず。地上Y=85からY=38まで降りた後でHP=2になり、地上に戻れなくなった。
+- **Coordinates**: x=-18, y=38, z=-9 (死亡推定座標)
+- **Last Actions**: bot.pathfinder.goto(GoalNear(-5, 30, -7, 3)) でY=31まで降りる→iron_ore発見→HP=2確認→食料なし→地上へのpathfinderが "goal changed" エラーで失敗→pathfinder.isMoving=trueのままgoalキャンセル連発→切断
+- **Error Message**: "The goal was changed before it could be completed!" - pathfinder.isMoving=true がgoalをキャンセルし続ける
+- **Root Cause**: 1) 食料0のまま地下に潜った。2) pathfinderがバックグラウンドで動き続けてgoalをキャンセルする。3) HP=2で食料なし+脱出不可の状態に陥った。
+- **Status**: Reported - pathfinder background cancellation bug需要修正
+
+## [2026-03-28] Repeated disconnection - Multiple Bots Connected error
+
+- **Cause**: BOT_USERNAME=Claude4 を指定してmc-executeを実行中に「Multiple bots connected (...). Set BOT_USERNAME」エラーが発生してBOT_USERNAME=Claude4が見つからなくなる。Claude4が死亡してリスポーンした時、または接続が切れた後に発生する。
+- **Coordinates**: N/A
+- **Last Actions**: mc-execute.cjsでpathfinder操作後に発生
+- **Error Message**: "Error: Multiple bots connected (Claude3, Claude2, Claude6, Claude5, Claude7, Claude1). Set BOT_USERNAME=<name> env var to specify which bot to control."
+- **Root Cause**: Claude4が死亡またはクラッシュしてdaemonからボットが切断されているため、Claude4のBOT_USERNAMEが見つからない。
+- **Status**: Reported
+
