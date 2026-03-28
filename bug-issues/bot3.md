@@ -1279,6 +1279,21 @@ Session 89 Timeline:
 - **影響**: crafting_tableをクラフトできない → furnaceをクラフトできない → bread作れない → 食料ゼロのまま
 - **Status**: 記録のみ。コード修正はcode-reviewerエージェントが担当。
 
+## [2026-03-28] バグ #59 CRITICAL — combat/gather/farm 全て機能せず食料入手不能
+
+- **Cause**: bot.combat(), bot.gather(), bot.farm() が全て即座に成功を返すが、アイテムが一切インベントリに入らない
+- **Coordinates**: (39, 97, -66) — birch_forest area
+- **Last Actions**:
+  1. bot.combat('chicken'/'cow'/'pig'/'sheep') → 実行後も食料ゼロ
+  2. bot.gather('birch_log', 8) → 90秒タイムアウト、または即座にゼロ
+  3. bot.gather('oak_log', 5) → 即座に完了報告、ログゼロ
+  4. bot.farm() → 即座に完了報告、wheat変化なし
+  5. bot.navigate('cow') → "Found cow"と報告するが位置が変わらず、combat後も食料ゼロ
+- **Error Message**: エラーなし（silentに失敗）
+- **Status**: HP=9.2, Hunger=0, food=0。完全デッドロック
+- **Impact**: 飢餓でHP継続低下。死亡不可避
+- **Status**: Reported - CRITICAL
+
 ## [2026-03-28] 死亡 #58 — 高所落下（y=110から落下）
 
 - **Cause**: navigate/combat実行中にy=110の高所から落下して死亡
