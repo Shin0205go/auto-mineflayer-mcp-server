@@ -241,6 +241,18 @@ export async function mc_status(): Promise<string> {
   if (foodItems.length === 0 && food < 10) {
     warnings.push("NO FOOD in inventory. Hunger will deplete. Hunt animals (mc_combat cow/pig) or harvest crops before it's critical.");
   }
+  // HP-no-regen warning: In Minecraft, HP only regenerates naturally when hunger >= 18.
+  // At hunger 1-17, HP neither regens nor drains — waiting does nothing.
+  // Bot3 Bug #57 [2026-03-28]: bot at HP=4.2, hunger=12, waited 10s expecting HP to recover.
+  // Result: no regen, continued to take mob damage, died. Agent needs to know: eat to heal.
+  if (health < 10 && food < 18 && food > 0) {
+    const foodItem = foodItems.length > 0 ? foodItems[0] : null;
+    if (foodItem) {
+      warnings.push(`LOW HP (${Math.round(health*10)/10}/20) + Hunger=${food}<18: HP WILL NOT REGENERATE NATURALLY. Eat immediately to raise hunger above 18 for HP recovery. Use bot.eat("${foodItem}") NOW.`);
+    } else {
+      warnings.push(`LOW HP (${Math.round(health*10)/10}/20) + Hunger=${food}<18 + NO FOOD: HP cannot regenerate. Get food immediately (bot.combat("cow"/"pig"/"chicken")) — hunger must be >= 18 for natural HP regen.`);
+    }
+  }
   // Underground warning: many deaths from being trapped underground where mobs are dense.
   // Bot1 Sessions 31-44: 15+ deaths from pathfinder routing underground into cave systems.
   // Bot2/Bot3: repeated deaths from being underground with no escape path.
