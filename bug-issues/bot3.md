@@ -39,6 +39,24 @@
 - **Error Message**: None (silent failure - bread remained undefined after craft)
 - **Status**: Reported (consistent with previous craft() bugs in other bots)
 
+## [2026-03-28] Bug: goals variable is undefined in mc-execute sandbox
+
+- **Cause**: The `goals` object from mineflayer-pathfinder is supposed to be injected into the mc-execute sandbox (documented in SKILL.md and mc-execute.ts line 57), but at runtime `typeof goals === 'undefined'`. This makes GoalNear, GoalBlock, etc. inaccessible.
+- **Coordinates**: Any position
+- **Last Actions**: `log('goals type: ' + typeof goals)` inside mc-execute → returns 'undefined'
+- **Error Message**: `Cannot read properties of undefined (reading 'GoalNear')`
+- **Impact**: All pathfinder.goto() calls fail. Bot cannot navigate to specific coordinates.
+- **Status**: Reported
+
+## [2026-03-28] Bug: Most bot.* high-level APIs missing (session 2026-03-28 second run)
+
+- **Cause**: bot.navigate, bot.moveTo, bot.flee, bot.gather, bot.eat, bot.farm, bot.status are all undefined. Only bot.craft is available. This is inconsistent - craft works but others don't.
+- **Coordinates**: x=2, y=102, z=14
+- **Last Actions**: Checked `typeof bot.navigate/moveTo/flee/gather/eat/farm/status` - all undefined
+- **Error Message**: None (undefined, not error)
+- **Impact**: Major gameplay limitation - cannot move, gather resources, or eat
+- **Status**: Reported
+
 ## [2026-03-28] Bug: Multiple deaths - zombie at Y=54, drowned at Y=54 (underground)
 
 - **Cause**: Bot ended up underground (Y=54) and was killed by zombie, then drowned
