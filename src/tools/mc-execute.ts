@@ -83,6 +83,51 @@ export async function mc_execute(
         )
       ]);
     },
+    // Multi-stage pathfind: break long distances into waypoints
+    // Usage: await multiStagePathfind(targetX, targetZ, 10)
+    multiStagePathfind: async (targetX: number, targetZ: number, stageDistance: number = 10) => {
+      const startPos = rawBot.entity.position;
+      const dx = targetX - startPos.x;
+      const dz = targetZ - startPos.z;
+      const totalDist = Math.sqrt(dx*dx + dz*dz);
+
+      if (totalDist <= stageDistance) {
+        // Close enough, just go directly
+        const gotoPromise = (rawBot.pathfinder.goto as any)(new goals.GoalXZ(targetX, targetZ));
+        return Promise.race([
+          gotoPromise,
+          new Promise<void>((_resolve, reject) =>
+            setTimeout(() => reject(new Error(`Pathfinder timeout after 20000ms`)), 20000)
+          )
+        ]);
+      }
+
+      // Calculate waypoints
+      const numStages = Math.ceil(totalDist / stageDistance);
+      logFn(`Multi-stage pathfind: ${totalDist.toFixed(1)} blocks in ${numStages} stages`);
+
+      // Navigate each stage
+      for (let i = 1; i <= numStages; i++) {
+        const frac = i / numStages;
+        const wpX = startPos.x + dx * frac;
+        const wpZ = startPos.z + dz * frac;
+
+        logFn(`Stage ${i}/${numStages}: (${Math.floor(wpX)}, ${Math.floor(wpZ)})`);
+
+        const gotoPromise = (rawBot.pathfinder.goto as any)(new goals.GoalXZ(wpX, wpZ));
+        try {
+          await Promise.race([
+            gotoPromise,
+            new Promise<void>((_resolve, reject) =>
+              setTimeout(() => reject(new Error(`Pathfinder timeout after 20000ms`)), 20000)
+            )
+          ]);
+        } catch (e) {
+          logFn(`Stage ${i} failed: ${String(e).substring(0, 60)}`);
+          throw e;
+        }
+      }
+    },
     // Standard JS
     console: {
       log: (...args: unknown[]) => { if (logs.length < MAX_LOG_LINES) logs.push(args.map(String).join(" ")); },

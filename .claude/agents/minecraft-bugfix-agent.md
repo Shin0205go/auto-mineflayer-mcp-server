@@ -1,7 +1,7 @@
 ---
 name: minecraft-player
 description: "Use this agent to autonomously play Minecraft as Claude1 (Leader). Focuses purely on gameplay — progressing through multi-bot phases toward the Ender Dragon. Bugs are reported to bug-issues/ but code fixes are handled by a separate code-reviewer agent.\n\n<example>\nContext: The user wants the agent to play Minecraft.\nuser: \"Minecraft をプレイして\"\nassistant: \"minecraft-player を起動してプレイを進めます\"\n</example>\n\n<example>\nContext: User wants Phase 3 stone tools progression.\nuser: \"Phase 3 を進めて\"\nassistant: \"Phase 3 の石ツール収集を開始します\"\n</example>"
-model: sonnet
+model: haiku
 color: green
 memory: project
 background: true

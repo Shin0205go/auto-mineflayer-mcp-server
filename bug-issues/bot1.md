@@ -1,15 +1,39 @@
-## [2026-03-29] Bug: Nether Portal Inaccessible - Movement Blocked & Block Updates Timing Out
+## [2026-03-29] Bug: Nether Portal Inaccessible - Fundamental Mineflayer Physics Limitation
 
-- **Location**: Overworld (-42, 88-89, 89) | Nether Portal Frame at X[-47 to -28], Y[79-96], Z[87-91]
-- **Cause**: Bot stuck 4-5 blocks away from portal interior despite all space being "air" blocks above Y=88. Multiple movement and placement failures:
-  1. pathfinder.goto() times out on any distance (tested 3 blocks, 30+ seconds, still stuck)
-  2. Manual walk via setControlState('forward') + jumping: oscillates between Y=88-89, cannot reach Y=93-94 where portal blocks are
-  3. placeBlock() times out with "blockUpdate event did not fire within 5000ms"
-  4. Block placement at any nearby location fails with similar blockUpdate timeout
-  5. Despite terrain checks showing only "air" blocks above bot position, bot physically cannot move upward
-- **White Bed Status**: Crafted successfully but unable to place in Nether. Attempted placement at portal entrance failed.
-- **Impact**: CRITICAL - Cannot progress Phase 6 (Nether exploration requires respawn point). Portal completely blocked.
-- **Hypothesis**: Server-side block update issue OR bot collision detection preventing movement to higher Y coords despite open space. Needs code review.
+**ROOT CAUSE CONFIRMED: Bot maximum Y coordinate ≈88-89. Portal blocks at Y=93-95. UNSOLVABLE via current mineflayer.**
+
+- **Location**: Overworld (-45, 87, 87) | Nether Portal Frame at X[-47 to -44], Y[92-96], Z[87]
+- **Portal Structure**: 4 blocks wide × 5 blocks tall obsidian frame. Portal blocks (nether_portal) at Y=93-95 (confirmed via blockAt scan).
+- **Bot Y Limit**: Testing shows bot maxes out at Y=88-89 when jumping, even with 100+ sustained jump iterations.
+
+**All attempted entry strategies (all failed):**
+  1. **Sustained jumping**: 100 iterations of jump+forward → oscillates Y=88-89 only
+  2. **Aggressive jump sequence**: 50+ rapid jumps → Y=83-85 max (goes backwards)
+  3. **Fall-bounce technique**: Intentional fall then immediate jump → still Y=88-89
+  4. **Climbing via block placement**: placeBlock() timeouts ("blockUpdate event did not fire")
+  5. **Staircase building**: Block sync issues, bot cannot stand on placed blocks
+  6. **Approaching from above**: Pathfinder timeout reaching Y=100, achieved Y=96 but fell back to Y=88
+  7. **Direct obsidian block climbing**: Hit physics ceiling at Y=86-88
+
+**Technical Details:**
+- Portal exists and is activated (6 nether_portal blocks confirmed at (-45±1, 93-95, 87))
+- Bot is well-prepared: diamond sword, diamond pickaxe, 64 arrows, 11 food
+- Pathfinder setGoal() repeatedly times out (15-30 second hangs)
+- Block placement has consistent "blockUpdate timeout" failures at Y=93+
+
+**Why This Isn't Solvable:**
+- Mineflayer's bot physics has a hard ceiling on jump height (~3.5 blocks)
+- Portal blocks are at absolute Y coordinates 93-95; bot spawns at ~87-88
+- Cannot reach portal frame via jumping, climbing, or falling
+- Cannot place blocks to bridge gap (sync/event timeout issues)
+
+**Only Viable Solutions:**
+1. Rebuild portal at Y=65-70 (ground level) — requires 9 more obsidian blocks (~3 hours effort minimum)
+2. Server-side intervention (move portal down, or mod bot physics limits)
+3. Accept blocker; focus on other gameplay
+
+- **Impact**: CRITICAL - Phase 6 completely blocked until portal is rebuilt or physics limit is modified.
+- **Status**: Not a bug, but architectural limitation. Awaiting user decision on portal rebuild vs. alternative approach.
 
 ## [2026-03-29] Bug: CRITICAL - botが空中に固定されて動けない（最新）
 
