@@ -493,39 +493,8 @@ export class BotCore extends EventEmitter {
 
         // Dimension change (portal teleport) - update pathfinder safety settings
         let lastDimension = bot.game.dimension;
-        let lastSpawnPos = bot.entity.position.clone();
-        let spawnCheckCount = 0;
         bot.on("spawn", () => {
           const newDimension = bot.game.dimension;
-          const currentPos = bot.entity.position;
-
-          // ANTI-STUCK: Detect if bot is frozen in air (no gravity)
-          // Bug [2026-03-29]: Y=96 air freeze after portal teleport near (-3,98,5).
-          // Symptoms: Y unchanged after 3+ spawn ticks, pathfinder.goto() all fail with "goal changed",
-          // setControlState has no effect. Likely physics engine bugged by server position rollback.
-          // Recovery: initiate reconnect if bot frozen >3 ticks.
-          const yUnchangedFromLast = Math.abs(currentPos.y - lastSpawnPos.y) < 0.01;
-          const heightAboveGround = 96; // Arbitrary high Y that should not occur naturally
-          const botSuspiciouslyHigh = currentPos.y > 85; // Above tree tops
-          const botSuspiciouslyfloating = yUnchangedFromLast && botSuspiciouslyHigh && currentPos.y === bot.entity.position.y;
-
-          if (botSuspiciouslyfloating) {
-            spawnCheckCount++;
-            console.error(`[BotManager] WARNING: Bot Y unchanged for ${spawnCheckCount} spawn ticks at Y=${currentPos.y.toFixed(1)} (suspicious freeze). Pos: (${currentPos.x.toFixed(1)},${currentPos.y.toFixed(1)},${currentPos.z.toFixed(1)})`);
-            if (spawnCheckCount >= 3) {
-              console.error(`[BotManager] CRITICAL: Bot appears stuck in air (Y=${currentPos.y.toFixed(1)}, no gravity). Initiating emergency teleport down 20 blocks.`);
-              // Attempt forced descent via command or reconnect
-              try {
-                bot.chat(`/tp ${bot.username} ${currentPos.x.toFixed(1)} ${Math.max(0, currentPos.y - 20).toFixed(1)} ${currentPos.z.toFixed(1)}`);
-              } catch (e) {
-                console.error(`[BotManager] Teleport command failed: ${e}`);
-              }
-              spawnCheckCount = 0; // Reset counter after attempt
-            }
-          } else {
-            spawnCheckCount = 0; // Reset if bot moves normally
-          }
-          lastSpawnPos = currentPos.clone();
 
           if (newDimension !== lastDimension) {
             lastDimension = newDimension;
