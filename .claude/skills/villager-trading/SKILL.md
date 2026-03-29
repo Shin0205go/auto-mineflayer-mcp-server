@@ -3,9 +3,8 @@ name: villager-trading
 description: 村人交易。エメラルド・特殊アイテム入手（mc_execute用）
 ---
 ## 村人を見つける
-```js
-await bot.navigate("villager"); // entity検索
-```
+
+navigateでvillagerを探索する。
 
 ## 職業ブロック（村人の職業を決定）
 - 司書 → lectern（本棚関連）

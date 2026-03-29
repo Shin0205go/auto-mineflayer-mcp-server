@@ -26,6 +26,17 @@
 
 ---
 
+## [2026-03-28] Bug: stoneブロック内スタック - 完全移動不能 (Session 102) - CRITICAL
+
+- **Cause**: ボットがstoneブロックの内部にスタックし、完全に移動不能。上下左右前後すべてのy+0面がstone。bot.dig()でも1ブロックずつしか掘れず、石の中に閉じ込められたまま。
+- **Coordinates**: x=-3.4, y=71, z=-35.5
+- **Last Actions**: pathfinder.gotoが動かない状態でcontrolState 'forward'で手動移動中。何らかのタイミングでstoneの中に埋まった。
+- **Error Message**: なし（サイレント失敗）
+- **Status**: Reported - Session 102 (2026-03-28)
+- **Notes**: pathfinderが機能しない根本バグが引き起こす連鎖問題。再接続で解決する可能性あり。
+
+---
+
 ## [2026-03-28] Bug: 溺死 + ゾンビ死亡 (Session 101) - CRITICAL DEATHS
 
 - **Cause**:

@@ -345,12 +345,17 @@ export class BotCore extends EventEmitter {
         // Guard: validate goal objects before they reach pathfinder internals.
         // Agents sometimes pass plain {x,y,z} objects which lack isValid()/hasChanged()/isEnd()
         // causing uncaught TypeError("stateGoal.isValid is not a function") every physics tick.
+        // Bug [2026-03-29]: silent rejection of invalid goals caused "goal was changed" race condition.
+        // When goal is invalid, we still need to call origSetGoal(null) to properly clear any existing goal.
+        // This prevents the pathfinder from staying in a stale state waiting for the old goal to complete.
         {
           const origSetGoal = bot.pathfinder.setGoal.bind(bot.pathfinder);
           (bot.pathfinder as any).setGoal = (goal: any, dynamic?: boolean) => {
             if (goal !== null && goal !== undefined &&
                 (typeof goal.isValid !== "function" || typeof goal.isEnd !== "function")) {
               console.error(`[Pathfinder] INVALID goal rejected (missing isValid/isEnd): ${JSON.stringify(goal)}`);
+              // Still clear the pathfinder's internal goal state by passing null
+              origSetGoal(null, dynamic);
               return;
             }
             origSetGoal(goal, dynamic);
@@ -488,8 +493,40 @@ export class BotCore extends EventEmitter {
 
         // Dimension change (portal teleport) - update pathfinder safety settings
         let lastDimension = bot.game.dimension;
+        let lastSpawnPos = bot.entity.position.clone();
+        let spawnCheckCount = 0;
         bot.on("spawn", () => {
           const newDimension = bot.game.dimension;
+          const currentPos = bot.entity.position;
+
+          // ANTI-STUCK: Detect if bot is frozen in air (no gravity)
+          // Bug [2026-03-29]: Y=96 air freeze after portal teleport near (-3,98,5).
+          // Symptoms: Y unchanged after 3+ spawn ticks, pathfinder.goto() all fail with "goal changed",
+          // setControlState has no effect. Likely physics engine bugged by server position rollback.
+          // Recovery: initiate reconnect if bot frozen >3 ticks.
+          const yUnchangedFromLast = Math.abs(currentPos.y - lastSpawnPos.y) < 0.01;
+          const heightAboveGround = 96; // Arbitrary high Y that should not occur naturally
+          const botSuspiciouslyHigh = currentPos.y > 85; // Above tree tops
+          const botSuspiciouslyfloating = yUnchangedFromLast && botSuspiciouslyHigh && currentPos.y === bot.entity.position.y;
+
+          if (botSuspiciouslyfloating) {
+            spawnCheckCount++;
+            console.error(`[BotManager] WARNING: Bot Y unchanged for ${spawnCheckCount} spawn ticks at Y=${currentPos.y.toFixed(1)} (suspicious freeze). Pos: (${currentPos.x.toFixed(1)},${currentPos.y.toFixed(1)},${currentPos.z.toFixed(1)})`);
+            if (spawnCheckCount >= 3) {
+              console.error(`[BotManager] CRITICAL: Bot appears stuck in air (Y=${currentPos.y.toFixed(1)}, no gravity). Initiating emergency teleport down 20 blocks.`);
+              // Attempt forced descent via command or reconnect
+              try {
+                bot.chat(`/tp ${bot.username} ${currentPos.x.toFixed(1)} ${Math.max(0, currentPos.y - 20).toFixed(1)} ${currentPos.z.toFixed(1)}`);
+              } catch (e) {
+                console.error(`[BotManager] Teleport command failed: ${e}`);
+              }
+              spawnCheckCount = 0; // Reset counter after attempt
+            }
+          } else {
+            spawnCheckCount = 0; // Reset if bot moves normally
+          }
+          lastSpawnPos = currentPos.clone();
+
           if (newDimension !== lastDimension) {
             lastDimension = newDimension;
             console.error(`[BotManager] Dimension changed to ${newDimension}, updating pathfinder safety settings...`);
@@ -859,7 +896,16 @@ export class BotCore extends EventEmitter {
               if (bot.pathfinder.movements) {
                 bot.pathfinder.movements.canDig = false;
                 bot.pathfinder.movements.maxDropDown = 2;
-                (bot.pathfinder.movements as any).liquidCost = 10000;
+                (bot.pathfinder.movements as any).liquidCost = 100000; // Very high to discourage water/lava
+                // Add water and lava to blocksToAvoid to prevent routing through them
+                const waterBlock = bot.registry.blocksByName["water"];
+                const flowingWater = bot.registry.blocksByName["flowing_water"];
+                const lavaBlock = bot.registry.blocksByName["lava"];
+                const flowingLava = bot.registry.blocksByName["flowing_lava"];
+                if (waterBlock) bot.pathfinder.movements.blocksToAvoid.add(waterBlock.id);
+                if (flowingWater) bot.pathfinder.movements.blocksToAvoid.add(flowingWater.id);
+                if (lavaBlock) bot.pathfinder.movements.blocksToAvoid.add(lavaBlock.id);
+                if (flowingLava) bot.pathfinder.movements.blocksToAvoid.add(flowingLava.id);
               }
               creeperGoalHandle = safeSetGoal(bot,
                 new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3),

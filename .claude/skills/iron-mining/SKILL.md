@@ -7,21 +7,8 @@ description: 鉄鉱石採掘→精錬→鉄インゴット（mc_execute用）
 - かまど + 燃料(coal/oak_log)
 
 ## 手順
-```js
-const s = await bot.status();
-bot.log(`ツール: ${JSON.stringify(s.inventory)}`);
 
-// 鉄鉱石採掘（Y=16付近が最多）
-await bot.gather("iron_ore", 16);
-
-// 精錬
-await bot.smelt("raw_iron", 16);
-
-// 鉄ツール作成
-await bot.craft("iron_pickaxe");
-await bot.craft("iron_sword");
-bot.log("鉄装備完成");
-```
+インベントリのツールを確認する。iron_oreを16個採掘する（Y=16付近が最多）。raw_ironを16個精錬する。iron_pickaxeとiron_swordをクラフトする。
 
 ## 必要数の目安
 - 鉄ピッケル: 3個、鉄の剣: 2個、バケツ: 3個 → 最低8個

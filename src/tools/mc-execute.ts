@@ -53,8 +53,19 @@ export async function mc_execute(
   // do not override the pathfinder goal while agent code is in control.
   managed.mcExecuteActive = true;
 
+  // aborted flag — set true on timeout so wait() rejects, terminating zombie async functions
+  let aborted = false;
+
   const logFn = (message: unknown) => { if (logs.length < MAX_LOG_LINES) logs.push(String(message)); };
-  const waitFn = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, Math.min(ms, MAX_WAIT_MS)));
+  const waitFn = (ms: number) => new Promise<void>((resolve, reject) => {
+    if (aborted) { reject(new Error("Execution aborted")); return; }
+    const timer = setTimeout(() => {
+      if (aborted) reject(new Error("Execution aborted"));
+      else resolve();
+    }, Math.min(ms, MAX_WAIT_MS));
+    // Store timer so it can be cleared (optional, not strictly needed)
+    void timer;
+  });
   const getMessagesFn = () => botManager.getChatMessages(botUsername, true);
 
   const ctx: Record<string, unknown> = {
@@ -88,13 +99,16 @@ export async function mc_execute(
 
   try {
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Execution timed out after ${effectiveTimeout}ms`)), effectiveTimeout)
+      setTimeout(() => { aborted = true; reject(new Error(`Execution timed out after ${effectiveTimeout}ms`)); }, effectiveTimeout)
     );
     const result = await Promise.race([fn(...values), timeoutPromise]);
     const elapsed = Date.now() - startTime;
 
     // Clear execute flag — background handlers may resume normal operation
     managed.mcExecuteActive = false;
+
+    // Cancel any ongoing pathfinder navigation to prevent zombie goto() from previous execution
+    try { rawBot.pathfinder.setGoal(null); } catch {}
 
     const parts: string[] = [];
     if (result !== undefined && result !== null) {
@@ -111,6 +125,9 @@ export async function mc_execute(
 
     // Clear execute flag even on error
     managed.mcExecuteActive = false;
+
+    // Cancel any ongoing pathfinder navigation (especially on timeout — stops zombie goto())
+    try { rawBot.pathfinder.setGoal(null); } catch {}
 
     const parts = [`Error: ${errorMessage}`];
     if (logs.length > 0) parts.push(`Logs before error:\n${logs.join("\n")}`);

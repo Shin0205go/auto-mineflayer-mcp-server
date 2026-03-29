@@ -9,11 +9,8 @@ description: エンダードラゴン討伐。準備・戦略・手順（mc_exec
 - 食料64+、water_bucket x2、carved_pumpkin（エンダーマン対策）
 
 ## エンド要塞の場所
-```js
-await bot.craft("ender_eye", 3);
-// ender_eyeを投げる → 飛ぶ方向が要塞の方向
-// 要塞の石レンガブロック下にポータルがある
-```
+
+ender_eyeを3個クラフトして投げる → 飛ぶ方向が要塞の方向。要塞の石レンガブロック下にポータルがある。
 
 ## ポータル起動
 - ポータル枠に ender_eye を12個はめ込む → ポータルが開く → 飛び込む
@@ -23,9 +20,8 @@ await bot.craft("ender_eye", 3);
 2. 高いタワーは黒曜石の足場を作って登り破壊
 3. Crystalを全破壊（12個）→ ドラゴンを攻撃
 4. ドラゴンがホバリング中に弓で攻撃（弱点: 頭）
-```js
-await bot.combat("ender_dragon");
-```
+
+ender_dragonとのcombatを実行する。
 
 ## 注意
 - エンダーマンを見るな（carved_pumpkin 装備で回避）

@@ -147,7 +147,8 @@
       "Bash(do echo \"=== $f ===\")",
       "Read(//Users/shingo/Develop/auto-mineflayer-mcp-server/**)",
       "Bash(git config --global user.name \"Claude2\" && git config --global user.email \"claude2@auto-mineflayer.local\")",
-      "mcp__mineflayer__mc_place_block"
+      "mcp__mineflayer__mc_place_block",
+      "Bash(BOT_USERNAME=Claude2 node scripts/mc-execute.cjs \":*)"
     ]
   },
   "enableAllProjectMcpServers": true,

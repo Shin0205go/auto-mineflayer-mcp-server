@@ -3,40 +3,21 @@ name: crafting-chain
 description: bot.craftで依存関係自動解決。autoGather=trueで素材自動収集（mc_execute用）
 ---
 ## 基本
-```js
-await bot.craft("wooden_pickaxe", 1, true); // autoGather=true
-```
+
+autoGather=trueを指定することで素材が不足していても自動収集してクラフトする。
 
 ## Stone Upgrade (Phase 3)
-```js
-await bot.gather("cobblestone", 20);
-await bot.craft("stone_pickaxe");
-await bot.craft("stone_axe");
-await bot.craft("stone_sword");
-bot.log("石ツール完成");
-```
+
+cobblestone を20個採掘してから、stone_pickaxe・stone_axe・stone_swordをクラフトする。
 
 ## Iron Upgrade (Phase 4)
-```js
-await bot.gather("iron_ore", 12);
-await bot.craft("furnace"); // なければ作成
-await bot.smelt("raw_iron", 12);
-await bot.craft("iron_pickaxe");
-await bot.craft("iron_sword");
-bot.log("鉄装備完成");
-```
+
+iron_oreを12個採掘し、furnaceを作成してraw_ironを12個精錬する。iron_pickaxeとiron_swordをクラフトする。
 
 ## Diamond Upgrade (Phase 5)
-```js
-await bot.gather("diamond_ore", 5); // Y=-59
-await bot.craft("diamond_pickaxe");
-await bot.craft("diamond_sword");
-bot.log("ダイヤ装備完成");
-```
+
+Y=-59付近でdiamond_oreを5個採掘し、diamond_pickaxeとdiamond_swordをクラフトする。
 
 ## 失敗時
-```js
-// missing items エラー → 素材収集して再実行
-const result = await bot.craft("iron_pickaxe");
-bot.log(result); // エラーなら足りない素材が表示される
-```
+
+missing items エラーが出たら素材を収集してから再実行する。クラフト結果を確認すると足りない素材が表示される。

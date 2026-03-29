@@ -1642,6 +1642,22 @@ export async function fight(
           console.error(`[Fight] MULTI-MOB ESCALATION: ${otherHostilesClose.length} other hostile(s) closing in (${threatList}) during ${targetName} combat. Fleeing to avoid multi-mob burst damage.`);
           bot.pathfinder.setGoal(null);
           try { bot.setControlState("sprint", false); } catch { /* ignore */ }
+          // PRE-FLEE: Apply liquid avoidance BEFORE flee() to prevent lava/water routing
+          // Bug [2026-03-29]: Blaze combat escape routed into lava at (290,77,-97) Nether.
+          // flee() sets liquidCost=100000 internally but it may not be applied before pathfinder
+          // starts computing the initial path. Adding to blocksToAvoid makes fluids truly impassable.
+          try {
+            if (bot.pathfinder.movements) {
+              const waterBlock = bot.registry.blocksByName["water"];
+              const flowingWater = bot.registry.blocksByName["flowing_water"];
+              const lavaBlock = bot.registry.blocksByName["lava"];
+              const flowingLava = bot.registry.blocksByName["flowing_lava"];
+              if (waterBlock) bot.pathfinder.movements.blocksToAvoid.add(waterBlock.id);
+              if (flowingWater) bot.pathfinder.movements.blocksToAvoid.add(flowingWater.id);
+              if (lavaBlock) bot.pathfinder.movements.blocksToAvoid.add(lavaBlock.id);
+              if (flowingLava) bot.pathfinder.movements.blocksToAvoid.add(flowingLava.id);
+            }
+          } catch (_) { /* ignore */ }
           await flee(managed, 20);
           return `[MULTI-MOB ABORT] Fled from ${otherHostilesClose.length} other hostile(s) (${threatList}) during ${targetName} combat. Attacked ${attackCount} times. Fight one mob at a time — lure target away first.` + getBriefStatus(bot);
         }

@@ -3,19 +3,12 @@ name: nether-fortress
 description: ネザー要塞探索。ブレイズロッド・ネザーウォート入手（mc_execute用）
 ---
 ## 見つけ方
-```js
-// X軸方向に移動（要塞はX軸沿いに生成）
-const s = await bot.status();
-await bot.moveTo(s.position.x + 100, 60, s.position.z);
-// ネザーレンガの構造物を目印に繰り返す
-```
+
+X軸方向に+100ずつ移動を繰り返す（要塞はX軸沿いに生成）。ネザーレンガの構造物を目印にする。
 
 ## ブレイズ攻略
-```js
-await bot.combat("blaze"); // flee_at_hp=8がデフォルト
-// 盾で火の玉を防いでから近接攻撃
-// 目標: ブレイズロッド10本以上
-```
+
+blazeとcombatする（flee_at_hp=8がデフォルト）。盾で火の玉を防いでから近接攻撃。目標: ブレイズロッド10本以上。
 
 ## ウィザースケルトン（頭蓋骨）
 - ドロップ率2.5%（低い）

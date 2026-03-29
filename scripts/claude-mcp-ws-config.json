@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "mineflayer-ws": {
-      "command": "node",
-      "args": ["/Users/shingo/Develop/auto-mineflayer-mcp-server/scripts/mcp-ws-client.mjs"]
-    }
-  }
-}
