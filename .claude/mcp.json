@@ -1,3 +1,11 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "mineflayer-local": {
+      "command": "node",
+      "args": ["src/daemon.ts"],
+      "env": {
+        "BOT_SERVER": "localhost:25565"
+      }
+    }
+  }
 }
