@@ -876,14 +876,22 @@ export class BotCore extends EventEmitter {
                 if (lavaBlock) bot.pathfinder.movements.blocksToAvoid.add(lavaBlock.id);
                 if (flowingLava) bot.pathfinder.movements.blocksToAvoid.add(flowingLava.id);
               }
-              creeperGoalHandle = safeSetGoal(bot,
-                new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3),
-                {
-                  onAbort: (yDescent) => {
-                    console.error(`[CreeperFlee] CAVE DESCENT ABORT: Y dropped ${yDescent.toFixed(1)} blocks. Stopping.`);
+              // FIX: Do NOT override an existing pathfinder goal (prevents "goal was changed" race)
+              // Check if a goal is already active. If so, use sprint-only escape instead.
+              const hasActiveGoal = !!(bot.pathfinder.goal);
+              if (hasActiveGoal) {
+                console.error(`[CreeperFlee] Active pathfinder goal detected, using sprint-only escape (skipping safeSetGoal)`);
+                // Continue with setControlState sprint/forward already set above
+              } else {
+                creeperGoalHandle = safeSetGoal(bot,
+                  new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3),
+                  {
+                    onAbort: (yDescent) => {
+                      console.error(`[CreeperFlee] CAVE DESCENT ABORT: Y dropped ${yDescent.toFixed(1)} blocks. Stopping.`);
+                    }
                   }
-                }
-              );
+                );
+              }
             } catch (_) { /* ignore */ }
             setTimeout(() => {
               if (creeperGoalHandle) creeperGoalHandle.cleanup();

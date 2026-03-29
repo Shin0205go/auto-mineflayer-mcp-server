@@ -49,10 +49,6 @@ export async function mc_execute(
   if (!managed) throw new Error("Bot not connected");
   const rawBot = managed.bot;
 
-  // Signal that mc_execute is running so background handlers (e.g. creeperFlee in physicsTick)
-  // do not override the pathfinder goal while agent code is in control.
-  managed.mcExecuteActive = true;
-
   // aborted flag — set true on timeout so wait() rejects, terminating zombie async functions
   let aborted = false;
 
@@ -98,33 +94,34 @@ export async function mc_execute(
   console.error(`[mc_execute] Executing code (${code.length} chars, timeout: ${effectiveTimeout}ms)`);
 
   try {
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => { aborted = true; reject(new Error(`Execution timed out after ${effectiveTimeout}ms`)); }, effectiveTimeout)
-    );
-    const result = await Promise.race([fn(...values), timeoutPromise]);
-    const elapsed = Date.now() - startTime;
+    // Set execute flag ONLY during actual code execution to prevent race conditions
+    managed.mcExecuteActive = true;
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => { aborted = true; reject(new Error(`Execution timed out after ${effectiveTimeout}ms`)); }, effectiveTimeout)
+      );
+      const result = await Promise.race([fn(...values), timeoutPromise]);
+      const elapsed = Date.now() - startTime;
 
-    // Clear execute flag — background handlers may resume normal operation
-    managed.mcExecuteActive = false;
+      // Cancel any ongoing pathfinder navigation to prevent zombie goto() from previous execution
+      try { rawBot.pathfinder.setGoal(null); } catch {}
 
-    // Cancel any ongoing pathfinder navigation to prevent zombie goto() from previous execution
-    try { rawBot.pathfinder.setGoal(null); } catch {}
-
-    const parts: string[] = [];
-    if (result !== undefined && result !== null) {
-      try { parts.push(`Result:\n${typeof result === "string" ? result : JSON.stringify(result, null, 2)}`); }
-      catch { parts.push(`Result: ${String(result)}`); }
+      const parts: string[] = [];
+      if (result !== undefined && result !== null) {
+        try { parts.push(`Result:\n${typeof result === "string" ? result : JSON.stringify(result, null, 2)}`); }
+        catch { parts.push(`Result: ${String(result)}`); }
+      }
+      if (logs.length > 0) parts.push(`Logs:\n${logs.join("\n")}`);
+      parts.push(`Executed in ${elapsed}ms`);
+      return parts.join("\n\n");
+    } finally {
+      // Clear execute flag when code execution finishes (success or error)
+      managed.mcExecuteActive = false;
     }
-    if (logs.length > 0) parts.push(`Logs:\n${logs.join("\n")}`);
-    parts.push(`Executed in ${elapsed}ms`);
-    return parts.join("\n\n");
 
   } catch (error) {
     const elapsed = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : String(error);
-
-    // Clear execute flag even on error
-    managed.mcExecuteActive = false;
 
     // Cancel any ongoing pathfinder navigation (especially on timeout — stops zombie goto())
     try { rawBot.pathfinder.setGoal(null); } catch {}

@@ -1,3 +1,16 @@
+## [2026-03-29] Bug: Nether Portal Inaccessible - Movement Blocked & Block Updates Timing Out
+
+- **Location**: Overworld (-42, 88-89, 89) | Nether Portal Frame at X[-47 to -28], Y[79-96], Z[87-91]
+- **Cause**: Bot stuck 4-5 blocks away from portal interior despite all space being "air" blocks above Y=88. Multiple movement and placement failures:
+  1. pathfinder.goto() times out on any distance (tested 3 blocks, 30+ seconds, still stuck)
+  2. Manual walk via setControlState('forward') + jumping: oscillates between Y=88-89, cannot reach Y=93-94 where portal blocks are
+  3. placeBlock() times out with "blockUpdate event did not fire within 5000ms"
+  4. Block placement at any nearby location fails with similar blockUpdate timeout
+  5. Despite terrain checks showing only "air" blocks above bot position, bot physically cannot move upward
+- **White Bed Status**: Crafted successfully but unable to place in Nether. Attempted placement at portal entrance failed.
+- **Impact**: CRITICAL - Cannot progress Phase 6 (Nether exploration requires respawn point). Portal completely blocked.
+- **Hypothesis**: Server-side block update issue OR bot collision detection preventing movement to higher Y coords despite open space. Needs code review.
+
 ## [2026-03-29] Bug: CRITICAL - botが空中に固定されて動けない（最新）
 
 - **Cause**: botがY=96, X=6, Z=7付近の空中に固定され、移動不能・落下不能な状態になった。

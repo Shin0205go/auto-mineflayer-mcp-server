@@ -103,6 +103,8 @@ async function moveToBasic(managed: ManagedBot, x: number, y: number, z: number,
   bot.setControlState("back", false);
   bot.setControlState("sprint", false);
   bot.setControlState("jump", false);
+  // FIX: Wait briefly for control state packets to be sent/processed by server (prevents network desync)
+  await new Promise(r => setTimeout(r, 50));
 
   const start = bot.entity.position;
   const distance = start.distanceTo(targetPos);
