@@ -73,6 +73,16 @@ export async function mc_execute(
     log: logFn,
     wait: waitFn,
     getMessages: getMessagesFn,
+    // Pathfinder timeout wrapper utility (usage: await pathfinderGoto(goal, 30000))
+    pathfinderGoto: (goal: any, timeoutMs = 30000) => {
+      const gotoPromise = (rawBot.pathfinder.goto as any)(goal);
+      return Promise.race([
+        gotoPromise,
+        new Promise<void>((_resolve, reject) =>
+          setTimeout(() => reject(new Error(`Pathfinder timeout after ${timeoutMs}ms`)), timeoutMs)
+        )
+      ]);
+    },
     // Standard JS
     console: {
       log: (...args: unknown[]) => { if (logs.length < MAX_LOG_LINES) logs.push(args.map(String).join(" ")); },
