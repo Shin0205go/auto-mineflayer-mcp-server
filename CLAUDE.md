@@ -34,7 +34,7 @@ await wait(ms), log(msg), getMessages()
 
 // メタ認知 (行動前に必ず呼ぶ)
 awareness()       // 自己状態 + 空間スナップショット
-scanTerrain(r?)   // 地形高さマップ (整地・建築前)
+scan3D(r?, h?)    // 3D空間スキャン (レイヤー表示 + 空洞/壁分析)
 ```
 
 詳細: `.claude/rules/mc-execute-api.md`, mineflayer docs: https://github.com/PrismarineJS/mineflayer
