@@ -31,6 +31,10 @@ Movements, goals, Vec3
 
 // Util
 await wait(ms), log(msg), getMessages()
+
+// メタ認知 (行動前に必ず呼ぶ)
+awareness()       // 自己状態 + 空間スナップショット
+scanTerrain(r?)   // 地形高さマップ (整地・建築前)
 ```
 
 詳細: `.claude/rules/mc-execute-api.md`, mineflayer docs: https://github.com/PrismarineJS/mineflayer
@@ -53,6 +57,7 @@ await wait(ms), log(msg), getMessages()
 
 ## 核心ルール
 
+- **行動前に `awareness()` で観察** → 理解 → 行動 (詳細: `.claude/rules/pre-action-awareness.md`)
 - **毎アクションごとにチャット報告** (`bot.chat()` or `admin-chat.cjs`)
 - **死亡 = バグ** → `bug-issues/botN.md` に記録
 - **食料で HP回復** (リスポーン禁止)
@@ -62,6 +67,7 @@ await wait(ms), log(msg), getMessages()
 ## 詳細ドキュメント
 
 詳しい内容は `.claude/rules/` を参照:
+- `pre-action-awareness.md` — **観察→理解→行動プロトコル**
 - `survival-rules.md` — HP/食料/夜間対策
 - `death-prevention.md` — 死亡防止チェックリスト
 - `phase-guide.md` — 各フェーズの詳細

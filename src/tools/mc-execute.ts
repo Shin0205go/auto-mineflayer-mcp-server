@@ -7,6 +7,7 @@
 
 import { botManager } from "../bot-manager/index.js";
 import { currentBotContext } from "../bot-manager/bot-core.js";
+import { getSurroundings } from "../bot-manager/bot-info.js";
 import * as pathfinderPkg from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
 
@@ -128,6 +129,87 @@ export async function mc_execute(
         }
       }
     },
+    // === Meta-cognition layer: observe → understand → act ===
+    // awareness() — self-state + spatial snapshot (call before any action)
+    awareness: () => {
+      return getSurroundings(rawBot);
+    },
+    // scanTerrain(radius?) — 2D height map for terrain diff / leveling
+    // Returns { heightMap, stats } where heightMap[dx][dz] = topSolidY
+    scanTerrain: (radius: number = 8) => {
+      const r = Math.min(radius, 16);
+      const pos = rawBot.entity.position;
+      const cx = Math.floor(pos.x);
+      const cz = Math.floor(pos.z);
+      const baseY = Math.floor(pos.y);
+
+      const heights: Record<string, number> = {};
+      let minY = 999, maxY = -999;
+      let totalY = 0, count = 0;
+
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          // Scan downward from bot+10 to find top solid block
+          let topY = baseY - 1;
+          for (let dy = 10; dy >= -20; dy--) {
+            const block = rawBot.blockAt(new Vec3(cx + dx, baseY + dy, cz + dz));
+            if (block && block.name !== "air" && block.name !== "water" &&
+                block.name !== "lava" && block.name !== "cave_air") {
+              topY = baseY + dy;
+              break;
+            }
+          }
+          heights[`${dx},${dz}`] = topY;
+          if (topY < minY) minY = topY;
+          if (topY > maxY) maxY = topY;
+          totalY += topY;
+          count++;
+        }
+      }
+
+      const avgY = Math.round(totalY / count);
+
+      // Generate text grid (compact height diff from average)
+      const lines: string[] = [];
+      lines.push(`## 地形スキャン (${2*r+1}x${2*r+1}, 中心: ${cx},${baseY},${cz})`);
+      lines.push(`平均Y: ${avgY}, 最低: ${minY}, 最高: ${maxY}, 高低差: ${maxY - minY}`);
+      lines.push(``);
+
+      // Visual grid: show height diff from avgY
+      lines.push(`高さマップ (数字 = Y - ${avgY}, . = 平坦, + = 高い, - = 低い):`);
+      const header = "   " + Array.from({length: 2*r+1}, (_, i) => {
+        const dz = i - r;
+        return (dz % 4 === 0) ? String(dz).padStart(2) : "  ";
+      }).join("");
+      lines.push(header);
+
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx % 2 !== 0 && r > 4) continue; // skip rows for readability in large scans
+        let row = String(dx).padStart(3) + " ";
+        for (let dz = -r; dz <= r; dz++) {
+          const y = heights[`${dx},${dz}`];
+          const diff = y - avgY;
+          if (diff === 0) row += ". ";
+          else if (diff > 0 && diff <= 3) row += `${diff} `;
+          else if (diff > 3) row += "# ";
+          else if (diff < 0 && diff >= -3) row += `${diff}`;
+          else row += "v ";
+        }
+        lines.push(row);
+      }
+
+      // Dig/fill summary for leveling to avgY
+      let toDig = 0, toFill = 0;
+      for (const [, y] of Object.entries(heights)) {
+        if (y > avgY) toDig += (y - avgY);
+        if (y < avgY) toFill += (avgY - y);
+      }
+      lines.push(``);
+      lines.push(`整地 (Y=${avgY}に平坦化): 掘る${toDig}ブロック, 埋める${toFill}ブロック`);
+
+      return lines.join("\n");
+    },
+
     // Standard JS
     console: {
       log: (...args: unknown[]) => { if (logs.length < MAX_LOG_LINES) logs.push(args.map(String).join(" ")); },
