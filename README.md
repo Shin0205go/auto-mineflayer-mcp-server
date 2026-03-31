@@ -43,60 +43,36 @@ npm run dev
 └─────────────────────────┘
 ```
 
-### MCPツール（4つのみ）
+### MCPツール
 
 | ツール | 機能 |
 |--------|------|
-| `mc_execute` | **メインツール。** bot.* APIでJSコードを実行 |
+| `mc_execute` | **メインツール。** mineflayer生APIでJSコードを実行 |
 | `mc_connect` | サーバー接続・切断 |
 | `mc_chat` | チャット送受信 |
-| `mc_reload` | コード変更後のホットリロード |
+| `mc_reconnect` | 死亡後の再接続 |
 
-### bot.* API（mc_execute内で使用）
+### mc_execute（メイン操作）
+
+エージェントは mineflayer の生APIを直接書く。サンドボックス内で実行。
 
 ```js
-bot.status()              // HP, hunger, position, inventory, nearbyEntities
-bot.inventory()           // インベントリのみ
-bot.moveTo(x, y, z)      // 座標移動
-bot.navigate(target)      // ブロック/エンティティ検索+移動
-bot.flee(distance?)       // 逃走
-bot.gather(block, count?) // 採掘
-bot.craft(item, count?, autoGather?) // クラフト
-bot.combat(target?)       // 戦闘/狩猟
-bot.eat(food?)            // 食事
-bot.farm()                // 農場
-bot.build(preset, size?)  // 建築
-bot.store(action, ...)    // チェスト操作
-// 他: pillarUp, smelt, equipArmor, place, drop, chat, getMessages, log, wait
+// 注入済みオブジェクト
+bot                    // mineflayer Bot インスタンス
+Movements, goals, Vec3 // pathfinder ユーティリティ
+log(msg), wait(ms), getMessages(), pathfinderGoto(goal, timeout)
+
+// 例: 木を採掘
+const block = bot.findBlock({matching: bot.registry.blocksByName['oak_log'].id, maxDistance: 32});
+if (block) {
+  await bot.pathfinder.goto(new goals.GoalNear(block.position.x, block.position.y, block.position.z, 1));
+  await bot.dig(block);
+}
 ```
 
-### bot.* API と mineflayer の関係
+制約: `require()` 禁止、デフォルトタイムアウト 120秒（最大 600秒）、`wait()` は1回30秒まで。
 
-bot.* APIは **mineflayer の生APIを直接公開しているわけではない。**
-3層の抽象化で、安全なゲームプレイ操作に変換している。
-
-```
-エージェントが書くコード:   bot.gather("oak_log", 10)
-                              ↓
-(1) mc-execute.ts:          vm sandboxで実行、bot APIオブジェクトにディスパッチ
-                              ↓
-(2) core-tools.ts:          安全チェック（REFUSED判定） → 実行ロジック
-    - HP < 8 → [REFUSED] 操作拒否
-    - 夜間 + 敵接近 → [REFUSED] 操作拒否
-    - クリーパー8m以内 → [REFUSED] 操作拒否
-    - 飢餓状態 → [REFUSED] 長時間操作拒否
-                              ↓
-(3) bot-manager/:           mineflayer API + mineflayer-pathfinder を呼び出し
-    bot-movement.ts         → bot.pathfinder.goto(), bot.entity.position
-    bot-survival.ts         → bot.attack(), bot.useOn()
-    bot-crafting.ts         → bot.craft(), bot.openContainer()
-    bot-core.ts             → mineflayer.createBot(), pathfinder plugin
-```
-
-**REFUSEDシステム**: core-tools.ts には7箇所の安全ゲートがあり、
-危険な状況（低HP、夜間敵接近、クリーパー近接、飢餓）で操作を拒否して
-`[REFUSED] 理由と代替手段` を返す。エージェントはこのメッセージを見て
-別のアプローチ（flee → eat → 再試行）を選択する。
+詳細: `.claude/rules/mc-execute-api.md`
 
 ### 既知の制約
 
@@ -154,27 +130,23 @@ keepInventory有効推奨（`/gamerule keepInventory true`）。
 
 ```
 src/
-├── index.ts                # MCPサーバー（4ツールのルーティング）
-├── mcp-proxy.ts            # エージェント用プロキシ
-├── tool-filters.ts         # tools/list可視性（VISIBLE_TOOLS set）
+├── daemon.ts               # HTTPデーモン（port 3099）
+├── viewer-server.ts        # Webダッシュボード・ミニマップ
 ├── bot-manager/            # Mineflayerボット管理
 │   ├── index.ts            # 統合BotManager
-│   ├── bot-core.ts         # 接続・pathfinder設定
+│   ├── bot-core.ts         # 接続・pathfinder設定・クリーパー回避
 │   ├── bot-movement.ts     # 移動・落下検知・flee
-│   ├── bot-survival.ts     # 戦闘・食事・リスポーン
+│   ├── bot-survival.ts     # 戦闘・食事・アイテム回収
 │   ├── bot-crafting.ts     # クラフト・精錬
 │   └── ...                 # blocks, items, storage, info, utils, types
 └── tools/
-    ├── core-tools.ts       # bot.* API実装（mc_status, mc_gather等）
-    ├── core-tools-mcp.ts   # MCP スキーマ定義
-    ├── mc-execute.ts       # vm sandbox + bot APIオブジェクト構築
-    └── high-level-actions.ts # mc_build, mc_farm実装
+    ├── core-tools.ts       # mc_status, mc_connect, mc_chat, mc_reconnect
+    └── mc-execute.ts       # vm sandbox + mineflayer API注入
 
-.claude/
-├── agents/                 # ゲームエージェント定義
-├── skills/                 # スキルファイル（必要時にRead、目次はCLAUDE.md）
-└── hooks/                  # エージェント用フック
-
+scripts/                    # CLI操作スクリプト
+.claude/agents/             # ゲームエージェント定義
+.claude/skills/             # 22スキルガイド（オンデマンドRead）
+.claude/rules/              # 生存・死亡防止・フェーズガイド
 bug-issues/                 # 死亡バグ記録
 ```
 

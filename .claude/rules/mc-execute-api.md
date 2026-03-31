@@ -115,7 +115,9 @@ if (food && bot.food < 18) {
 
 - `require()` 禁止 (セキュリティ)
 - Async/await 対応
-- Max timeout: 30秒
+- デフォルト timeout: 120秒（最大 600秒）
+- `wait()` は1回30秒まで
+- ログ出力は最大200行
 - mineflayer 公式 API のみ有効
 
 詳細: https://github.com/PrismarineJS/mineflayer
