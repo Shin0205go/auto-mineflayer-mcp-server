@@ -134,78 +134,188 @@ export async function mc_execute(
     awareness: () => {
       return getSurroundings(rawBot);
     },
-    // scanTerrain(radius?) — 2D height map for terrain diff / leveling
-    // Returns { heightMap, stats } where heightMap[dx][dz] = topSolidY
-    scanTerrain: (radius: number = 8) => {
-      const r = Math.min(radius, 16);
+    // scan3D(radius?, heightRange?) — 3D spatial scan with layer views
+    // Shows XZ slices at multiple Y levels + cavity/wall analysis
+    scan3D: (radius: number = 5, heightRange: number = 4) => {
+      const r = Math.min(radius, 10);
+      const hr = Math.min(heightRange, 8);
       const pos = rawBot.entity.position;
       const cx = Math.floor(pos.x);
+      const cy = Math.floor(pos.y);
       const cz = Math.floor(pos.z);
-      const baseY = Math.floor(pos.y);
 
-      const heights: Record<string, number> = {};
-      let minY = 999, maxY = -999;
-      let totalY = 0, count = 0;
+      // Block character map for compact display
+      const charOf = (name: string | undefined): string => {
+        if (!name || name === "air" || name === "cave_air") return " ";
+        if (name === "water") return "~";
+        if (name === "lava") return "!";
+        if (name.includes("log") || name.includes("wood")) return "T";
+        if (name.includes("leaves")) return "L";
+        if (name.includes("ore")) return "*";
+        if (name === "chest") return "C";
+        if (name === "crafting_table") return "W";
+        if (name === "furnace") return "F";
+        if (name.includes("torch")) return "t";
+        if (name === "grass_block" || name === "dirt") return ".";
+        if (name === "stone" || name.includes("deepslate")) return "#";
+        if (name === "sand" || name === "gravel") return ":";
+        return "█";
+      };
 
+      const lines: string[] = [];
+      lines.push(`## 3Dスキャン (${2*r+1}x${2*r+1}, Y=${cy-hr}~${cy+hr}, 中心: ${cx},${cy},${cz})`);
+      lines.push(`凡例:  =空気 ~=水 !=溶岩 #=石 .=土 T=木 *=鉱石 █=固体 @=自分`);
+      lines.push(``);
+
+      // Scan all blocks into 3D array
+      const blocks: Record<string, string> = {};
+      for (let dy = -hr; dy <= hr; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          for (let dz = -r; dz <= r; dz++) {
+            const block = rawBot.blockAt(new Vec3(cx + dx, cy + dy, cz + dz));
+            blocks[`${dx},${dy},${dz}`] = block?.name || "air";
+          }
+        }
+      }
+
+      // Key Y layers: below feet, feet, head, above head
+      const keyLayers = [
+        { dy: -2, label: "足元-2 (地下)" },
+        { dy: -1, label: "足元-1 (直下)" },
+        { dy: 0,  label: "足元 (Y=" + cy + ")" },
+        { dy: 1,  label: "頭 (Y=" + (cy+1) + ")" },
+        { dy: 2,  label: "頭上+1" },
+      ].filter(l => l.dy >= -hr && l.dy <= hr);
+
+      for (const layer of keyLayers) {
+        lines.push(`### ${layer.label}`);
+        // Header row with Z offsets
+        let header = "    ";
+        for (let dz = -r; dz <= r; dz++) {
+          header += dz === 0 ? "V" : (Math.abs(dz) <= 1 ? String(dz) : (dz % 2 === 0 ? String(Math.abs(dz) % 10) : " "));
+        }
+        lines.push(header);
+
+        for (let dx = -r; dx <= r; dx++) {
+          const prefix = dx === 0 ? " >" : "  ";
+          let row = prefix + String(dx).padStart(2) + " ";
+          for (let dz = -r; dz <= r; dz++) {
+            if (dx === 0 && dz === 0 && layer.dy === 0) {
+              row += "@";  // Bot position
+            } else {
+              const name = blocks[`${dx},${layer.dy},${dz}`];
+              row += charOf(name);
+            }
+          }
+          lines.push(row);
+        }
+        lines.push(``);
+      }
+
+      // === 3D structural analysis ===
+      lines.push(`### 構造分析`);
+
+      // Cavity detection: air blocks below feet level
+      const cavities: string[] = [];
       for (let dx = -r; dx <= r; dx++) {
         for (let dz = -r; dz <= r; dz++) {
-          // Scan downward from bot+10 to find top solid block
-          let topY = baseY - 1;
-          for (let dy = 10; dy >= -20; dy--) {
-            const block = rawBot.blockAt(new Vec3(cx + dx, baseY + dy, cz + dz));
-            if (block && block.name !== "air" && block.name !== "water" &&
-                block.name !== "lava" && block.name !== "cave_air") {
-              topY = baseY + dy;
+          // Check if ground has cavity (air below the top solid block)
+          const groundName = blocks[`${dx},-1,${dz}`];
+          const belowGround = blocks[`${dx},-2,${dz}`];
+          if (groundName && groundName !== "air" && groundName !== "cave_air" &&
+              belowGround && (belowGround === "air" || belowGround === "cave_air")) {
+            const dist = Math.sqrt(dx*dx + dz*dz);
+            if (dist <= r) {
+              cavities.push(`(${cx+dx},${cy-2},${cz+dz})`);
+            }
+          }
+        }
+      }
+      if (cavities.length > 0) {
+        lines.push(`空洞 (足元-2に空気): ${cavities.length}箇所${cavities.length <= 5 ? " " + cavities.join(" ") : ""}`);
+      }
+
+      // Drop risk: air below feet at bot's walking level
+      const dropRisks: string[] = [];
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          const atFeet = blocks[`${dx},0,${dz}`];
+          const belowFeet = blocks[`${dx},-1,${dz}`];
+          if ((atFeet === "air" || atFeet === "cave_air") &&
+              (belowFeet === "air" || belowFeet === "cave_air")) {
+            const dist = Math.sqrt(dx*dx + dz*dz);
+            if (dist <= r && dist > 0) {
+              dropRisks.push(`(${cx+dx},${cz+dz})`);
+            }
+          }
+        }
+      }
+      if (dropRisks.length > 0) {
+        lines.push(`落下リスク (穴): ${dropRisks.length}箇所${dropRisks.length <= 5 ? " " + dropRisks.join(" ") : ""}`);
+      }
+
+      // Wall thickness in 4 cardinal directions
+      const wallDirs = [
+        { name: "北(Z-)", dx: 0, dz: -1 },
+        { name: "南(Z+)", dx: 0, dz: 1 },
+        { name: "東(X+)", dx: 1, dz: 0 },
+        { name: "西(X-)", dx: -1, dz: 0 },
+      ];
+      const wallInfo: string[] = [];
+      for (const dir of wallDirs) {
+        let thickness = 0;
+        let hitSolid = false;
+        for (let i = 1; i <= r; i++) {
+          const feetBlock = blocks[`${dir.dx * i},0,${dir.dz * i}`];
+          const headBlock = blocks[`${dir.dx * i},1,${dir.dz * i}`];
+          const isPassable = (!feetBlock || feetBlock === "air" || feetBlock === "water") &&
+                             (!headBlock || headBlock === "air" || headBlock === "water");
+          if (!isPassable && !hitSolid) {
+            hitSolid = true;
+            thickness = 1;
+          } else if (!isPassable && hitSolid) {
+            thickness++;
+          } else if (isPassable && hitSolid) {
+            break; // Wall ended
+          }
+        }
+        if (hitSolid) {
+          wallInfo.push(`${dir.name}:壁${thickness}ブロック`);
+        } else {
+          wallInfo.push(`${dir.name}:通路`);
+        }
+      }
+      lines.push(`壁: ${wallInfo.join(", ")}`);
+
+      // Height map for terrain leveling (surface Y per XZ)
+      lines.push(``);
+      lines.push(`### 高さマップ (整地用)`);
+      let totalTopY = 0, topCount = 0;
+      let surfMinY = 999, surfMaxY = -999;
+      const surfHeights: Record<string, number> = {};
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          for (let dy = hr; dy >= -hr; dy--) {
+            const name = blocks[`${dx},${dy},${dz}`];
+            if (name && name !== "air" && name !== "cave_air" && name !== "water" && name !== "lava") {
+              const absY = cy + dy;
+              surfHeights[`${dx},${dz}`] = absY;
+              totalTopY += absY;
+              topCount++;
+              if (absY < surfMinY) surfMinY = absY;
+              if (absY > surfMaxY) surfMaxY = absY;
               break;
             }
           }
-          heights[`${dx},${dz}`] = topY;
-          if (topY < minY) minY = topY;
-          if (topY > maxY) maxY = topY;
-          totalY += topY;
-          count++;
         }
       }
-
-      const avgY = Math.round(totalY / count);
-
-      // Generate text grid (compact height diff from average)
-      const lines: string[] = [];
-      lines.push(`## 地形スキャン (${2*r+1}x${2*r+1}, 中心: ${cx},${baseY},${cz})`);
-      lines.push(`平均Y: ${avgY}, 最低: ${minY}, 最高: ${maxY}, 高低差: ${maxY - minY}`);
-      lines.push(``);
-
-      // Visual grid: show height diff from avgY
-      lines.push(`高さマップ (数字 = Y - ${avgY}, . = 平坦, + = 高い, - = 低い):`);
-      const header = "   " + Array.from({length: 2*r+1}, (_, i) => {
-        const dz = i - r;
-        return (dz % 4 === 0) ? String(dz).padStart(2) : "  ";
-      }).join("");
-      lines.push(header);
-
-      for (let dx = -r; dx <= r; dx++) {
-        if (dx % 2 !== 0 && r > 4) continue; // skip rows for readability in large scans
-        let row = String(dx).padStart(3) + " ";
-        for (let dz = -r; dz <= r; dz++) {
-          const y = heights[`${dx},${dz}`];
-          const diff = y - avgY;
-          if (diff === 0) row += ". ";
-          else if (diff > 0 && diff <= 3) row += `${diff} `;
-          else if (diff > 3) row += "# ";
-          else if (diff < 0 && diff >= -3) row += `${diff}`;
-          else row += "v ";
-        }
-        lines.push(row);
-      }
-
-      // Dig/fill summary for leveling to avgY
+      const avgY = topCount > 0 ? Math.round(totalTopY / topCount) : cy;
       let toDig = 0, toFill = 0;
-      for (const [, y] of Object.entries(heights)) {
+      for (const [, y] of Object.entries(surfHeights)) {
         if (y > avgY) toDig += (y - avgY);
         if (y < avgY) toFill += (avgY - y);
       }
-      lines.push(``);
-      lines.push(`整地 (Y=${avgY}に平坦化): 掘る${toDig}ブロック, 埋める${toFill}ブロック`);
+      lines.push(`平均Y: ${avgY}, 高低差: ${surfMaxY - surfMinY}, 掘る: ${toDig}, 埋める: ${toFill}`);
 
       return lines.join("\n");
     },
