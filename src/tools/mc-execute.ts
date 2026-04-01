@@ -221,8 +221,46 @@ export async function mc_execute(
   } as any;
   MovementsWrapped.prototype = Movements.prototype;
 
+  // Maximum timeout for any single pathfinder goto call.
+  // Prevents agents from passing 120000ms (the mc_execute outer timeout) which causes
+  // the pathfinder to hang for the full duration instead of failing fast.
+  // 60s is enough for any reasonable navigation — longer means the path is truly impossible.
+  const MAX_PATHFINDER_TIMEOUT = 60_000;
+
+  // Wrap rawBot.pathfinder.goto() so that even direct bot.pathfinder.goto() calls inside
+  // agent code go through gotoWithStuckDetection (hard timeout + stuck detection).
+  // This prevents the 120s deadlock reported in bot1_session3_pathfinder_deadlock.md.
+  const pathfinderProxy = rawBot.pathfinder ? new Proxy(rawBot.pathfinder, {
+    get(target: any, prop: string) {
+      if (prop === 'goto') {
+        // Replace goto with our safe wrapper.
+        // Cap at MAX_PATHFINDER_TIMEOUT regardless of what the agent passes.
+        return (goal: any) => gotoWithStuckDetection(goal, MAX_PATHFINDER_TIMEOUT, false);
+      }
+      const val = target[prop];
+      return typeof val === 'function' ? val.bind(target) : val;
+    },
+    set(target: any, prop: string, value: any) {
+      target[prop] = value;
+      return true;
+    },
+  }) : rawBot.pathfinder;
+
+  // Shadow rawBot with a proxy that replaces .pathfinder with our safe version.
+  const botProxy = new Proxy(rawBot, {
+    get(target: any, prop: string) {
+      if (prop === 'pathfinder') return pathfinderProxy;
+      const val = target[prop];
+      return typeof val === 'function' ? val.bind(target) : val;
+    },
+    set(target: any, prop: string, value: any) {
+      target[prop] = value;
+      return true;
+    },
+  });
+
   const ctx: Record<string, unknown> = {
-    bot: rawBot,
+    bot: botProxy,
     Movements: MovementsWrapped,
     goals,
     Vec3,
@@ -233,9 +271,11 @@ export async function mc_execute(
     // Pathfinder timeout wrapper utility (usage: await pathfinderGoto(goal, 30000))
     // On "No path" / "Took too long" failure, automatically retries once with canDig=true.
     // On retry, thinkTimeout is temporarily doubled to give A* more time on complex terrain.
+    // timeoutMs is capped at MAX_PATHFINDER_TIMEOUT (60s) — passing 120000 won't cause a 120s hang.
     pathfinderGoto: async (goal: any, timeoutMs = 30000) => {
+      const effectiveTimeoutMs = Math.min(timeoutMs, MAX_PATHFINDER_TIMEOUT);
       try {
-        return await gotoWithStuckDetection(goal, timeoutMs, false);
+        return await gotoWithStuckDetection(goal, effectiveTimeoutMs, false);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         // On "No path" / think-timeout errors, retry with canDig=true as fallback for complex terrain.
@@ -246,7 +286,7 @@ export async function mc_execute(
           const prevThinkTimeout = (rawBot.pathfinder as any)?.thinkTimeout ?? 20000;
           try {
             if (rawBot.pathfinder) (rawBot.pathfinder as any).thinkTimeout = prevThinkTimeout * 2;
-            return await gotoWithStuckDetection(goal, timeoutMs, true);
+            return await gotoWithStuckDetection(goal, effectiveTimeoutMs, true);
           } finally {
             // Restore original thinkTimeout and canDig=false after dig-enabled navigation
             try {
