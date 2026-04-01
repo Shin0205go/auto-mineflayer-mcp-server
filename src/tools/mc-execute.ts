@@ -167,12 +167,18 @@ export async function mc_execute(
       // We listen for path_update with status=noPath and reject explicitly so that
       // the canDig=true retry logic in pathfinderGoto is triggered correctly.
       const onPathUpdate = (result: any) => {
-        if (result?.status === 'noPath') {
+        // 'noPath' = A* exhausted search space with no solution
+        // 'timeout' = thinkTimeout elapsed before path was found ("Took too long to decide path to goal!")
+        // Both should trigger the canDig=true retry in pathfinderGoto.
+        if (result?.status === 'noPath' || result?.status === 'timeout') {
           rawBot.removeListener('path_update', onPathUpdate);
           cleanup();
           clearTimeout(hardTimeoutId);
           try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
-          reject(new Error('No path to the goal!'));
+          const errMsg = result.status === 'timeout'
+            ? 'Took too long to decide path to goal!'
+            : 'No path to the goal!';
+          reject(new Error(errMsg));
         }
       };
       rawBot.on('path_update', onPathUpdate);
