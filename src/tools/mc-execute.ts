@@ -131,7 +131,9 @@ export async function mc_execute(
     const MAX_STUCK_CHECKS = 2;
     // Grace period: don't start stuck-counting until bot has moved, or this many
     // ms have elapsed (covers slow path-computation on complex terrain).
-    const GRACE_PERIOD_MS = 15000;
+    // 25s: Phase 5 reports show path computation taking 20-30s on Y=100+ elevated
+    // terrain. 15s caused "goal was changed" on every attempt including 1-block steps.
+    const GRACE_PERIOD_MS = 25000;
     const startTime = Date.now();
     let startPos = rawBot.entity.position.clone();
     let hasMovedOnce = false;
@@ -202,9 +204,24 @@ export async function mc_execute(
     });
   };
 
+  // Wrap Movements constructor to catch the common mistake of passing bot.world
+  // instead of bot. new Movements(bot.world) throws "Cannot read properties of
+  // undefined (reading 'blocksByName')" because Movements expects the full bot object.
+  const MovementsWrapped = function(this: any, botArg: any, ...rest: any[]) {
+    if (botArg && !botArg.entity && !botArg.pathfinder) {
+      // bot.world was likely passed — it lacks entity/pathfinder but has block methods
+      throw new Error(
+        "Movements(bot.world) is incorrect — pass the full bot object: new Movements(bot)\n" +
+        "Example: const movements = new Movements(bot); bot.pathfinder.setMovements(movements);"
+      );
+    }
+    return new (Movements as any)(botArg, ...rest);
+  } as any;
+  MovementsWrapped.prototype = Movements.prototype;
+
   const ctx: Record<string, unknown> = {
     bot: rawBot,
-    Movements,
+    Movements: MovementsWrapped,
     goals,
     Vec3,
     // Utilities
@@ -1219,17 +1236,36 @@ export async function mc_execute(
       // Hold forward to stay inside portal (prevents server from cancelling the teleport)
       rawBot.setControlState("forward", true);
 
+      // Mineflayer fires "respawn" for dimension transitions (nether/end portal).
+      // On some server versions the event may be delayed or named differently.
+      // Fallback: poll bot.game.dimension every 500ms so we detect the change
+      // even if the "respawn" event does not fire in time.
       const teleportDone = new Promise<string | null>(resolve => {
-        const onRespawn = () => {
+        let resolved = false;
+        const done = (dim: string | null) => {
+          if (resolved) return;
+          resolved = true;
           rawBot.removeListener("respawn" as any, onRespawn);
-          const dim = (rawBot.game as any)?.dimension ?? (rawBot as any).dimension ?? "unknown";
+          clearInterval(pollId);
+          clearTimeout(timeoutId);
           resolve(dim);
         };
+
+        const onRespawn = () => {
+          const dim = (rawBot.game as any)?.dimension ?? (rawBot as any).dimension ?? "unknown";
+          done(dim);
+        };
         rawBot.on("respawn" as any, onRespawn);
-        setTimeout(() => {
-          rawBot.removeListener("respawn" as any, onRespawn);
-          resolve(null);
-        }, timeoutMs);
+
+        // Fallback poll: check if dimension changed every 500ms
+        const pollId = setInterval(() => {
+          const current = (rawBot.game as any)?.dimension ?? (rawBot as any).dimension ?? "unknown";
+          if (current !== dimensionBefore) {
+            done(current);
+          }
+        }, 500);
+
+        const timeoutId = setTimeout(() => done(null), timeoutMs);
       });
 
       const dimensionAfter = await teleportDone;
