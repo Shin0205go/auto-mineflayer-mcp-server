@@ -57,11 +57,39 @@ Session logs:
 3. Check event listeners for consume/placeBlock handlers
 4. Consider bot reconnection/reset
 
+### Debug Findings (Session 2)
+```
+- Bot is responsive to read operations (inventory, position, blockAt all work)
+- Jump action works (bot moved from Y66 to Y67)
+- Read-only operations: 0ms latency
+- Action operations: ALL TIMEOUT
+  * bot.consume(): timeout ~2s consistently
+  * bot.placeBlock(): timeout ~5s
+  * bot.pathfinder.goto(): timeout ~30s
+- Bot._client event listeners: 0 (CRITICAL - no handlers!)
+- Bot.mealTime: undefined (suggests hunger system not initialized)
+```
+
+### System Architecture Issue
+The bot object appears to have:
+1. Working read-path (blockAt, inventory, etc.)
+2. Broken event-path (consume, placeBlock, dig - all async handlers)
+3. **Zero event listeners** on the underlying Minecraft client
+
+This suggests:
+- Event listener registration failed during bot initialization
+- OR event handlers were unregistered/cleared at some point
+- OR the server is not sending required packets for actions
+
 ### Status
-**REPORTED** - Game agent cannot resolve. Code reviewer must investigate mineflayer event system.
+**REPORTED** - Game agent cannot resolve. Code reviewer must investigate:
+1. Bot initialization sequence in mc-execute sandbox
+2. Event listener registration in mineflayer Bot
+3. Server-side action packet handling
+4. Consider bot state reset/reconnect logic
 
 ### Prevention for Future
-- Implement action timeout handlers with fallback
-- Add periodic bot state health check
+- Implement event listener health check
+- Add action timeout handlers with fallback
 - Implement auto-reconnect if event queue backs up
-- Consider action queue watchdog timer
+- Log event listener count periodically
