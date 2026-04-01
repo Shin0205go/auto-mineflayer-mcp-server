@@ -193,15 +193,24 @@ export class AutoSafety {
       } catch { /* ignore pathfinder errors */ }
     }
 
-    // Stop after 2 seconds
-    setTimeout(() => {
+    // Stop after 2 seconds, or immediately if mc_execute starts (to avoid goal conflict)
+    const creeperCleanup = () => {
+      clearInterval(creeperActiveCheck);
+      clearTimeout(creeperTimeout);
       if (goalHandle) goalHandle.cleanup();
       this.bot.setControlState("sprint", false);
       this.bot.setControlState("forward", false);
       this.creeperFleeActive = false;
       this.creeperFleeLastEndTime = Date.now();
       this.updateState("creeper-flee", false, "creeperFleeActive");
-    }, 2000);
+    };
+    const creeperTimeout = setTimeout(creeperCleanup, 2000);
+    const creeperActiveCheck = setInterval(() => {
+      if (this.managed.mcExecuteActive) {
+        console.error(`[AutoSafety] Creeper flee pathfinder aborted: mc_execute became active`);
+        creeperCleanup();
+      }
+    }, 200);
   }
 
   // ==================== General enemy flee (idle only, HP < 10) ====================
@@ -241,12 +250,21 @@ export class AutoSafety {
         }
       );
 
-      // Cleanup after 5 seconds
-      setTimeout(() => {
+      // Cleanup after 5 seconds, or immediately if mc_execute starts
+      const fleeCleanup = () => {
+        clearInterval(fleeActiveCheck);
+        clearTimeout(fleeTimeout);
         goalHandle.cleanup();
         this.generalFleeActive = false;
         this.updateState("general-flee", false, "generalFleeActive");
-      }, 5000);
+      };
+      const fleeTimeout = setTimeout(fleeCleanup, 5000);
+      const fleeActiveCheck = setInterval(() => {
+        if (this.managed.mcExecuteActive) {
+          console.error(`[AutoSafety] General flee aborted: mc_execute became active`);
+          fleeCleanup();
+        }
+      }, 200);
     } catch (err) {
       console.error(`[AutoSafety] General flee error:`, err);
       this.generalFleeActive = false;
@@ -323,6 +341,8 @@ export class AutoSafety {
       try {
         if (bedBlock) {
           // === Option A: navigate to existing bed ===
+          // Guard: abort if mc_execute started before navigation begins
+          if (this.managed.mcExecuteActive) { console.error(`[AutoSafety] Auto-sleep aborted before navigate: mc_execute active`); return; }
           console.error(`[AutoSafety] Auto-sleep: navigating to bed at (${bedBlock.position.x},${bedBlock.position.y},${bedBlock.position.z})`);
           await this.navigateTo(bedBlock.position.x, bedBlock.position.y, bedBlock.position.z, 2, 10000);
           if (this.managed.mcExecuteActive) { console.error(`[AutoSafety] Auto-sleep aborted: mc_execute started`); return; }
@@ -405,16 +425,35 @@ export class AutoSafety {
     return true;
   }
 
-  /** Navigate to (x,y,z) within tolerance, waiting up to maxWaitMs */
+  /** Navigate to (x,y,z) within tolerance, waiting up to maxWaitMs.
+   * Aborts early if mcExecuteActive becomes true to avoid goal conflict with pathfinderGoto(). */
   private async navigateTo(x: number, y: number, z: number, tolerance: number, maxWaitMs: number): Promise<void> {
     const goalHandle = safeSetGoal(this.bot,
       new goals.GoalNear(x, y, z, tolerance),
       { elevationAware: true }
     );
     await new Promise<void>(resolve => {
-      const onReached = () => { this.bot.removeListener("goal_reached", onReached); resolve(); };
+      const onReached = () => {
+        clearInterval(mcExecuteCheck);
+        this.bot.removeListener("goal_reached", onReached);
+        resolve();
+      };
       this.bot.on("goal_reached", onReached);
-      setTimeout(() => { this.bot.removeListener("goal_reached", onReached); resolve(); }, maxWaitMs);
+      const timeoutId = setTimeout(() => {
+        clearInterval(mcExecuteCheck);
+        this.bot.removeListener("goal_reached", onReached);
+        resolve();
+      }, maxWaitMs);
+      // Poll for mc_execute starting — abort immediately to avoid goal conflict
+      const mcExecuteCheck = setInterval(() => {
+        if (this.managed.mcExecuteActive) {
+          clearInterval(mcExecuteCheck);
+          clearTimeout(timeoutId);
+          this.bot.removeListener("goal_reached", onReached);
+          console.error(`[AutoSafety] navigateTo aborted: mc_execute became active`);
+          resolve();
+        }
+      }, 200);
     });
     goalHandle.cleanup();
   }
