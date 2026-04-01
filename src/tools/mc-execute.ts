@@ -1112,6 +1112,116 @@ export async function mc_execute(
       return { planted: seedItem.name, position: farmlandBlock.position };
     },
 
+    // === tillLand — convert dirt/grass to farmland using a hoe ===
+    // Usage: const result = await tillLand(dirtBlock)
+    // Equips any hoe in inventory, sends raw use_item packet on the block's top face,
+    // then waits up to 600ms for a blockUpdate confirming the farmland conversion.
+    // Returns { tilled: boolean, blockName: string, position } so the caller can
+    // verify the server actually changed the block (activateBlock alone does not
+    // guarantee a sync'd client block state update).
+    //
+    // NOTE: bot.activateBlock(dirtBlock) is the mineflayer API for right-clicking a
+    // block. However it does not wait for the resulting blockUpdate, so findBlocks()
+    // called immediately after may still see "dirt" instead of "farmland". This helper
+    // explicitly waits for the blockUpdate so subsequent findBlocks calls are reliable.
+    tillLand: async (dirtBlock: any) => {
+      if (!dirtBlock) throw new Error("tillLand: dirtBlock is null");
+
+      // Find and equip a hoe
+      const hoeNames = ["wooden_hoe", "stone_hoe", "iron_hoe", "golden_hoe", "diamond_hoe", "netherite_hoe"];
+      let hoe: any = null;
+      for (const name of hoeNames) {
+        hoe = rawBot.inventory.items().find((i: any) => i.name === name);
+        if (hoe) break;
+      }
+      if (!hoe) throw new Error("tillLand: no hoe in inventory");
+      await rawBot.equip(hoe, "hand");
+
+      const fPos = dirtBlock.position;
+
+      // Listen for blockUpdate at the tilled position BEFORE sending the packet
+      // to avoid a race where the server acks before we attach the listener.
+      const syncPromise = new Promise<string>(resolve => {
+        const handler = (_o: any, n: any) => {
+          if (n.position.x === fPos.x && n.position.y === fPos.y && n.position.z === fPos.z) {
+            rawBot.removeListener("blockUpdate", handler);
+            resolve(n.name);
+          }
+        };
+        rawBot.on("blockUpdate", handler);
+        // Fallback: resolve after 600ms even if no blockUpdate arrives
+        setTimeout(() => {
+          rawBot.removeListener("blockUpdate", handler);
+          // Re-read block from world state as fallback
+          const current = rawBot.blockAt(fPos);
+          resolve(current?.name ?? "unknown");
+        }, 600);
+      });
+
+      // Look at the block top face and right-click it (activateBlock)
+      await rawBot.lookAt(fPos.offset(0.5, 1.0, 0.5), true);
+      try {
+        await rawBot.activateBlock(dirtBlock);
+      } catch { /* ignore — server may not send an ack */ }
+
+      const resultName = await syncPromise;
+      const tilled = resultName === "farmland";
+      logFn(`[tillLand] (${fPos.x},${fPos.y},${fPos.z}): ${dirtBlock.name} → ${resultName} (tilled=${tilled})`);
+      return { tilled, blockName: resultName, position: fPos };
+    },
+
+    // === applyBoneMeal — use bone_meal on a crop/sapling/grass block ===
+    // Usage: await applyBoneMeal(targetBlock)
+    // Equips bone_meal, sends a raw block_place packet on the target block, then
+    // waits up to 500ms for a blockUpdate confirming crop growth (or resolves on timeout).
+    // Returns { applied: boolean, blockNameAfter: string }
+    //
+    // NOTE: bot.activateBlock() with bone_meal equipped should work in principle, but
+    // on some server versions the right-click packet is not sent with the held item
+    // information needed for bone_meal consumption. The raw block_place packet is more
+    // reliable because it explicitly encodes hand=0 (main hand with bone_meal equipped).
+    applyBoneMeal: async (targetBlock: any) => {
+      if (!targetBlock) throw new Error("applyBoneMeal: targetBlock is null");
+
+      // Find and equip bone_meal
+      const boneMeal = rawBot.inventory.items().find((i: any) => i.name === "bone_meal");
+      if (!boneMeal) throw new Error("applyBoneMeal: no bone_meal in inventory");
+      await rawBot.equip(boneMeal, "hand");
+
+      const tPos = targetBlock.position;
+
+      // Wait for blockUpdate (crop grows, grass spreads, etc.)
+      const syncPromise = new Promise<string>(resolve => {
+        const handler = (_o: any, n: any) => {
+          if (n.position.x === tPos.x && n.position.y === tPos.y && n.position.z === tPos.z) {
+            rawBot.removeListener("blockUpdate", handler);
+            resolve(n.name);
+          }
+        };
+        rawBot.on("blockUpdate", handler);
+        setTimeout(() => {
+          rawBot.removeListener("blockUpdate", handler);
+          const current = rawBot.blockAt(tPos);
+          resolve(current?.name ?? "unknown");
+        }, 500);
+      });
+
+      // Look at the target block and send raw block_place packet (most reliable for item use)
+      await rawBot.lookAt(tPos.offset(0.5, 0.5, 0.5), true);
+      (rawBot as any)._client.write("block_place", {
+        location: { x: tPos.x, y: tPos.y, z: tPos.z },
+        direction: 1,   // top face
+        hand: 0,        // main hand (bone_meal)
+        cursorX: 0.5, cursorY: 1.0, cursorZ: 0.5,
+        insideBlock: false,
+      });
+
+      const blockNameAfter = await syncPromise;
+      const applied = blockNameAfter !== targetBlock.name;
+      logFn(`[applyBoneMeal] (${tPos.x},${tPos.y},${tPos.z}): ${targetBlock.name} → ${blockNameAfter}`);
+      return { applied, blockNameAfter };
+    },
+
     // AutoSafety state (read-only from agent code)
     // Defined as a getter so agent always reads the latest live state object.
     // Without a getter, managed.safetyState would be captured as null if AutoSafety
@@ -1121,8 +1231,23 @@ export async function mc_execute(
     // === recipesFor wrapper ===
     // bot.recipesFor(id, null, 1, null) only returns 2x2 recipes when no table is passed.
     // This wrapper auto-finds a nearby crafting table and passes it, returning 3x3 recipes too.
-    // Usage: const recipes = recipesFor(itemId)  — equivalent to bot.recipesFor but table-aware
-    recipesFor: (itemId: number, metadata: any = null, count: number = 1) => {
+    // Usage: const recipes = recipesFor(itemId)    — numeric item ID
+    //        const recipes = recipesFor('bread')   — item name string also accepted
+    recipesFor: (itemIdOrName: number | string, metadata: any = null, count: number = 1) => {
+      // Accept item name string (e.g. 'bread') in addition to numeric ID.
+      // bot.recipesFor() requires a numeric id — resolve name to id first.
+      let itemId: number;
+      if (typeof itemIdOrName === 'string') {
+        const itemDef = (rawBot.registry?.itemsByName as any)?.[itemIdOrName];
+        if (!itemDef) {
+          logFn(`[recipesFor] Unknown item name: "${itemIdOrName}"`);
+          return [];
+        }
+        itemId = itemDef.id;
+      } else {
+        itemId = itemIdOrName;
+      }
+
       // First try without table (2x2 recipes)
       const recipesNoTable = rawBot.recipesFor(itemId, metadata, count, null);
       // Then try with nearby crafting table (3x3 recipes)
