@@ -1,41 +1,41 @@
-# Bug Report: Pathfinder Timeout - Long Distance Navigation
+## [2026-04-01] Bug: Pathfinder timeout during water quest
 
-## Issue
-Claude1 encounters **timeout after 120 seconds** when attempting pathfinder navigation over distances > 30 blocks. Shorter segments (< 5 blocks) also timeout unexpectedly.
+**Status:** BLOCKING - cannot navigate to furnace or coal areas
 
-## Occurrence
-- **Time**: 2026-04-01, Phase 2 farm setup
-- **Coordinates**: (32, 99, -18) → attempting to reach base at (27, 107, -13)
-- **Distance**: ~30 blocks horizontal
+**Current Location:** (32.4, 98, -1.6)
+**Target:** Furnace at (7, 100, -3), distance 25.5 blocks
+**Last Action:** Attempted `pathfinderGoto(GoalBlock(7, 100, -3))` with default timeout
 
-## Error Sequence
-1. First attempt: `await bot.pathfinder.goto(new goals.GoalXZ(target.x, target.z), {timeout: 10000})` → **timeout after 120s**
-2. Second attempt: Incremental short-distance goals (5 blocks each) → **timeout after 120s on first step**
-3. Third attempt: `goals.GoalNear(27, -13, 3)` → **timeout after 120s**
-
-## Last Log Before Failure
+**Error:**
 ```
-Position: (32, 99, -18)
-Target: base at (27, 104, -13)
-step 1: move west
-[120s timeout - process killed]
+Took to long to decide path to goal!
+Timeout after 20684ms (even with 30s+ default)
 ```
 
-## Daemon Status
-- Daemon crashed mid-session with "socket hang up"
-- Recovered after restart
-- Subsequent mc-execute calls work normally
+**Context:**
+- Earlier attempts to reach coal area (32, 92, -2) also timed out
+- Short-distance goals (<1 block) work fine (reached water successfully)
+- Longer distances (>5 blocks) trigger pathfinder timeout
+- Same timeout pattern repeating across multiple commands
 
-## Hypothesis
-- Pathfinder getting stuck analyzing terrain (forest area?)
-- Possible infinite loop in pathfinding algorithm
-- Timeout not being properly respected
-- Chunk loading blocking pathfinding
+**Observations:**
+- Bot position updates successfully (0ms checks work)
+- awareness() works fine
+- Block scanning (findBlock) works
+- Only pathfinder.goto() with distance >5 blocks fails
+- No unusual terrain features blocking visible paths
 
-## Impact
-- Cannot navigate distances > 5 blocks reliably
-- Blocks farm setup (base unreachable)
-- Daemon stability at risk
+**Impact:**
+- Cannot reach furnace to smelt iron ore
+- Cannot reach coal area to mine iron
+- Cannot complete water bucket quest (need 3 iron ingots, only have 2)
+- Effectively stuck at farm location
 
-## Status
-Reported - awaiting code-reviewer fix
+**Hypothesis:**
+- Pathfinder collision detection or movement validator may be broken
+- Possible issue in terrain pathfinding algorithm or movement goals
+- May be related to recent code changes in bot-core.ts or pathfinder setup
+
+**Workaround:** None available - all longer-distance navigation blocked
+
+**Next Step:** Investigate pathfinder configuration in src/bot-manager/
