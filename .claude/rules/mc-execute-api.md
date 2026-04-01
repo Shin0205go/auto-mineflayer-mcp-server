@@ -65,7 +65,7 @@ await eat()                 // 注入済み: 安定した食事関数
 await escapeWater()         // 注入済み: 水中脱出
 await collectDrops(radius?) // 注入済み: bot.dig()/bot.attack()後のドロップ収集 (デフォルト8ブロック)
 await pathfinderGoto(goal, timeoutMs?) // 注入済み: タイムアウト+位置ロック検知付きpathfinder.goto()。No path時canDig=trueでリトライ。経路計算中(15s猶予)は位置不変でもstuckとみなさない
-await multiStagePathfind(x, z, stageDistance?) // 注入済み: 長距離をウェイポイントに分割して移動。各ステージにも位置ロック検知あり
+await multiStagePathfind(x, z, stageDistance?, targetY?) // 注入済み: 長距離をウェイポイントに分割して移動。各ステージにも位置ロック検知あり。targetY指定時は最終ステージでGoalNear(x,y,z,3)を使いY軸移動も行う(ネザー等の高低差がある地形向け)。中間ステージ失敗はスキップして継続、最終ステージ失敗のみthrow
 await safePlaceBlock(refBlock, faceVec) // 注入済み: blockUpdateタイムアウトを回避するブロック設置
 await pillarUp(height?)     // 注入済み: 足元にブロックを積み上げて高さを稼ぐ (デフォルト4ブロック)。bot.pillarUp()は存在しないのでこれを使う
 await descendSafely(targetY, maxDigAttempts?) // 注入済み: 足元を掘りながら安全に降下。崖・段差対応 (デフォルト maxDigAttempts=30)。{ reached, finalY } を返す
