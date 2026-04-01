@@ -431,9 +431,15 @@ export async function mc_execute(
       }
     },
     // Multi-stage pathfind: break long distances into waypoints
-    // Usage: await multiStagePathfind(targetX, targetZ, 10)
+    // Usage: await multiStagePathfind(targetX, targetZ, stageDistance?, targetY?)
     // Each stage retries with canDig=true on noPath/timeout, same as pathfinderGoto.
-    multiStagePathfind: async (targetX: number, targetZ: number, stageDistance: number = 10) => {
+    // targetY: optional Y coordinate for the final goal. When provided the last stage
+    //   uses GoalNear(x, y, z, 3) instead of GoalXZ so the bot actually descends/ascends
+    //   to the correct altitude (important in the Nether where terrain has large Y variation).
+    // skipFailedStages: intermediate stages that fail are logged but skipped (not thrown),
+    //   allowing the bot to advance toward the goal even over partially blocked terrain.
+    //   The final stage always throws on failure so the caller knows if goal was not reached.
+    multiStagePathfind: async (targetX: number, targetZ: number, stageDistance: number = 10, targetY?: number) => {
       const startPos = rawBot.entity.position;
       const dx = targetX - startPos.x;
       const dz = targetZ - startPos.z;
@@ -459,27 +465,48 @@ export async function mc_execute(
       };
 
       if (totalDist <= stageDistance) {
-        // Close enough, just go directly
-        return stageGoto(new goals.GoalXZ(targetX, targetZ), "direct");
+        // Close enough, just go directly.
+        // If targetY was provided, use GoalNear with Y so the bot moves to the right altitude.
+        const directGoal = targetY !== undefined
+          ? new goals.GoalNear(targetX, targetY, targetZ, 3)
+          : new goals.GoalXZ(targetX, targetZ);
+        return stageGoto(directGoal, "direct");
       }
 
       // Calculate waypoints
       const numStages = Math.ceil(totalDist / stageDistance);
       logFn(`Multi-stage pathfind: ${totalDist.toFixed(1)} blocks in ${numStages} stages`);
 
+      // Interpolate Y if targetY was provided (linear approach from current Y to targetY)
+      const startY = startPos.y;
+      const dyTotal = targetY !== undefined ? (targetY - startY) : 0;
+
       // Navigate each stage
       for (let i = 1; i <= numStages; i++) {
         const frac = i / numStages;
         const wpX = startPos.x + dx * frac;
         const wpZ = startPos.z + dz * frac;
+        const isFinal = i === numStages;
 
-        logFn(`Stage ${i}/${numStages}: (${Math.floor(wpX)}, ${Math.floor(wpZ)})`);
+        // For intermediate stages use GoalXZ (Y-agnostic) to avoid getting stuck on terrain.
+        // For the final stage, use GoalNear with Y if targetY was specified.
+        const goal = (isFinal && targetY !== undefined)
+          ? new goals.GoalNear(wpX, startY + dyTotal, wpZ, 3)
+          : new goals.GoalXZ(wpX, wpZ);
+
+        logFn(`Stage ${i}/${numStages}: (${Math.floor(wpX)}, ${Math.floor(wpZ)})${isFinal && targetY !== undefined ? ` Y=${Math.floor(startY + dyTotal)}` : ""}`);
 
         try {
-          await stageGoto(new goals.GoalXZ(wpX, wpZ), `stage ${i}`);
+          await stageGoto(goal, `stage ${i}`);
         } catch (e) {
           logFn(`Stage ${i} failed: ${String(e).substring(0, 60)}`);
-          throw e;
+          // Intermediate stage failures are logged and skipped — the bot may have
+          // advanced partway and can still attempt the next waypoint.
+          // The final stage always re-throws so the caller knows if the goal was not reached.
+          if (isFinal) {
+            throw e;
+          }
+          logFn(`[multiStagePathfind] Stage ${i} skipped, continuing toward goal`);
         }
       }
     },
@@ -1664,10 +1691,11 @@ export async function mc_execute(
         if (portalBlock) {
           logFn(`[enterPortal] Moving into portal block at (${portalBlock.position.x},${portalBlock.position.y},${portalBlock.position.z})`);
           try {
-            await Promise.race([
-              (rawBot.pathfinder.goto as any)(new goals.GoalBlock(portalBlock.position.x, portalBlock.position.y, portalBlock.position.z)),
-              new Promise<void>((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000))
-            ]);
+            await gotoWithStuckDetection(
+              new goals.GoalBlock(portalBlock.position.x, portalBlock.position.y, portalBlock.position.z),
+              8000,
+              false
+            );
           } catch { /* may already be inside */ }
         }
       }
