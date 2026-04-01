@@ -45,10 +45,20 @@ None recorded. Bot appears to have spawned or been teleported into this enclosed
 - Only North direction navigable but leads back to same Y=81
 - World appears to have vertical cave layers but bot cannot traverse between them
 
+### CRITICAL BUG: Pathfinder Returns "Success" But Doesn't Move
+
+When calling `await bot.pathfinder.goto(new goals.GoalY(targetY))` for Y values >= 85:
+- Returns no exception (appears successful)
+- But bot remains at Y=81
+- Example: `await bot.pathfinder.goto(new goals.GoalY(100))` completes without error but bot stays at Y=81
+
+This indicates **pathfinder.goto() is not actually executing the movement**.
+
 ### Hypothesis
-- Pathfinder's GoalY implementation may not be handling cave topology correctly
-- Chunk loading/unloading around bot may be preventing upward pathfinding
-- Block placement and world state sync issues may be preventing terrain escape
+1. **Pathfinder.goto() silently fails** - goal is unreachable but API doesn't throw
+2. **Chunk loading issue** - high Y coordinates not loaded properly
+3. **Movements configuration** - canDig=false prevents upward traversal
+4. **World state sync** - server position differs from client calculation
 
 ### Status
-BLOCKED - Stuck at (2, 81, 15). Pathfinder unable to navigate beyond Y=81 despite open air space visible at Y=82-87.
+BLOCKED at (2, 81, 15). Critical pathfinder bug preventing vertical movement. Code reviewer must inspect `bot.pathfinder.goto()` implementation and `Movements.canDig` settings.
