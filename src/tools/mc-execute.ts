@@ -121,6 +121,10 @@ export async function mc_execute(
       if (rawBot.pathfinder?.movements) {
         rawBot.pathfinder.movements.canDig = allowDig;
         (rawBot.pathfinder.movements as any).liquidCost = 10000;
+        // canDig=true (retry) の場合: 大きな降下を許可して垂直ナビゲーションを可能にする
+        // maxDropDown=4: 4ブロック落下 = 1.5HP ダメージ (許容範囲; 1ブロック≒0.5HP)
+        // canDig=false (初回) は maxDropDown=1 のまま (安全優先)
+        rawBot.pathfinder.movements.maxDropDown = allowDig ? 4 : 1;
       }
     } catch { /* ignore */ }
 
