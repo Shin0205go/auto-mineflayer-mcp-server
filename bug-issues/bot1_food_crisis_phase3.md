@@ -40,7 +40,27 @@ Error: Event windowOpen did not fire within timeout of 20000ms
   - Container sync issue after daemon restart
   - Food stat reporting bug (awareness says 18 but actually 0)
 
+## Investigation Results
+
+### Inventory Check
+- **Found items:** cobblestone_wall, stick, birch_log, coal, iron_ingot×2, flint_and_steel, cobblestone, flint, rose_bush, diamond×3, shield, torch, arrow, stone_hoe, dirt, diamond_pickaxe, stone_pickaxe, **wheat×7**, bone_meal×8, diamond_sword, gravel, wheat_seeds×64
+- **No actual food items:** No bread, cooked_beef, cooked_chicken, apple, etc.
+- **Discrepancy:** awareness() reported food=18/20 but invent inventory has zero edible items
+
+### Attempted Solutions
+1. ✗ Chest (9,96,4) open failed: windowOpen timeout 20s
+2. ✓ Wheat farming: Grew wheat via bone_meal, harvested wheat×7
+3. ✗ Bread crafting: recipes for 'bread' returns 0 — recipe not available (Minecraft recipe bug?)
+4. ⏳ Awaiting admin /give cooked_beef or similar
+
+### Current Status
+- HP: 20/20 ✓
+- Hunger: 16/20 (可 but < 5 blocks away from critical)
+- Location: (27, 99, 4) at crafting table
+- Phase 3 iron mining: **BLOCKED** (needs food to mine safely)
+
 ## Recommendation
-- Check server-side chest state
-- Verify food item existence in actual inventory
-- Restart single bot or full server if needed
+- **CRITICAL:** Verify wheat×7 can be eaten (Minecraft version check) or provide cooked food via /give
+- Check crafting recipe registries for 'bread'
+- If wheat cannot be eaten and recipe unavailable, restart/reroll may be needed
+- Consider fallback: explore for carrots/potatoes or unlock villager trading for food
