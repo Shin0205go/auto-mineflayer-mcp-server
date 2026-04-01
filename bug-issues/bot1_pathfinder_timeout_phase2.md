@@ -13,6 +13,12 @@
   - canDig=true doesn't fix it
   - maxDropDown parameter doesn't help
   - Manual digging ahead doesn't help
-  - Block placement timeout: "blockUpdate did not fire within timeout"
-- **Status**: Reported - BLOCKING ALL GAMEPLAY - need immediate pathfinder fix
+  - Block placement ALSO broken: "blockUpdate:(x,y,z) did not fire within 5000ms timeout"
+  - Manual walk without pathfinder works, but very limited
+  - Escape attempts (pillar up) fail due to block placement timeout
+- **Current State**:
+  - Position: (3, 82, 12) - stuck underground
+  - HP: 17.8/20 (taking damage from confinement)
+  - Can walk manually but no way to build escape
+- **Status**: Reported - BLOCKING ALL GAMEPLAY - need immediate pathfinder + block placement fix
 
