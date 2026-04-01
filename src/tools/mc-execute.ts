@@ -621,6 +621,67 @@ export async function mc_execute(
       return filled;
     },
 
+    // === collectDrops — pick up dropped items near the bot ===
+    // Call after bot.dig() or bot.attack() to collect entity drops.
+    // Usage: const result = await collectDrops(radius?)  — default radius=8
+    // Returns a summary string with item counts.
+    collectDrops: async (radius: number = 8) => {
+      const r = Math.min(radius, 20);
+      const NON_ITEM_OBJECTS = new Set([
+        "boat", "chest_boat", "oak_boat", "spruce_boat", "birch_boat", "jungle_boat",
+        "acacia_boat", "dark_oak_boat", "minecart", "chest_minecart", "furnace_minecart",
+        "tnt_minecart", "hopper_minecart", "tnt", "falling_block", "armor_stand",
+        "item_frame", "glow_item_frame", "painting", "end_crystal", "fishing_bobber",
+        "firework_rocket", "eye_of_ender", "thrown_item",
+      ]);
+      const findDrops = () => Object.values(rawBot.entities).filter((e: any) => {
+        if (!e || e === rawBot.entity || !e.position) return false;
+        if (e.position.distanceTo(rawBot.entity.position) > r) return false;
+        return e.name === "item" ||
+          e.displayName === "Item" || e.displayName === "Dropped Item" ||
+          (e.type === "object" && !NON_ITEM_OBJECTS.has(e.name || "")) ||
+          (e.type === "other" && e.name === "item");
+      });
+
+      const inventoryBefore = rawBot.inventory.items().reduce((s: number, i: any) => s + i.count, 0);
+
+      // Wait up to 4s for drops to appear (server may delay spawning drop entities)
+      let drops = findDrops();
+      for (let t = 0; t < 8 && drops.length === 0; t++) {
+        await new Promise<void>(resolve => setTimeout(resolve, 500));
+        drops = findDrops();
+      }
+
+      if (drops.length === 0) {
+        return "collectDrops: no drops found nearby";
+      }
+
+      // Navigate to each drop and pick up
+      let collected = 0;
+      for (const drop of drops.slice(0, 12)) {
+        if (!drop.position) continue;
+        const dist = drop.position.distanceTo(rawBot.entity.position);
+        if (dist > 1.5) {
+          // Move close enough for auto-pickup (within 1.5 blocks)
+          try {
+            const goal = new goals.GoalNear(drop.position.x, drop.position.y, drop.position.z, 1);
+            await Promise.race([
+              (rawBot.pathfinder.goto as any)(goal),
+              new Promise<void>((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000))
+            ]);
+          } catch { /* item may have already been picked up or moved */ }
+        }
+        // Short wait for auto-pickup
+        await new Promise<void>(resolve => setTimeout(resolve, 200));
+        collected++;
+      }
+
+      const inventoryAfter = rawBot.inventory.items().reduce((s: number, i: any) => s + i.count, 0);
+      const gained = inventoryAfter - inventoryBefore;
+      logFn(`[collectDrops] Approached ${collected} drops, inventory +${gained} items`);
+      return `collectDrops: approached ${collected} drops, gained ${gained} items`;
+    },
+
     // AutoSafety state (read-only from agent code)
     // Getter function so agent always reads the latest state (not a stale snapshot).
     safetyState: managed.safetyState ?? null,
