@@ -61,3 +61,30 @@ bot.setControlState('jump', true);  // Used to work, now unclear
 - Check movement controller queue
 - Verify world block cache synchronization
 - Consider bot reset/respawn as recovery
+
+## Additional Findings (Session 2)
+**Pathfinder False Success:**
+- `bot.pathfinder.goto()` claims success ("At furnace", "Reached furnace") but bot doesn't move
+- Happens reliably - 5+ attempts all reported success with 0 movement
+- No error thrown, just silent failure
+
+**Block Placement Timeout:**
+- `await bot.placeBlock()` times out on `blockUpdate` event
+- Every block placement attempt (4+ tries) resulted in 5000ms timeout
+- Server never confirms block update
+- Affects shelter building, furnace creation, terrain management
+
+**Container Opening Issues:**
+- `bot.openContainer()` fails with "containerToOpen is neither a block nor an entity"
+- Furnace block identified correctly but cannot be opened
+- Prevents access to existing furnace 6m away
+
+**Intermittent Movement Success:**
+- Manual `setControlState()` works sometimes (fell 2 blocks successfully)
+- Other times has no effect or causes erratic movement
+- Suggests input queue or controller state corruption
+
+**World State Mismatch:**
+- Furnace exists at (7,100,-3) confirmed by findBlock
+- But bot cannot reach or interact with it
+- Suggests spatial synchronization issue or access control
