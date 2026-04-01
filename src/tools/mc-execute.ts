@@ -784,6 +784,45 @@ export async function mc_execute(
       return { placed, startY, finalY };
     },
 
+    // === descendSafely — 足元を掘りながら安全に降下 ===
+    // Usage: await descendSafely(65)  — Y=65まで降りる
+    // Bot の真下を1ブロックずつ掘って降りる。崖でも使える。
+    descendSafely: async (targetY: number, maxDigAttempts: number = 30) => {
+      let attempts = 0;
+      while (Math.floor(rawBot.entity.position.y) > targetY + 1 && attempts < maxDigAttempts) {
+        attempts++;
+        const pos = rawBot.entity.position.floored();
+        const blockBelow = rawBot.blockAt(pos.offset(0, -1, 0));
+        const block2Below = rawBot.blockAt(pos.offset(0, -2, 0));
+
+        if (blockBelow && blockBelow.name !== 'air' && blockBelow.name !== 'cave_air' &&
+            blockBelow.name !== 'water' && blockBelow.name !== 'lava') {
+          // 固体ブロックがある → 掘る
+          try {
+            await rawBot.dig(blockBelow);
+            logFn(`[descendSafely] Dug ${blockBelow.name} at y=${blockBelow.position.y}`);
+          } catch(e) { /* ignore */ }
+        } else {
+          // 下が空洞 → sneak 解除して少し前進し落ちる
+          rawBot.setControlState('sneak', false);
+          await new Promise<void>(r => setTimeout(r, 300));
+        }
+
+        // 2ブロック下が air なら着地待ち
+        if (block2Below && (block2Below.name === 'air' || block2Below.name === 'cave_air')) {
+          await new Promise<void>(r => setTimeout(r, 500));
+        }
+
+        const newY = Math.floor(rawBot.entity.position.y);
+        logFn(`[descendSafely] Y=${newY}, target=${targetY}, attempt=${attempts}`);
+
+        if (newY <= targetY + 1) break;
+      }
+      const finalY = Math.floor(rawBot.entity.position.y);
+      logFn(`[descendSafely] Done: Y=${finalY} (target=${targetY})`);
+      return { reached: finalY <= targetY + 2, finalY };
+    },
+
     // === Terrain management: fill holes within radius ===
     // Usage: const count = await fillHoles(radius?)  — default radius=6
     // Scans for fall-risk positions (air+air below at foot level) and fills with cobblestone/dirt
