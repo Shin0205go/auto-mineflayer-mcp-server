@@ -102,7 +102,22 @@ export async function mc_execute(
     // Store timer so it can be cleared (optional, not strictly needed)
     void timer;
   });
-  const getMessagesFn = () => botManager.getChatMessages(botUsername, true);
+  const getMessagesFn = () => {
+    const msgs = botManager.getChatMessages(botUsername, true);
+    // Deduplicate: consecutive identical [Server] messages get collapsed to one entry.
+    // This suppresses spam loops (e.g. repeated gamerule or command confirmations)
+    // that would otherwise flood the agent's context and impair decision-making.
+    const deduped: typeof msgs = [];
+    for (const m of msgs) {
+      const prev = deduped[deduped.length - 1];
+      if (prev && prev.username === m.username && prev.message === m.message) {
+        // Skip exact duplicate
+        continue;
+      }
+      deduped.push(m);
+    }
+    return deduped;
+  };
 
   // Shared helper: goto with hard timeout + position-lock (stuck) detection.
   // Used by pathfinderGoto and multiStagePathfind to avoid silent hangs.
@@ -348,15 +363,35 @@ export async function mc_execute(
     },
     // Multi-stage pathfind: break long distances into waypoints
     // Usage: await multiStagePathfind(targetX, targetZ, 10)
+    // Each stage retries with canDig=true on noPath/timeout, same as pathfinderGoto.
     multiStagePathfind: async (targetX: number, targetZ: number, stageDistance: number = 10) => {
       const startPos = rawBot.entity.position;
       const dx = targetX - startPos.x;
       const dz = targetZ - startPos.z;
       const totalDist = Math.sqrt(dx*dx + dz*dz);
 
+      // Helper: one stage goto with canDig retry (mirrors pathfinderGoto logic)
+      const stageGoto = async (goal: any, label: string): Promise<void> => {
+        try {
+          await gotoWithStuckDetection(goal, 20000, false);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if ((msg.includes("No path") || msg.includes("no path") || msg.includes("Took to long") || msg.includes("Took too long") || msg.includes("Pathfinder stuck")) && !msg.toLowerCase().includes("goal was changed")) {
+            logFn(`[multiStagePathfind] ${label} retry with canDig=true`);
+            try {
+              await gotoWithStuckDetection(goal, 20000, true);
+            } finally {
+              try { if (rawBot.pathfinder?.movements) rawBot.pathfinder.movements.canDig = false; } catch { /* ignore */ }
+            }
+          } else {
+            throw err;
+          }
+        }
+      };
+
       if (totalDist <= stageDistance) {
         // Close enough, just go directly
-        return gotoWithStuckDetection(new goals.GoalXZ(targetX, targetZ), 20000, false);
+        return stageGoto(new goals.GoalXZ(targetX, targetZ), "direct");
       }
 
       // Calculate waypoints
@@ -372,7 +407,7 @@ export async function mc_execute(
         logFn(`Stage ${i}/${numStages}: (${Math.floor(wpX)}, ${Math.floor(wpZ)})`);
 
         try {
-          await gotoWithStuckDetection(new goals.GoalXZ(wpX, wpZ), 20000, false);
+          await stageGoto(new goals.GoalXZ(wpX, wpZ), `stage ${i}`);
         } catch (e) {
           logFn(`Stage ${i} failed: ${String(e).substring(0, 60)}`);
           throw e;
@@ -1370,10 +1405,10 @@ export async function mc_execute(
       const itemDef = (rawBot.registry?.itemsByName as any)?.[itemName];
       if (!itemDef) throw new Error(`craftWithTable: unknown item "${itemName}"`);
 
-      // Find nearby crafting table (within 4 blocks)
+      // Find nearby crafting table (within 6 blocks — matches recipesFor search radius)
       const tableId = (rawBot.registry?.blocksByName as any)?.crafting_table?.id;
       const table = tableId
-        ? rawBot.findBlock({ matching: tableId, maxDistance: 4 })
+        ? rawBot.findBlock({ matching: tableId, maxDistance: 6 })
         : null;
 
       // Get recipes (with table if available for 3x3)
