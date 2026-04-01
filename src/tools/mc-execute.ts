@@ -90,16 +90,50 @@ export async function mc_execute(
           }
         } catch { /* ignore */ }
         const gotoPromise = (rawBot.pathfinder.goto as any)(goal);
-        return Promise.race([
-          gotoPromise,
-          new Promise<void>((_resolve, reject) =>
-            setTimeout(() => {
-              // Stop the pathfinder immediately on timeout so it doesn't continue as a zombie
-              try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
-              reject(new Error(`Pathfinder timeout after ${timeoutMs}ms`));
-            }, timeoutMs)
-          )
-        ]);
+
+        // Rule B: position-lock detection — abort if position hasn't changed for STUCK_INTERVAL ms.
+        // This prevents the 120s mc_execute global timeout from firing when pathfinder hangs
+        // internally (e.g. "Took too long to decide path" in complex underground/water terrain).
+        const STUCK_INTERVAL = 5000;
+        const STUCK_THRESHOLD = 0.5; // blocks
+        let lastPos = rawBot.entity.position.clone();
+        let stuckCheckTimer: ReturnType<typeof setInterval> | null = null;
+        let stuckCount = 0;
+        const MAX_STUCK_CHECKS = 2; // abort after 2 consecutive stuck intervals (10s with no movement)
+
+        return new Promise<void>((resolve, reject) => {
+          const cleanup = () => {
+            if (stuckCheckTimer !== null) { clearInterval(stuckCheckTimer); stuckCheckTimer = null; }
+          };
+
+          stuckCheckTimer = setInterval(() => {
+            const currentPos = rawBot.entity.position;
+            const moved = currentPos.distanceTo(lastPos);
+            if (moved < STUCK_THRESHOLD) {
+              stuckCount++;
+              if (stuckCount >= MAX_STUCK_CHECKS) {
+                cleanup();
+                try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
+                reject(new Error(`Pathfinder stuck: position unchanged for ${STUCK_INTERVAL * MAX_STUCK_CHECKS}ms`));
+              }
+            } else {
+              stuckCount = 0;
+              lastPos = currentPos.clone();
+            }
+          }, STUCK_INTERVAL);
+
+          const hardTimeoutId = setTimeout(() => {
+            cleanup();
+            // Stop the pathfinder immediately on timeout so it doesn't continue as a zombie
+            try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
+            reject(new Error(`Pathfinder timeout after ${timeoutMs}ms`));
+          }, timeoutMs);
+
+          gotoPromise.then(
+            (val: unknown) => { cleanup(); clearTimeout(hardTimeoutId); resolve(val as void); },
+            (err: unknown) => { cleanup(); clearTimeout(hardTimeoutId); reject(err); }
+          );
+        });
       };
 
       try {
