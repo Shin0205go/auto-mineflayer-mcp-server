@@ -32,8 +32,23 @@ type: project
 tryEmergencyDodge() existed but was never called from onPhysicsTick().
 Fix: added `this.tryEmergencyDodge()` at the top of onPhysicsTick().
 
+## Past bug: generalFleeActive updateState used wrong field (fixed 2026-04-01 commit d1b26d8)
+tryGeneralFlee() called updateState("general-flee", ..., "creeperFleeActive") — updating the
+wrong SafetyState field. safetyState.creeperFleeActive would become true during general flee
+events, misleading agents that read the state. Also SafetyState lacked generalFleeActive field.
+Fix: added generalFleeActive to SafetyState interface + updated all three updateState calls.
+
+## Past bug: "goal was changed" from AutoSafety/mc_execute race (fixed 2026-04-01 commit 72f6c5f)
+All three pathfinder-using actions (navigateTo, tryGeneralFlee, creeper flee) set a goal and
+then waited a fixed time (2-10s) before calling goalHandle.cleanup(). If mc_execute started
+during that window and called pathfinderGoto() -> rawBot.pathfinder.goto(), the new goal
+overwrote the AutoSafety goal, causing mineflayer to emit "goal was changed before it could
+be completed" on the AutoSafety goto promise. This error propagated back to pathfinderGoto().
+Fix: replaced all fixed-duration cleanups with 200ms mcExecuteActive polling. Each action
+now calls goalHandle.cleanup() within ~200ms of mc_execute starting.
+
 ## Known limitations
-- tryGeneralFlee uses GoalXZ (horizontal only) — cannot flee from aerial mobs like Phantom
+- tryGeneralFlee uses GoalNear (horizontal flee target) — cannot flee from aerial mobs like Phantom
 - Phantom defense relies on auto-sleep to skip night before Phantoms spawn
 - general-flee is idle-only (mcExecuteActive guard) — does not protect during long mc_execute calls
 - emergencyEat/autoEat fire even during mc_execute (no mcExecuteActive guard)

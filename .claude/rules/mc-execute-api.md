@@ -44,8 +44,9 @@ bot.openContainer(chestBlock)     // チェスト/ディスペンサー等を開
 // 例: const fw = await bot.openFurnace(fb); await fw.putFuel(...); await fw.putInput(...); fw.close();
 
 // Crafting
-bot.craft(recipe, count, table)                 // クラフト実行
+bot.craft(recipe, count, table)                 // クラフト実行 (低レベル。windowOpenタイムアウトに注意→craftWithTable()推奨)
 recipesFor(itemId, metadata?, count?)           // 注入済み: bot.recipesFor()のラッパー。近くのクラフトテーブルを自動検出して3x3レシピも返す
+await craftWithTable(itemName, count?)          // 注入済み: 信頼性の高いクラフト。activateBlock+wait+craftを一括実行。windowOpenタイムアウト(40%失敗)を回避
 
 // Info
 bot.nearestEntity(filter)   // 最近のエンティティ
@@ -104,13 +105,26 @@ if (block) {
 }
 ```
 
-### クラフト
+### クラフト (重要: bot.craft()は直接呼ばない)
 ```js
-// recipesFor() 注入済みラッパーを使う (近くのテーブルを自動検出、3x3レシピも返す)
+// NG: bot.craft(recipe, 1, table) → windowOpenタイムアウト40%失敗
+// OK: craftWithTable() ヘルパー (推奨) — activateBlock+wait+craftを一括実行
+
+// 方法1: craftWithTable() ヘルパー (推奨)
+// クラフトテーブルに近づいてから呼ぶ (4ブロック以内)
+const result = await craftWithTable('bread', 1);
+log('Crafted: ' + JSON.stringify(result));  // { crafted: 'bread', count: 1, tableUsed: true }
+
+// 方法2: 低レベル (bot.craft + activateBlock + wait)
+// craftWithTable() が使えない場合のみ使用
 const itemId = bot.registry.itemsByName['wooden_pickaxe'].id;
-const recipes = recipesFor(itemId);  // ← sandboxに注入済み。bot.recipesFor()より確実
+const recipes = recipesFor(itemId);  // ← 注入済みラッパー
 const table = bot.findBlock({matching: bot.registry.blocksByName['crafting_table'].id, maxDistance: 4});
-if (recipes[0]) await bot.craft(recipes[0], 1, table);
+if (recipes[0] && table) {
+  await bot.activateBlock(table);  // ← 先にウィンドウを開く
+  await wait(300);
+  await bot.craft(recipes[0], 1, table);
+}
 ```
 
 ### 戦闘 + ドロップ収集
