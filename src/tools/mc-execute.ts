@@ -855,19 +855,24 @@ export async function mc_execute(
       let collected = 0;
       for (const drop of drops.slice(0, 12)) {
         if (!drop.position) continue;
+        // Re-check entity still exists (may have been picked up already)
+        const stillExists = rawBot.entities[drop.id as any];
+        if (!stillExists) { collected++; continue; }
         const dist = drop.position.distanceTo(rawBot.entity.position);
-        if (dist > 1.5) {
-          // Move close enough for auto-pickup (within 1.5 blocks)
+        if (dist > 0.8) {
+          // Move close enough for auto-pickup (within 0.8 blocks).
+          // Use gotoWithStuckDetection so stuck pathfinder doesn't hang indefinitely.
+          // If pathfinder fails, fall through and hope the item gets picked up by proximity.
           try {
-            const goal = new goals.GoalNear(drop.position.x, drop.position.y, drop.position.z, 1);
-            await Promise.race([
-              (rawBot.pathfinder.goto as any)(goal),
-              new Promise<void>((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000))
-            ]);
-          } catch { /* item may have already been picked up or moved */ }
+            await gotoWithStuckDetection(
+              new goals.GoalNear(drop.position.x, drop.position.y, drop.position.z, 0),
+              5000,
+              false
+            );
+          } catch { /* item may have been picked up or pathfinder blocked */ }
         }
-        // Short wait for auto-pickup
-        await new Promise<void>(resolve => setTimeout(resolve, 200));
+        // Wait up to 800ms for the server to confirm item pickup (server round-trip latency)
+        await new Promise<void>(resolve => setTimeout(resolve, 800));
         collected++;
       }
 
@@ -1182,10 +1187,11 @@ export async function mc_execute(
               resolve();
             };
             rawBot.on("windowOpen" as any, onWindow);
+            // 3000ms timeout: enough for laggy servers (was 1500ms, increased for reliability)
             setTimeout(() => {
               rawBot.removeListener("windowOpen" as any, onWindow);
               resolve();
-            }, 1500);
+            }, 3000);
           });
           await rawBot.activateBlock(chestBlock);
           await windowOpenPromise;

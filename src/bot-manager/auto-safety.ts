@@ -517,10 +517,14 @@ export class AutoSafety {
       ? this.bot.findBlock({ matching: waterDef.id, maxDistance: 32 })
       : null;
 
-    // Nearest chest within 32 blocks
-    const chestDef = (this.bot.registry as any).blocksByName['chest'];
-    const chestBlock = chestDef
-      ? this.bot.findBlock({ matching: chestDef.id, maxDistance: 32 })
+    // Nearest chest/barrel/trapped_chest within 32 blocks
+    // Collect IDs for all container block types that are openable
+    const containerBlockNames = ['chest', 'barrel', 'trapped_chest'];
+    const containerIds = containerBlockNames
+      .map(n => (this.bot.registry as any).blocksByName[n]?.id)
+      .filter((id): id is number => id !== undefined);
+    const chestBlock = containerIds.length > 0
+      ? this.bot.findBlock({ matching: containerIds, maxDistance: 32 })
       : null;
 
     this.state.nearbyOres = ores;
