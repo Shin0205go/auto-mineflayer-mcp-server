@@ -222,7 +222,7 @@ export async function mc_execute(
         const msg = err instanceof Error ? err.message : String(err);
         // On "No path" errors, retry with canDig=true as fallback for complex terrain.
         // "goal was changed" means the goal was overridden externally — retrying won't help, rethrow.
-        if ((msg.includes("No path") || msg.includes("no path")) && !msg.toLowerCase().includes("goal was changed")) {
+        if ((msg.includes("No path") || msg.includes("no path") || msg.includes("Took to long") || msg.includes("Took too long") || msg.includes("Pathfinder stuck")) && !msg.toLowerCase().includes("goal was changed")) {
           logFn(`[pathfinderGoto] No path with canDig=false, retrying with canDig=true`);
           try {
             return await gotoWithStuckDetection(goal, timeoutMs, true);
