@@ -104,8 +104,23 @@ export async function mc_execute(
     let stuckCheckTimer: ReturnType<typeof setInterval> | null = null;
 
     return new Promise<void>((resolve, reject) => {
+      // Pathfinder silently resolves (instead of rejecting) when it cannot find a path.
+      // We listen for path_update with status=noPath and reject explicitly so that
+      // the canDig=true retry logic in pathfinderGoto is triggered correctly.
+      const onPathUpdate = (result: any) => {
+        if (result?.status === 'noPath') {
+          (rawBot.pathfinder as any).removeListener('path_update', onPathUpdate);
+          cleanup();
+          clearTimeout(hardTimeoutId);
+          try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
+          reject(new Error('No path to the goal!'));
+        }
+      };
+      (rawBot.pathfinder as any).on('path_update', onPathUpdate);
+
       const cleanup = () => {
         if (stuckCheckTimer !== null) { clearInterval(stuckCheckTimer); stuckCheckTimer = null; }
+        (rawBot.pathfinder as any).removeListener('path_update', onPathUpdate);
       };
 
       stuckCheckTimer = setInterval(() => {
