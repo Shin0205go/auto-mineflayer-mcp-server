@@ -1094,6 +1094,52 @@ export async function mc_execute(
       return { crafted: itemName, count: crafted, tableUsed: !!table };
     },
 
+    // === openChest — reliable chest/barrel/shulker_box access ===
+    // bot.openContainer() requires the windowOpen event within 20s or throws.
+    // On laggy servers the window packet can be delayed, causing "Event windowOpen did
+    // not fire within timeout of 20000ms".
+    //
+    // Fix (same pattern as craftWithTable): call activateBlock first to pre-open the
+    // GUI, wait up to 1000ms for windowOpen, then call openContainer for the handle.
+    //
+    // Usage: const chest = await openChest(chestBlock)
+    //   Returns: the chest window object (same as bot.openContainer())
+    //   Use chest.containerItems() to list contents, chest.withdraw() / chest.deposit(),
+    //   then await chest.close() when done.
+    // Example:
+    //   const chestId = bot.registry.blocksByName['chest'].id;
+    //   const chestBlock = bot.findBlock({ matching: chestId, maxDistance: 5 });
+    //   if (chestBlock) {
+    //     await pathfinderGoto(new goals.GoalNear(chestBlock.position.x, chestBlock.position.y, chestBlock.position.z, 2), 15000);
+    //     const chest = await openChest(chestBlock);
+    //     log(JSON.stringify(chest.containerItems().map(i => i.name)));
+    //     await chest.close();
+    //   }
+    openChest: async (chestBlock: any) => {
+      if (!chestBlock) throw new Error("openChest: chestBlock is null");
+
+      // Pre-open the GUI to avoid windowOpen timeout
+      try {
+        await rawBot.activateBlock(chestBlock);
+        // Wait for window to open (up to 1000ms)
+        await new Promise<void>(resolve => {
+          const onWindow = () => {
+            rawBot.removeListener("windowOpen" as any, onWindow);
+            resolve();
+          };
+          rawBot.on("windowOpen" as any, onWindow);
+          setTimeout(() => {
+            rawBot.removeListener("windowOpen" as any, onWindow);
+            resolve();
+          }, 1000);
+        });
+      } catch { /* ignore activateBlock errors — openContainer will open it */ }
+
+      // Open container for programmatic access
+      const chest = await rawBot.openContainer(chestBlock);
+      return chest;
+    },
+
     // Standard JS
     console: {
       log: (...args: unknown[]) => { if (logs.length < MAX_LOG_LINES) logs.push(args.map(String).join(" ")); },

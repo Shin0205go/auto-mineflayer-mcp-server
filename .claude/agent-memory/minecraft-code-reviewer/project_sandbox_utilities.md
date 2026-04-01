@@ -18,8 +18,8 @@ type: project
 
 ## Items / Crafting / Farming
 - `collectDrops(radius?)` — post-dig/combat item collection. Waits up to 4s for drop entities, then pathfinds to each.
-- `recipesFor(itemId, meta?, count?)` — wraps bot.recipesFor() but auto-finds nearby crafting table (≤6 blocks) to return 3x3 recipes too.
-- `craftWithTable(itemName, count?)` — reliable crafting helper. Calls activateBlock(table) + waits for windowOpen event (1s timeout), then calls bot.craft(). Fixes the 40% windowOpen timeout failure in raw bot.craft(). Returns { crafted, count, tableUsed }. Added 2026-04-01.
+- `recipesFor(itemId, meta?, minResultCount?)` — wraps bot.recipesFor() but auto-finds nearby crafting table (≤6 blocks) to return 3x3 recipes too. 3rd arg is minResultCount (default 1) = inventory filter for N crafts worth of materials.
+- `craftWithTable(itemName, count?)` — reliable crafting helper. Calls activateBlock(table) + waits for windowOpen event (1s timeout), then calls bot.craft(). Fixes the 40% windowOpen timeout failure in raw bot.craft(). IMPORTANT: always passes minResultCount=1 to recipesFor (not count) to avoid "no recipe found" when bot has single-craft materials. Also adds slot[0] recovery (shift-click) for laggy servers where putAway(0) fails. Returns { crafted, count, tableUsed }. Fixed 2026-04-01.
 - `smeltItems(furnaceBlock, inputItemName, fuelItemName, count?)` — opens furnace via bot.openFurnace() (NOT openContainer), puts fuel+input, waits for smelted output, returns { input, fuel, outputCount }. outputBefore is recorded to avoid false early-resolve when furnace had pre-existing output. Added 2026-04-01, fixed 2026-04-01.
 - `plantSeeds(farmlandBlock, seedItemName?)` — equips seeds + places via raw block_place packet (500ms fallback). Avoids bot.placeBlock() 5s blockUpdate timeout. NOTE: bot.place()/bot.interact() do NOT exist. Added 2026-04-01, fixed from bot.placeBlock to raw packet 2026-04-01.
 
@@ -34,7 +34,9 @@ type: project
 ## Known issues (as of 2026-04-01)
 - bot.placeBlock() still uses mineflayer's 5s blockUpdate timeout internally — use safePlaceBlock() or plantSeeds() instead
 - bot.recipesFor() often returns [] when no table passed — use recipesFor() wrapper
+- bot.recipesFor(id, null, count, table) returns [] when ingredients < count — always use 1 as minResultCount for recipe detection
 - bot.craft(recipe, count, table) called directly fails ~40% with windowOpen timeout — use craftWithTable() instead
+- craftWithTable() was previously passing count as minResultCount to recipesFor() — fixed 2026-04-01 to always use 1
 - goals import: uses `import pathfinderPkg from "mineflayer-pathfinder"` (default import) same as bot-core.ts
 - bot.combat("cow") does NOT exist — use bot.attack(entity) + collectDrops()
 - bot.pillarUp() does NOT exist — use pillarUp() sandbox helper
