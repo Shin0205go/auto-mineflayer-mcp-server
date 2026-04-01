@@ -20,7 +20,8 @@ bot.entity.position  // Vec3 座標
 bot.inventory.items()    // アイテム配列 [{name, count, metadata}]
 bot.heldItem             // 現在の手持ちアイテム
 bot.equip(item, dest)    // 装備 (dest = 'head'|'chest'|'legs'|'feet'|'hand')
-bot.consume()            // 食べる
+bot.consume()            // 食べる（非推奨: entity_statusタイムアウトあり → eat()を使う）
+eat()                    // 注入済み: 安定した食事関数（food_level_changeイベント + 2800msフォールバック）
 
 // Movement
 bot.pathfinder.goto(goal)           // ナビゲーション
@@ -102,13 +103,15 @@ if (mob) {
 
 ### 食事
 ```js
+// eat() を使う（bot.consume() はサーバーのentity_statusパケット遅延でタイムアウトするため非推奨）
 const food = bot.inventory.items().find(i =>
   ['bread','cooked_beef','cooked_porkchop','cooked_chicken'].includes(i.name)
 );
 if (food && bot.food < 18) {
   await bot.equip(food, 'hand');
-  await bot.consume();
+  await eat();  // ← sandboxに注入済み。food_level_changeイベントで完了検知、2800msフォールバック付き
 }
+// bot.consume() は使わない: "Promise timed out" エラーが頻発する
 ```
 
 ## 制約

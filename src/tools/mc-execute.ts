@@ -129,6 +129,99 @@ export async function mc_execute(
         }
       }
     },
+    // === Safe block placement (bypasses blockUpdate timeout) ===
+    // Usage: await safePlaceBlock(referenceBlock, faceVector)
+    // Uses raw packet directly (~50ms vs 5000ms timeout), then syncs client block cache
+    safePlaceBlock: async (referenceBlock: any, faceVector: any) => {
+      const pos = referenceBlock.position;
+      const direction = faceVector.y === 1 ? 1 : faceVector.y === -1 ? 0 : faceVector.x === 1 ? 5 : faceVector.x === -1 ? 4 : faceVector.z === 1 ? 3 : 2;
+
+      // Ensure we're looking at the target block
+      await rawBot.lookAt(pos.offset(0.5, 0.5, 0.5), true);
+
+      // Wait for server block_change to sync client cache (with timeout)
+      const placePos = pos.offset(faceVector.x, faceVector.y, faceVector.z);
+      const syncPromise = new Promise<void>(resolve => {
+        const onBlockUpdate = (oldBlock: any, newBlock: any) => {
+          if (newBlock.position.x === placePos.x &&
+              newBlock.position.y === placePos.y &&
+              newBlock.position.z === placePos.z &&
+              newBlock.name !== "air") {
+            rawBot.removeListener("blockUpdate", onBlockUpdate);
+            resolve();
+          }
+        };
+        rawBot.on("blockUpdate", onBlockUpdate);
+        // Timeout: resolve anyway after 300ms
+        setTimeout(() => {
+          rawBot.removeListener("blockUpdate", onBlockUpdate);
+          resolve();
+        }, 300);
+      });
+
+      // Send raw packet (avoids mineflayer's 5s blockUpdate wait)
+      (rawBot as any)._client.write("block_place", {
+        location: { x: pos.x, y: pos.y, z: pos.z },
+        direction,
+        hand: 0,
+        cursorX: 0.5,
+        cursorY: faceVector.y === 1 ? 1.0 : 0.5,
+        cursorZ: 0.5,
+        insideBlock: false,
+      });
+
+      await syncPromise;
+    },
+    // === Reliable eat function (bypasses bot.consume() entity_status timeout) ===
+    // bot.consume() depends on the server sending entity_status=9 within 2500ms.
+    // On high-latency or laggy servers this packet arrives late or is missed,
+    // causing "Promise timed out" errors that make food consumption impossible.
+    //
+    // eat() uses activateItem() via raw use_item packet + waits for food_level_change
+    // event (fired when food actually changes) with a 3000ms fallback.
+    // This is reliable regardless of entity_status packet delivery.
+    //
+    // Usage: await eat()   — eats heldItem (equip the food first with bot.equip)
+    eat: async () => {
+      if (!rawBot.heldItem) throw new Error("No item in hand — equip food first");
+      const itemName = rawBot.heldItem.name;
+      const foodBefore = rawBot.food;
+
+      // Detect eat completion via food_level_change event
+      const eatDone = new Promise<void>(resolve => {
+        const onFoodChange = () => {
+          rawBot.removeListener("food" as any, onFoodChange);
+          resolve();
+        };
+        rawBot.on("food" as any, onFoodChange);
+        // Fallback: eating takes ~1.61s in vanilla; wait 2800ms then resolve anyway
+        setTimeout(() => {
+          rawBot.removeListener("food" as any, onFoodChange);
+          resolve();
+        }, 2800);
+      });
+
+      // Send use_item packet directly to avoid bot.consume()'s entity_status dependency
+      const sequence = (rawBot as any)._sequenceNumber ?? 0;
+      if ((rawBot as any).supportFeature?.("useItemWithOwnPacket")) {
+        (rawBot as any)._client.write("use_item", { hand: 0, sequence });
+      } else {
+        // Older protocol: block_place with location (-1,255,-1)
+        (rawBot as any)._client.write("block_place", {
+          location: { x: -1, y: 255, z: -1 },
+          direction: -1,
+          heldItem: rawBot.heldItem,
+          cursorX: -1, cursorY: -1, cursorZ: -1,
+        });
+      }
+
+      await eatDone;
+
+      const foodAfter = rawBot.food;
+      logFn(`[eat] ${itemName}: food ${foodBefore} → ${foodAfter}`);
+      return { item: itemName, foodBefore, foodAfter };
+    },
+
     // === Meta-cognition layer: observe → understand → act ===
     // awareness() — self-state + spatial snapshot (call before any action)
     awareness: () => {
@@ -320,6 +413,82 @@ export async function mc_execute(
       return lines.join("\n");
     },
 
+    // === Terrain management: fill holes within radius ===
+    // Usage: const count = await fillHoles(radius?)  — default radius=6
+    // Scans for fall-risk positions (air+air below at foot level) and fills with cobblestone/dirt
+    // Only fills blocks within placement reach (4.5 blocks). Skips unreachable holes.
+    fillHoles: async (radius: number = 6) => {
+      const MAX_PLACE_DIST = 4.5;
+      const r = Math.min(radius, 10);
+      const pos = rawBot.entity.position;
+      const cx = Math.floor(pos.x);
+      const cy = Math.floor(pos.y);
+      const cz = Math.floor(pos.z);
+      let filled = 0;
+      let skippedFar = 0;
+
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (dx === 0 && dz === 0) continue;
+          // Check foot level: air + air below = fall risk
+          const atFeet = rawBot.blockAt(new Vec3(cx + dx, cy, cz + dz));
+          const below = rawBot.blockAt(new Vec3(cx + dx, cy - 1, cz + dz));
+          if (!atFeet || !below) continue;
+          if ((atFeet.name !== "air" && atFeet.name !== "cave_air") ||
+              (below.name !== "air" && below.name !== "cave_air")) continue;
+
+          // Find support: first solid block going down from foot-1
+          let supportY = cy - 2;
+          while (supportY > cy - 10) {
+            const s = rawBot.blockAt(new Vec3(cx + dx, supportY, cz + dz));
+            if (s && s.name !== "air" && s.name !== "cave_air" && s.name !== "water") break;
+            supportY--;
+          }
+
+          // Fill from support up to foot level
+          for (let fy = supportY; fy < cy; fy++) {
+            const base = rawBot.blockAt(new Vec3(cx + dx, fy, cz + dz));
+            const above = rawBot.blockAt(new Vec3(cx + dx, fy + 1, cz + dz));
+            if (!base || !above) continue;
+            if (base.name === "air" || base.name === "cave_air") continue;
+            if (above.name !== "air" && above.name !== "cave_air") continue;
+
+            // Distance check: server rejects placement beyond ~4.5 blocks
+            const blockCenter = base.position.offset(0.5, 1.5, 0.5); // center of placement target
+            const dist = blockCenter.distanceTo(rawBot.entity.position);
+            if (dist > MAX_PLACE_DIST) { skippedFar++; continue; }
+
+            const cobble = rawBot.inventory.items().find((i: any) => i.name === "cobblestone" || i.name === "dirt");
+            if (!cobble) { logFn("[fillHoles] Out of fill material"); return filled; }
+
+            await rawBot.equip(cobble, "hand");
+            // Use safePlaceBlock logic (raw packet + sync)
+            const bPos = base.position;
+            await rawBot.lookAt(bPos.offset(0.5, 0.5, 0.5), true);
+            const syncP = new Promise<void>(resolve => {
+              const handler = (_o: any, n: any) => {
+                if (n.position.x === bPos.x && n.position.y === bPos.y + 1 && n.position.z === bPos.z && n.name !== "air") {
+                  rawBot.removeListener("blockUpdate", handler);
+                  resolve();
+                }
+              };
+              rawBot.on("blockUpdate", handler);
+              setTimeout(() => { rawBot.removeListener("blockUpdate", handler); resolve(); }, 300);
+            });
+            (rawBot as any)._client.write("block_place", {
+              location: { x: bPos.x, y: bPos.y, z: bPos.z },
+              direction: 1, hand: 0,
+              cursorX: 0.5, cursorY: 1.0, cursorZ: 0.5, insideBlock: false,
+            });
+            await syncP;
+            filled++;
+          }
+        }
+      }
+      logFn(`[fillHoles] Filled ${filled} blocks, skipped ${skippedFar} out-of-reach (radius ${r})`);
+      return filled;
+    },
+
     // Standard JS
     console: {
       log: (...args: unknown[]) => { if (logs.length < MAX_LOG_LINES) logs.push(args.map(String).join(" ")); },
@@ -339,6 +508,20 @@ export async function mc_execute(
   const fn = new AsyncFunction(...keys, `\n${code}\n`);
 
   console.error(`[mc_execute] Executing code (${code.length} chars, timeout: ${effectiveTimeout}ms)`);
+
+  // Apply safe pathfinder defaults for mc_execute sandbox
+  // Agents use bot.pathfinder.goto() directly — without these, maxDropDown is unset
+  // and pathfinder routes over cliffs causing massive fall damage.
+  // maxDropDown=1: Minecraft fall damage starts at >3-block drops (>3 blocks = 0.5HP damage).
+  // maxDropDown=2 caused cumulative damage on mountainous terrain (Y=85-120) via repeated 2-block
+  // drops. maxDropDown=1 prevents all fall damage while still allowing natural terrain descent.
+  try {
+    if (rawBot.pathfinder?.movements) {
+      rawBot.pathfinder.movements.canDig = false;
+      rawBot.pathfinder.movements.maxDropDown = 1;
+      rawBot.pathfinder.movements.dontCreateFlow = true;
+    }
+  } catch { /* pathfinder may not be loaded yet */ }
 
   try {
     // Set execute flag ONLY during actual code execution to prevent race conditions
