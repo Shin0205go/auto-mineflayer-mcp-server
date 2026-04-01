@@ -45,6 +45,8 @@ export interface SafetyState {
   nearbyWater: Array<{ x: number; y: number; z: number }>;
   nearbyChests: Array<{ x: number; y: number; z: number }>;
   lastScanTime: number;  // Date.now()
+  scan3DSnapshot: string;   // scan3D() output text (updated every 10 seconds)
+  scan3DTime: number;       // snapshot timestamp Date.now()
 }
 
 export interface ManagedBot {

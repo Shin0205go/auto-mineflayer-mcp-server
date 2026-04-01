@@ -76,6 +76,8 @@ safetyState.nearbyOres      // [{name, pos: {x,y,z}}] — 最大1個/鉱石種 w
 safetyState.nearbyWater     // [{x,y,z}] — 最寄りの水源 within 32 blocks
 safetyState.nearbyChests    // [{x,y,z}] — 最寄りのチェスト within 32 blocks
 safetyState.lastScanTime    // Date.now() — 最後のスキャン時刻 (ms)
+safetyState.scan3DSnapshot  // scan3D() の最新スナップショット文字列 (10秒ごと更新)
+safetyState.scan3DTime      // Date.now() — スナップショット取得時刻 (ms)
 ```
 
 ## よく使うパターン

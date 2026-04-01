@@ -13,6 +13,7 @@ import type { SafetyState } from "./types.js";
 import { isHostileMob, EDIBLE_FOOD_NAMES, isBedBlock } from "./minecraft-utils.js";
 import { safeSetGoal } from "./pathfinder-safety.js";
 import pkg from "mineflayer-pathfinder";
+import { Vec3 } from "vec3";
 const { goals } = pkg;
 
 export class AutoSafety {
@@ -46,6 +47,8 @@ export class AutoSafety {
       nearbyWater: [],
       nearbyChests: [],
       lastScanTime: 0,
+      scan3DSnapshot: '',
+      scan3DTime: 0,
     };
     managed.safetyState = this.state;
   }
@@ -510,6 +513,50 @@ export class AutoSafety {
     this.state.nearbyWater = waterBlock ? [waterBlock.position] : [];
     this.state.nearbyChests = chestBlock ? [chestBlock.position] : [];
     this.state.lastScanTime = Date.now();
+
+    // Build scan3D snapshot
+    this.state.scan3DSnapshot = this.buildScan3DSnapshot();
+    this.state.scan3DTime = Date.now();
+  }
+
+  private buildScan3DSnapshot(): string {
+    const r = 5, hr = 4;
+    const pos = this.bot.entity.position;
+    const cx = Math.floor(pos.x), cy = Math.floor(pos.y), cz = Math.floor(pos.z);
+
+    const charOf = (name: string | undefined): string => {
+      if (!name || name === 'air' || name === 'cave_air') return ' ';
+      if (name === 'water') return '~';
+      if (name === 'lava') return '!';
+      if (name.includes('ore')) return '*';
+      if (name === 'grass_block' || name === 'dirt') return '.';
+      if (name === 'stone' || name.includes('deepslate')) return '#';
+      if (name === 'sand' || name === 'gravel') return ':';
+      if (name.includes('log') || name.includes('wood')) return 'T';
+      if (name.includes('leaves')) return 'L';
+      if (name === 'chest') return 'C';
+      if (name === 'crafting_table') return 'W';
+      if (name === 'furnace') return 'F';
+      return '█';
+    };
+
+    const lines: string[] = [];
+    lines.push(`scan3D @ (${cx},${cy},${cz}) t=${new Date().toISOString()}`);
+
+    const keyLayers = [-2, -1, 0, 1, 2].filter(dy => dy >= -hr && dy <= hr);
+    for (const dy of keyLayers) {
+      lines.push(`Y=${cy + dy}:`);
+      for (let dz = -r; dz <= r; dz++) {
+        let row = '';
+        for (let dx = -r; dx <= r; dx++) {
+          if (dx === 0 && dz === 0 && dy === 0) { row += '@'; continue; }
+          const block = this.bot.blockAt(new Vec3(cx + dx, cy + dy, cz + dz));
+          row += charOf(block?.name);
+        }
+        lines.push(row);
+      }
+    }
+    return lines.join('\n');
   }
 
   // ==================== Helpers ====================
