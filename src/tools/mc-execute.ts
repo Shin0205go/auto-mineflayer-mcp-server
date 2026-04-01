@@ -128,18 +128,33 @@ export async function mc_execute(
       }
     } catch { /* ignore */ }
 
+    // Cap pathfinder thinkTimeout so that A* computation gives up BEFORE the hard
+    // timeout fires. Without this, when timeoutMs < thinkTimeout (e.g. agent passes
+    // 20000ms but thinkTimeout=20000ms), the hard timeout fires first and the caller
+    // gets a generic "timeout" error instead of "noPath", preventing canDig retry.
+    // Keep at least 5000ms for the computation; reserve 3000ms for navigation after.
+    const prevThinkTimeout = (rawBot.pathfinder as any)?.thinkTimeout ?? 20000;
+    const cappedThinkTimeout = Math.min(prevThinkTimeout, Math.max(timeoutMs - 3000, 5000));
+    try {
+      if (rawBot.pathfinder) (rawBot.pathfinder as any).thinkTimeout = cappedThinkTimeout;
+    } catch { /* ignore */ }
+
     const gotoPromise = (rawBot.pathfinder.goto as any)(goal);
+
+    // Restore thinkTimeout after goto() starts (the promise holds the capped value
+    // internally; restoring early does not affect the in-progress computation).
+    try {
+      if (rawBot.pathfinder) (rawBot.pathfinder as any).thinkTimeout = prevThinkTimeout;
+    } catch { /* ignore */ }
 
     const STUCK_INTERVAL = 5000;
     const STUCK_THRESHOLD = 0.5;
     const MAX_STUCK_CHECKS = 2;
     // Grace period: don't start stuck-counting until bot has moved, or this many
     // ms have elapsed (covers slow path-computation on complex terrain).
-    // Use thinkTimeout as the floor: on retry thinkTimeout is doubled (40s), so
-    // GRACE_PERIOD_MS must also account for that to avoid false stuck detection
-    // during path computation. Add 5s buffer on top of thinkTimeout.
-    const currentThinkTimeout = (rawBot.pathfinder as any)?.thinkTimeout ?? 20000;
-    const GRACE_PERIOD_MS = Math.max(currentThinkTimeout + 5000, 25000);
+    // Use cappedThinkTimeout (not prevThinkTimeout) so grace matches what pathfinder
+    // will actually spend on path computation. Add 5s buffer.
+    const GRACE_PERIOD_MS = Math.max(cappedThinkTimeout + 5000, 15000);
     const startTime = Date.now();
     let startPos = rawBot.entity.position.clone();
     let hasMovedOnce = false;
@@ -310,15 +325,13 @@ export async function mc_execute(
         // "goal was changed" means the goal was overridden externally — retrying won't help, rethrow.
         if ((msg.includes("No path") || msg.includes("no path") || msg.includes("Took to long") || msg.includes("Took too long") || msg.includes("Pathfinder stuck")) && !msg.toLowerCase().includes("goal was changed")) {
           logFn(`[pathfinderGoto] Path failed (${msg.substring(0, 60)}), retrying with canDig=true`);
-          // Temporarily double thinkTimeout so the A* search has more time on complex terrain.
-          const prevThinkTimeout = (rawBot.pathfinder as any)?.thinkTimeout ?? 20000;
+          // Retry with canDig=true. gotoWithStuckDetection will cap thinkTimeout to
+          // timeoutMs-3000 so the A* computation finishes before the hard timeout fires.
           try {
-            if (rawBot.pathfinder) (rawBot.pathfinder as any).thinkTimeout = prevThinkTimeout * 2;
             return await gotoWithStuckDetection(goal, effectiveTimeoutMs, true);
           } finally {
-            // Restore original thinkTimeout and canDig=false after dig-enabled navigation
+            // Restore canDig=false after dig-enabled navigation
             try {
-              if (rawBot.pathfinder) (rawBot.pathfinder as any).thinkTimeout = prevThinkTimeout;
               if (rawBot.pathfinder?.movements) rawBot.pathfinder.movements.canDig = false;
             } catch { /* ignore */ }
           }
