@@ -1,12 +1,19 @@
 #!/bin/bash
-# Restrict subagent Bash to git/npm only (main session is unrestricted)
+# Restrict Bash: block /tmp writes for all sessions, subagent git/npm only
 INPUT=$(cat)
+CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+
+# Block /tmp file creation for ALL sessions (main + subagent)
+if echo "$CMD" | grep -qE '(>|tee|cp|mv|touch|mkdir)\s+/tmp'; then
+  echo "BLOCKED: Writing to /tmp is not allowed. Pass code directly to mc_execute." >&2
+  exit 2
+fi
 
 # Check if running in a subagent
 AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
 
 if [ -z "$AGENT_ID" ]; then
-  # Main session — allow everything
+  # Main session — allow everything else
   exit 0
 fi
 
