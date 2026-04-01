@@ -79,7 +79,13 @@ export async function mc_execute(
     pathfinderGoto: async (goal: any, timeoutMs = 30000) => {
       const tryGoto = (allowDig: boolean) => {
         try {
-          if (rawBot.pathfinder?.movements) rawBot.pathfinder.movements.canDig = allowDig;
+          if (rawBot.pathfinder?.movements) {
+            rawBot.pathfinder.movements.canDig = allowDig;
+            // Prevent pathfinder from routing through water — liquidCost=10000 makes water ~2500x
+            // more expensive than land. Without this, bots in water-heavy terrain (spawn area near
+            // ocean/river) route through water and get stuck mid-lake with no exit.
+            (rawBot.pathfinder.movements as any).liquidCost = 10000;
+          }
         } catch { /* ignore */ }
         const gotoPromise = (rawBot.pathfinder.goto as any)(goal);
         return Promise.race([
@@ -254,6 +260,97 @@ export async function mc_execute(
       const foodAfter = rawBot.food;
       logFn(`[eat] ${itemName}: food ${foodBefore} → ${foodAfter}${changed ? "" : " (timeout)"}`);
       return { item: itemName, foodBefore, foodAfter };
+    },
+
+    // === Water escape utility ===
+    // Usage: const result = await escapeWater()
+    // Holds jump + moves toward nearest non-water block to escape water traps.
+    // Returns a summary of what happened (surfaced, reached land, or still in water).
+    // Call this when bot.entity.position foot=water and pathfinderGoto is unreliable.
+    escapeWater: async () => {
+      const isWater = (name: string | undefined) => name === "water" || name === "flowing_water";
+
+      const feetBlock = rawBot.blockAt(rawBot.entity.position.floored());
+      const headBlock = rawBot.blockAt(rawBot.entity.position.floored().offset(0, 1, 0));
+      const startInWater = isWater(feetBlock?.name) || isWater(headBlock?.name);
+
+      if (!startInWater) {
+        return "Not in water — no escape needed";
+      }
+
+      const startPos = rawBot.entity.position.clone();
+      logFn(`[escapeWater] In water at (${startPos.x.toFixed(1)}, ${startPos.y.toFixed(1)}, ${startPos.z.toFixed(1)}). Starting escape.`);
+
+      // Phase 1: Swim up by holding jump for up to 5s
+      rawBot.setControlState("jump", true);
+      rawBot.setControlState("sprint", true);
+
+      let surfaced = false;
+      for (let i = 0; i < 25; i++) {
+        await new Promise<void>(r => setTimeout(r, 200));
+        const check = rawBot.blockAt(rawBot.entity.position.floored().offset(0, 1, 0));
+        if (!isWater(check?.name)) {
+          surfaced = true;
+          break;
+        }
+      }
+
+      rawBot.setControlState("jump", false);
+      rawBot.setControlState("sprint", false);
+
+      const afterSwimPos = rawBot.entity.position;
+      const feetAfter = rawBot.blockAt(afterSwimPos.floored());
+      const stillInWater = isWater(feetAfter?.name);
+
+      if (!stillInWater) {
+        logFn(`[escapeWater] Surfaced. Now at (${afterSwimPos.x.toFixed(1)}, ${afterSwimPos.y.toFixed(1)}, ${afterSwimPos.z.toFixed(1)})`);
+
+        // Phase 2: Navigate toward land (non-water block at feet+1 level)
+        // Search nearby XZ for a land position
+        let landX = afterSwimPos.x, landZ = afterSwimPos.z;
+        let foundLand = false;
+        for (let r = 2; r <= 8 && !foundLand; r++) {
+          for (let dx = -r; dx <= r && !foundLand; dx++) {
+            for (let dz = -r; dz <= r && !foundLand; dz++) {
+              if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue;
+              const checkPos = afterSwimPos.floored().offset(dx, 0, dz);
+              const landFeet = rawBot.blockAt(checkPos);
+              const landHead = rawBot.blockAt(checkPos.offset(0, 1, 0));
+              if (landFeet && !isWater(landFeet.name) && landFeet.name !== "air" &&
+                  landHead && (landHead.name === "air" || isWater(landHead.name))) {
+                // Solid ground with passable space above
+                landX = checkPos.x + 0.5;
+                landZ = checkPos.z + 0.5;
+                foundLand = true;
+              }
+            }
+          }
+        }
+
+        if (foundLand) {
+          try {
+            if (rawBot.pathfinder?.movements) {
+              rawBot.pathfinder.movements.canDig = false;
+              (rawBot.pathfinder.movements as any).liquidCost = 10000;
+            }
+            const goal = new goals.GoalNear(landX, Math.round(afterSwimPos.y), landZ, 1);
+            await Promise.race([
+              (rawBot.pathfinder.goto as any)(goal),
+              new Promise<void>((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000))
+            ]);
+          } catch { /* ignore pathfinder errors — we're on surface, which is the main goal */ }
+        }
+      }
+
+      const finalPos = rawBot.entity.position;
+      const finalFeet = rawBot.blockAt(finalPos.floored());
+      const finalInWater = isWater(finalFeet?.name);
+
+      if (finalInWater) {
+        return `Still in water at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}). Try digging sideways or placing blocks to escape.`;
+      }
+
+      return `Escaped water. Now at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}) on ${finalFeet?.name ?? "unknown"}.`;
     },
 
     // === Meta-cognition layer: observe → understand → act ===

@@ -468,8 +468,10 @@ export class BotCore extends EventEmitter {
           // Chat event handles player messages like "<Player> message"
           if (messagePosition === "chat" && message.match(/^<\w+>/)) return;
 
-          // Skip noisy messages
-          if (message.includes("Gamerule") || message.includes("gamerule")) return;
+          // Skip noisy but expected gamerule confirmation messages
+          // e.g. "Gamerule doTileDrops is now set to: true"
+          // BUT keep permission errors / unknown command errors so the agent sees failures.
+          if (message.match(/^Gamerule \w+ is now set to:/)) return;
           if (message.includes("Set the time to")) return;
           if (message.includes("joined the game")) return;
           if (message.includes("left the game")) return;
