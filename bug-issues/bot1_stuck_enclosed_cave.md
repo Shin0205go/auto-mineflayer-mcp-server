@@ -81,8 +81,26 @@ await bot.pathfinder.goto(goal);
 - Example: Y=103 to Y=105 took entire 120s timeout
 - Needs optimization but is functional
 
-### Current Status
-PARTIALLY RESOLVED. Bot at Y=117, progressing toward surface. Pathfinder works with canDig=true but needs performance optimization. Recommend:
-1. Test if default Movements in pathfinder initializer should have canDig=true
-2. Profile pathfinding performance with canDig=true on vertical goals
-3. Consider A* heuristic improvements for cave/cliff terrain
+### LATEST STATUS (End of Session)
+
+**Current Location**: Y=111 (estimated, last confirmed Y=111)
+**Food Crisis**: Food bar at 8/20 - CRITICAL
+**Resources**: 12 wheat_seeds, 12 coal, 100+ cobblestone, 2 iron ingots
+**Next Phase**: Ascent to surface in background process
+
+**Workaround Validated**:
+- `canDig=true` DOES enable vertical traversal
+- Performance: 30-120+ seconds per Y-level change
+- Example: Y=81 → Y=90 took ~1 minute, Y=90 → Y=111 took ~2+ minutes
+- Trade-off: Slow but functional
+
+**Recommendations for Code Reviewer**:
+1. Make `canDig=true` the **default** in `src/bot-manager/pathfinder.ts` Movements initialization
+2. Profile and optimize A* pathfinding with canDig=true (likely need heuristic improvements for cave terrain)
+3. Consider chunk pre-loading strategy for vertical movement
+4. Test block placement (`bot.placeBlock`) - had timeout issues with event sync
+
+**Food Crisis Next Steps**:
+- After surface: Hunt animals OR farm wheat urgently (has seeds)
+- Avoid letting food reach 0 (causes death → bug)
+- Consider wheat farm: till soil, plant seeds, craft bread immediately
