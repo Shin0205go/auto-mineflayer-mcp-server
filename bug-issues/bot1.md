@@ -1,3 +1,38 @@
+## [2026-04-02] CRITICAL BUG: Daemon 再起動後 - 食料完全喪失 + 餓死寸前 (HP 5.5, Food 0)
+
+- **Cause**: Daemon 再起動後、Claude1 が食料ゼロの状態で復帰。インベントリに bread/meat なし。wheat x1 のみ。chests 内容確認不可（pathfinder timeout）。
+- **Current State**:
+  - **HP**: 5.5/20 (CRITICAL)
+  - **Food**: 0/20 (STARVATION)
+  - **Position**: Overworld (23, 95, -2)
+  - **Inventory**:
+    - wheat x1, wheat_seeds x30 (農場リソース)
+    - coal x12, diamond x3, iron_ingot x2 (装備・フューエル)
+    - diamond_sword x1, diamond_pickaxe x1 (装備)
+    - crafting_table x1, furnace x1 (未配置)
+    - shield x1, arrows x64, torch x5, stick x8, ...
+    - **NO FOOD ITEMS** (bread, cooked_*, apple など一切なし)
+- **Chest Scan**: 1個のチェスト確認 (座標 8, 92, 5 | 距離 17m) → pathfinder timeout で到達不可
+- **Animal Scan**: 周辺 mob ゼロ (cow, pig, sheep なし)
+- **Floor Items**: 落ちているアイテムなし
+- **Admin Messages**: なし
+- **Impact**: CRITICAL - 死亡が数秒内に確実。管理者の緊急支援（/give bread など）が必要。
+- **Root Cause Analysis**:
+  1. Daemon shutdown → state snapshot でインベントリが frozen
+  2. Session 中に食料を全て消費（おそらく Phase 5-6 の戦闘で）
+  3. 再起動時に食料ゼロで復帰
+  4. チェスト/動物が到達不可
+  5. 自動安全機構がないか効かない
+- **Last Session Context** (推測):
+  - Phase 5-6 進行中（ネザー要塞・ブレイズ戦闘のバグレポートより）
+  - 食料消費による HP 管理を続けていたが、supply exhausted
+  - Daemon restart で状態を失った可能性
+- **Status**: IMMINENT DEATH - 報告後すぐに餓死予想
+- **Prevention/Fix**:
+  1. **即座の対応**: `/give Claude1 bread 10` で食料補給必須
+  2. **根本原因**: session restart 時に食料ゼロで復帰する仕様は危険。復帰前にチェスト内容 snapshot すべき
+  3. **AutoSafety**: 食料ゼロを検出して自動で emergency beacon/death report を発火すべき
+
 ## [2026-04-01] Bug: Phase 1-2 進行中 - pathfinder 繰り返しタイムアウト + 食料ゼロ
 
 - **Cause**: pathfinder.goto() が複数回タイムアウト（"Took to long to decide path to goal!"）。敵が周辺に多数いる場合、pathfinder の経路計算が完了できない。
