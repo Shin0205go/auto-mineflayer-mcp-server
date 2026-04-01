@@ -32,6 +32,15 @@ export interface GameEvent {
   data?: Record<string, unknown>;
 }
 
+export interface SafetyState {
+  autoEatActive: boolean;
+  creeperFleeActive: boolean;
+  emergencyDodgeActive: boolean;
+  autoSleepActive: boolean;
+  lastAction: string | null;
+  lastActionTime: number;
+}
+
 export interface ManagedBot {
   bot: Bot;
   username: string;
@@ -43,4 +52,5 @@ export interface ManagedBot {
   serverHasItemPickupDisabled?: boolean;  // Track if server blocks item pickup
   serverHasItemPickupDisabledTimestamp?: number;  // Timestamp when flag was set (ms since epoch)
   mcExecuteActive?: boolean;  // True while mc_execute is running code — background flee handlers should not override pathfinder
+  safetyState?: SafetyState;  // AutoSafety state — readable by agent code via sandbox
 }

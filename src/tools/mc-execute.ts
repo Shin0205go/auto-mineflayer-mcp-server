@@ -183,42 +183,53 @@ export async function mc_execute(
     //
     // Usage: await eat()   — eats heldItem (equip the food first with bot.equip)
     eat: async () => {
-      if (!rawBot.heldItem) throw new Error("No item in hand — equip food first");
-      const itemName = rawBot.heldItem.name;
+      // Find and equip food automatically
+      const foodNames = [
+        "golden_apple", "enchanted_golden_apple",
+        "cooked_beef", "cooked_porkchop", "cooked_mutton", "cooked_chicken",
+        "cooked_rabbit", "cooked_cod", "cooked_salmon",
+        "bread", "baked_potato", "pumpkin_pie", "cookie",
+        "melon_slice", "sweet_berries", "apple", "carrot",
+        "dried_kelp", "beetroot", "potato", "rotten_flesh",
+      ];
+      let food = rawBot.heldItem && foodNames.includes(rawBot.heldItem.name)
+        ? rawBot.heldItem
+        : null;
+      if (!food) {
+        for (const name of foodNames) {
+          food = rawBot.inventory.items().find((i: any) => i.name === name) ?? null;
+          if (food) break;
+        }
+      }
+      if (!food) throw new Error("No food in inventory");
+      await rawBot.equip(food, "hand");
+
+      const itemName = food.name;
       const foodBefore = rawBot.food;
 
-      // Detect eat completion via food_level_change event
-      const eatDone = new Promise<void>(resolve => {
+      // Start eating using activateItem (holds use button)
+      rawBot.activateItem(false);
+
+      // Wait for food event or timeout (eating takes ~1.61s)
+      const eatDone = new Promise<boolean>(resolve => {
         const onFoodChange = () => {
-          rawBot.removeListener("food" as any, onFoodChange);
-          resolve();
+          rawBot.removeListener("health" as any, onFoodChange);
+          resolve(true);
         };
-        rawBot.on("food" as any, onFoodChange);
-        // Fallback: eating takes ~1.61s in vanilla; wait 2800ms then resolve anyway
+        rawBot.on("health" as any, onFoodChange);
         setTimeout(() => {
-          rawBot.removeListener("food" as any, onFoodChange);
-          resolve();
-        }, 2800);
+          rawBot.removeListener("health" as any, onFoodChange);
+          resolve(false);
+        }, 3500);
       });
 
-      // Send use_item packet directly to avoid bot.consume()'s entity_status dependency
-      const sequence = (rawBot as any)._sequenceNumber ?? 0;
-      if ((rawBot as any).supportFeature?.("useItemWithOwnPacket")) {
-        (rawBot as any)._client.write("use_item", { hand: 0, sequence });
-      } else {
-        // Older protocol: block_place with location (-1,255,-1)
-        (rawBot as any)._client.write("block_place", {
-          location: { x: -1, y: 255, z: -1 },
-          direction: -1,
-          heldItem: rawBot.heldItem,
-          cursorX: -1, cursorY: -1, cursorZ: -1,
-        });
-      }
+      const changed = await eatDone;
 
-      await eatDone;
+      // Stop eating
+      rawBot.deactivateItem();
 
       const foodAfter = rawBot.food;
-      logFn(`[eat] ${itemName}: food ${foodBefore} → ${foodAfter}`);
+      logFn(`[eat] ${itemName}: food ${foodBefore} → ${foodAfter}${changed ? "" : " (timeout)"}`);
       return { item: itemName, foodBefore, foodAfter };
     },
 
@@ -488,6 +499,10 @@ export async function mc_execute(
       logFn(`[fillHoles] Filled ${filled} blocks, skipped ${skippedFar} out-of-reach (radius ${r})`);
       return filled;
     },
+
+    // AutoSafety state (read-only from agent code)
+    // Getter function so agent always reads the latest state (not a stale snapshot).
+    safetyState: managed.safetyState ?? null,
 
     // Standard JS
     console: {

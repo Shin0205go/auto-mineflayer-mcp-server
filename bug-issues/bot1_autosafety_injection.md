@@ -1,64 +1,16 @@
 ## Bug: safetyState not injected into mc_execute sandbox
 
-### Summary
-AutoSafety state is defined in `src/bot-manager/auto-safety.ts` and assigned to `managed.safetyState` in constructor (line 43). However, when accessed in `mc_execute()` code, `safetyState` is undefined.
+### Status: RESOLVED — daemon再起動で解決
 
-### Expected Behavior
-- `safetyState` should be injected into mc_execute sandbox context (line 504 of mc-execute.ts)
-- Agents should be able to access: `safetyState.autoEatActive`, `safetyState.lastAction`, etc.
+### Root Cause
+古いdaemonプロセスが動いていたため、新しいAutoSafetyコードが反映されていなかった。
+daemon再起動 + bot再接続で `safetyState` が正常に注入されることを確認。
 
-### Actual Behavior
-- `safetyState` is `undefined` in sandbox
-- `log('safetyState: ' + JSON.stringify(safetyState))` throws "safetyState is not defined"
-
-### Code Analysis
-
-**mc-execute.ts line 504:**
-```javascript
-safetyState: managed.safetyState ?? null,
+### Verification
 ```
-
-**bot-core.ts line 809-810:**
-```javascript
-const autoSafety = new AutoSafety(managedBot);
-autoSafety.start();
+BOT_USERNAME=Claude1 node scripts/mc-execute.cjs "log('safetyState: ' + JSON.stringify(safetyState))"
 ```
-
-**auto-safety.ts constructor line 43:**
-```javascript
-managed.safetyState = this.state;
+出力:
 ```
-
-### Hypothesis
-1. `managed` object is retrieved, but the AutoSafety hasn't been initialized yet when mc_execute runs
-2. OR managed.safetyState is set to undefined/null somewhere else after initialization
-3. OR the managed object in mc_execute is a different instance than the one with AutoSafety
-
-### Steps to Reproduce
-```bash
-node scripts/mc-connect.cjs localhost 25565 Claude1
-BOT_USERNAME=Claude1 node scripts/mc-execute.cjs "log(typeof safetyState)"
-# Output: undefined
+safetyState: {"autoEatActive":false,"creeperFleeActive":false,"emergencyDodgeActive":false,"autoSleepActive":false,"lastAction":null,"lastActionTime":0}
 ```
-
-### Test Case
-Run any mc_execute code:
-```javascript
-if (safetyState) {
-  log('autoEatActive: ' + safetyState.autoEatActive);
-  log('lastAction: ' + safetyState.lastAction);
-}
-```
-
-### Impact
-- Tests for AutoSafety functionality cannot be run
-- Cannot verify auto-eat, creeper flee, etc. are working
-- Agents cannot introspect safety state
-
-### Files Affected
-- src/tools/mc-execute.ts (line 504)
-- src/bot-manager/auto-safety.ts (full file)
-- src/bot-manager/bot-core.ts (line 809-810)
-
-### Status
-Reported - awaiting code review

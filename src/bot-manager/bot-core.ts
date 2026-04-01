@@ -9,6 +9,7 @@ import { isHostileMob, isPassiveMob, isWaterBlock, EDIBLE_FOOD_NAMES } from "./m
 import { equipArmor } from "./bot-items.js";
 import { safeSetGoal } from "./pathfinder-safety.js";
 import { lastSleepTick } from "./bot-survival.js";
+import { AutoSafety } from "./auto-safety.js";
 
 // AsyncLocalStorage for per-request bot username context (multi-bot support)
 export const currentBotContext = new AsyncLocalStorage<string>();
@@ -613,6 +614,8 @@ export class BotCore extends EventEmitter {
           if (managedBot.particleInterval) {
             clearInterval(managedBot.particleInterval);
           }
+          // Stop AutoSafety on disconnect
+          autoSafety.stop();
           this.bots.delete(config.username);
           const reasonStr = typeof reason === 'string' ? reason : JSON.stringify(reason);
           console.error(`[BotManager] ${config.username} disconnected. Reason: ${reasonStr}`);
@@ -802,112 +805,9 @@ export class BotCore extends EventEmitter {
           }
         });
 
-        // Proactive Creeper flee: detect Creeper within 7 blocks and sprint away immediately
-        // This fires every physics tick (~50ms) to catch Creepers before they explode
-        let creeperFleeActive = false;
-        let creeperFleeLastEndTime = 0; // Timestamp when last flee ended (for cooldown)
-        bot.on("physicsTick", () => {
-          if (creeperFleeActive) return; // Throttle: avoid re-triggering while already fleeing
-          // 500ms cooldown after flee ends to prevent rapid re-triggering that spams setGoal
-          if (Date.now() - creeperFleeLastEndTime < 500) return;
-          // Do not override pathfinder while mc_execute is running agent code.
-          // Without this check, creeperFlee fires every ~50ms and calls safeSetGoal(),
-          // which emits pathfinder goal-changed events that cancel any goto() the agent issued.
-          // Bug [2026-03-28]: HP=2 bot in cave → physicsTick fires creeperFlee every tick →
-          // every agent pathfinder.goto() immediately throws "goal was changed before completion".
-          // Agent still receives hostile_spawn / entityHurt events and can decide to flee itself.
-          if (managedBot.mcExecuteActive) return;
-          const creeper = Object.values(bot.entities).find(
-            e => e !== bot.entity && e.name?.toLowerCase() === "creeper" &&
-            e.position?.distanceTo(bot.entity.position) < 7
-          );
-          if (creeper) {
-            // Bug fix (Session 186): Do NOT flee when inside a portal block.
-            // CreeperFlee during portal entry overrides the portal goal via pathfinder.setGoal()
-            // and causes portal teleport to fail (GoalChanged exception).
-            const creeperFleeBlockFeet = bot.blockAt(bot.entity.position.floored());
-            const creeperFleeBlockHead = bot.blockAt(bot.entity.position.floored().offset(0, 1, 0));
-            const creeperFleeInPortal = (creeperFleeBlockFeet?.name === "nether_portal" || creeperFleeBlockFeet?.name === "end_portal" ||
-                                         creeperFleeBlockHead?.name === "nether_portal" || creeperFleeBlockHead?.name === "end_portal");
-            // Bug fix (Session 186b): Also suppress when portal is nearby (within 6 blocks)
-            let creeperFleeNearPortal = false;
-            if (!creeperFleeInPortal) {
-              const cfPos = bot.entity.position;
-              for (let dx = -6; dx <= 6 && !creeperFleeNearPortal; dx++) {
-                for (let dy = -3; dy <= 3 && !creeperFleeNearPortal; dy++) {
-                  for (let dz = -6; dz <= 6 && !creeperFleeNearPortal; dz++) {
-                    const nb = bot.blockAt(cfPos.floored().offset(dx, dy, dz));
-                    if (nb?.name === "nether_portal" || nb?.name === "end_portal") {
-                      creeperFleeNearPortal = true;
-                    }
-                  }
-                }
-              }
-            }
-            if (creeperFleeInPortal || creeperFleeNearPortal) {
-              console.error(`[CreeperFlee] Suppressed: bot is ${creeperFleeInPortal ? "inside" : "near"} portal block, standing still for teleportation.`);
-              return;
-            }
-            if (!creeper.position) return;
-            const dist = creeper.position.distanceTo(bot.entity.position);
-            const dir = bot.entity.position.minus(creeper.position).normalize();
-            const fleeTarget = bot.entity.position.plus(dir.scaled(12));
-            fleeTarget.y = bot.entity.position.y;
-            console.error(`[CreeperFlee] Creeper detected ${dist.toFixed(1)} blocks away! Fleeing preemptively.`);
-            creeperFleeActive = true;
-            // Sprint-flee immediately using control states (faster than pathfinder)
-            const lookAngle = Math.atan2(-dir.x, -dir.z); // Look AWAY from creeper
-            bot.look(lookAngle, 0, true);
-            bot.setControlState("sprint", true);
-            bot.setControlState("forward", true);
-            let creeperGoalHandle: ReturnType<typeof safeSetGoal> | null = null;
-            try {
-              if (bot.pathfinder.movements) {
-                bot.pathfinder.movements.canDig = false;
-                bot.pathfinder.movements.maxDropDown = 2;
-                (bot.pathfinder.movements as any).liquidCost = 100000; // Very high to discourage water/lava
-                // Add water and lava to blocksToAvoid to prevent routing through them
-                const waterBlock = bot.registry.blocksByName["water"];
-                const flowingWater = bot.registry.blocksByName["flowing_water"];
-                const lavaBlock = bot.registry.blocksByName["lava"];
-                const flowingLava = bot.registry.blocksByName["flowing_lava"];
-                if (waterBlock) bot.pathfinder.movements.blocksToAvoid.add(waterBlock.id);
-                if (flowingWater) bot.pathfinder.movements.blocksToAvoid.add(flowingWater.id);
-                if (lavaBlock) bot.pathfinder.movements.blocksToAvoid.add(lavaBlock.id);
-                if (flowingLava) bot.pathfinder.movements.blocksToAvoid.add(flowingLava.id);
-              }
-              // FIX: Do NOT override an existing pathfinder goal (prevents "goal was changed" race)
-              // Check if a goal is already active. If so, use sprint-only escape instead.
-              const hasActiveGoal = !!(bot.pathfinder.goal);
-              if (hasActiveGoal) {
-                console.error(`[CreeperFlee] Active pathfinder goal detected, using sprint-only escape (skipping safeSetGoal)`);
-                // Continue with setControlState sprint/forward already set above
-              } else {
-                creeperGoalHandle = safeSetGoal(bot,
-                  new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3),
-                  {
-                    onAbort: (yDescent) => {
-                      console.error(`[CreeperFlee] CAVE DESCENT ABORT: Y dropped ${yDescent.toFixed(1)} blocks. Stopping.`);
-                    }
-                  }
-                );
-              }
-            } catch (_) { /* ignore */ }
-            setTimeout(() => {
-              if (creeperGoalHandle) creeperGoalHandle.cleanup();
-              bot.setControlState("sprint", false);
-              bot.setControlState("forward", false);
-              creeperFleeActive = false;
-              creeperFleeLastEndTime = Date.now(); // Record end time for 500ms cooldown
-              try {
-                if (bot.pathfinder.movements) {
-                  bot.pathfinder.movements.maxDropDown = 2; // Restore to safe default
-                  // canDig is intentionally NOT restored — next moveTo handles it
-                }
-              } catch { /* bot may be disconnected */ }
-            }, 3000);
-          }
-        });
+        // AutoSafety: deterministic safety layer (auto-eat, creeper flee, general flee, auto-sleep)
+        const autoSafety = new AutoSafety(managedBot);
+        autoSafety.start();
 
         // Heartbeat event (every 30 seconds for idle detection)
         let heartbeatCount = 0;
