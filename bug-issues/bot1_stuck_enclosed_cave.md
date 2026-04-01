@@ -60,5 +60,29 @@ This indicates **pathfinder.goto() is not actually executing the movement**.
 3. **Movements configuration** - canDig=false prevents upward traversal
 4. **World state sync** - server position differs from client calculation
 
-### Status
-BLOCKED at (2, 81, 15). Critical pathfinder bug preventing vertical movement. Code reviewer must inspect `bot.pathfinder.goto()` implementation and `Movements.canDig` settings.
+### WORKAROUND FOUND
+
+**Solution**: Enable `canDig=true` in Movements object before pathfinding:
+```javascript
+const moves = new Movements(bot);
+moves.canDig = true;
+moves.canPlaceOn = true;
+bot.pathfinder.setMovements(moves);
+await bot.pathfinder.goto(goal);
+```
+
+**Result**:
+- Enabled bot to escape Y=81 cave
+- Reached Y=90 successfully
+- Further ascent to Y=103-125 in progress
+
+**Performance Issue**:
+- Each vertical movement with canDig=true takes 30-120+ seconds
+- Example: Y=103 to Y=105 took entire 120s timeout
+- Needs optimization but is functional
+
+### Current Status
+PARTIALLY RESOLVED. Bot at Y=117, progressing toward surface. Pathfinder works with canDig=true but needs performance optimization. Recommend:
+1. Test if default Movements in pathfinder initializer should have canDig=true
+2. Profile pathfinding performance with canDig=true on vertical goals
+3. Consider A* heuristic improvements for cave/cliff terrain
