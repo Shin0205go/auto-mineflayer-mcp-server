@@ -45,8 +45,8 @@ bot.openContainer(chestBlock)     // チェスト/ディスペンサー等を開
 
 // Crafting
 bot.craft(recipe, count, table)                 // クラフト実行 (低レベル。windowOpenタイムアウトに注意→craftWithTable()推奨)
-recipesFor(itemId, metadata?, count?)           // 注入済み: bot.recipesFor()のラッパー。近くのクラフトテーブルを自動検出して3x3レシピも返す
-await craftWithTable(itemName, count?)          // 注入済み: 信頼性の高いクラフト。activateBlock+wait+craftを一括実行。windowOpenタイムアウト(40%失敗)を回避
+recipesFor(itemId, metadata?, minResultCount?)  // 注入済み: bot.recipesFor()のラッパー。近くのクラフトテーブルを自動検出して3x3レシピも返す。第3引数はminResultCount(デフォルト1)=素材がN回分あるかのフィルタ
+await craftWithTable(itemName, count?)          // 注入済み: 信頼性の高いクラフト。activateBlock+wait+craftを一括実行。windowOpenタイムアウト(40%失敗)を回避。slot[0]回収付き
 
 // Info
 bot.nearestEntity(filter)   // 最近のエンティティ
