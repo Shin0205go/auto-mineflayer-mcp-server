@@ -8,12 +8,14 @@
 import { botManager } from "../bot-manager/index.js";
 import { currentBotContext } from "../bot-manager/bot-core.js";
 import { getSurroundings } from "../bot-manager/bot-info.js";
-import * as pathfinderPkg from "mineflayer-pathfinder";
+import pathfinderPkg from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
 
-// mineflayer-pathfinder is CJS: Movements is a named ESM export but goals is only on default
-const { Movements } = pathfinderPkg;
-const goals = (pathfinderPkg as any).default?.goals ?? (pathfinderPkg as any).goals;
+// mineflayer-pathfinder default import: same approach as bot-core.ts
+const { Movements, goals } = pathfinderPkg as any;
+if (!goals) {
+  console.error("[mc_execute] WARNING: pathfinder goals is undefined — check mineflayer-pathfinder export");
+}
 
 const MAX_TIMEOUT = 600_000;
 const DEFAULT_TIMEOUT = 120_000;
