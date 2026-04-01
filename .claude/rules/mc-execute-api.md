@@ -54,8 +54,8 @@ Vec3(x,y,z)                // ベクトル生成
 await eat()                 // 注入済み: 安定した食事関数
 await escapeWater()         // 注入済み: 水中脱出
 await collectDrops(radius?) // 注入済み: bot.dig()/bot.attack()後のドロップ収集 (デフォルト8ブロック)
-await pathfinderGoto(goal, timeoutMs?) // 注入済み: タイムアウト付きpathfinder.goto() + No path時にcanDig=trueでリトライ
-await multiStagePathfind(x, z, stageDistance?) // 注入済み: 長距離をウェイポイントに分割して移動
+await pathfinderGoto(goal, timeoutMs?) // 注入済み: タイムアウト+位置ロック検知付きpathfinder.goto()。No path時canDig=trueでリトライ。10s位置不変でstuckエラー
+await multiStagePathfind(x, z, stageDistance?) // 注入済み: 長距離をウェイポイントに分割して移動。各ステージにも位置ロック検知あり
 await safePlaceBlock(refBlock, faceVec) // 注入済み: blockUpdateタイムアウトを回避するブロック設置
 await fillHoles(radius?)    // 注入済み: 周囲の落下穴を埋める
 awareness()                 // 注入済み: 自己状態+空間スナップショット (行動前に必ず呼ぶ)
