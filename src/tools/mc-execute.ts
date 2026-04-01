@@ -321,11 +321,39 @@ export async function mc_execute(
     ]);
   };
 
+  // Wrap bot.openContainer() to pre-activate the block before opening.
+  // Direct calls to bot.openContainer() fail ~40% of the time with "Event windowOpen did not
+  // fire within timeout of 20000ms" because the server sends windowOpen only after the client
+  // activates the block. This wrapper mirrors the openChest() helper but intercepts the raw API
+  // so agents who call bot.openContainer() directly also benefit from the pre-activation.
+  const openContainerWithPreActivate = async (block: any) => {
+    if (block && !rawBot.currentWindow) {
+      try {
+        const windowOpenPromise = new Promise<void>(resolve => {
+          const onWindow = () => {
+            rawBot.removeListener("windowOpen" as any, onWindow);
+            resolve();
+          };
+          rawBot.on("windowOpen" as any, onWindow);
+          setTimeout(() => {
+            rawBot.removeListener("windowOpen" as any, onWindow);
+            resolve();
+          }, 3000);
+        });
+        await rawBot.activateBlock(block);
+        await windowOpenPromise;
+      } catch { /* ignore — openContainer will open the window */ }
+    }
+    return rawBot.openContainer(block);
+  };
+
   const botProxy = new Proxy(rawBot, {
     get(target: any, prop: string | symbol) {
       if (prop === 'pathfinder') return pathfinderProxy;
       // Wrap dig() with a hard timeout so a single stuck dig() doesn't block the sandbox.
       if (prop === 'dig') return digWithTimeout;
+      // Wrap openContainer() to pre-activate the block and avoid windowOpen timeout.
+      if (prop === 'openContainer') return openContainerWithPreActivate;
       // Pass EventEmitter methods and _client through without bind() to preserve
       // the full EventEmitter chain and minecraft-protocol packet dispatch.
       if (typeof prop === 'string' && EVENT_EMITTER_PROPS.has(prop)) {
