@@ -72,7 +72,7 @@ await fillHoles(radius?)    // 注入済み: 周囲の落下穴を埋める
 await smeltItems(furnaceBlock, inputItemName, fuelItemName, count?) // 注入済み: かまど精錬ヘルパー
 await plantSeeds(farmlandBlock, seedItemName?) // 注入済み: 種植えヘルパー (rawパケット、blockUpdateタイムアウト回避)
 await openChest(chestBlock)                   // 注入済み: チェスト/樽を開く。activateBlock+windowOpen待機でタイムアウト回避。戻り値はbot.openContainer()と同じウィンドウオブジェクト
-await enterPortal(timeoutMs?)                 // 注入済み: ネザー/エンドポータル通過ヘルパー。respawnイベントで次元変更を検知。{ success, dimensionBefore, dimensionAfter } を返す
+await enterPortal(timeoutMs?)                 // 注入済み: ネザー/エンドポータル通過ヘルパー。respawnイベント+500msポーリングで次元変更を検知。{ success, dimensionBefore, dimensionAfter } を返す。ポータルブロック内に立って前進キーを保持し続けること（約4秒のポータル遅延あり）
 awareness()                 // 注入済み: 自己状態+空間スナップショット (行動前に必ず呼ぶ)
 scan3D(radius?, heightRange?) // 注入済み: 3D空間スキャン
 safetyState                 // 注入済み: AutoSafety状態 (read-only)
@@ -236,6 +236,29 @@ if (chestBlock) {
   const bread = items.find(i => i.name === 'bread');
   if (bread) await chest.withdraw(bread.type, null, bread.count);
   await chest.close();
+}
+```
+
+### ネザーポータル通過 (重要: 単に歩き込むだけでは転送されない場合あり)
+```js
+// NG: bot.activateBlock(portalBlock) でポータルを再点火しようとする
+//   → 既にアクティブな nether_portal ブロックに activateBlock は不要
+// NG: await wait(2000) で2秒待つだけ
+//   → ポータル通過には約4秒の「ポータル遅延」が必要
+// OK: enterPortal() ヘルパー — ポータルブロック内でフォワード保持 + respawn/ポーリング検知
+
+// ポータルブロック位置に移動
+const portalId = bot.registry.blocksByName['nether_portal'].id;
+const portalBlock = bot.findBlock({ matching: portalId, maxDistance: 10 });
+if (portalBlock) {
+  await pathfinderGoto(new goals.GoalBlock(portalBlock.position.x, portalBlock.position.y, portalBlock.position.z), 20000);
+  const result = await enterPortal(30000);
+  log('Portal result: ' + JSON.stringify(result));
+  if (result.success) {
+    log('Now in: ' + result.dimensionAfter);
+  } else {
+    log('Portal failed — check: 1) portal is active (nether_portal block), 2) bot is inside portal, 3) server allows portals');
+  }
 }
 ```
 
