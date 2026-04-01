@@ -347,6 +347,23 @@ export async function mc_execute(
     return rawBot.openContainer(block);
   };
 
+  // Wrap bot.consume() with a 5-second timeout (Rule A: entity_status packet can be delayed
+  // indefinitely on laggy servers). Without this, bot.consume() hangs forever.
+  // The eat() helper in ctx is preferred and handles food selection + health event detection,
+  // but for agents that call bot.consume() directly this ensures a bounded wait.
+  const CONSUME_TIMEOUT_MS = 5000;
+  const consumeWithTimeout = (): Promise<void> => {
+    return Promise.race<void>([
+      rawBot.consume(),
+      new Promise<void>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`bot.consume() timed out after ${CONSUME_TIMEOUT_MS}ms — use eat() instead for reliable food consumption`)),
+          CONSUME_TIMEOUT_MS
+        )
+      ),
+    ]);
+  };
+
   const botProxy = new Proxy(rawBot, {
     get(target: any, prop: string | symbol) {
       if (prop === 'pathfinder') return pathfinderProxy;
@@ -354,6 +371,8 @@ export async function mc_execute(
       if (prop === 'dig') return digWithTimeout;
       // Wrap openContainer() to pre-activate the block and avoid windowOpen timeout.
       if (prop === 'openContainer') return openContainerWithPreActivate;
+      // Wrap consume() with a hard timeout — entity_status packet can be delayed indefinitely.
+      if (prop === 'consume') return consumeWithTimeout;
       // Pass EventEmitter methods and _client through without bind() to preserve
       // the full EventEmitter chain and minecraft-protocol packet dispatch.
       if (typeof prop === 'string' && EVENT_EMITTER_PROPS.has(prop)) {
