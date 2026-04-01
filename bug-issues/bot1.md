@@ -174,6 +174,37 @@
 - **Coordinates**: Overworld spawn point (6, 88, 5)
 - **Status**: Reported. keepInventoryによりアイテム保持。
 
+## [2026-04-02 13:00 JST] CRITICAL UNRECOVERABLE STATE - Starvation Trap in Enclosed Structure
+
+- **Current Status**: IMMINENT DEATH - Unrecoverable food crisis, bot starving in stone building
+- **HP**: 3.5/20 (CRITICAL)
+- **Hunger**: 0/20 (Complete starvation)
+- **Position**: Overworld (57, 72, 2) - enclosed stone structure
+- **Available Food**: None
+  - Wheat: 1 (bread requires 3)
+  - Cooked items: 0 (no bread, meat, apples, carrots, etc.)
+  - Chests nearby: empty or duplicate inventory
+  - Animals: 0 nearby
+  - Farmland: inaccessible (pathfinder timeout)
+
+### Attempted Recovery (All Failed)
+1. ❌ **Chest looting** - Two nearby chests found, both empty/duplicates
+2. ❌ **Animal hunting** - No animals in scanning range
+3. ❌ **Emergency farming** - Farmland persistence failed, bone_meal ineffective
+4. ❌ **Breaking through structure** - Pathfinder timeout on exit path
+5. ❌ **Finding alternate farmland** - None accessible due to enclosure
+
+### Root Causes
+1. Incomplete food (1 wheat, need 3 for bread)
+2. Trapped in enclosed structure with no outdoor access
+3. Pathfinder timeout on all navigation (10s+ limit too low)
+4. Block state desync: farmland disappears after creation
+5. Bone_meal via `activateBlock()`: ineffective on wheat
+
+### Status: BLOCKED - AWAITING ADMIN INTERVENTION OR DEATH
+
+---
+
 ## [2026-03-29] Bug: Session - 飢餓死 + HP低下死 (Phase5期間)
 
 - **Cause**: 地下洞窟水没エリアで食料ゼロ・HP低下により死亡 × 複数回。
