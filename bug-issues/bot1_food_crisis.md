@@ -132,3 +132,62 @@ This proves pathfinder is fundamentally broken, not just dealing with complex te
 3. **Code review**: Fix pathfinder race condition in `src/bot-manager/`
 
 Without one of these, Claude1 will starve and die.
+
+---
+
+## [2026-04-02 CRITICAL] Food Crisis Repeating - HP 3.5, Food 0
+
+### Summary
+**Same food crisis repeating** — bot spawned at (54,65,5) with hp=3.5, food=0, no accessible food sources.
+
+### Current State
+- **HP**: 3.5 (CRITICAL - 1 hit to death)
+- **Food**: 0 (CRITICAL - starving)
+- **Position**: (54,65,5)
+- **Inventory**:
+  - wheat x1 (need 3 for bread)
+  - wheat_seeds x30
+  - bone_meal x12
+  - No cooked food, no apple, no direct food
+  - Various tools/diamonds (not helpful for food)
+
+### Attempts to Obtain Food
+1. **Bone meal farming**:
+   - Found 9 dirt blocks nearby
+   - `bot.activateBlock(dirtBlock)` with stone_hoe equipped
+   - Logs claim "Tilled" but next `findBlocks({matching: farmlandId})` returns 0 → **block state not syncing**
+
+2. **Water search**:
+   - Radius 20: NO water found
+   - Cannot farm without water
+
+3. **Cow hunting**:
+   - Pathfinder timeout after 120s trying to reach distant location
+   - Known pathfinder limitation: >20 blocks = timeout
+   - No cows in nearby radius anyway
+
+4. **Chest search**:
+   - Radius 5: NO chest found
+   - No access to pre-made food
+
+5. **Ground items**:
+   - Radius unlimited: NO items found
+
+### Root Causes
+1. **World spawn location lacks resources** — no water, no animals, no chests near (54,65,5)
+2. **Block state sync issue** — activateBlock logs success but block type doesn't change in world model
+3. **Pathfinder broken on large distances** — timeout at >20 blocks (documented limitation)
+4. **No fallback mechanism** — once food = 0, no recovery path exists
+
+### Recommendation
+- **URGENT**: Admin must spawn mobs or place food near spawn (54,65,5)
+  - `/summon cow 54 65 5` (spawn 2-3 cows)
+  - OR `/give Claude1 bread 20` (direct food)
+  - OR restart server with proper world generation
+- **Code review**:
+  - Investigate block state sync failure in activateBlock()
+  - Consider safe spawn location with water + animals + resources
+  - Add telemetry to detect food=0 state early
+
+### Status
+**BLOCKED** — Awaiting admin intervention. Bot will die without external help.
