@@ -783,12 +783,18 @@ export async function mc_execute(
         await furnace.putFuel(fuelItem.type, null, Math.min(fuelItem.count, 64));
         await furnace.putInput(inputItem.type, null, Math.min(count, inputItem.count));
 
-        // Wait for smelting to produce output (up to 20 seconds per item)
-        const waitMs = count * 10000 + 5000;
+        // Record output count before smelting begins (furnace may already have output from a
+        // previous session — we must not treat pre-existing items as freshly smelted).
+        const outputBefore = (furnace.outputItem()?.count ?? 0);
+        const targetOutputCount = outputBefore + Math.min(count, inputItem.count);
+
+        // Wait for smelting: 10s per item + 5s startup buffer.
+        // Use targetOutputCount so pre-existing output does not cause early resolve.
+        const waitMs = Math.min(count, inputItem.count) * 10000 + 5000;
         const smeltDone = new Promise<void>(resolve => {
           const check = () => {
             const out = furnace.outputItem();
-            if (out && out.count >= count) {
+            if (out && out.count >= targetOutputCount) {
               furnace.removeListener("update", check);
               resolve();
             }
@@ -803,8 +809,9 @@ export async function mc_execute(
         const outputCount = output ? output.count : 0;
         if (output) await furnace.takeOutput();
 
-        logFn(`[smeltItems] Smelted ${inputItemName} x${count} with ${fuelItemName} → output: ${outputCount}`);
-        return { input: inputItemName, fuel: fuelItemName, outputCount };
+        const smelted = Math.max(0, outputCount - outputBefore);
+        logFn(`[smeltItems] Smelted ${inputItemName} x${smelted} with ${fuelItemName} → output: ${outputCount}`);
+        return { input: inputItemName, fuel: fuelItemName, outputCount: smelted };
       } finally {
         furnace.close();
       }
@@ -839,17 +846,43 @@ export async function mc_execute(
         throw new Error(`plantSeeds: too far from farmland (${dist.toFixed(1)} blocks). Navigate closer first.`);
       }
 
-      // Plant: place block on top face of farmland (Vec3(0,1,0) = top face)
-      // bot.placeBlock(referenceBlock, faceVector) places a new block on that face
-      await rawBot.placeBlock(farmlandBlock, new Vec3(0, 1, 0));
+      // Plant: place block on top face of farmland using raw packet to avoid
+      // bot.placeBlock()'s 5-second blockUpdate timeout (server may not ack reliably).
+      const fPos = farmlandBlock.position;
+      const plantPos = fPos.offset(0, 1, 0);
+      await rawBot.lookAt(fPos.offset(0.5, 1.0, 0.5), true);
 
-      logFn(`[plantSeeds] Planted ${seedItem.name} on farmland at (${farmlandBlock.position.x}, ${farmlandBlock.position.y}, ${farmlandBlock.position.z})`);
+      // Listen for blockUpdate at the target position (seed crop appears 1 block above farmland)
+      const syncPromise = new Promise<void>(resolve => {
+        const handler = (_o: any, n: any) => {
+          if (n.position.x === plantPos.x && n.position.y === plantPos.y && n.position.z === plantPos.z) {
+            rawBot.removeListener("blockUpdate", handler);
+            resolve();
+          }
+        };
+        rawBot.on("blockUpdate", handler);
+        // Fallback: resolve after 500ms even if no blockUpdate arrives
+        setTimeout(() => { rawBot.removeListener("blockUpdate", handler); resolve(); }, 500);
+      });
+
+      (rawBot as any)._client.write("block_place", {
+        location: { x: fPos.x, y: fPos.y, z: fPos.z },
+        direction: 1,   // top face
+        hand: 0,
+        cursorX: 0.5, cursorY: 1.0, cursorZ: 0.5,
+        insideBlock: false,
+      });
+      await syncPromise;
+
+      logFn(`[plantSeeds] Planted ${seedItem.name} on farmland at (${fPos.x}, ${fPos.y}, ${fPos.z})`);
       return { planted: seedItem.name, position: farmlandBlock.position };
     },
 
     // AutoSafety state (read-only from agent code)
-    // Getter function so agent always reads the latest state (not a stale snapshot).
-    safetyState: managed.safetyState ?? null,
+    // Defined as a getter so agent always reads the latest live state object.
+    // Without a getter, managed.safetyState would be captured as null if AutoSafety
+    // had not yet assigned it at sandbox construction time (race condition on first call).
+    get safetyState() { return managed.safetyState ?? null; },
 
     // === recipesFor wrapper ===
     // bot.recipesFor(id, null, 1, null) only returns 2x2 recipes when no table is passed.
