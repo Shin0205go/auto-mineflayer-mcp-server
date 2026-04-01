@@ -642,8 +642,34 @@ export async function mc_execute(
 
     // === Meta-cognition layer: observe → understand → act ===
     // awareness() — self-state + spatial snapshot (call before any action)
+    // Appends AutoSafety periodic scan cache (ores, chests, water within 32 blocks)
+    // so agents can avoid redundant findBlock calls for common resources.
     awareness: () => {
-      return getSurroundings(rawBot);
+      const base = getSurroundings(rawBot);
+      const ss = managed.safetyState;
+      if (!ss) return base;
+
+      const lines: string[] = [base];
+
+      // Append AutoSafety scan cache if it is recent (< 30 seconds old)
+      const scanAge = Date.now() - ss.lastScanTime;
+      if (ss.lastScanTime > 0 && scanAge < 30000) {
+        lines.push(`\n## AutoSafety スキャンキャッシュ (${Math.round(scanAge / 1000)}秒前)`);
+        if (ss.nearbyOres.length > 0) {
+          const oreList = ss.nearbyOres.map(o => `${o.name}@(${o.pos.x},${o.pos.y},${o.pos.z})`).join(", ");
+          lines.push(`鉱石: ${oreList}`);
+        }
+        if (ss.nearbyChests.length > 0) {
+          const chestList = ss.nearbyChests.map(c => `(${c.x},${c.y},${c.z})`).join(", ");
+          lines.push(`チェスト: ${chestList}`);
+        }
+        if (ss.nearbyWater.length > 0) {
+          const waterList = ss.nearbyWater.map(w => `(${w.x},${w.y},${w.z})`).join(", ");
+          lines.push(`水源: ${waterList}`);
+        }
+      }
+
+      return lines.join("\n");
     },
     // scan3D(radius?, heightRange?) — 3D spatial scan with layer views
     // Shows XZ slices at multiple Y levels + cavity/wall analysis
