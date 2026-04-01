@@ -460,6 +460,14 @@ export async function mc_execute(
 
       const foodAfter = rawBot.food;
       logFn(`[eat] ${itemName}: food ${foodBefore} → ${foodAfter}${changed ? "" : " (timeout)"}`);
+
+      // If food level did not change after timeout, eating failed (server did not respond).
+      // This can happen when the server connection is stale or use_item packet was not processed.
+      // Throw an error so the agent knows eating did not succeed rather than silently continuing.
+      if (!changed && foodAfter <= foodBefore) {
+        throw new Error(`eat() timed out: ${itemName} was not consumed (food ${foodBefore} → ${foodAfter}). Server may not be responding to use_item packets.`);
+      }
+
       return { item: itemName, foodBefore, foodAfter };
     },
 
