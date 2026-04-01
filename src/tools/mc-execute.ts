@@ -131,9 +131,11 @@ export async function mc_execute(
     const MAX_STUCK_CHECKS = 2;
     // Grace period: don't start stuck-counting until bot has moved, or this many
     // ms have elapsed (covers slow path-computation on complex terrain).
-    // 25s: Phase 5 reports show path computation taking 20-30s on Y=100+ elevated
-    // terrain. 15s caused "goal was changed" on every attempt including 1-block steps.
-    const GRACE_PERIOD_MS = 25000;
+    // Use thinkTimeout as the floor: on retry thinkTimeout is doubled (40s), so
+    // GRACE_PERIOD_MS must also account for that to avoid false stuck detection
+    // during path computation. Add 5s buffer on top of thinkTimeout.
+    const currentThinkTimeout = (rawBot.pathfinder as any)?.thinkTimeout ?? 20000;
+    const GRACE_PERIOD_MS = Math.max(currentThinkTimeout + 5000, 25000);
     const startTime = Date.now();
     let startPos = rawBot.entity.position.clone();
     let hasMovedOnce = false;
