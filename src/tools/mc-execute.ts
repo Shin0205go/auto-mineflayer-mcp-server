@@ -170,7 +170,14 @@ export async function mc_execute(
     // ms have elapsed (covers slow path-computation on complex terrain).
     // Use cappedThinkTimeout (not prevThinkTimeout) so grace matches what pathfinder
     // will actually spend on path computation. Add 5s buffer.
-    const GRACE_PERIOD_MS = Math.max(cappedThinkTimeout + 5000, 15000);
+    // IMPORTANT: Cap grace period below timeoutMs so that stuck detection can fire
+    // at least once before the hard timeout. Without this cap, GRACE_PERIOD_MS can
+    // exceed timeoutMs (e.g. grace=22000 > timeout=20000), making stuck detection
+    // never activate and the hard timeout always firing first.
+    const GRACE_PERIOD_MS = Math.min(
+      Math.max(cappedThinkTimeout + 5000, 15000),
+      timeoutMs - STUCK_INTERVAL  // ensure at least one stuck check fires before hard timeout
+    );
     const startTime = Date.now();
     let startPos = rawBot.entity.position.clone();
     let hasMovedOnce = false;
@@ -301,9 +308,24 @@ export async function mc_execute(
     'removeListener', 'removeAllListeners', 'listeners', 'rawListeners',
     'listenerCount', 'prependListener', 'prependOnceListener', 'eventNames',
   ]);
+  // Wrap bot.dig() with a 15-second timeout (Rule A: mineflayer API can hang indefinitely).
+  // Without this, a single dig() call can block the entire mc_execute sandbox for 120s.
+  // 15s is generous: most blocks take <2s; hardest (obsidian w/ gold pick) takes ~9s.
+  const DIG_TIMEOUT_MS = 15000;
+  const digWithTimeout = (block: any): Promise<void> => {
+    return Promise.race<void>([
+      rawBot.dig(block),
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error(`bot.dig() timed out after ${DIG_TIMEOUT_MS}ms — block may be out of reach or undiggable`)), DIG_TIMEOUT_MS)
+      ),
+    ]);
+  };
+
   const botProxy = new Proxy(rawBot, {
     get(target: any, prop: string | symbol) {
       if (prop === 'pathfinder') return pathfinderProxy;
+      // Wrap dig() with a hard timeout so a single stuck dig() doesn't block the sandbox.
+      if (prop === 'dig') return digWithTimeout;
       // Pass EventEmitter methods and _client through without bind() to preserve
       // the full EventEmitter chain and minecraft-protocol packet dispatch.
       if (typeof prop === 'string' && EVENT_EMITTER_PROPS.has(prop)) {
@@ -922,8 +944,11 @@ export async function mc_execute(
 
     // === descendSafely — 足元を掘りながら安全に降下 ===
     // Usage: await descendSafely(65)  — Y=65まで降りる
+    // Usage: await descendSafely(-59, 300)  — 深部への長距離降下
     // Bot の真下を1ブロックずつ掘って降りる。崖でも使える。
-    descendSafely: async (targetY: number, maxDigAttempts: number = 30) => {
+    // maxDigAttempts のデフォルトは 300 (Y=73→Y=-59 の 132 ブロック降下に十分)
+    // 各ループは平均 ~0.4s なので 300 attempts ≈ 120s (mc_execute のデフォルト timeout と同等)
+    descendSafely: async (targetY: number, maxDigAttempts: number = 300) => {
       let attempts = 0;
       while (Math.floor(rawBot.entity.position.y) > targetY + 1 && attempts < maxDigAttempts) {
         attempts++;
@@ -939,23 +964,25 @@ export async function mc_execute(
             logFn(`[descendSafely] Dug ${blockBelow.name} at y=${blockBelow.position.y}`);
           } catch(e) { /* ignore */ }
         } else {
-          // 下が空洞 → sneak 解除して少し前進し落ちる
+          // 下が空洞 → sneak 解除して落ちる
           rawBot.setControlState('sneak', false);
           await new Promise<void>(r => setTimeout(r, 300));
         }
 
-        // 2ブロック下が air なら着地待ち
+        // 2ブロック下が air なら着地待ち (短縮: 300ms → 200ms で throughput 向上)
         if (block2Below && (block2Below.name === 'air' || block2Below.name === 'cave_air')) {
-          await new Promise<void>(r => setTimeout(r, 500));
+          await new Promise<void>(r => setTimeout(r, 200));
         }
 
         const newY = Math.floor(rawBot.entity.position.y);
-        logFn(`[descendSafely] Y=${newY}, target=${targetY}, attempt=${attempts}`);
+        if (attempts % 10 === 0) {
+          logFn(`[descendSafely] Y=${newY}, target=${targetY}, attempt=${attempts}`);
+        }
 
         if (newY <= targetY + 1) break;
       }
       const finalY = Math.floor(rawBot.entity.position.y);
-      logFn(`[descendSafely] Done: Y=${finalY} (target=${targetY})`);
+      logFn(`[descendSafely] Done: Y=${finalY} (target=${targetY}, attempts=${attempts})`);
       return { reached: finalY <= targetY + 2, finalY };
     },
 
@@ -1135,10 +1162,11 @@ export async function mc_execute(
               resolve();
             };
             rawBot.on("windowOpen" as any, onWindow);
+            // 3000ms timeout: matches openChest for consistency on laggy servers
             setTimeout(() => {
               rawBot.removeListener("windowOpen" as any, onWindow);
               resolve();
-            }, 1500);
+            }, 3000);
           });
           await rawBot.activateBlock(furnaceBlock);
           await windowOpenPromise;
@@ -1467,10 +1495,11 @@ export async function mc_execute(
                 resolve();
               };
               rawBot.on("windowOpen" as any, onWindow);
+              // 3000ms timeout: matches openChest for consistency on laggy servers
               setTimeout(() => {
                 rawBot.removeListener("windowOpen" as any, onWindow);
                 resolve();
-              }, 1500);
+              }, 3000);
             });
             await rawBot.activateBlock(table);
             await windowOpenPromise;
