@@ -19,6 +19,7 @@ export class AutoSafety {
   private managed: ManagedBot;
   private bot: Bot;
   private interval: NodeJS.Timeout | null = null;
+  private scanInterval: NodeJS.Timeout | null = null;
   private state: SafetyState;
 
   // Internal flags
@@ -41,6 +42,10 @@ export class AutoSafety {
       autoSleepActive: false,
       lastAction: null,
       lastActionTime: 0,
+      nearbyOres: [],
+      nearbyWater: [],
+      nearbyChests: [],
+      lastScanTime: 0,
     };
     managed.safetyState = this.state;
   }
@@ -53,6 +58,13 @@ export class AutoSafety {
     this.physicsTick = () => this.onPhysicsTick();
     this.bot.on("physicsTick", this.physicsTick);
 
+    // 10-second interval for periodic block scan (ores, water, chests)
+    this.scanInterval = setInterval(() => {
+      this.runPeriodicScan().catch(() => {});
+    }, 10000);
+    // Run once immediately on start
+    this.runPeriodicScan().catch(() => {});
+
     console.error(`[AutoSafety] Started for ${this.managed.username}`);
   }
 
@@ -60,6 +72,10 @@ export class AutoSafety {
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
+    }
+    if (this.scanInterval) {
+      clearInterval(this.scanInterval);
+      this.scanInterval = null;
     }
     if (this.physicsTick) {
       this.bot.removeListener("physicsTick", this.physicsTick);
@@ -456,6 +472,44 @@ export class AutoSafety {
       }, 200);
     });
     goalHandle.cleanup();
+  }
+
+  // ==================== Periodic block scan (10-second interval) ====================
+
+  private async runPeriodicScan(): Promise<void> {
+    const oreNames = [
+      'iron_ore', 'deepslate_iron_ore',
+      'gold_ore', 'deepslate_gold_ore',
+      'diamond_ore', 'deepslate_diamond_ore',
+      'coal_ore', 'deepslate_coal_ore',
+      'copper_ore', 'deepslate_copper_ore',
+    ];
+
+    // Search for each ore type — max 1 result per type within 32 blocks
+    const ores: SafetyState['nearbyOres'] = [];
+    for (const oreName of oreNames) {
+      const blockDef = (this.bot.registry as any).blocksByName[oreName];
+      if (!blockDef) continue;
+      const found = this.bot.findBlock({ matching: blockDef.id, maxDistance: 32 });
+      if (found) ores.push({ name: oreName, pos: found.position });
+    }
+
+    // Nearest water source within 32 blocks
+    const waterDef = (this.bot.registry as any).blocksByName['water'];
+    const waterBlock = waterDef
+      ? this.bot.findBlock({ matching: waterDef.id, maxDistance: 32 })
+      : null;
+
+    // Nearest chest within 32 blocks
+    const chestDef = (this.bot.registry as any).blocksByName['chest'];
+    const chestBlock = chestDef
+      ? this.bot.findBlock({ matching: chestDef.id, maxDistance: 32 })
+      : null;
+
+    this.state.nearbyOres = ores;
+    this.state.nearbyWater = waterBlock ? [waterBlock.position] : [];
+    this.state.nearbyChests = chestBlock ? [chestBlock.position] : [];
+    this.state.lastScanTime = Date.now();
   }
 
   // ==================== Helpers ====================

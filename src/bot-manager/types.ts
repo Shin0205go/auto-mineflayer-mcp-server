@@ -40,6 +40,11 @@ export interface SafetyState {
   autoSleepActive: boolean;
   lastAction: string | null;
   lastActionTime: number;
+  // Periodic scan cache (updated every 10 seconds)
+  nearbyOres: Array<{ name: string; pos: { x: number; y: number; z: number } }>;
+  nearbyWater: Array<{ x: number; y: number; z: number }>;
+  nearbyChests: Array<{ x: number; y: number; z: number }>;
+  lastScanTime: number;  // Date.now()
 }
 
 export interface ManagedBot {
