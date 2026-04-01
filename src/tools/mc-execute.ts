@@ -93,7 +93,11 @@ export async function mc_execute(
         return Promise.race([
           gotoPromise,
           new Promise<void>((_resolve, reject) =>
-            setTimeout(() => reject(new Error(`Pathfinder timeout after ${timeoutMs}ms`)), timeoutMs)
+            setTimeout(() => {
+              // Stop the pathfinder immediately on timeout so it doesn't continue as a zombie
+              try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
+              reject(new Error(`Pathfinder timeout after ${timeoutMs}ms`));
+            }, timeoutMs)
           )
         ]);
       };
@@ -130,7 +134,10 @@ export async function mc_execute(
         return Promise.race([
           gotoPromise,
           new Promise<void>((_resolve, reject) =>
-            setTimeout(() => reject(new Error(`Pathfinder timeout after 20000ms`)), 20000)
+            setTimeout(() => {
+              try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
+              reject(new Error(`Pathfinder timeout after 20000ms`));
+            }, 20000)
           )
         ]);
       }
@@ -152,7 +159,10 @@ export async function mc_execute(
           await Promise.race([
             gotoPromise,
             new Promise<void>((_resolve, reject) =>
-              setTimeout(() => reject(new Error(`Pathfinder timeout after 20000ms`)), 20000)
+              setTimeout(() => {
+                try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
+                reject(new Error(`Pathfinder timeout after 20000ms`));
+              }, 20000)
             )
           ]);
         } catch (e) {
