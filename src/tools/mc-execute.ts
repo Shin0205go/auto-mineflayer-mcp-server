@@ -1022,30 +1022,54 @@ export async function mc_execute(
     // Bot の真下を1ブロックずつ掘って降りる。崖でも使える。
     // maxDigAttempts のデフォルトは 300 (Y=73→Y=-59 の 132 ブロック降下に十分)
     // 各ループは平均 ~0.4s なので 300 attempts ≈ 120s (mc_execute のデフォルト timeout と同等)
+    //
+    // 最適化: 連続する空洞(落下可能区間)はまとめて自由落下する。
+    // ブロックを掘る必要がない連続空洞は物理エンジンに任せて落下させることで
+    // 空洞1ブロックにつき300+200msかかっていた待機を大幅削減する。
     descendSafely: async (targetY: number, maxDigAttempts: number = 300) => {
       let attempts = 0;
       while (Math.floor(rawBot.entity.position.y) > targetY + 1 && attempts < maxDigAttempts) {
         attempts++;
         const pos = rawBot.entity.position.floored();
         const blockBelow = rawBot.blockAt(pos.offset(0, -1, 0));
-        const block2Below = rawBot.blockAt(pos.offset(0, -2, 0));
 
-        if (blockBelow && blockBelow.name !== 'air' && blockBelow.name !== 'cave_air' &&
-            blockBelow.name !== 'water' && blockBelow.name !== 'lava') {
+        const isAirLike = (name: string | undefined) =>
+          !name || name === 'air' || name === 'cave_air' || name === 'water' || name === 'lava';
+
+        if (blockBelow && !isAirLike(blockBelow.name)) {
           // 固体ブロックがある → 掘る
           try {
             await rawBot.dig(blockBelow);
             logFn(`[descendSafely] Dug ${blockBelow.name} at y=${blockBelow.position.y}`);
           } catch(e) { /* ignore */ }
-        } else {
-          // 下が空洞 → sneak 解除して落ちる
-          rawBot.setControlState('sneak', false);
-          await new Promise<void>(r => setTimeout(r, 300));
-        }
-
-        // 2ブロック下が air なら着地待ち (短縮: 300ms → 200ms で throughput 向上)
-        if (block2Below && (block2Below.name === 'air' || block2Below.name === 'cave_air')) {
+          // After dig, bot may fall automatically — give physics time to settle
           await new Promise<void>(r => setTimeout(r, 200));
+        } else {
+          // 下が空洞/水/溶岩 → 自由落下させる。
+          // sneak を解除して sneak+forward で端から踏み出す。
+          // 連続空洞は落下完了(onGround=true)まで待機し、1回のattemptで複数ブロック降下する。
+          rawBot.setControlState('sneak', false);
+          // 端にいる可能性があるため前進して確実に落下させる
+          rawBot.setControlState('forward', true);
+          await new Promise<void>(r => setTimeout(r, 100));
+          rawBot.setControlState('forward', false);
+
+          // Wait for the bot to land (onGround) or up to 2 seconds for a deep drop
+          const fallStart = rawBot.entity.position.y;
+          const FALL_WAIT_MS = 2000;
+          const FALL_POLL_MS = 50;
+          let waited = 0;
+          while (waited < FALL_WAIT_MS) {
+            await new Promise<void>(r => setTimeout(r, FALL_POLL_MS));
+            waited += FALL_POLL_MS;
+            if ((rawBot.entity as any).onGround) break;
+            // Also break if we've reached target
+            if (Math.floor(rawBot.entity.position.y) <= targetY + 1) break;
+          }
+          const dropped = fallStart - rawBot.entity.position.y;
+          if (dropped > 0.5) {
+            logFn(`[descendSafely] Fell ${dropped.toFixed(1)} blocks to Y=${Math.floor(rawBot.entity.position.y)}`);
+          }
         }
 
         const newY = Math.floor(rawBot.entity.position.y);
