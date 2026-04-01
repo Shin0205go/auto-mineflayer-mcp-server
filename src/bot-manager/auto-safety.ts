@@ -332,6 +332,10 @@ export class AutoSafety {
     if (this.managed.mcExecuteActive) return false;
     if (this.autoSleepActive) return false;
 
+    // Beds explode in Nether/End — never attempt auto-sleep outside Overworld.
+    const dimension = (this.bot.game as any)?.dimension ?? (this.bot as any).dimension ?? "overworld";
+    if (dimension !== "overworld") return false;
+
     // Check if nighttime (12541+ ticks)
     const timeOfDay = this.bot.time?.timeOfDay;
     if (timeOfDay === undefined || timeOfDay < 12541) return false;

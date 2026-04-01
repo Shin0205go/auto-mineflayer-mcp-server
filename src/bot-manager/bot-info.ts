@@ -184,6 +184,10 @@ export function getSurroundings(bot: Bot): string {
   lines.push(`## 現在地`);
   lines.push(`座標: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})`);
 
+  // ディメンション (ネザー/エンド判定に必須)
+  const dimension = (bot.game as any)?.dimension ?? (bot as any).dimension ?? "overworld";
+  lines.push(`ディメンション: ${dimension}`);
+
   // バイオーム
   try {
     const biome = bot.blockAt(pos)?.biome?.name || "unknown";
