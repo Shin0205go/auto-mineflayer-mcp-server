@@ -55,6 +55,42 @@ export async function mc_execute(
   // aborted flag — set true on timeout so wait() rejects, terminating zombie async functions
   let aborted = false;
 
+  // Track all timer IDs created by agent code so they can be force-cleared on timeout/abort.
+  // Without this, a rapid setInterval loop (e.g. findBlock in a tight loop) leaves zombie
+  // timers running after execution ends, accumulating across calls and eventually crashing
+  // the daemon via memory exhaustion or uncaughtException from stale callbacks.
+  const trackedTimeouts = new Set<ReturnType<typeof setTimeout>>();
+  const trackedIntervals = new Set<ReturnType<typeof setInterval>>();
+
+  const sandboxSetTimeout = (fn: (...args: any[]) => void, ms?: number, ...args: any[]): ReturnType<typeof setTimeout> => {
+    const id = setTimeout((...a: any[]) => {
+      trackedTimeouts.delete(id);
+      fn(...a);
+    }, ms, ...args);
+    trackedTimeouts.add(id);
+    return id;
+  };
+  const sandboxClearTimeout = (id?: ReturnType<typeof setTimeout>) => {
+    if (id !== undefined) trackedTimeouts.delete(id);
+    clearTimeout(id);
+  };
+  const sandboxSetInterval = (fn: (...args: any[]) => void, ms?: number, ...args: any[]): ReturnType<typeof setInterval> => {
+    const id = setInterval(fn, ms, ...args);
+    trackedIntervals.add(id);
+    return id;
+  };
+  const sandboxClearInterval = (id?: ReturnType<typeof setInterval>) => {
+    if (id !== undefined) trackedIntervals.delete(id);
+    clearInterval(id);
+  };
+
+  const clearAllTrackedTimers = () => {
+    for (const id of trackedTimeouts) clearTimeout(id);
+    trackedTimeouts.clear();
+    for (const id of trackedIntervals) clearInterval(id);
+    trackedIntervals.clear();
+  };
+
   const logFn = (message: unknown) => { if (logs.length < MAX_LOG_LINES) logs.push(String(message)); };
   const waitFn = (ms: number) => new Promise<void>((resolve, reject) => {
     if (aborted) { reject(new Error("Execution aborted")); return; }
@@ -1044,7 +1080,10 @@ export async function mc_execute(
     JSON, Math, Date, Array, Object, String, Number, Boolean,
     Map, Set, RegExp, Error, Promise,
     parseInt, parseFloat, isNaN, isFinite,
-    setTimeout, setInterval, clearTimeout, clearInterval,
+    setTimeout: sandboxSetTimeout,
+    setInterval: sandboxSetInterval,
+    clearTimeout: sandboxClearTimeout,
+    clearInterval: sandboxClearInterval,
   };
 
   const keys = Object.keys(ctx);
@@ -1082,6 +1121,11 @@ export async function mc_execute(
       // Cancel any ongoing pathfinder navigation to prevent zombie goto() from previous execution
       try { rawBot.pathfinder.setGoal(null); } catch {}
 
+      // Clear any sandbox setInterval/setTimeout created by agent code.
+      // A tight findBlock loop or rapid setInterval would otherwise accumulate across
+      // executions and eventually exhaust memory or trigger uncaughtException.
+      clearAllTrackedTimers();
+
       const parts: string[] = [];
       if (result !== undefined && result !== null) {
         try { parts.push(`Result:\n${typeof result === "string" ? result : JSON.stringify(result, null, 2)}`); }
@@ -1101,6 +1145,9 @@ export async function mc_execute(
 
     // Cancel any ongoing pathfinder navigation (especially on timeout — stops zombie goto())
     try { rawBot.pathfinder.setGoal(null); } catch {}
+
+    // Force-clear any zombie timers left by agent code (critical on execution timeout)
+    clearAllTrackedTimers();
 
     const parts = [`Error: ${errorMessage}`];
     if (logs.length > 0) parts.push(`Logs before error:\n${logs.join("\n")}`);

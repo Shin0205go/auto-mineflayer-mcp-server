@@ -57,9 +57,15 @@ process.on("exit", () => { try { unlinkSync(PID_FILE); } catch {} });
 // Prevent pathfinder/mineflayer bugs from crashing the whole daemon
 process.on("uncaughtException", (err) => {
   console.error(`[Daemon] uncaughtException (continuing): ${err.message}`);
+  console.error(err.stack ?? "(no stack)");
 });
 process.on("unhandledRejection", (reason) => {
-  console.error(`[Daemon] unhandledRejection (continuing): ${reason}`);
+  if (reason instanceof Error) {
+    console.error(`[Daemon] unhandledRejection (continuing): ${reason.message}`);
+    console.error(reason.stack ?? "(no stack)");
+  } else {
+    console.error(`[Daemon] unhandledRejection (continuing): ${reason}`);
+  }
 });
 
 await startViewerServer(port);
