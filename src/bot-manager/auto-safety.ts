@@ -25,6 +25,7 @@ export class AutoSafety {
   private autoEatActive = false;
   private creeperFleeActive = false;
   private creeperFleeLastEndTime = 0;
+  private generalFleeActive = false;
   private emergencyDodgeActive = false;
   private autoSleepActive = false;
   private physicsTick: (() => void) | null = null;
@@ -144,7 +145,7 @@ export class AutoSafety {
     // Emergency dodge runs on every tick regardless of creeper state (HP < 4 = immediate danger)
     this.tryEmergencyDodge();
 
-    if (this.creeperFleeActive) return;
+    if (this.creeperFleeActive || this.generalFleeActive) return;
     if (Date.now() - this.creeperFleeLastEndTime < 500) return;
 
     // Find creeper within 7 blocks
@@ -207,14 +208,18 @@ export class AutoSafety {
   private tryGeneralFlee(): boolean {
     if (this.managed.mcExecuteActive) return false;
     if (this.bot.health >= 10) return false;
-    if (this.creeperFleeActive || this.emergencyDodgeActive) return false;
+    if (this.creeperFleeActive || this.generalFleeActive || this.emergencyDodgeActive) return false;
+
+    // Don't override an active pathfinder goal (agent may be mid-navigate)
+    if (this.bot.pathfinder?.goal) return false;
 
     // Find nearest hostile within 8 blocks
     const hostile = this.findNearestHostile(8);
     if (!hostile) return false;
 
     console.error(`[AutoSafety] General flee: HP=${this.bot.health.toFixed(1)}, ${hostile.name} at ${hostile.distance.toFixed(1)} blocks`);
-    this.updateState("general-flee", true, "creeperFleeActive"); // reuse flag to prevent overlap
+    this.generalFleeActive = true;
+    this.updateState("general-flee", true, "creeperFleeActive");
 
     try {
       const dir = this.bot.entity.position.minus(hostile.entity.position).normalize();
@@ -238,10 +243,12 @@ export class AutoSafety {
       // Cleanup after 5 seconds
       setTimeout(() => {
         goalHandle.cleanup();
+        this.generalFleeActive = false;
         this.updateState("general-flee", false, "creeperFleeActive");
       }, 5000);
     } catch (err) {
       console.error(`[AutoSafety] General flee error:`, err);
+      this.generalFleeActive = false;
       this.updateState("general-flee", false, "creeperFleeActive");
     }
 

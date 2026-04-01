@@ -100,8 +100,9 @@ export async function mc_execute(
         return await tryGoto(false);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        // On "No path" errors, retry with canDig=true as fallback for complex terrain
-        if (msg.includes("No path") || msg.includes("no path") || msg.includes("GoalChanged")) {
+        // On "No path" errors, retry with canDig=true as fallback for complex terrain.
+        // "goal was changed" means the goal was overridden externally — retrying won't help, rethrow.
+        if ((msg.includes("No path") || msg.includes("no path")) && !msg.toLowerCase().includes("goal was changed")) {
           logFn(`[pathfinderGoto] No path with canDig=false, retrying with canDig=true`);
           try {
             return await tryGoto(true);
@@ -623,6 +624,33 @@ export async function mc_execute(
     // AutoSafety state (read-only from agent code)
     // Getter function so agent always reads the latest state (not a stale snapshot).
     safetyState: managed.safetyState ?? null,
+
+    // === recipesFor wrapper ===
+    // bot.recipesFor(id, null, 1, null) only returns 2x2 recipes when no table is passed.
+    // This wrapper auto-finds a nearby crafting table and passes it, returning 3x3 recipes too.
+    // Usage: const recipes = recipesFor(itemId)  — equivalent to bot.recipesFor but table-aware
+    recipesFor: (itemId: number, metadata: any = null, count: number = 1) => {
+      // First try without table (2x2 recipes)
+      const recipesNoTable = rawBot.recipesFor(itemId, metadata, count, null);
+      // Then try with nearby crafting table (3x3 recipes)
+      const tableId = (rawBot.registry?.blocksByName as any)?.crafting_table?.id;
+      const table = tableId
+        ? rawBot.findBlock({ matching: tableId, maxDistance: 6 })
+        : null;
+      if (!table) return recipesNoTable;
+      const recipesWithTable = rawBot.recipesFor(itemId, metadata, count, table);
+      // Merge: prefer 3x3 if found, otherwise fall back to 2x2
+      const seen = new Set<number>();
+      const merged: any[] = [];
+      for (const r of [...recipesWithTable, ...recipesNoTable]) {
+        // Deduplicate by result id
+        if (!seen.has(r.result?.id ?? -1)) {
+          seen.add(r.result?.id ?? -1);
+          merged.push(r);
+        }
+      }
+      return merged;
+    },
 
     // Standard JS
     console: {
