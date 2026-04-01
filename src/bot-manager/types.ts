@@ -35,6 +35,7 @@ export interface GameEvent {
 export interface SafetyState {
   autoEatActive: boolean;
   creeperFleeActive: boolean;
+  generalFleeActive: boolean;
   emergencyDodgeActive: boolean;
   autoSleepActive: boolean;
   lastAction: string | null;

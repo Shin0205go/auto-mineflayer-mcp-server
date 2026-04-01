@@ -36,6 +36,7 @@ export class AutoSafety {
     this.state = {
       autoEatActive: false,
       creeperFleeActive: false,
+      generalFleeActive: false,
       emergencyDodgeActive: false,
       autoSleepActive: false,
       lastAction: null,
@@ -219,7 +220,7 @@ export class AutoSafety {
 
     console.error(`[AutoSafety] General flee: HP=${this.bot.health.toFixed(1)}, ${hostile.name} at ${hostile.distance.toFixed(1)} blocks`);
     this.generalFleeActive = true;
-    this.updateState("general-flee", true, "creeperFleeActive");
+    this.updateState("general-flee", true, "generalFleeActive");
 
     try {
       const dir = this.bot.entity.position.minus(hostile.entity.position).normalize();
@@ -244,12 +245,12 @@ export class AutoSafety {
       setTimeout(() => {
         goalHandle.cleanup();
         this.generalFleeActive = false;
-        this.updateState("general-flee", false, "creeperFleeActive");
+        this.updateState("general-flee", false, "generalFleeActive");
       }, 5000);
     } catch (err) {
       console.error(`[AutoSafety] General flee error:`, err);
       this.generalFleeActive = false;
-      this.updateState("general-flee", false, "creeperFleeActive");
+      this.updateState("general-flee", false, "generalFleeActive");
     }
 
     return true;
