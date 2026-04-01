@@ -67,6 +67,59 @@ export async function mc_execute(
   });
   const getMessagesFn = () => botManager.getChatMessages(botUsername, true);
 
+  // Shared helper: goto with hard timeout + position-lock (stuck) detection.
+  // Used by pathfinderGoto and multiStagePathfind to avoid silent hangs.
+  const gotoWithStuckDetection = (goal: any, timeoutMs: number, allowDig: boolean): Promise<void> => {
+    try {
+      if (rawBot.pathfinder?.movements) {
+        rawBot.pathfinder.movements.canDig = allowDig;
+        (rawBot.pathfinder.movements as any).liquidCost = 10000;
+      }
+    } catch { /* ignore */ }
+
+    const gotoPromise = (rawBot.pathfinder.goto as any)(goal);
+
+    const STUCK_INTERVAL = 5000;
+    const STUCK_THRESHOLD = 0.5;
+    const MAX_STUCK_CHECKS = 2;
+    let lastPos = rawBot.entity.position.clone();
+    let stuckCount = 0;
+    let stuckCheckTimer: ReturnType<typeof setInterval> | null = null;
+
+    return new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        if (stuckCheckTimer !== null) { clearInterval(stuckCheckTimer); stuckCheckTimer = null; }
+      };
+
+      stuckCheckTimer = setInterval(() => {
+        const currentPos = rawBot.entity.position;
+        const moved = currentPos.distanceTo(lastPos);
+        if (moved < STUCK_THRESHOLD) {
+          stuckCount++;
+          if (stuckCount >= MAX_STUCK_CHECKS) {
+            cleanup();
+            try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
+            reject(new Error(`Pathfinder stuck: position unchanged for ${STUCK_INTERVAL * MAX_STUCK_CHECKS}ms`));
+          }
+        } else {
+          stuckCount = 0;
+          lastPos = currentPos.clone();
+        }
+      }, STUCK_INTERVAL);
+
+      const hardTimeoutId = setTimeout(() => {
+        cleanup();
+        try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
+        reject(new Error(`Pathfinder timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      gotoPromise.then(
+        (val: unknown) => { cleanup(); clearTimeout(hardTimeoutId); resolve(val as void); },
+        (err: unknown) => { cleanup(); clearTimeout(hardTimeoutId); reject(err); }
+      );
+    });
+  };
+
   const ctx: Record<string, unknown> = {
     bot: rawBot,
     Movements,
@@ -78,66 +131,11 @@ export async function mc_execute(
     getMessages: getMessagesFn,
     // Pathfinder timeout wrapper utility (usage: await pathfinderGoto(goal, 30000))
     // On "No path" failure, automatically retries once with canDig=true to handle complex terrain.
+    // Pathfinder timeout wrapper utility (usage: await pathfinderGoto(goal, 30000))
+    // On "No path" failure, automatically retries once with canDig=true to handle complex terrain.
     pathfinderGoto: async (goal: any, timeoutMs = 30000) => {
-      const tryGoto = (allowDig: boolean) => {
-        try {
-          if (rawBot.pathfinder?.movements) {
-            rawBot.pathfinder.movements.canDig = allowDig;
-            // Prevent pathfinder from routing through water — liquidCost=10000 makes water ~2500x
-            // more expensive than land. Without this, bots in water-heavy terrain (spawn area near
-            // ocean/river) route through water and get stuck mid-lake with no exit.
-            (rawBot.pathfinder.movements as any).liquidCost = 10000;
-          }
-        } catch { /* ignore */ }
-        const gotoPromise = (rawBot.pathfinder.goto as any)(goal);
-
-        // Rule B: position-lock detection — abort if position hasn't changed for STUCK_INTERVAL ms.
-        // This prevents the 120s mc_execute global timeout from firing when pathfinder hangs
-        // internally (e.g. "Took too long to decide path" in complex underground/water terrain).
-        const STUCK_INTERVAL = 5000;
-        const STUCK_THRESHOLD = 0.5; // blocks
-        let lastPos = rawBot.entity.position.clone();
-        let stuckCheckTimer: ReturnType<typeof setInterval> | null = null;
-        let stuckCount = 0;
-        const MAX_STUCK_CHECKS = 2; // abort after 2 consecutive stuck intervals (10s with no movement)
-
-        return new Promise<void>((resolve, reject) => {
-          const cleanup = () => {
-            if (stuckCheckTimer !== null) { clearInterval(stuckCheckTimer); stuckCheckTimer = null; }
-          };
-
-          stuckCheckTimer = setInterval(() => {
-            const currentPos = rawBot.entity.position;
-            const moved = currentPos.distanceTo(lastPos);
-            if (moved < STUCK_THRESHOLD) {
-              stuckCount++;
-              if (stuckCount >= MAX_STUCK_CHECKS) {
-                cleanup();
-                try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
-                reject(new Error(`Pathfinder stuck: position unchanged for ${STUCK_INTERVAL * MAX_STUCK_CHECKS}ms`));
-              }
-            } else {
-              stuckCount = 0;
-              lastPos = currentPos.clone();
-            }
-          }, STUCK_INTERVAL);
-
-          const hardTimeoutId = setTimeout(() => {
-            cleanup();
-            // Stop the pathfinder immediately on timeout so it doesn't continue as a zombie
-            try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
-            reject(new Error(`Pathfinder timeout after ${timeoutMs}ms`));
-          }, timeoutMs);
-
-          gotoPromise.then(
-            (val: unknown) => { cleanup(); clearTimeout(hardTimeoutId); resolve(val as void); },
-            (err: unknown) => { cleanup(); clearTimeout(hardTimeoutId); reject(err); }
-          );
-        });
-      };
-
       try {
-        return await tryGoto(false);
+        return await gotoWithStuckDetection(goal, timeoutMs, false);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         // On "No path" errors, retry with canDig=true as fallback for complex terrain.
@@ -145,7 +143,7 @@ export async function mc_execute(
         if ((msg.includes("No path") || msg.includes("no path")) && !msg.toLowerCase().includes("goal was changed")) {
           logFn(`[pathfinderGoto] No path with canDig=false, retrying with canDig=true`);
           try {
-            return await tryGoto(true);
+            return await gotoWithStuckDetection(goal, timeoutMs, true);
           } finally {
             // Always restore canDig=false after dig-enabled navigation
             try { if (rawBot.pathfinder?.movements) rawBot.pathfinder.movements.canDig = false; } catch { /* ignore */ }
@@ -164,16 +162,7 @@ export async function mc_execute(
 
       if (totalDist <= stageDistance) {
         // Close enough, just go directly
-        const gotoPromise = (rawBot.pathfinder.goto as any)(new goals.GoalXZ(targetX, targetZ));
-        return Promise.race([
-          gotoPromise,
-          new Promise<void>((_resolve, reject) =>
-            setTimeout(() => {
-              try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
-              reject(new Error(`Pathfinder timeout after 20000ms`));
-            }, 20000)
-          )
-        ]);
+        return gotoWithStuckDetection(new goals.GoalXZ(targetX, targetZ), 20000, false);
       }
 
       // Calculate waypoints
@@ -188,17 +177,8 @@ export async function mc_execute(
 
         logFn(`Stage ${i}/${numStages}: (${Math.floor(wpX)}, ${Math.floor(wpZ)})`);
 
-        const gotoPromise = (rawBot.pathfinder.goto as any)(new goals.GoalXZ(wpX, wpZ));
         try {
-          await Promise.race([
-            gotoPromise,
-            new Promise<void>((_resolve, reject) =>
-              setTimeout(() => {
-                try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
-                reject(new Error(`Pathfinder timeout after 20000ms`));
-              }, 20000)
-            )
-          ]);
+          await gotoWithStuckDetection(new goals.GoalXZ(wpX, wpZ), 20000, false);
         } catch (e) {
           logFn(`Stage ${i} failed: ${String(e).substring(0, 60)}`);
           throw e;
