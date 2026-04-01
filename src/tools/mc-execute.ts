@@ -212,23 +212,28 @@ export async function mc_execute(
     wait: waitFn,
     getMessages: getMessagesFn,
     // Pathfinder timeout wrapper utility (usage: await pathfinderGoto(goal, 30000))
-    // On "No path" failure, automatically retries once with canDig=true to handle complex terrain.
-    // Pathfinder timeout wrapper utility (usage: await pathfinderGoto(goal, 30000))
-    // On "No path" failure, automatically retries once with canDig=true to handle complex terrain.
+    // On "No path" / "Took too long" failure, automatically retries once with canDig=true.
+    // On retry, thinkTimeout is temporarily doubled to give A* more time on complex terrain.
     pathfinderGoto: async (goal: any, timeoutMs = 30000) => {
       try {
         return await gotoWithStuckDetection(goal, timeoutMs, false);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        // On "No path" errors, retry with canDig=true as fallback for complex terrain.
+        // On "No path" / think-timeout errors, retry with canDig=true as fallback for complex terrain.
         // "goal was changed" means the goal was overridden externally — retrying won't help, rethrow.
         if ((msg.includes("No path") || msg.includes("no path") || msg.includes("Took to long") || msg.includes("Took too long") || msg.includes("Pathfinder stuck")) && !msg.toLowerCase().includes("goal was changed")) {
-          logFn(`[pathfinderGoto] No path with canDig=false, retrying with canDig=true`);
+          logFn(`[pathfinderGoto] Path failed (${msg.substring(0, 60)}), retrying with canDig=true`);
+          // Temporarily double thinkTimeout so the A* search has more time on complex terrain.
+          const prevThinkTimeout = (rawBot.pathfinder as any)?.thinkTimeout ?? 20000;
           try {
+            if (rawBot.pathfinder) (rawBot.pathfinder as any).thinkTimeout = prevThinkTimeout * 2;
             return await gotoWithStuckDetection(goal, timeoutMs, true);
           } finally {
-            // Always restore canDig=false after dig-enabled navigation
-            try { if (rawBot.pathfinder?.movements) rawBot.pathfinder.movements.canDig = false; } catch { /* ignore */ }
+            // Restore original thinkTimeout and canDig=false after dig-enabled navigation
+            try {
+              if (rawBot.pathfinder) (rawBot.pathfinder as any).thinkTimeout = prevThinkTimeout;
+              if (rawBot.pathfinder?.movements) rawBot.pathfinder.movements.canDig = false;
+            } catch { /* ignore */ }
           }
         }
         throw err;
@@ -876,22 +881,26 @@ export async function mc_execute(
 
       // Pre-open the furnace GUI to avoid windowOpen timeout.
       // openFurnace() internally waits for the windowOpen event (up to 20s on laggy servers).
-      // Same pattern as openChest(): activateBlock first, wait up to 1000ms for windowOpen,
-      // then call openFurnace() which will find the already-open window immediately.
-      try {
-        await rawBot.activateBlock(furnaceBlock);
-        await new Promise<void>(resolve => {
-          const onWindow = () => {
-            rawBot.removeListener("windowOpen" as any, onWindow);
-            resolve();
-          };
-          rawBot.on("windowOpen" as any, onWindow);
-          setTimeout(() => {
-            rawBot.removeListener("windowOpen" as any, onWindow);
-            resolve();
-          }, 1000);
-        });
-      } catch { /* ignore activateBlock errors — openFurnace will open it */ }
+      // Register the windowOpen listener BEFORE calling activateBlock to prevent a race
+      // where the event fires before the listener is attached.
+      // Skip if a window is already open (e.g. leftover from a previous call).
+      if (!rawBot.currentWindow) {
+        try {
+          const windowOpenPromise = new Promise<void>(resolve => {
+            const onWindow = () => {
+              rawBot.removeListener("windowOpen" as any, onWindow);
+              resolve();
+            };
+            rawBot.on("windowOpen" as any, onWindow);
+            setTimeout(() => {
+              rawBot.removeListener("windowOpen" as any, onWindow);
+              resolve();
+            }, 1500);
+          });
+          await rawBot.activateBlock(furnaceBlock);
+          await windowOpenPromise;
+        } catch { /* ignore activateBlock errors — openFurnace will open it */ }
+      }
 
       // Open furnace using the correct API (bot.openFurnace, NOT bot.openContainer)
       const furnace = await rawBot.openFurnace(furnaceBlock) as any;
@@ -1066,23 +1075,28 @@ export async function mc_execute(
       }
       const recipe = recipes[0];
 
-      // If using a table, open it first to avoid windowOpen timeout
+      // If using a table, open it first to avoid windowOpen timeout.
+      // Register the windowOpen listener BEFORE calling activateBlock to prevent
+      // a race where the event fires before the listener is attached.
       if (table) {
-        try {
-          await rawBot.activateBlock(table);
-          // Wait for window to open
-          await new Promise<void>(resolve => {
-            const onWindow = () => {
-              rawBot.removeListener("windowOpen" as any, onWindow);
-              resolve();
-            };
-            rawBot.on("windowOpen" as any, onWindow);
-            setTimeout(() => {
-              rawBot.removeListener("windowOpen" as any, onWindow);
-              resolve();
-            }, 1000);
-          });
-        } catch { /* ignore activateBlock errors — bot.craft handles the window */ }
+        // Skip if window already open (e.g. leftover from previous call)
+        if (!rawBot.currentWindow) {
+          try {
+            const windowOpenPromise = new Promise<void>(resolve => {
+              const onWindow = () => {
+                rawBot.removeListener("windowOpen" as any, onWindow);
+                resolve();
+              };
+              rawBot.on("windowOpen" as any, onWindow);
+              setTimeout(() => {
+                rawBot.removeListener("windowOpen" as any, onWindow);
+                resolve();
+              }, 1500);
+            });
+            await rawBot.activateBlock(table);
+            await windowOpenPromise;
+          } catch { /* ignore activateBlock errors — bot.craft handles the window */ }
+        }
       }
 
       // Craft
@@ -1137,26 +1151,97 @@ export async function mc_execute(
     openChest: async (chestBlock: any) => {
       if (!chestBlock) throw new Error("openChest: chestBlock is null");
 
-      // Pre-open the GUI to avoid windowOpen timeout
-      try {
-        await rawBot.activateBlock(chestBlock);
-        // Wait for window to open (up to 1000ms)
-        await new Promise<void>(resolve => {
-          const onWindow = () => {
-            rawBot.removeListener("windowOpen" as any, onWindow);
-            resolve();
-          };
-          rawBot.on("windowOpen" as any, onWindow);
-          setTimeout(() => {
-            rawBot.removeListener("windowOpen" as any, onWindow);
-            resolve();
-          }, 1000);
-        });
-      } catch { /* ignore activateBlock errors — openContainer will open it */ }
+      // Pre-open the GUI to avoid windowOpen timeout.
+      // Register the windowOpen listener BEFORE calling activateBlock to prevent a race
+      // where the event fires before the listener is attached.
+      // Skip if a window is already open.
+      if (!rawBot.currentWindow) {
+        try {
+          const windowOpenPromise = new Promise<void>(resolve => {
+            const onWindow = () => {
+              rawBot.removeListener("windowOpen" as any, onWindow);
+              resolve();
+            };
+            rawBot.on("windowOpen" as any, onWindow);
+            setTimeout(() => {
+              rawBot.removeListener("windowOpen" as any, onWindow);
+              resolve();
+            }, 1500);
+          });
+          await rawBot.activateBlock(chestBlock);
+          await windowOpenPromise;
+        } catch { /* ignore activateBlock errors — openContainer will open it */ }
+      }
 
       // Open container for programmatic access
       const chest = await rawBot.openContainer(chestBlock);
       return chest;
+    },
+
+    // === enterPortal — stand in nether/end portal until dimension changes ===
+    // Usage: const result = await enterPortal(timeoutMs?)  — default 30000ms
+    //
+    // Mineflayer does not have a dedicated portal-enter API.  The only reliable way
+    // to teleport is to stand inside the portal block (nether_portal / end_portal)
+    // and wait for the server to change the dimension.  This takes ~4 seconds
+    // (the "portal delay" mechanic) after the bot walks into the portal block.
+    //
+    // Returns: { success: true, dimensionBefore, dimensionAfter } on teleport
+    //          { success: false, reason: "timeout", ... } if dimension didn't change
+    //
+    // The bot must already be adjacent to / standing in the portal before calling.
+    // Use pathfinderGoto(GoalBlock(px, py, pz)) to walk into the portal first.
+    enterPortal: async (timeoutMs: number = 30000) => {
+      const dimensionBefore = (rawBot.game as any)?.dimension ?? (rawBot as any).dimension ?? "unknown";
+
+      // Detect portal block at bot feet/head position
+      const feetBlock = rawBot.blockAt(rawBot.entity.position.floored());
+      const headBlock = rawBot.blockAt(rawBot.entity.position.floored().offset(0, 1, 0));
+      const inPortal =
+        feetBlock?.name === "nether_portal" || feetBlock?.name === "end_portal" ||
+        headBlock?.name === "nether_portal" || headBlock?.name === "end_portal";
+
+      if (!inPortal) {
+        // Attempt to walk into nearest portal block within 2 blocks
+        const portalBlock =
+          rawBot.findBlock({ matching: (b: any) => b.name === "nether_portal" || b.name === "end_portal", maxDistance: 3 });
+        if (portalBlock) {
+          logFn(`[enterPortal] Moving into portal block at (${portalBlock.position.x},${portalBlock.position.y},${portalBlock.position.z})`);
+          try {
+            await Promise.race([
+              (rawBot.pathfinder.goto as any)(new goals.GoalBlock(portalBlock.position.x, portalBlock.position.y, portalBlock.position.z)),
+              new Promise<void>((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000))
+            ]);
+          } catch { /* may already be inside */ }
+        }
+      }
+
+      // Hold forward to stay inside portal (prevents server from cancelling the teleport)
+      rawBot.setControlState("forward", true);
+
+      const teleportDone = new Promise<string | null>(resolve => {
+        const onRespawn = () => {
+          rawBot.removeListener("respawn" as any, onRespawn);
+          const dim = (rawBot.game as any)?.dimension ?? (rawBot as any).dimension ?? "unknown";
+          resolve(dim);
+        };
+        rawBot.on("respawn" as any, onRespawn);
+        setTimeout(() => {
+          rawBot.removeListener("respawn" as any, onRespawn);
+          resolve(null);
+        }, timeoutMs);
+      });
+
+      const dimensionAfter = await teleportDone;
+      rawBot.setControlState("forward", false);
+
+      if (dimensionAfter === null) {
+        logFn(`[enterPortal] Timeout — dimension did not change after ${timeoutMs}ms`);
+        return { success: false, reason: "timeout", dimensionBefore, dimensionAfter: dimensionBefore };
+      }
+
+      logFn(`[enterPortal] Teleported: ${dimensionBefore} → ${dimensionAfter}`);
+      return { success: true, dimensionBefore, dimensionAfter };
     },
 
     // Standard JS

@@ -365,13 +365,16 @@ export class BotCore extends EventEmitter {
 
         // Extend pathfinder think timeout for long-distance navigation.
         // Default thinkTimeout=5000ms is insufficient for 100-200 block paths through hilly terrain
-        // (spawn area cliff/mountain geography). With water/lava/digging disabled, pathfinder must
+        // (spawn area cliff/mountain geometry). With water/lava/digging disabled, pathfinder must
         // find longer surface routes which require more A* search time.
         // Bot1 Session 64: moveTo(200,70,200) arrived at (4,65,-3) — pathfinder timed out and
         // fell back to the "best partial node" near spawn instead of the actual target.
-        // 10000ms gives the A* search 2× the time to find long surface routes.
-        (bot.pathfinder as any).thinkTimeout = 10000;
-        console.error(`[BotManager] Pathfinder configured: canDig=false, allow1by1towers=true, scaffoldingBlocks=${movements.scafoldingBlocks.length} types, thinkTimeout=10000ms`);
+        // [2026-04-02]: Even 10000ms causes frequent "Took too long to decide path" errors on
+        // 15-20 block navigations in the spawn terrain (hilly, Y=85-120 range).
+        // 20000ms gives the A* search 4× the default time, covering complex terrain without
+        // triggering the error on medium-distance paths.
+        (bot.pathfinder as any).thinkTimeout = 20000;
+        console.error(`[BotManager] Pathfinder configured: canDig=false, allow1by1towers=true, scaffoldingBlocks=${movements.scafoldingBlocks.length} types, thinkTimeout=20000ms`);
 
         // PATCH: Fix mineflayer's block_place sequence bug (hardcoded 0 in both
         // generic_place.js and inventory.js activateBlock).
