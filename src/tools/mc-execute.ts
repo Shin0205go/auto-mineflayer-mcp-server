@@ -1306,7 +1306,15 @@ export async function mc_execute(
       const table = tableId
         ? rawBot.findBlock({ matching: tableId, maxDistance: 6 })
         : null;
-      if (!table) return recipesNoTable;
+      if (!table) {
+        // No crafting table nearby: only 2x2 recipes available.
+        // Items like bread/bucket require a crafting table (3x3 grid).
+        // If recipesNoTable is empty, this is likely why — navigate to crafting table first.
+        if (recipesNoTable.length === 0) {
+          logFn(`[recipesFor] No recipes found for item ${itemIdOrName} and no crafting table within 6 blocks. 3x3 recipes (like bread/bucket) require a crafting table nearby.`);
+        }
+        return recipesNoTable;
+      }
       const recipesWithTable = rawBot.recipesFor(itemId, metadata, count, table);
       // Merge: prefer 3x3 if found, otherwise fall back to 2x2
       const seen = new Set<number>();
@@ -1354,7 +1362,10 @@ export async function mc_execute(
         ? rawBot.recipesFor(itemDef.id, null, 1, table)
         : rawBot.recipesFor(itemDef.id, null, 1, null);
       if (!recipes || recipes.length === 0) {
-        throw new Error(`craftWithTable: no recipe found for "${itemName}"${table ? " (with table)" : " (no table nearby)"}`);
+        throw new Error(
+          `craftWithTable: no recipe found for "${itemName}"` +
+          (table ? " (with table)" : " — no crafting table within 4 blocks. Navigate to crafting table first, then call craftWithTable.")
+        );
       }
       const recipe = recipes[0];
 
