@@ -235,12 +235,14 @@ export async function mc_execute(
   // agent code go through gotoWithStuckDetection (hard timeout + stuck detection).
   // This prevents the 120s deadlock reported in bot1_session3_pathfinder_deadlock.md.
   const pathfinderProxy = rawBot.pathfinder ? new Proxy(rawBot.pathfinder, {
-    get(target: any, prop: string) {
+    get(target: any, prop: string | symbol) {
       if (prop === 'goto') {
         // Replace goto with our safe wrapper.
         // Cap at MAX_PATHFINDER_TIMEOUT regardless of what the agent passes.
         return (goal: any) => gotoWithStuckDetection(goal, MAX_PATHFINDER_TIMEOUT, false);
       }
+      // Pass Symbol properties through without modification.
+      if (typeof prop === 'symbol') return target[prop];
       const val = target[prop];
       return typeof val === 'function' ? val.bind(target) : val;
     },
@@ -251,9 +253,31 @@ export async function mc_execute(
   }) : rawBot.pathfinder;
 
   // Shadow rawBot with a proxy that replaces .pathfinder with our safe version.
+  // IMPORTANT: EventEmitter methods (on, once, emit, removeListener, etc.) and _client
+  // must NOT be wrapped with bind() — they must be returned as-is from the target to
+  // preserve the EventEmitter chain.  Wrapping them with bind(target) is functionally
+  // equivalent but can interfere with internal Symbol properties (Symbol.for('nodejs.*'))
+  // and prototype chain inspection used by minecraft-protocol's packet dispatch.
+  // Only non-EventEmitter methods get bind(target) to preserve the correct `this` context.
+  const EVENT_EMITTER_PROPS = new Set([
+    '_client', 'emit', 'on', 'once', 'off', 'addListener',
+    'removeListener', 'removeAllListeners', 'listeners', 'rawListeners',
+    'listenerCount', 'prependListener', 'prependOnceListener', 'eventNames',
+  ]);
   const botProxy = new Proxy(rawBot, {
-    get(target: any, prop: string) {
+    get(target: any, prop: string | symbol) {
       if (prop === 'pathfinder') return pathfinderProxy;
+      // Pass EventEmitter methods and _client through without bind() to preserve
+      // the full EventEmitter chain and minecraft-protocol packet dispatch.
+      if (typeof prop === 'string' && EVENT_EMITTER_PROPS.has(prop)) {
+        const val = target[prop];
+        return typeof val === 'function' ? val.bind(target) : val;
+      }
+      // For Symbol properties (e.g. Symbol.iterator, Symbol.for('nodejs.*')):
+      // always pass through without modification.
+      if (typeof prop === 'symbol') {
+        return target[prop];
+      }
       const val = target[prop];
       return typeof val === 'function' ? val.bind(target) : val;
     },
