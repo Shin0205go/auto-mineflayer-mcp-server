@@ -1,3 +1,37 @@
+## [2026-04-01] Bug: Phase 1-2 進行中 - pathfinder 繰り返しタイムアウト + 食料ゼロ
+
+- **Cause**: pathfinder.goto() が複数回タイムアウト（"Took to long to decide path to goal!"）。敵が周辺に多数いる場合、pathfinder の経路計算が完了できない。
+- **Impact**:
+  - チェストへのアクセス不可（距離19m程度でもタイムアウト）
+  - 拠点への復帰不可
+  - cow 狩りで肉確保不可（敵が多い環境では敵狩りも不可）
+- **Food Crisis**: インベントリに食料なし。チェスト内にも肉がない（furnace, tool, diamond など只の装備のみ）。Hunger=15/20 まで低下。
+- **AutoSafety**: 有効。HP=20/20 に保たれているが、Hunger 低下に対応していない（食べ物がないため）。
+- **Location**: Overworld (11, 99, 5) 付近。水と農場スキャン完了。wheat_seeds x12 あるが、農地化失敗。
+- **Last Actions**:
+  1. pathfinder で多数回タイムアウト（チェスト、furnace、crafting_table など）
+  2. 農場構築試行 → hoe 装備・earth till 実行したが farmland 化失敗
+  3. 敵狩り → cow なし、敵倒せず
+  4. シェルター建設 → cobblestone で壁を作成、敵回避成功
+- **Status**: ACTIVE - Hunger が 15/20 で危険水準。夜間はシェルター内で待機中。
+- **Prevention**:
+  1. pathfinder timeout 時の代替ルート（キャンセル後の再試行、短距離目標変更）
+  2. 食料確保を Phase 1 の最優先タスクにすべき
+  3. チェストの内容を事前スキャン（food 優先）
+
+## [2026-04-01] Bug: 整地中の繰り返し落下ダメージによるHP枯渇
+
+- **Cause**: pathfinder.goto(GoalY(100))で山岳地帯を移動中、落下ダメージを繰り返し受けてHP 20→0.89に低下。maxDropDown=2設定済みだが、pathfinderが高低差のある地形で安全ルートを取らない。
+- **Root Cause**: maxDropDown=2でも pathfinder は2ブロック落下を繰り返す。山岳地帯(Y=85-120)では2ブロック×10回以上の落下が累積してHP半減以上。
+- **食料問題**: 食料ゼロ、周囲に動物・チェスト・農場なし。bot.consume()はblockUpdateタイムアウトで使用不能。自然回復にはFood>=18必要だがFood=14。
+- **Location**: Overworld (-2, 99, -6)
+- **Status**: CRITICAL - HP 0.89/20。回復手段なし。リスポーン必要。
+- **Prevention**:
+  1. 整地前に食料20+を確保必須
+  2. pathfinder移動はHP監視付きにする
+  3. 山岳地帯ではmaxDropDown=1にすべき
+  4. bot.consume()のblockUpdateバグ修正が急務
+
 ## [2026-03-29] Bug: Nether Portal Inaccessible - Fundamental Mineflayer Physics Limitation
 
 **ROOT CAUSE CONFIRMED: Bot maximum Y coordinate ≈88-89. Portal blocks at Y=93-95. UNSOLVABLE via current mineflayer.**
