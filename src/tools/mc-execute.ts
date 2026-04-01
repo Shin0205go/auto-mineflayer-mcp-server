@@ -69,6 +69,17 @@ export async function mc_execute(
 
   // Shared helper: goto with hard timeout + position-lock (stuck) detection.
   // Used by pathfinderGoto and multiStagePathfind to avoid silent hangs.
+  //
+  // Grace period: pathfinder spends the first several seconds computing the path
+  // before the bot starts moving. On isolated platforms (Y=95) or complex terrain
+  // this can take 10-15 seconds. Without a grace period, stuck detection fires
+  // during path computation and calls setGoal(null), producing the
+  // "goal was changed before it could be completed" error on short moves.
+  //
+  // Logic: stuck detection only activates after the bot has moved at least once
+  // (moved >= STUCK_THRESHOLD from start position), OR after GRACE_PERIOD_MS has
+  // elapsed. This prevents false aborts during path computation while still
+  // catching genuine post-movement stuck conditions.
   const gotoWithStuckDetection = (goal: any, timeoutMs: number, allowDig: boolean): Promise<void> => {
     try {
       if (rawBot.pathfinder?.movements) {
@@ -82,6 +93,12 @@ export async function mc_execute(
     const STUCK_INTERVAL = 5000;
     const STUCK_THRESHOLD = 0.5;
     const MAX_STUCK_CHECKS = 2;
+    // Grace period: don't start stuck-counting until bot has moved, or this many
+    // ms have elapsed (covers slow path-computation on complex terrain).
+    const GRACE_PERIOD_MS = 15000;
+    const startTime = Date.now();
+    let startPos = rawBot.entity.position.clone();
+    let hasMovedOnce = false;
     let lastPos = rawBot.entity.position.clone();
     let stuckCount = 0;
     let stuckCheckTimer: ReturnType<typeof setInterval> | null = null;
@@ -93,6 +110,20 @@ export async function mc_execute(
 
       stuckCheckTimer = setInterval(() => {
         const currentPos = rawBot.entity.position;
+
+        // Detect first movement from start position (pathfinder started moving)
+        if (!hasMovedOnce && currentPos.distanceTo(startPos) >= STUCK_THRESHOLD) {
+          hasMovedOnce = true;
+        }
+
+        // Only apply stuck detection after grace period has elapsed OR bot has moved
+        const graceElapsed = Date.now() - startTime >= GRACE_PERIOD_MS;
+        if (!hasMovedOnce && !graceElapsed) {
+          // Still in grace period — update lastPos so we don't count pre-move time
+          lastPos = currentPos.clone();
+          return;
+        }
+
         const moved = currentPos.distanceTo(lastPos);
         if (moved < STUCK_THRESHOLD) {
           stuckCount++;
