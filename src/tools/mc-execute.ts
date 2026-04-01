@@ -8,6 +8,7 @@
 import { botManager } from "../bot-manager/index.js";
 import { currentBotContext } from "../bot-manager/bot-core.js";
 import { getSurroundings } from "../bot-manager/bot-info.js";
+import { EDIBLE_FOOD_NAMES } from "../bot-manager/minecraft-utils.js";
 import pathfinderPkg from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
 
@@ -432,16 +433,32 @@ export async function mc_execute(
     //
     // Usage: await eat()   — eats heldItem (equip the food first with bot.equip)
     eat: async () => {
-      // Find and equip food automatically
-      const foodNames = [
+      // Find and equip food automatically.
+      // Uses EDIBLE_FOOD_NAMES from minecraft-utils.ts as the single source of truth.
+      // Previously this function had its own hardcoded list that diverged from EDIBLE_FOOD_NAMES,
+      // causing bugs where items in one list but not the other were silently ignored.
+      // Priority order: cooked/golden items first (most nutrition), raw/emergency food last.
+      const PRIORITY_ORDER = [
         "golden_apple", "enchanted_golden_apple",
         "cooked_beef", "cooked_porkchop", "cooked_mutton", "cooked_chicken",
         "cooked_rabbit", "cooked_cod", "cooked_salmon",
-        "bread", "baked_potato", "pumpkin_pie", "cookie",
-        "melon_slice", "sweet_berries", "apple", "carrot",
-        "dried_kelp", "beetroot", "potato", "rotten_flesh",
+        "bread", "baked_potato", "pumpkin_pie", "cookie", "pumpkin_pie",
+        "golden_carrot", "melon_slice", "sweet_berries", "glow_berries",
+        "apple", "carrot", "baked_potato", "potato", "beetroot", "dried_kelp",
+        "mushroom_stew", "rabbit_stew", "beetroot_soup", "suspicious_stew",
+        "chorus_fruit",
+        "raw_beef", "raw_porkchop", "raw_mutton", "raw_chicken",
+        "raw_rabbit", "raw_cod", "raw_salmon",
+        "beef", "porkchop", "mutton", "chicken", "rabbit", "cod", "salmon",
+        "rotten_flesh",
       ];
-      let food = rawBot.heldItem && foodNames.includes(rawBot.heldItem.name)
+      // Build the ordered list: priority items first, then any remaining EDIBLE_FOOD_NAMES entries
+      const foodNames = [
+        ...PRIORITY_ORDER.filter(n => EDIBLE_FOOD_NAMES.has(n)),
+        ...[...EDIBLE_FOOD_NAMES].filter(n => !PRIORITY_ORDER.includes(n)),
+      ];
+
+      let food = rawBot.heldItem && EDIBLE_FOOD_NAMES.has(rawBot.heldItem.name)
         ? rawBot.heldItem
         : null;
       if (!food) {
@@ -450,7 +467,14 @@ export async function mc_execute(
           if (food) break;
         }
       }
-      if (!food) throw new Error("No food in inventory");
+      if (!food) {
+        // Check if the held item is a non-edible item that might confuse the agent (e.g. wheat)
+        const heldName = rawBot.heldItem?.name;
+        if (heldName && !EDIBLE_FOOD_NAMES.has(heldName)) {
+          throw new Error(`No edible food in inventory. Held item "${heldName}" cannot be eaten. wheat/seeds are ingredients, not food — craft bread first.`);
+        }
+        throw new Error("No food in inventory");
+      }
       await rawBot.equip(food, "hand");
 
       const itemName = food.name;
