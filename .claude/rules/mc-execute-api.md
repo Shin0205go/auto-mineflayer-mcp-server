@@ -37,8 +37,8 @@ bot.attack(entity)       // エンティティ攻撃
 bot.chat(msg)            // チャット送信
 
 // Crafting
-bot.recipesFor(itemId, metadata, count, table)  // レシピ取得
 bot.craft(recipe, count, table)                 // クラフト実行
+recipesFor(itemId, metadata?, count?)           // 注入済み: bot.recipesFor()のラッパー。近くのクラフトテーブルを自動検出して3x3レシピも返す
 
 // Info
 bot.nearestEntity(filter)   // 最近のエンティティ
@@ -47,10 +47,20 @@ bot.registry.blocksByName   // ブロック ID マップ
 bot.registry.itemsByName    // アイテム ID マップ
 
 // Utility (mc_execute に注入)
-await wait(ms)      // 待機 (max 30s)
-log(msg)            // ログ出力
-getMessages()       // チャット履歴配列
-Vec3(x,y,z)        // ベクトル生成
+await wait(ms)              // 待機 (max 30s)
+log(msg)                    // ログ出力
+getMessages()               // チャット履歴配列
+Vec3(x,y,z)                // ベクトル生成
+await eat()                 // 注入済み: 安定した食事関数
+await escapeWater()         // 注入済み: 水中脱出
+await collectDrops(radius?) // 注入済み: bot.dig()/bot.attack()後のドロップ収集 (デフォルト8ブロック)
+await pathfinderGoto(goal, timeoutMs?) // 注入済み: タイムアウト付きpathfinder.goto() + No path時にcanDig=trueでリトライ
+await multiStagePathfind(x, z, stageDistance?) // 注入済み: 長距離をウェイポイントに分割して移動
+await safePlaceBlock(refBlock, faceVec) // 注入済み: blockUpdateタイムアウトを回避するブロック設置
+await fillHoles(radius?)    // 注入済み: 周囲の落下穴を埋める
+awareness()                 // 注入済み: 自己状態+空間スナップショット (行動前に必ず呼ぶ)
+scan3D(radius?, heightRange?) // 注入済み: 3D空間スキャン
+safetyState                 // 注入済み: AutoSafety状態 (read-only)
 ```
 
 ## よく使うパターン
@@ -86,18 +96,23 @@ if (block) {
 
 ### クラフト
 ```js
+// recipesFor() 注入済みラッパーを使う (近くのテーブルを自動検出、3x3レシピも返す)
+const itemId = bot.registry.itemsByName['wooden_pickaxe'].id;
+const recipes = recipesFor(itemId);  // ← sandboxに注入済み。bot.recipesFor()より確実
 const table = bot.findBlock({matching: bot.registry.blocksByName['crafting_table'].id, maxDistance: 4});
-const recipes = bot.recipesFor(bot.registry.itemsByName['wooden_pickaxe'].id, null, 1, table);
 if (recipes[0]) await bot.craft(recipes[0], 1, table);
 ```
 
-### 戦闘
+### 戦闘 + ドロップ収集
 ```js
 const mob = bot.nearestEntity(e => e.type === 'mob');
 if (mob) {
   const sword = bot.inventory.items().find(i => i.name.includes('sword'));
   if (sword) await bot.equip(sword, 'hand');
   await bot.attack(mob);
+  // ドロップを収集 (bot.attack()後に必ず呼ぶ)
+  const result = await collectDrops();  // ← sandboxに注入済み
+  log(result);
 }
 ```
 
