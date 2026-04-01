@@ -72,6 +72,7 @@ await fillHoles(radius?)    // 注入済み: 周囲の落下穴を埋める
 await smeltItems(furnaceBlock, inputItemName, fuelItemName, count?) // 注入済み: かまど精錬ヘルパー
 await plantSeeds(farmlandBlock, seedItemName?) // 注入済み: 種植えヘルパー (rawパケット、blockUpdateタイムアウト回避)
 await openChest(chestBlock)                   // 注入済み: チェスト/樽を開く。activateBlock+windowOpen待機でタイムアウト回避。戻り値はbot.openContainer()と同じウィンドウオブジェクト
+await enterPortal(timeoutMs?)                 // 注入済み: ネザー/エンドポータル通過ヘルパー。respawnイベントで次元変更を検知。{ success, dimensionBefore, dimensionAfter } を返す
 awareness()                 // 注入済み: 自己状態+空間スナップショット (行動前に必ず呼ぶ)
 scan3D(radius?, heightRange?) // 注入済み: 3D空間スキャン
 safetyState                 // 注入済み: AutoSafety状態 (read-only)
