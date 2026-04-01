@@ -39,3 +39,46 @@ Timeout after 20684ms (even with 30s+ default)
 **Workaround:** None available - all longer-distance navigation blocked
 
 **Next Step:** Investigate pathfinder configuration in src/bot-manager/
+
+---
+
+## UPDATE: Diagnosed as Systemic Pathfinder Failure
+
+**New evidence from multiple attempts:**
+
+1. **Reconnection temporarily helped** (reached farm 9 blocks)
+   - After ~5 successful navigations, pathfinder broke again
+   - Suggests state corruption or cumulative issue
+
+2. **Distance-dependent failure pattern:**
+   ```
+   <3 blocks:  100% success
+   3-10 blocks: 50% success  
+   >15 blocks: 0% success (consistent timeout)
+   ```
+
+3. **Affected operations:**
+   - Cannot reach furnace (23 blocks)
+   - Cannot reach crafting table (16 blocks)
+   - Cannot reach water (26 blocks after relocation)
+   - Cannot reach coal mining area (25+ blocks)
+
+4. **Root cause likely in:**
+   - Pathfinder collision detection
+   - Movement validator state accumulation
+   - Terrain analysis caching (becoming stale)
+   - Goal computation timeout
+
+**Impact severity: CRITICAL**
+- Game is unplayable for any task requiring travel >10 blocks
+- Cannot progress toward dragon without stable pathfinding
+- Resource gathering, crafting, building all blocked
+
+**Current workaround:**
+- Disconnecting/reconnecting gives temporary 5-10 successful navigations
+- Not a viable long-term solution
+
+**Needed fix:**
+- Investigate pathfinder state management in `src/bot-manager/pathfinder.ts` or equivalent
+- Check for memory leaks or state corruption in movement validation
+- Consider resetting pathfinder state between goals
