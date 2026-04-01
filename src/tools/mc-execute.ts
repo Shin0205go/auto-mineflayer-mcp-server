@@ -1034,9 +1034,14 @@ export async function mc_execute(
         : null;
 
       // Get recipes (with table if available for 3x3)
+      // NOTE: recipesFor's 3rd arg is minResultCount — a filter that checks whether the
+      // bot has enough materials to craft that many times.  Passing `count` here causes
+      // "no recipe found" whenever the bot has ingredients for fewer than `count` crafts.
+      // We always pass 1 so the filter only checks "can I craft at least once?", then
+      // let bot.craft(recipe, count, table) handle the repeated crafting loop.
       const recipes = table
-        ? rawBot.recipesFor(itemDef.id, null, count, table)
-        : rawBot.recipesFor(itemDef.id, null, count, null);
+        ? rawBot.recipesFor(itemDef.id, null, 1, table)
+        : rawBot.recipesFor(itemDef.id, null, 1, null);
       if (!recipes || recipes.length === 0) {
         throw new Error(`craftWithTable: no recipe found for "${itemName}"${table ? " (with table)" : " (no table nearby)"}`);
       }
@@ -1064,6 +1069,24 @@ export async function mc_execute(
       // Craft
       const countBefore = rawBot.inventory.items().find((i: any) => i.name === itemName)?.count ?? 0;
       await rawBot.craft(recipe, count, table ?? undefined);
+
+      // Recovery: bot.craft()'s grabResult() calls putAway(0) to collect the output, but
+      // on laggy servers putAway(0) can arrive before the server confirms slot 0, leaving
+      // the item stuck there.  Shift-click slot 0 to recover it.
+      await new Promise<void>(r => setTimeout(r, 300));
+      const resultSlot = rawBot.inventory.slots[0];
+      if (resultSlot && resultSlot.count > 0) {
+        try {
+          await rawBot.clickWindow(0, 0, 1); // shift-click to move to inventory
+          await new Promise<void>(r => setTimeout(r, 400));
+          logFn(`[craftWithTable] Recovered ${resultSlot.name}×${resultSlot.count} from result slot`);
+        } catch { /* ignore — may already have been moved */ }
+      }
+      // Also close the crafting window if it's still open (prevents inventory leak)
+      if (table && rawBot.currentWindow) {
+        try { rawBot.closeWindow(rawBot.currentWindow); } catch { /* ignore */ }
+      }
+
       const countAfter = rawBot.inventory.items().find((i: any) => i.name === itemName)?.count ?? 0;
       const crafted = countAfter - countBefore;
 
