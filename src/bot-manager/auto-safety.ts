@@ -447,9 +447,18 @@ export class AutoSafety {
   /** Navigate to (x,y,z) within tolerance, waiting up to maxWaitMs.
    * Aborts early if mcExecuteActive becomes true to avoid goal conflict with pathfinderGoto(). */
   private async navigateTo(x: number, y: number, z: number, tolerance: number, maxWaitMs: number): Promise<void> {
+    // Guard: don't set a pathfinder goal if mc_execute is already active
+    if (this.managed.mcExecuteActive) {
+      console.error(`[AutoSafety] navigateTo skipped: mc_execute already active`);
+      return;
+    }
     const goalHandle = safeSetGoal(this.bot,
       new goals.GoalNear(x, y, z, tolerance),
-      { elevationAware: true }
+      {
+        elevationAware: true,
+        // Pass managed so Y-descent monitor can check mcExecuteActive before calling setGoal(null)
+        managed: this.managed,
+      } as any
     );
     await new Promise<void>(resolve => {
       const onReached = () => {
@@ -461,20 +470,25 @@ export class AutoSafety {
       const timeoutId = setTimeout(() => {
         clearInterval(mcExecuteCheck);
         this.bot.removeListener("goal_reached", onReached);
+        goalHandle.cleanup();
         resolve();
       }, maxWaitMs);
-      // Poll for mc_execute starting — abort immediately to avoid goal conflict
+      // Poll for mc_execute starting — abort immediately to avoid goal conflict.
+      // Cancel the Y-descent monitor AND release the pathfinder goal synchronously
+      // (before resolve()) so there's zero window where the monitor can fire and
+      // cancel the agent's pathfinderGoto() call.
       const mcExecuteCheck = setInterval(() => {
         if (this.managed.mcExecuteActive) {
           clearInterval(mcExecuteCheck);
           clearTimeout(timeoutId);
           this.bot.removeListener("goal_reached", onReached);
+          goalHandle.cleanup();  // Stop Y-descent monitor immediately
+          try { this.bot.pathfinder.setGoal(null); } catch { /* ignore */ }
           console.error(`[AutoSafety] navigateTo aborted: mc_execute became active`);
           resolve();
         }
-      }, 200);
+      }, 50);  // Reduced from 200ms to 50ms to minimize race window
     });
-    goalHandle.cleanup();
   }
 
   // ==================== Periodic block scan (10-second interval) ====================

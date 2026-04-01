@@ -43,9 +43,9 @@ export interface SafeGoalHandle {
 export function safeSetGoal(
   bot: Bot,
   goal: any,
-  options: SafeGoalOptions = {}
+  options: SafeGoalOptions & { managed?: { mcExecuteActive?: boolean } } = {}
 ): SafeGoalHandle {
-  const { intervalMs = 300, onAbort, elevationAware = false, absoluteMinY } = options;
+  const { intervalMs = 300, onAbort, elevationAware = false, absoluteMinY, managed } = options;
   const startY = bot.entity.position.y;
 
   // Compute effective maxYDescent:
@@ -81,6 +81,11 @@ export function safeSetGoal(
       // Check absolute Y floor (prevents cumulative descent across retries)
       const absoluteAbort = absoluteMinY !== undefined && currentY < absoluteMinY;
       if (relativeAbort || absoluteAbort) {
+        // Don't cancel the goal if mc_execute is active — the agent owns the pathfinder now
+        if (managed?.mcExecuteActive) {
+          clearInterval(monitor);
+          return;
+        }
         handle.aborted = true;
         clearInterval(monitor);
         try { bot.pathfinder.setGoal(null); } catch { /* ignore */ }
