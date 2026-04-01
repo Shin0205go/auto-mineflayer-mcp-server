@@ -75,14 +75,37 @@ export async function mc_execute(
     wait: waitFn,
     getMessages: getMessagesFn,
     // Pathfinder timeout wrapper utility (usage: await pathfinderGoto(goal, 30000))
-    pathfinderGoto: (goal: any, timeoutMs = 30000) => {
-      const gotoPromise = (rawBot.pathfinder.goto as any)(goal);
-      return Promise.race([
-        gotoPromise,
-        new Promise<void>((_resolve, reject) =>
-          setTimeout(() => reject(new Error(`Pathfinder timeout after ${timeoutMs}ms`)), timeoutMs)
-        )
-      ]);
+    // On "No path" failure, automatically retries once with canDig=true to handle complex terrain.
+    pathfinderGoto: async (goal: any, timeoutMs = 30000) => {
+      const tryGoto = (allowDig: boolean) => {
+        try {
+          if (rawBot.pathfinder?.movements) rawBot.pathfinder.movements.canDig = allowDig;
+        } catch { /* ignore */ }
+        const gotoPromise = (rawBot.pathfinder.goto as any)(goal);
+        return Promise.race([
+          gotoPromise,
+          new Promise<void>((_resolve, reject) =>
+            setTimeout(() => reject(new Error(`Pathfinder timeout after ${timeoutMs}ms`)), timeoutMs)
+          )
+        ]);
+      };
+
+      try {
+        return await tryGoto(false);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // On "No path" errors, retry with canDig=true as fallback for complex terrain
+        if (msg.includes("No path") || msg.includes("no path") || msg.includes("GoalChanged")) {
+          logFn(`[pathfinderGoto] No path with canDig=false, retrying with canDig=true`);
+          try {
+            return await tryGoto(true);
+          } finally {
+            // Always restore canDig=false after dig-enabled navigation
+            try { if (rawBot.pathfinder?.movements) rawBot.pathfinder.movements.canDig = false; } catch { /* ignore */ }
+          }
+        }
+        throw err;
+      }
     },
     // Multi-stage pathfind: break long distances into waypoints
     // Usage: await multiStagePathfind(targetX, targetZ, 10)
