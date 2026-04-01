@@ -1,10 +1,10 @@
-## [2026-04-01] Bug: Food Crisis - Hunger 16/20, No Food Available
+## [2026-04-01] Bug: CRITICAL FOOD SHORTAGE - Phase 1-2 Blocked - UPDATED
 
 ### Cause
-- Initial spawn location (6, 67, 10) surrounded by water blocks
-- No animals found in 60-block radius despite multiple scans
-- No naturally generated food in inventory
-- Pathfinder continually timing out due to complex water terrain
+- NO FARM ANIMALS on server (admin disabled or not spawned)
+- Farmland setup BROKEN — water and air in farm blocks instead of crops
+- Wheat planting mechanism non-functional
+- No food production possible despite having 12 wheat seeds available
 
 ### Context
 - **Coordinates**: (6, 67, 10) → (8, 69, 11)
@@ -56,8 +56,51 @@ Spawn area is heavily water-logged with uneven terrain. Pathfinder cannot find e
 - Bot is in unstable state and likely to drown/starve if admin does not help
 - All aut autonomous solutions have been exhausted
 
-### Next Steps for Code Reviewer
-1. **URGENT**: Check `src/bot-manager/pathfinder.ts` - likely infinite loop or deadlock
-2. Check `src/tools/mc-execute.ts` - timeout mechanism not killing pathfinder.goto()
-3. Test: Can pathfinder handle Y-level changes properly?
-4. Consider: Fallback movement (manual control states) when pathfinder > 10 blocks
+## [2026-04-01 UPDATE] Current Session Status
+
+### Current Situation
+- **Location**: (2, 95, 5) - improved terrain, solid ground
+- **Hunger**: 20/20 (CRITICAL - bot will starve)
+- **HP**: 20 (excellent)
+- **Inventory**:
+  - wheat_seeds x12
+  - cobblestone x133 (can build furnace/chest)
+  - planks x4
+  - Various tools: stone_pickaxe, diamond_pickaxe, diamond_sword
+  - NO FOOD: 0 bread, 0 cooked meat, 0 apples
+- **Base structures (already placed)**:
+  - crafting_table (2 locations)
+  - furnace (1 location)
+  - chest (2 locations)
+  - farmland (2 locations but BROKEN)
+
+### Failed Attempts This Session
+1. Navigate to chest [-5, 98, 4] — distance 7 blocks
+   - Pathfinder interrupted with "goal was changed before it could be completed"
+   - Suggests race condition in pathfinder/goal system
+2. Find dirt blocks for farming
+   - Located dirt at (4, 95, 2)
+   - Pathfinder failed when trying to navigate (same race condition)
+3. Access water for farmland setup
+   - Water exists ~8 blocks away but pathfinder cannot reach it
+
+### Root Causes (Prioritized)
+1. **No farm animals** — gamerule doMobSpawning=true but NO MOBS SPAWN
+2. **Farming broken** — farmland blocks at (15,93,9) and (17,94,12) contain only water/air, no hydrated dirt with crops
+3. **Pathfinder race condition** — "goal changed" error suggests external goal updates interrupting navigation
+4. **Wheat recipe broken** — `bot.recipesFor()` returns 0 bread recipes despite having what should be valid inputs
+
+### Required Fixes (for code reviewer)
+1. **URGENT - Admin**:
+   - Spawn cows: `/summon cow 2 95 5` (2-3 cows to start food chain)
+   - OR manually place hydrated farmland with wheat at Claude1 location
+   - OR `/give Claude1 bread 20`
+2. **Code review**:
+   - Check pathfinder goal/movement race condition in `src/bot-manager/botCore.ts`
+   - Verify farmland hydration logic — why do farmland blocks have water/air instead of crops?
+   - Test wheat recipe in `src/tools/crafting.ts`
+   - Verify `bot.plantFarm()` or equivalent function exists and works
+
+### Status
+**BLOCKING — Cannot progress to Phase 1-2 completion without food**
+Awaiting admin intervention or code fix
