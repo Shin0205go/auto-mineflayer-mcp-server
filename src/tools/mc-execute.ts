@@ -315,8 +315,8 @@ export async function mc_execute(
     // On high-latency or laggy servers this packet arrives late or is missed,
     // causing "Promise timed out" errors that make food consumption impossible.
     //
-    // eat() uses activateItem() via raw use_item packet + waits for food_level_change
-    // event (fired when food actually changes) with a 3000ms fallback.
+    // eat() uses activateItem() via raw use_item packet + waits for the "health" event
+    // (mineflayer fires this when food/saturation changes) with a 3500ms fallback.
     // This is reliable regardless of entity_status packet delivery.
     //
     // Usage: await eat()   — eats heldItem (equip the food first with bot.equip)

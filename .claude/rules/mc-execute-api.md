@@ -21,7 +21,7 @@ bot.inventory.items()    // アイテム配列 [{name, count, metadata}]
 bot.heldItem             // 現在の手持ちアイテム
 bot.equip(item, dest)    // 装備 (dest = 'head'|'chest'|'legs'|'feet'|'hand')
 bot.consume()            // 食べる（非推奨: entity_statusタイムアウトあり → eat()を使う）
-eat()                    // 注入済み: 安定した食事関数（food_level_changeイベント + 2800msフォールバック）
+eat()                    // 注入済み: 安定した食事関数（healthイベント + 3500msフォールバック）
 
 // Movement
 bot.pathfinder.goto(goal)           // ナビゲーション
@@ -157,7 +157,7 @@ const food = bot.inventory.items().find(i =>
 );
 if (food && bot.food < 18) {
   await bot.equip(food, 'hand');
-  await eat();  // ← sandboxに注入済み。food_level_changeイベントで完了検知、2800msフォールバック付き
+  await eat();  // ← sandboxに注入済み。healthイベントで完了検知、3500msフォールバック付き
 }
 // bot.consume() は使わない: "Promise timed out" エラーが頻発する
 ```

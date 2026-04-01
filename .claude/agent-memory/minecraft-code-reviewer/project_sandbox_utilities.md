@@ -23,6 +23,9 @@ type: project
 - `smeltItems(furnaceBlock, inputItemName, fuelItemName, count?)` — opens furnace via bot.openFurnace() (NOT openContainer), puts fuel+input, waits for smelted output, returns { input, fuel, outputCount }. outputBefore is recorded to avoid false early-resolve when furnace had pre-existing output. Added 2026-04-01, fixed 2026-04-01.
 - `plantSeeds(farmlandBlock, seedItemName?)` — equips seeds + places via raw block_place packet (500ms fallback). Avoids bot.placeBlock() 5s blockUpdate timeout. NOTE: bot.place()/bot.interact() do NOT exist. Added 2026-04-01, fixed from bot.placeBlock to raw packet 2026-04-01.
 
+## Container Access
+- `openChest(chestBlock)` — reliable chest/barrel/shulker_box opener. Calls activateBlock(chestBlock) + waits for windowOpen event (1s timeout), then calls openContainer() for programmatic access. Fixes the ~40% windowOpen timeout failure in raw bot.openContainer(). Returns chest window object same as openContainer(). Added 2026-04-02.
+
 ## Eating
 - `eat()` — uses activateItem + waits for "health" event (avoids entity_status timeout in bot.consume())
 
@@ -31,11 +34,12 @@ type: project
 - `scan3D(radius?, heightRange?)` — 3D spatial scan with layer views
 - `safetyState` — getter (not static property) returning managed.safetyState ?? null. Fixed from static capture to getter 2026-04-01 to avoid null race condition on first call.
 
-## Known issues (as of 2026-04-01)
+## Known issues (as of 2026-04-02)
 - bot.placeBlock() still uses mineflayer's 5s blockUpdate timeout internally — use safePlaceBlock() or plantSeeds() instead
 - bot.recipesFor() often returns [] when no table passed — use recipesFor() wrapper
 - bot.recipesFor(id, null, count, table) returns [] when ingredients < count — always use 1 as minResultCount for recipe detection
 - bot.craft(recipe, count, table) called directly fails ~40% with windowOpen timeout — use craftWithTable() instead
+- bot.openContainer(chestBlock) called directly fails ~40% with windowOpen timeout — use openChest() instead
 - craftWithTable() was previously passing count as minResultCount to recipesFor() — fixed 2026-04-01 to always use 1
 - goals import: uses `import pathfinderPkg from "mineflayer-pathfinder"` (default import) same as bot-core.ts
 - bot.combat("cow") does NOT exist — use bot.attack(entity) + collectDrops()
