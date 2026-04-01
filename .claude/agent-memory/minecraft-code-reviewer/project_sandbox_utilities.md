@@ -55,6 +55,24 @@ type: project
 ## windowOpen pre-open timeout unified to 3000ms (fixed 2026-04-02 session 3)
 - smeltItems and craftWithTable used 1500ms; openChest used 3000ms. All three now use 3000ms.
 
+## multiStagePathfind targetY + skip intermediate failures (fixed 2026-04-02 session 4)
+- `multiStagePathfind(x, z, stageDistance?, targetY?)` now accepts an optional `targetY` argument.
+  When provided, the final stage uses GoalNear(x, y, z, 3) so the bot descends/ascends to
+  the correct altitude. Critical for Nether navigation (large Y variation between waypoints).
+- Intermediate stage failures are now skipped (logged but not thrown) so the bot can advance
+  even over partially blocked terrain. Only the final stage re-throws on failure.
+
+## descendSafely free-fall optimization (fixed 2026-04-02 session 4)
+- Previously each air/void step waited 500ms (300ms sneak release + 200ms landing check), causing
+  a 130-block descent to take 65+ seconds.
+- Now: forward nudge (100ms) to step off ledge, then poll onGround every 50ms up to 2s. A single
+  attempt covers the entire multi-block free-fall instead of re-entering the loop per block.
+- Solid block digs still wait 200ms after dig for physics to settle.
+
+## enterPortal portal-approach path now uses gotoWithStuckDetection (fixed 2026-04-02 session 4)
+- Was using raw Promise.race([rawBot.pathfinder.goto, timeout(8000)]) — no stuck detection.
+- Fixed to use gotoWithStuckDetection(..., 8000, false) for consistent cleanup and stuck abort.
+
 ## Known issues / fixes (updated 2026-04-02 session 2)
 - bot.placeBlock() still uses mineflayer's 5s blockUpdate timeout internally — use safePlaceBlock() or plantSeeds() instead
 - bot.recipesFor() often returns [] when no table passed — use recipesFor() wrapper
