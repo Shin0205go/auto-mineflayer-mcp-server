@@ -617,6 +617,69 @@ export async function mc_execute(
       return lines.join("\n");
     },
 
+    // === pillarUp — build a pillar under the bot to gain height ===
+    // Usage: const result = await pillarUp(height?)  — default height=4
+    // Builds a column of cobblestone/dirt directly below the bot while jumping.
+    // Each block is placed via raw packet (no blockUpdate timeout) with a 300ms fallback.
+    // Returns a summary of blocks placed and final Y position.
+    // Note: bot.pillarUp() does NOT exist on the mineflayer Bot directly — use this helper.
+    pillarUp: async (height: number = 4) => {
+      const h = Math.min(Math.max(1, height), 20); // clamp 1-20
+      const SCAFFOLD_NAMES = ["cobblestone", "dirt", "stone", "gravel", "sand", "oak_planks",
+                              "spruce_planks", "birch_planks", "jungle_planks", "acacia_planks",
+                              "dark_oak_planks", "netherrack", "cobbled_deepslate"];
+      let placed = 0;
+      const startY = Math.floor(rawBot.entity.position.y);
+
+      for (let i = 0; i < h; i++) {
+        // Find scaffold material
+        const block = rawBot.inventory.items().find((item: any) => SCAFFOLD_NAMES.includes(item.name));
+        if (!block) {
+          logFn(`[pillarUp] No scaffold blocks in inventory after placing ${placed}`);
+          break;
+        }
+        await rawBot.equip(block, "hand");
+
+        // Jump first so the bot rises above the block it will stand on
+        rawBot.setControlState("jump", true);
+        await new Promise<void>(r => setTimeout(r, 250));
+        rawBot.setControlState("jump", false);
+
+        // Place block at feet level using raw packet (avoids 5s blockUpdate timeout)
+        const feetPos = rawBot.entity.position.floored();
+        const groundPos = feetPos.offset(0, -1, 0);
+
+        const syncP = new Promise<void>(resolve => {
+          const handler = (_o: any, n: any) => {
+            if (n.position.x === feetPos.x && n.position.y === feetPos.y && n.position.z === feetPos.z && n.name !== "air") {
+              rawBot.removeListener("blockUpdate", handler);
+              resolve();
+            }
+          };
+          rawBot.on("blockUpdate", handler);
+          setTimeout(() => { rawBot.removeListener("blockUpdate", handler); resolve(); }, 300);
+        });
+
+        await rawBot.lookAt(groundPos.offset(0.5, 0.5, 0.5), true);
+        (rawBot as any)._client.write("block_place", {
+          location: { x: groundPos.x, y: groundPos.y, z: groundPos.z },
+          direction: 1, // top face
+          hand: 0,
+          cursorX: 0.5, cursorY: 1.0, cursorZ: 0.5,
+          insideBlock: false,
+        });
+        await syncP;
+        placed++;
+
+        // Short wait for physics to settle (bot rises to stand on placed block)
+        await new Promise<void>(r => setTimeout(r, 150));
+      }
+
+      const finalY = Math.floor(rawBot.entity.position.y);
+      logFn(`[pillarUp] Placed ${placed}/${h} blocks, Y ${startY} → ${finalY}`);
+      return { placed, startY, finalY };
+    },
+
     // === Terrain management: fill holes within radius ===
     // Usage: const count = await fillHoles(radius?)  — default radius=6
     // Scans for fall-risk positions (air+air below at foot level) and fills with cobblestone/dirt
