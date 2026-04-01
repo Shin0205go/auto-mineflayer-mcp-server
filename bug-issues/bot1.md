@@ -1,3 +1,29 @@
+## [2026-04-02 12:00 JST] CRITICAL BUG: IMMEDIATE DEATH IMMINENT - Daemon 再起動後の絶望的状況（HP 3.5, Food 0, 敵95体）
+
+- **Current Status**: IMMINENT DEATH - 数秒以内の確実な餓死 or 敵撃破
+- **HP**: 3.5/20 (EXTREME CRITICAL)
+- **Food**: 0/20 (STARVATION)
+- **Position**: Overworld (57, 77, 1)
+- **Nearby Threats**: 敵mob x95 (Enderman x5 detected, distance 20-70b)
+- **Nearby Resources**:
+  - Chests: 0個
+  - Animals: 0個
+  - Beds: 0個
+  - Food items: 1個（wheat x1、調理不可）
+- **Inventory Analysis**:
+  - Crafting materials: crafting_table ✓, furnace ✓（未配置）
+  - Food: wheat x1 のみ（cooked_*, bread, apple 等 NONE）
+  - Edible: 0個（wheat は直食い不可、bread クラフトには3個必要 - 現在1個）
+  - Tools: diamond_pickaxe, stone_pickaxe, stone_hoe ✓
+  - Weapons: diamond_sword ✓ (vs 95敵 = 確実死亡)
+- **Attempted Recovery Paths**:
+  1. ✗ Pathfinder to chest (54, 65, 6) → timeout 失敗
+  2. ✗ multiStagePathfind (54, 6) → 距離4.6b (移動不可)
+  3. ✗ Food item pickup (74, -40, -28) → 121blocks + Y=-40 (glitched)
+  4. ✗ Craft bread from wheat → 3個必要、1個しかない
+  5. ✗ Hunt animals → 0個
+  6. ✗ Fight mobs for drops → HP 3.5では1hit死亡確定
+
 ## [2026-04-02] CRITICAL BUG: Daemon 再起動後 - 食料完全喪失 + 餓死寸前 (HP 5.5, Food 0)
 
 - **Cause**: Daemon 再起動後、Claude1 が食料ゼロの状態で復帰。インベントリに bread/meat なし。wheat x1 のみ。chests 内容確認不可（pathfinder timeout）。
