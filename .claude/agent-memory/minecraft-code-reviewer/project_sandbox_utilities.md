@@ -20,11 +20,14 @@ type: project
 - `collectDrops(radius?)` — post-dig/combat item collection. Waits up to 4s for drop entities, then pathfinds to each.
 - `recipesFor(itemId, meta?, minResultCount?)` — wraps bot.recipesFor() but auto-finds nearby crafting table (≤6 blocks) to return 3x3 recipes too. 3rd arg is minResultCount (default 1) = inventory filter for N crafts worth of materials.
 - `craftWithTable(itemName, count?)` — reliable crafting helper. Calls activateBlock(table) + waits for windowOpen event (1s timeout), then calls bot.craft(). Fixes the 40% windowOpen timeout failure in raw bot.craft(). IMPORTANT: always passes minResultCount=1 to recipesFor (not count) to avoid "no recipe found" when bot has single-craft materials. Also adds slot[0] recovery (shift-click) for laggy servers where putAway(0) fails. Returns { crafted, count, tableUsed }. Fixed 2026-04-01.
-- `smeltItems(furnaceBlock, inputItemName, fuelItemName, count?)` — opens furnace via bot.openFurnace() (NOT openContainer), puts fuel+input, waits for smelted output, returns { input, fuel, outputCount }. outputBefore is recorded to avoid false early-resolve when furnace had pre-existing output. Added 2026-04-01, fixed 2026-04-01.
+- `smeltItems(furnaceBlock, inputItemName, fuelItemName, count?)` — opens furnace via activateBlock + windowOpen wait (1s) + bot.openFurnace(), puts fuel+input, waits for smelted output, returns { input, fuel, outputCount }. outputBefore is recorded to avoid false early-resolve when furnace had pre-existing output. Added 2026-04-01. Fixed 2026-04-02: added activateBlock pre-open (same pattern as openChest/craftWithTable) to prevent "Event windowOpen did not fire" timeout.
 - `plantSeeds(farmlandBlock, seedItemName?)` — equips seeds + places via raw block_place packet (500ms fallback). Avoids bot.placeBlock() 5s blockUpdate timeout. NOTE: bot.place()/bot.interact() do NOT exist. Added 2026-04-01, fixed from bot.placeBlock to raw packet 2026-04-01.
 
 ## Container Access
-- `openChest(chestBlock)` — reliable chest/barrel/shulker_box opener. Calls activateBlock(chestBlock) + waits for windowOpen event (1s timeout), then calls openContainer() for programmatic access. Fixes the ~40% windowOpen timeout failure in raw bot.openContainer(). Returns chest window object same as openContainer(). Added 2026-04-02.
+- `openChest(chestBlock)` — reliable chest/barrel/shulker_box opener. activateBlock(chestBlock) + waits for windowOpen (1.5s timeout), then openContainer(). windowOpen listener registered BEFORE activateBlock to prevent race condition. Skips activateBlock if currentWindow already open. Returns chest window object. Added 2026-04-02. Race fix 2026-04-02.
+
+## Portal
+- `enterPortal(timeoutMs?)` — nether/end portal entry helper. Pathfinds into nearest portal block (≤3 blocks), holds forward key, waits for `respawn` event (dimension change). Returns { success, dimensionBefore, dimensionAfter }. Default timeout 30s. Added 2026-04-02.
 
 ## Eating
 - `eat()` — uses activateItem + waits for "health" event (avoids entity_status timeout in bot.consume())
@@ -34,12 +37,15 @@ type: project
 - `scan3D(radius?, heightRange?)` — 3D spatial scan with layer views
 - `safetyState` — getter (not static property) returning managed.safetyState ?? null. Fixed from static capture to getter 2026-04-01 to avoid null race condition on first call.
 
-## Known issues (as of 2026-04-02)
+## Known issues (as of 2026-04-02, updated)
 - bot.placeBlock() still uses mineflayer's 5s blockUpdate timeout internally — use safePlaceBlock() or plantSeeds() instead
 - bot.recipesFor() often returns [] when no table passed — use recipesFor() wrapper
 - bot.recipesFor(id, null, count, table) returns [] when ingredients < count — always use 1 as minResultCount for recipe detection
 - bot.craft(recipe, count, table) called directly fails ~40% with windowOpen timeout — use craftWithTable() instead
 - bot.openContainer(chestBlock) called directly fails ~40% with windowOpen timeout — use openChest() instead
+- bot.openFurnace(furnaceBlock) called directly fails with windowOpen timeout — use smeltItems() instead (fixed 2026-04-02 with activateBlock pre-open)
+- pathfinder "Took to long to decide path to goal!" was occurring even for 15-20 block navigations due to thinkTimeout=10000ms. Fixed 2026-04-02: thinkTimeout raised to 20000ms in bot-core.ts. pathfinderGoto also temporarily doubles thinkTimeout on canDig=true retry.
+- windowOpen race: activateBlock was called before registering the windowOpen listener, so on fast servers the event could fire before the listener was attached. Fixed 2026-04-02 in craftWithTable/smeltItems/openChest.
 - craftWithTable() was previously passing count as minResultCount to recipesFor() — fixed 2026-04-01 to always use 1
 - goals import: uses `import pathfinderPkg from "mineflayer-pathfinder"` (default import) same as bot-core.ts
 - bot.combat("cow") does NOT exist — use bot.attack(entity) + collectDrops()
