@@ -739,6 +739,99 @@ export async function mc_execute(
       return `collectDrops: approached ${collected} drops, gained ${gained} items`;
     },
 
+    // === smeltItems — open furnace and smelt with fuel ===
+    // Usage: await smeltItems(furnaceBlock, inputItem, fuelItem, count?)
+    // furnaceBlock must be obtained via bot.findBlock({ matching: furnaceId, maxDistance: N })
+    // Returns a summary of what was smelted.
+    // NOTE: bot.openContainer() does NOT work for furnaces — use bot.openFurnace() directly.
+    smeltItems: async (furnaceBlock: any, inputItemName: string, fuelItemName: string, count: number = 1) => {
+      if (!furnaceBlock) throw new Error("smeltItems: furnaceBlock is null");
+
+      // Verify position: must be within 4 blocks of furnace
+      const dist = rawBot.entity.position.distanceTo(furnaceBlock.position);
+      if (dist > 5) {
+        throw new Error(`smeltItems: too far from furnace (${dist.toFixed(1)} blocks). Navigate closer first.`);
+      }
+
+      // Find items in inventory
+      const inputItem = rawBot.inventory.items().find((i: any) => i.name === inputItemName);
+      if (!inputItem) throw new Error(`smeltItems: no ${inputItemName} in inventory`);
+
+      const fuelItem = rawBot.inventory.items().find((i: any) => i.name === fuelItemName);
+      if (!fuelItem) throw new Error(`smeltItems: no ${fuelItemName} in inventory (fuel)`);
+
+      // Open furnace using the correct API (bot.openFurnace, NOT bot.openContainer)
+      const furnace = await rawBot.openFurnace(furnaceBlock) as any;
+
+      try {
+        // Put fuel first, then input
+        await furnace.putFuel(fuelItem.type, null, Math.min(fuelItem.count, 64));
+        await furnace.putInput(inputItem.type, null, Math.min(count, inputItem.count));
+
+        // Wait for smelting to produce output (up to 20 seconds per item)
+        const waitMs = count * 10000 + 5000;
+        const smeltDone = new Promise<void>(resolve => {
+          const check = () => {
+            const out = furnace.outputItem();
+            if (out && out.count >= count) {
+              furnace.removeListener("update", check);
+              resolve();
+            }
+          };
+          furnace.on("update", check);
+          setTimeout(() => { furnace.removeListener("update", check); resolve(); }, waitMs);
+        });
+        await smeltDone;
+
+        // Take output
+        const output = furnace.outputItem();
+        const outputCount = output ? output.count : 0;
+        if (output) await furnace.takeOutput();
+
+        logFn(`[smeltItems] Smelted ${inputItemName} x${count} with ${fuelItemName} → output: ${outputCount}`);
+        return { input: inputItemName, fuel: fuelItemName, outputCount };
+      } finally {
+        furnace.close();
+      }
+    },
+
+    // === plantSeeds — plant seeds on farmland blocks ===
+    // Usage: await plantSeeds(farmlandBlock)
+    // Must have seeds equipped or in inventory. Must be standing adjacent to farmland.
+    // Correct mineflayer API: bot.equip(seedItem, 'hand') then bot.placeBlock(farmlandBlock, new Vec3(0,1,0))
+    // NOTE: bot.place(), bot.interact(), bot.activate() do NOT exist in mineflayer.
+    plantSeeds: async (farmlandBlock: any, seedItemName?: string) => {
+      if (!farmlandBlock) throw new Error("plantSeeds: farmlandBlock is null");
+
+      // Find seeds in inventory
+      const seedNames = seedItemName
+        ? [seedItemName]
+        : ["wheat_seeds", "carrot", "potato", "beetroot_seeds", "melon_seeds", "pumpkin_seeds"];
+
+      let seedItem: any = null;
+      for (const name of seedNames) {
+        seedItem = rawBot.inventory.items().find((i: any) => i.name === name);
+        if (seedItem) break;
+      }
+      if (!seedItem) throw new Error(`plantSeeds: no seeds in inventory (tried: ${seedNames.join(", ")})`);
+
+      // Equip seeds in hand
+      await rawBot.equip(seedItem, "hand");
+
+      // Must be within reach (3 blocks) to place
+      const dist = rawBot.entity.position.distanceTo(farmlandBlock.position);
+      if (dist > 4) {
+        throw new Error(`plantSeeds: too far from farmland (${dist.toFixed(1)} blocks). Navigate closer first.`);
+      }
+
+      // Plant: place block on top face of farmland (Vec3(0,1,0) = top face)
+      // bot.placeBlock(referenceBlock, faceVector) places a new block on that face
+      await rawBot.placeBlock(farmlandBlock, new Vec3(0, 1, 0));
+
+      logFn(`[plantSeeds] Planted ${seedItem.name} on farmland at (${farmlandBlock.position.x}, ${farmlandBlock.position.y}, ${farmlandBlock.position.z})`);
+      return { planted: seedItem.name, position: farmlandBlock.position };
+    },
+
     // AutoSafety state (read-only from agent code)
     // Getter function so agent always reads the latest state (not a stale snapshot).
     safetyState: managed.safetyState ?? null,
