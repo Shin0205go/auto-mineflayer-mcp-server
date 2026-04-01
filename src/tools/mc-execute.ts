@@ -874,6 +874,25 @@ export async function mc_execute(
       const fuelItem = rawBot.inventory.items().find((i: any) => i.name === fuelItemName);
       if (!fuelItem) throw new Error(`smeltItems: no ${fuelItemName} in inventory (fuel)`);
 
+      // Pre-open the furnace GUI to avoid windowOpen timeout.
+      // openFurnace() internally waits for the windowOpen event (up to 20s on laggy servers).
+      // Same pattern as openChest(): activateBlock first, wait up to 1000ms for windowOpen,
+      // then call openFurnace() which will find the already-open window immediately.
+      try {
+        await rawBot.activateBlock(furnaceBlock);
+        await new Promise<void>(resolve => {
+          const onWindow = () => {
+            rawBot.removeListener("windowOpen" as any, onWindow);
+            resolve();
+          };
+          rawBot.on("windowOpen" as any, onWindow);
+          setTimeout(() => {
+            rawBot.removeListener("windowOpen" as any, onWindow);
+            resolve();
+          }, 1000);
+        });
+      } catch { /* ignore activateBlock errors — openFurnace will open it */ }
+
       // Open furnace using the correct API (bot.openFurnace, NOT bot.openContainer)
       const furnace = await rawBot.openFurnace(furnaceBlock) as any;
 
