@@ -32,13 +32,26 @@ Spawn area is heavily water-logged with uneven terrain. Pathfinder cannot find e
 - Complex Y-level changes requiring complex routing
 - Possible desync from previous water incident
 
+### Additional Failures
+- **Attempt 3** (2026-04-01 12:XX): Navigate to chest at (7, 70, 41) distance=39
+  - Timeout after 120s+ with no progress
+  - Multiple pathfinder.goto() calls consistently timeout
+  - Pattern: ANY use of pathfinder with distance >5 blocks results in hang
+
+### Pattern Analysis
+- pathfinder.goto() works for distances < 5 blocks
+- pathfinder.goto() hangs indefinitely for distances >= 30 blocks
+- Water terrain in spawn area prevents alternative routes
+- Suggests: pathfinder algorithm issue, not just terrain complexity
+
 ### Status
-Reported - awaiting manual intervention or code fix
-- Immediate need: Food delivery via /give or terrain simplification
-- Medium-term: Fix pathfinder performance in water-heavy biomes
+**CRITICAL** - Pathfinder broken. Bot cannot move more than 5 blocks.
+- Immediate need: Food delivery via /give OR admin terrain flatten
+- Medium-term: Fix pathfinder hang in mc-execute (timeout mechanism ineffective)
 - Long-term: Better spawn location selection or terrain preprocessing
 
 ### Next Steps for Code Reviewer
-1. Check `src/bot-manager/pathfinder.ts` - water terrain handling
-2. Consider: Should pathfinder.setMovements() include water avoidance toggle?
-3. Consider: Emergency shelter + manual food until terrain is fixed
+1. **URGENT**: Check `src/bot-manager/pathfinder.ts` - likely infinite loop or deadlock
+2. Check `src/tools/mc-execute.ts` - timeout mechanism not killing pathfinder.goto()
+3. Test: Can pathfinder handle Y-level changes properly?
+4. Consider: Fallback movement (manual control states) when pathfinder > 10 blocks
