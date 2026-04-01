@@ -16,3 +16,19 @@
 ## Last Successful Actions
 - Manual forward movement worked briefly: moved from 26,101,5 to 24,100,6
 - Short-distance walking moves but with limited control
+
+## Additional Issues Found
+
+### Furnace Window Won't Open
+- **Problem**: `bot.openFurnace(block)` times out with "Event windowOpen did not fire"
+- **Cause**: Either furnace is out of reach, or window event system is broken
+- **Impact**: Cannot smelt items
+
+### Crafting Window Won't Open  
+- **Problem**: `bot.activateBlock(crafting_table)` says SUCCESS but window doesn't actually open
+- **Impact**: Cannot craft recipes
+
+### World Terrain Issues
+- **Observation**: Large areas are "air" (void-like), no natural lava found despite mining down 90 blocks
+- **Possible Cause**: World might not be properly generated, or server has limited terrain
+
