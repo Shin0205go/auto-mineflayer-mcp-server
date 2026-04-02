@@ -498,6 +498,11 @@ export class AutoSafety {
         clearInterval(mcExecuteCheck);
         this.bot.removeListener("goal_reached", onReached);
         goalHandle.cleanup();
+        // Clear the pathfinder goal on timeout — we own it (mc_execute is idle here)
+        // and leaving it running would cause the bot to continue navigating after sleep.
+        if (!this.managed.mcExecuteActive) {
+          try { this.bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+        }
         resolve();
       }, maxWaitMs);
       // Poll for mc_execute starting — abort immediately to avoid goal conflict.
