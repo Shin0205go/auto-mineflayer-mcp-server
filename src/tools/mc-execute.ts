@@ -213,9 +213,14 @@ export async function mc_execute(
         // 'partialSuccess' = pathfinder reached closest approach but not actual goal.
         //   e.g. GoalNear(x, 62, z, 3) from Y=86 with maxDropDown=1 stops at Y=85 and resolves.
         //   Without this check, gotoPromise resolves silently and the bot is still far from target.
-        //   We reject 'partialSuccess' as "No path" so canDig=true retry fires and finds the real route.
+        //   We reject 'partialSuccess' when allowDig=false so canDig=true retry fires and finds the
+        //   real route (e.g. descending 24 blocks).
+        //   When allowDig=true (canDig=true retry), accept partialSuccess as the best reachable
+        //   position — rejecting it again would cause an infinite reject→retry loop with no
+        //   improvement, burning the full timeout every call.
         //   See: bug-issues/bot1_pathfinder_y_movement_2026-04-02.md
-        if (result?.status === 'noPath' || result?.status === 'timeout' || result?.status === 'partialSuccess') {
+        if (result?.status === 'noPath' || result?.status === 'timeout' ||
+            (result?.status === 'partialSuccess' && !allowDig)) {
           rawBot.removeListener('path_update', onPathUpdate);
           cleanup();
           sandboxClearTimeout(hardTimeoutId);
@@ -225,6 +230,7 @@ export async function mc_execute(
             : 'No path to the goal!';
           reject(new Error(errMsg));
         }
+        // allowDig=true + partialSuccess: let gotoPromise resolve naturally (best reachable approach)
       };
       rawBot.on('path_update', onPathUpdate);
 
@@ -263,6 +269,24 @@ export async function mc_execute(
           if (stuckCount >= MAX_STUCK_CHECKS) {
             cleanup();
             try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
+            // Physics freeze detection: if the bot has not moved at all since the first stuck
+            // check AND the position is exactly the same as start, the server may have frozen
+            // physics (shouldUsePhysics=false). Send position_look to prompt a server `position`
+            // response, which resets shouldUsePhysics=true before the caller retries.
+            const totalMoved = currentPos.distanceTo(startPos);
+            if (totalMoved < STUCK_THRESHOLD) {
+              try {
+                const RAD_TO_DEG = 180 / Math.PI;
+                const yaw = Math.fround((Math.PI - rawBot.entity.yaw) * RAD_TO_DEG);
+                const pitch = Math.fround(-rawBot.entity.pitch * RAD_TO_DEG);
+                (rawBot as any)._client.write("position_look", {
+                  x: currentPos.x, y: currentPos.y, z: currentPos.z, yaw, pitch,
+                  onGround: (rawBot.entity as any).onGround ?? true,
+                  flags: { onGround: (rawBot.entity as any).onGround ?? true, hasHorizontalCollision: false },
+                });
+                console.error(`[gotoWithStuckDetection] Physics freeze suspected — sent position_look resync at (${currentPos.x.toFixed(1)},${currentPos.y.toFixed(1)},${currentPos.z.toFixed(1)})`);
+              } catch { /* ignore */ }
+            }
             reject(new Error(`Pathfinder stuck: position unchanged for ${STUCK_INTERVAL * MAX_STUCK_CHECKS}ms`));
           }
         } else {

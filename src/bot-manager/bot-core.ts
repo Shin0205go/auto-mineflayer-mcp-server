@@ -497,6 +497,36 @@ export class BotCore extends EventEmitter {
           }
         });
 
+        // Helper: send position_look packet to resync physics with server.
+        // Mineflayer sets shouldUsePhysics=false after "respawn" events (dimension change,
+        // death-respawn, or initial spawn on some server versions). shouldUsePhysics is only
+        // reset to true when the server sends a `position` packet back. On many servers this
+        // packet is delayed or never arrives, leaving the bot permanently frozen.
+        // Sending position_look from the client prompts the server to respond with `position`,
+        // which triggers the `forcedMove` event and resets shouldUsePhysics=true.
+        const sendPhysicsResync = (context: string) => {
+          setTimeout(() => {
+            try {
+              const pos = bot.entity.position;
+              const RAD_TO_DEG = 180 / Math.PI;
+              const yaw = Math.fround((Math.PI - bot.entity.yaw) * RAD_TO_DEG);
+              const pitch = Math.fround(-bot.entity.pitch * RAD_TO_DEG);
+              (bot as any)._client.write("position_look", {
+                x: pos.x,
+                y: pos.y,
+                z: pos.z,
+                yaw,
+                pitch,
+                onGround: (bot.entity as any).onGround ?? true,
+                flags: { onGround: (bot.entity as any).onGround ?? true, hasHorizontalCollision: false },
+              });
+              console.error(`[BotManager] Physics resync: sent position_look (${context})`);
+            } catch (err) {
+              console.error(`[BotManager] Physics resync failed (${context}):`, err);
+            }
+          }, 500);
+        };
+
         // Dimension change (portal teleport) - update pathfinder safety settings
         let lastDimension = bot.game.dimension;
         bot.on("spawn", () => {
@@ -516,35 +546,8 @@ export class BotCore extends EventEmitter {
             bot.pathfinder.setMovements(movements);
             console.error(`[BotManager] Pathfinder updated for ${newDimension}: allowFreeMotion=${movements.allowFreeMotion}, allowParkour=${movements.allowParkour}, maxDropDown=${movements.maxDropDown}`);
 
-            // Physics freeze fix: after dimension change, mineflayer fires "respawn" which sets
-            // shouldUsePhysics=false internally. shouldUsePhysics is only reset to true when the
-            // server sends a `position` packet (clientbound). On some server versions this packet
-            // is delayed or never sent after the_end→overworld transition, leaving the bot
-            // completely frozen (cannot move, pathfind, or act).
-            // Fix: send a position_look packet from the client side. This prompts the server to
-            // respond with its own `position` packet, which triggers the `forcedMove` event and
-            // resets shouldUsePhysics=true.
-            // Delay 500ms to let the server finish the dimension-transition handshake first.
-            setTimeout(() => {
-              try {
-                const pos = bot.entity.position;
-                const RAD_TO_DEG = 180 / Math.PI;
-                const yaw = Math.fround((Math.PI - bot.entity.yaw) * RAD_TO_DEG);
-                const pitch = Math.fround(-bot.entity.pitch * RAD_TO_DEG);
-                (bot as any)._client.write("position_look", {
-                  x: pos.x,
-                  y: pos.y,
-                  z: pos.z,
-                  yaw,
-                  pitch,
-                  onGround: (bot.entity as any).onGround ?? true,
-                  flags: { onGround: (bot.entity as any).onGround ?? true, hasHorizontalCollision: false },
-                });
-                console.error(`[BotManager] Physics resync: sent position_look after dimension change to ${newDimension}`);
-              } catch (err) {
-                console.error(`[BotManager] Physics resync failed:`, err);
-              }
-            }, 500);
+            // Physics freeze fix after dimension change (the_end→overworld etc.)
+            sendPhysicsResync(`dimension-change→${newDimension}`);
           }
         });
 
@@ -838,6 +841,15 @@ export class BotCore extends EventEmitter {
             });
           }
         });
+
+        // Physics resync on initial spawn.
+        // Some server configurations send a `login` packet but delay the `position` packet,
+        // leaving shouldUsePhysics=false even after the first spawn event fires.
+        // Sending position_look immediately after spawn prompts the server to respond with
+        // `position`, which resets shouldUsePhysics=true and allows setControlState/pathfinder
+        // to work. Without this, Claude1 would freeze immediately after connecting and only
+        // recover after disconnect/reconnect (which also triggers this path).
+        sendPhysicsResync("initial-spawn");
 
         // AutoSafety: deterministic safety layer (auto-eat, creeper flee, general flee, auto-sleep)
         const autoSafety = new AutoSafety(managedBot);
