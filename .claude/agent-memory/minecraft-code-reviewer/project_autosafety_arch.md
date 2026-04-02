@@ -47,6 +47,19 @@ be completed" on the AutoSafety goto promise. This error propagated back to path
 Fix: replaced all fixed-duration cleanups with 200ms mcExecuteActive polling. Each action
 now calls goalHandle.cleanup() within ~200ms of mc_execute starting.
 
+## Past bug: cleanup setGoal(null) fired while mc_execute active (fixed 2026-04-02 commit 5629e05)
+creeperCleanup(), fleeCleanup(), and navigateTo() mcExecuteCheck all called setGoal(null) when
+they detected mc_execute becoming active. If the agent's pathfinderGoto() had already been called
+(which is common since mc_execute sets mcExecuteActive=true before running code), this setGoal(null)
+cancelled the active goto() with "goal was changed" error.
+Fix: all three cleanup paths now guard setGoal(null) with !managed.mcExecuteActive.
+navigateTo() timeout handler also added the same guard for when the timeout fires.
+
+## Past bug: escapeWater used rawBot.pathfinder.goto() directly (fixed 2026-04-02 commit 12cb556)
+Phase 2 of escapeWater (navigate to land after surfacing) called rawBot.pathfinder.goto() directly,
+bypassing pathfinderProxy (no canDig retry) and gotoWithStuckDetection (no stuck detection, no hard timeout).
+Fix: replaced with gotoWithStuckDetection(goal, 8000, false).
+
 ## Known limitations
 - tryGeneralFlee uses GoalNear (horizontal flee target) — cannot flee from aerial mobs like Phantom
 - Phantom defense relies on auto-sleep to skip night before Phantoms spawn

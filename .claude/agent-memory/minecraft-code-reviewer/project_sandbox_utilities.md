@@ -88,6 +88,19 @@ type: project
   Fixed: consumeWithTimeout now rejects immediately when onGround=false, matching eat()'s guard.
   Fixes bot1_food_death.md ("food consumption causes instant death").
 
+## descendSafely stall detection + escapeWater upward-dig (fixed 2026-04-02 session 6, commit bca1c3a)
+- `descendSafely` had no stall detection: if the bot's Y stopped decreasing (stuck against undiggable
+  block, broken world state, or unexpected Y drift upward), the loop continued until maxDigAttempts.
+  Fixed: every 5 iterations record Y; if 3 consecutive checks show < 0.5 block decrease, abort and
+  report "STALL detected". Also abort immediately if Y > startY + 3 (dimension confusion / upward teleport).
+  Added early-return when already at targetY. Reason in result log: " (stalled)" / " (maxAttempts)".
+  Root-cause evidence: bot1_descendsafely_critical.md — bot at Y=141 digging purpur_block in loop.
+- `escapeWater` Phase 2 (land navigation) was only reached after swim-up surfaced. When enclosed by
+  cobblestone walls (bot1_water_trap_total_immobility_20260402.md), Phase 1 couldn't surface and Phase 2
+  was skipped. Fixed: added Phase 3 — dig solid block above head (or hold jump for water/air above) up to
+  8 iterations. If still in water after Phase 3, returns honest message "Water pocket fully enclosed —
+  admin teleport required" instead of generic "try digging sideways".
+
 ## Known issues / fixes (updated 2026-04-02 session 2)
 - bot.placeBlock() still uses mineflayer's 5s blockUpdate timeout internally — use safePlaceBlock() or plantSeeds() instead
 - bot.recipesFor() often returns [] when no table passed — use recipesFor() wrapper

@@ -732,13 +732,17 @@ export async function mc_execute(
       rawBot.activateItem(false);
 
       // Wait for food event or timeout (eating takes ~1.61s)
+      // Use sandboxSetTimeout so this timer is cancelled if mc_execute times out
+      // before eating completes — prevents a zombie health listener from firing on
+      // the next mc_execute call and falsely resolving an unrelated eat() call.
       const eatDone = new Promise<boolean>(resolve => {
         const onFoodChange = () => {
           rawBot.removeListener("health" as any, onFoodChange);
+          sandboxClearTimeout(eatTimeoutId);
           resolve(true);
         };
         rawBot.on("health" as any, onFoodChange);
-        setTimeout(() => {
+        const eatTimeoutId = sandboxSetTimeout(() => {
           rawBot.removeListener("health" as any, onFoodChange);
           resolve(false);
         }, 3500);
@@ -2080,8 +2084,8 @@ export async function mc_execute(
           if (resolved) return;
           resolved = true;
           rawBot.removeListener("respawn" as any, onRespawn);
-          clearInterval(pollId);
-          clearTimeout(timeoutId);
+          sandboxClearInterval(pollId);
+          sandboxClearTimeout(timeoutId);
           resolve(dim);
         };
 
@@ -2092,14 +2096,19 @@ export async function mc_execute(
         rawBot.on("respawn" as any, onRespawn);
 
         // Fallback poll: check if dimension changed every 500ms
-        const pollId = setInterval(() => {
+        // Use sandboxSetInterval/sandboxSetTimeout so these timers are cleaned up if
+        // mc_execute times out before the portal transfer completes.  Without this,
+        // zombie timers from a timed-out enterPortal() call would keep running in the
+        // background and trigger spurious "dimension changed" detections in subsequent
+        // mc_execute calls.
+        const pollId = sandboxSetInterval(() => {
           const current = (rawBot.game as any)?.dimension ?? (rawBot as any).dimension ?? "unknown";
           if (current !== dimensionBefore) {
             done(current);
           }
         }, 500);
 
-        const timeoutId = setTimeout(() => done(null), timeoutMs);
+        const timeoutId = sandboxSetTimeout(() => done(null), timeoutMs);
       });
 
       const dimensionAfter = await teleportDone;
