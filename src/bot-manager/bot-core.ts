@@ -507,7 +507,6 @@ export class BotCore extends EventEmitter {
             console.error(`[BotManager] Dimension changed to ${newDimension}, updating pathfinder safety settings...`);
 
             const movements = bot.pathfinder.movements;
-            const isNether = newDimension === "the_nether";
 
             // NETHER SAFETY: Restrict risky movements to prevent lava deaths and cliff falls
             movements.allowFreeMotion = false; // SAFETY: Disable everywhere — prevents cliff falls from skipped path nodes
@@ -516,6 +515,36 @@ export class BotCore extends EventEmitter {
 
             bot.pathfinder.setMovements(movements);
             console.error(`[BotManager] Pathfinder updated for ${newDimension}: allowFreeMotion=${movements.allowFreeMotion}, allowParkour=${movements.allowParkour}, maxDropDown=${movements.maxDropDown}`);
+
+            // Physics freeze fix: after dimension change, mineflayer fires "respawn" which sets
+            // shouldUsePhysics=false internally. shouldUsePhysics is only reset to true when the
+            // server sends a `position` packet (clientbound). On some server versions this packet
+            // is delayed or never sent after the_end→overworld transition, leaving the bot
+            // completely frozen (cannot move, pathfind, or act).
+            // Fix: send a position_look packet from the client side. This prompts the server to
+            // respond with its own `position` packet, which triggers the `forcedMove` event and
+            // resets shouldUsePhysics=true.
+            // Delay 500ms to let the server finish the dimension-transition handshake first.
+            setTimeout(() => {
+              try {
+                const pos = bot.entity.position;
+                const RAD_TO_DEG = 180 / Math.PI;
+                const yaw = Math.fround((Math.PI - bot.entity.yaw) * RAD_TO_DEG);
+                const pitch = Math.fround(-bot.entity.pitch * RAD_TO_DEG);
+                (bot as any)._client.write("position_look", {
+                  x: pos.x,
+                  y: pos.y,
+                  z: pos.z,
+                  yaw,
+                  pitch,
+                  onGround: (bot.entity as any).onGround ?? true,
+                  flags: { onGround: (bot.entity as any).onGround ?? true, hasHorizontalCollision: false },
+                });
+                console.error(`[BotManager] Physics resync: sent position_look after dimension change to ${newDimension}`);
+              } catch (err) {
+                console.error(`[BotManager] Physics resync failed:`, err);
+              }
+            }, 500);
           }
         });
 
