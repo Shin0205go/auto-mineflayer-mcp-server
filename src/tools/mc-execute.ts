@@ -302,7 +302,16 @@ export async function mc_execute(
       }, timeoutMs);
 
       gotoPromise.then(
-        (val: unknown) => { cleanup(); sandboxClearTimeout(hardTimeoutId); resolve(val as void); },
+        (val: unknown) => {
+          cleanup();
+          sandboxClearTimeout(hardTimeoutId);
+          // Clear pathfinder goal after success so consecutive goto() calls don't see
+          // a stale goal and emit "goal was changed" on the NEXT call.
+          // mineflayer internally clears the goal on arrival but timing can race with
+          // the next goto() setup in a tight loop (bot1_pathfinder_goal_changed.md).
+          try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
+          resolve(val as void);
+        },
         (err: unknown) => { cleanup(); sandboxClearTimeout(hardTimeoutId); reject(err); }
       );
     });
