@@ -225,9 +225,12 @@ export class AutoSafety {
       clearInterval(creeperActiveCheck);
       clearTimeout(creeperTimeout);
       if (goalHandle) goalHandle.cleanup();
-      // Clear pathfinder goal to prevent Y-descent monitor from calling setGoal(null)
-      // after mc_execute registers goalChangedListener — same race as general flee.
-      try { this.bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+      // Only clear pathfinder goal if mc_execute is NOT active.
+      // If mc_execute is active, it owns the pathfinder — calling setGoal(null) here
+      // would cancel the agent's active goto() with "goal was changed" error.
+      if (!this.managed.mcExecuteActive) {
+        try { this.bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+      }
       this.bot.setControlState("sprint", false);
       this.bot.setControlState("forward", false);
       this.creeperFleeActive = false;
@@ -286,11 +289,14 @@ export class AutoSafety {
         clearInterval(fleeActiveCheck);
         clearTimeout(fleeTimeout);
         goalHandle.cleanup();
-        // Explicitly clear pathfinder goal so the Y-descent monitor (which may still be
-        // scheduled) does not call setGoal(null) AFTER mc_execute registers goalChangedListener.
-        // Without this, a 300ms Y-descent monitor macrotask fires right after the agent's
-        // first await, calls setGoal(null), and triggers "goal was changed" immediately.
-        try { this.bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+        // Only clear pathfinder goal if mc_execute is NOT active.
+        // If mc_execute is active, it owns the pathfinder — calling setGoal(null) here
+        // would cancel the agent's active goto() with "goal was changed" error.
+        // The Y-descent monitor in safeSetGoal() already checks managed.mcExecuteActive
+        // before calling setGoal(null), so no extra guard needed there.
+        if (!this.managed.mcExecuteActive) {
+          try { this.bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+        }
         this.generalFleeActive = false;
         this.updateState("general-flee", false, "generalFleeActive");
       };
@@ -504,7 +510,11 @@ export class AutoSafety {
           clearTimeout(timeoutId);
           this.bot.removeListener("goal_reached", onReached);
           goalHandle.cleanup();  // Stop Y-descent monitor immediately
-          try { this.bot.pathfinder.setGoal(null); } catch { /* ignore */ }
+          // Do NOT call setGoal(null) here: mc_execute is now active, meaning the
+          // agent's code may already have called pathfinderGoto() and set a goal.
+          // Calling setGoal(null) would cancel the agent's navigation with
+          // "goal was changed" error. The agent owns the pathfinder while
+          // mcExecuteActive=true — AutoSafety must not interfere.
           console.error(`[AutoSafety] navigateTo aborted: mc_execute became active`);
           resolve();
         }
