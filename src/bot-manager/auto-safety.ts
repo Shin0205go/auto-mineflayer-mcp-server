@@ -122,6 +122,13 @@ export class AutoSafety {
     const food = this.bot.inventory.items().find(i => EDIBLE_FOOD_NAMES.has(i.name));
     if (!food) return false;
 
+    // Skip eating while airborne — eating mid-fall causes fatal fall damage on landing.
+    // The 2-second tick will retry once the bot is on the ground.
+    if (!(this.bot.entity as any).onGround) {
+      console.error(`[AutoSafety] ${reason} skipped: bot is airborne (Y=${this.bot.entity.position.y.toFixed(1)}), waiting for landing`);
+      return false;
+    }
+
     this.autoEatActive = true;
     this.updateState(reason, true, "autoEatActive");
 

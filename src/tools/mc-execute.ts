@@ -624,6 +624,13 @@ export async function mc_execute(
         }
         throw new Error("No food in inventory");
       }
+      // Rule C (honest return value): eating while falling causes instant death on landing.
+      // Minecraft lets you eat in mid-air but the fall damage is fatal (72 blocks = 70+ HP).
+      // Throw immediately so the agent knows it must land before eating.
+      if (!(rawBot.entity as any).onGround) {
+        throw new Error(`eat() called while airborne (onGround=false, Y=${rawBot.entity.position.y.toFixed(1)}). Land first — eating mid-fall causes fatal fall damage on landing.`);
+      }
+
       await rawBot.equip(food, "hand");
 
       const itemName = food.name;
