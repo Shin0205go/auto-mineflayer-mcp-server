@@ -210,7 +210,12 @@ export async function mc_execute(
         // 'noPath' = A* exhausted search space with no solution
         // 'timeout' = thinkTimeout elapsed before path was found ("Took too long to decide path to goal!")
         // Both should trigger the canDig=true retry in pathfinderGoto.
-        if (result?.status === 'noPath' || result?.status === 'timeout') {
+        // 'partialSuccess' = pathfinder reached closest approach but not actual goal.
+        //   e.g. GoalNear(x, 62, z, 3) from Y=86 with maxDropDown=1 stops at Y=85 and resolves.
+        //   Without this check, gotoPromise resolves silently and the bot is still far from target.
+        //   We reject 'partialSuccess' as "No path" so canDig=true retry fires and finds the real route.
+        //   See: bug-issues/bot1_pathfinder_y_movement_2026-04-02.md
+        if (result?.status === 'noPath' || result?.status === 'timeout' || result?.status === 'partialSuccess') {
           rawBot.removeListener('path_update', onPathUpdate);
           cleanup();
           sandboxClearTimeout(hardTimeoutId);
