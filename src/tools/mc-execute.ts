@@ -1060,6 +1060,83 @@ export async function mc_execute(
       return result;
     },
 
+    // === resyncPhysics — break server rubber-band / position freeze after /tp ===
+    //
+    // Symptom: after admin /tp commands, the server rubber-bands the bot back to the
+    // teleport coordinates every tick — bot.entity.position never changes even when
+    // setControlState('forward', true) or pathfinder are active.
+    //
+    // Root cause: In 1.21.4, when the server teleports a player it sends a clientbound
+    // `position` packet with a teleportId.  Mineflayer sends `teleport_confirm` + a
+    // `position_look` packet back.  If multiple /tp commands arrive in quick succession
+    // the server may receive position updates from the client that were computed before
+    // the latest teleport was acknowledged, and it starts rubber-banding: accepting the
+    // client's position packets but immediately overriding them with its own `position`
+    // packet that resets the bot to the teleport coordinates.
+    //
+    // Fix: send a `position_look` packet with the CURRENT bot position and wait for the
+    // server to respond with a `position` packet (which fires the `forcedMove` event).
+    // This re-synchronises the server's view of the client's position and ends rubber-banding.
+    //
+    // Usage: await resyncPhysics(timeoutMs?)
+    //   timeoutMs: max wait for server ack in ms (default 3000)
+    // Returns: { synced: boolean, waitedMs: number, position: {x,y,z} }
+    resyncPhysics: async (timeoutMs: number = 3000): Promise<{ synced: boolean; waitedMs: number; position: { x: number; y: number; z: number } }> => {
+      const startMs = Date.now();
+      const pos = rawBot.entity.position;
+      // Inline mineflayer conversions (toNotchianYaw / toNotchianPitch) to avoid require()
+      // toNotchianYaw(yaw)   = (PI - yaw) * 180/PI  degrees
+      // toNotchianPitch(pitch) = -pitch * 180/PI     degrees
+      const RAD_TO_DEG = 180 / Math.PI;
+      const yaw = Math.fround((Math.PI - rawBot.entity.yaw) * RAD_TO_DEG);
+      const pitch = Math.fround(-rawBot.entity.pitch * RAD_TO_DEG);
+
+      logFn(`[resyncPhysics] Sending position_look to resync server at (${pos.x.toFixed(2)},${pos.y.toFixed(2)},${pos.z.toFixed(2)})`);
+
+      // Wait for forcedMove (server ack) with timeout
+      const syncResult = await new Promise<boolean>(resolve => {
+        let resolved = false;
+        const onForcedMove = () => {
+          if (resolved) return;
+          resolved = true;
+          rawBot.removeListener("forcedMove" as any, onForcedMove);
+          resolve(true);
+        };
+        rawBot.on("forcedMove" as any, onForcedMove);
+        sandboxSetTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            rawBot.removeListener("forcedMove" as any, onForcedMove);
+            resolve(false);
+          }
+        }, timeoutMs);
+
+        // Send position_look packet — prompts server to respond with its own position packet
+        try {
+          (rawBot as any)._client.write("position_look", {
+            x: pos.x,
+            y: pos.y,
+            z: pos.z,
+            yaw,
+            pitch,
+            onGround: (rawBot.entity as any).onGround ?? true,
+            flags: { onGround: (rawBot.entity as any).onGround ?? true, hasHorizontalCollision: false },
+          });
+        } catch (err) {
+          logFn(`[resyncPhysics] write error: ${err}`);
+        }
+      });
+
+      const elapsed = Date.now() - startMs;
+      const finalPos = rawBot.entity.position;
+      if (syncResult) {
+        logFn(`[resyncPhysics] Server ack received after ${elapsed}ms — new pos: (${finalPos.x.toFixed(2)},${finalPos.y.toFixed(2)},${finalPos.z.toFixed(2)})`);
+      } else {
+        logFn(`[resyncPhysics] No server ack after ${elapsed}ms — position may still be frozen`);
+      }
+      return { synced: syncResult, waitedMs: elapsed, position: { x: finalPos.x, y: finalPos.y, z: finalPos.z } };
+    },
+
     // === Meta-cognition layer: observe → understand → act ===
     // awareness() — self-state + spatial snapshot (call before any action)
     // Appends AutoSafety periodic scan cache (ores, chests, water within 32 blocks)
