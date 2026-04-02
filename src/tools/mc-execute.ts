@@ -341,7 +341,7 @@ export async function mc_execute(
     return Promise.race<void>([
       rawBot.dig(block),
       new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error(`bot.dig() timed out after ${DIG_TIMEOUT_MS}ms — block may be out of reach or undiggable`)), DIG_TIMEOUT_MS)
+        sandboxSetTimeout(() => reject(new Error(`bot.dig() timed out after ${DIG_TIMEOUT_MS}ms — block may be out of reach or undiggable`)), DIG_TIMEOUT_MS)
       ),
     ]);
   };
@@ -376,12 +376,23 @@ export async function mc_execute(
   // indefinitely on laggy servers). Without this, bot.consume() hangs forever.
   // The eat() helper in ctx is preferred and handles food selection + health event detection,
   // but for agents that call bot.consume() directly this ensures a bounded wait.
+  //
+  // Also rejects immediately when bot is airborne (onGround=false) — eating mid-fall causes
+  // fatal fall damage on landing (matches the same guard in eat()). This was the cause of
+  // the Y=135 instant-death bug in bot1_food_death.md.
   const CONSUME_TIMEOUT_MS = 5000;
   const consumeWithTimeout = (): Promise<void> => {
+    // Guard: reject immediately if airborne. Eating mid-fall = fatal fall damage on landing.
+    if (!(rawBot.entity as any).onGround) {
+      return Promise.reject(new Error(
+        `bot.consume() called while airborne (onGround=false, Y=${rawBot.entity.position.y.toFixed(1)}). ` +
+        `Land first — eating mid-fall causes fatal fall damage on landing. Use eat() for the same guard.`
+      ));
+    }
     return Promise.race<void>([
       rawBot.consume(),
       new Promise<void>((_, reject) =>
-        setTimeout(
+        sandboxSetTimeout(
           () => reject(new Error(`bot.consume() timed out after ${CONSUME_TIMEOUT_MS}ms — use eat() instead for reliable food consumption`)),
           CONSUME_TIMEOUT_MS
         )
