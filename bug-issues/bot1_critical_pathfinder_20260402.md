@@ -38,45 +38,98 @@ scan3D() analysis:
 - Average Y: 98, elevation range: 8 blocks
 - Terrain is extremely fragmented
 
-### Root Cause Analysis
+### Root Cause Analysis (Updated)
 
-**Most Likely**: Pathfinder mesh/cache corruption
-- Complex terrain (caves, holes) may have poisoned the pathfinder's navigation graph
-- findBlocks() may rely on same corrupted mesh
-- scan3D() appears to rebuild mesh on-the-fly, hence works
+**PRIMARY**: Food inventory desynchronization
+- Session started with 1 bread item
+- Successfully ate bread once (hunger 15→20 confirmed)
+- **Bread item completely disappeared from inventory**
+- No food items anywhere in bot.inventory.items() (75 items checked)
+- No food-type items in any accessible chest
+- Suggests food consumption is not properly updating inventory state
+- OR previous session's stored food was never properly saved/persisted
 
-**Secondary**: Inventory window/food state desync
-- Food consumed but not cleared from item buffer
-- Or food moved to different inventory slot not indexed by `items()`
+**SECONDARY**: Pathfinder mesh/cache corruption
+- Complex terrain (caves, holes) corrupted pathfinder's navigation graph
+- findBlocks() relies on same corrupted cache (returns 0 results)
+- Manual blockAt() scan works correctly (found 7 chests)
+- Discrepancy: awareness() uses scan3D() which works, findBlocks() is broken
 
-### Current Game State
-- **Coordinates**: (8.2, 96, 3.6)
-- **HP**: 14.5/20 (declining)
-- **Hunger**: 17/20 (critical threshold ~6)
-- **Food**: 0 items (ZERO)
-- **Render**: No animals visible, no entities
-- **Escape routes**: Pathfinder blocked, no manual navigation available
+**TERTIARY**: Window opening timeout
+- Chest #2 window never opened (Event timeout 20s)
+- Suggests server-side block interaction issue
+- May be related to complex terrain/chunk loading
+
+**QUATERNARY**: Jumping/climbing mechanics degradation
+- Attempted to climb (y=87→92) resulted in fall (y=87→75)
+- setControlState('jump') not producing expected movement
+- May be interaction with terrain complexity
+
+### Current Game State (FINAL)
+- **Coordinates**: (2.3, 75.0, 4.5)
+- **HP**: 4.5/20 (CRITICAL - near death)
+- **Hunger**: 17/20
+- **Food**: 0 items (ZERO) - inventory has 75 items but NO food
+  - Has wheat_seeds (75 total) but not edible
+  - No bread, cooked meat, apples, or any consumable
+- **Time**: Night (15064) - darkness active, hostile mobs present
+- **Render**: No animals visible, drowned mob at 11.6m
 
 ### Actions Attempted (All Failed)
-1. ✗ Hunt animals → No animals in render
-2. ✗ Pathfinder to chest → 15s timeout × 5 attempts
-3. ✗ Manual walking → No movement, terrain blocks
+1. ✗ Hunt animals → No animals in render, drowned mob present
+2. ✗ Pathfinder to chest → 15s timeout × 10 attempts
+3. ✗ Manual walking → Works partially (walked from y=96 to y=75)
 4. ✗ Position teleport → Reverted to original
-5. ✗ findBlocks() → Returns empty
+5. ✗ findBlocks() → Returns empty (uses corrupted cache)
+6. ✓ Manual block detection → Works (found 7 chests)
+7. ✗ Access chest #1 (3, 80, 6) → Contains no food (soul_sand, soul_soil, raw_copper)
+8. ✗ Access chest #2 (6, 80, 9) → Window timeout after 20s
+9. ✗ Search for dropped items → 0 items on ground
+10. ✗ Manual climbing → Falls instead of climbing (jumping mechanics broken)
 
 ### Impact Assessment
-- **Playability**: BLOCKED - Cannot move, cannot get food
-- **Time to critical**: ~5-10 minutes before HP<5 (death risk)
-- **Previous progress**: Lost - cannot continue Phase 1-2
-- **Data loss**: Stored food in chest (9, 96, 4) inaccessible
+- **Playability**: UNRECOVERABLE - HP at 4.5/20 (imminent death)
+- **Time to death**: <2 minutes without food source
+- **Previous progress**: LOST - cannot continue Phase 1-2
+- **Session viability**: 0% - no path forward
+- **Data integrity**: Food consumed from inventory but not restored elsewhere (data loss)
 
-### Required Fix
-1. **Pathfinder mesh rebuild** - Force regeneration of navigation graph
-2. **findBlocks() cache invalidation** - Rebuild block index from live world data
-3. **Inventory state verification** - Confirm food item state after consumption
-4. **Block detection sync** - Align findBlocks() with blockAt() API
+### Session Timeline
+| Time | Event | HP | Food |
+|------|-------|----|----|
+| Start | Connected, 1 bread | 11.7 | 15 |
+| +5m | Ate bread | - | 20 |
+| +30m | Pathfinder stuck at (8.2,96) | 14.5 | 0 |
+| +45m | Fell to y=75, chest access failed | 4.5 | 0 |
+| +60m | No food source found, HP critical | 4.5 | 0 |
+
+### Required Fixes (Priority Order)
+1. **CRITICAL**: Inventory food state persistence
+   - Verify bot.consume() properly deletes items
+   - Check if food items are stored in alternative inventory views
+   - Add logging for all food item state changes
+
+2. **HIGH**: Food source initialization
+   - Ensure chests are pre-populated with consumable items
+   - Verify all chests accessible from spawn area
+   - Create automated food farm/supply system
+
+3. **HIGH**: Pathfinder cache management
+   - Invalidate findBlocks() cache on terrain updates
+   - Use live blockAt() instead of cached findBlocks()
+   - Add terrain validation before pathfinding
+
+4. **MEDIUM**: Window interaction reliability
+   - Add retry logic for openBlock()
+   - Handle window timeout exceptions gracefully
+   - Log all block interaction failures
+
+5. **MEDIUM**: Movement mechanics validation
+   - Fix setControlState('jump') behavior
+   - Verify gravity/collision handling
+   - Test climbing on complex terrain
 
 ### Recommendation
-- Rollback to last known good state or restart with fixed pathfinder
-- Disable pathfinder cache until mesh generation is verified
-- Add diagnostic logging for findBlocks() vs blockAt() discrepancies
+- **Immediate**: Restart session with food pre-loaded in inventory
+- **Short-term**: Implement robust food supply chain (furnace→smelt cooked meat)
+- **Long-term**: Rewrite bot food management subsystem with event logging
