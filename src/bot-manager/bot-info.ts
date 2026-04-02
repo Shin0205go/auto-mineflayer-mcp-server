@@ -188,6 +188,14 @@ export function getSurroundings(bot: Bot): string {
   const dimension = (bot.game as any)?.dimension ?? (bot as any).dimension ?? "overworld";
   lines.push(`ディメンション: ${dimension}`);
 
+  // Physics state: shouldUsePhysics=false means the server has not sent a position packet
+  // yet (post-spawn or post-TP). setControlState() and pathfinder will be frozen until
+  // resyncPhysics() or a server position update resets this flag to true.
+  const physicsActive = (bot as any).physics?.shouldUsePhysics !== false;
+  if (!physicsActive) {
+    lines.push(`[警告] Physics凍結: shouldUsePhysics=false — resyncPhysics()を呼んでください`);
+  }
+
   // バイオーム
   try {
     const biome = bot.blockAt(pos)?.biome?.name || "unknown";
