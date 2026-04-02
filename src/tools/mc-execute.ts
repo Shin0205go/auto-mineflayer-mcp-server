@@ -312,14 +312,30 @@ export async function mc_execute(
         // Without the retry, bot.pathfinder.goto() in complex terrain (Nether/End) always fails
         // on the first attempt with "No path to the goal!" even though canDig=true would succeed.
         return async (goal: any) => {
+          // GoalY(y) only specifies a vertical target — pathfinder may silently "succeed"
+          // when the bot rises 1 block during path computation, leaving the agent thinking
+          // navigation is still in progress while the Promise has already resolved.
+          // This causes the agent to wait for the mc_execute outer timeout (120s) instead
+          // of getting a fast error.  Convert GoalY to GoalNear at the current XZ + target Y
+          // so the pathfinder fails fast with "noPath" when the path is blocked underground.
+          // See: bug-issues/claude1_post_phase8_pathfinder_deadlock_20260402.md
+          let effectiveGoal = goal;
+          if (goal && goal.constructor?.name === 'GoalY') {
+            const targetY = (goal as any).y ?? (goal as any).Y;
+            if (typeof targetY === 'number') {
+              const curPos = rawBot.entity.position;
+              console.error(`[mc_execute] GoalY(${targetY}) converted to GoalNear at current XZ (${curPos.x.toFixed(1)},${curPos.z.toFixed(1)}) to prevent silent deadlock`);
+              effectiveGoal = new goals.GoalNear(curPos.x, targetY, curPos.z, 2);
+            }
+          }
           try {
-            return await gotoWithStuckDetection(goal, MAX_PATHFINDER_TIMEOUT, false);
+            return await gotoWithStuckDetection(effectiveGoal, MAX_PATHFINDER_TIMEOUT, false);
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             if ((msg.includes("No path") || msg.includes("no path") || msg.includes("Took to long") || msg.includes("Took too long") || msg.includes("Pathfinder stuck")) && !msg.toLowerCase().includes("goal was changed")) {
               // Retry with canDig=true for complex terrain (Nether, End, caves)
               try {
-                return await gotoWithStuckDetection(goal, MAX_PATHFINDER_TIMEOUT, true);
+                return await gotoWithStuckDetection(effectiveGoal, MAX_PATHFINDER_TIMEOUT, true);
               } finally {
                 try { if (rawBot.pathfinder?.movements) rawBot.pathfinder.movements.canDig = false; } catch { /* ignore */ }
               }
@@ -574,6 +590,19 @@ export async function mc_execute(
     // and the previous 30s default was too short, causing false "stuck" detections.
     pathfinderGoto: async (goal: any, timeoutMs = 45000) => {
       const effectiveTimeoutMs = Math.min(timeoutMs, MAX_PATHFINDER_TIMEOUT);
+      // GoalY(y) only specifies vertical target — pathfinder may silently "succeed" with
+      // 1-block rise during path computation, causing a false-success that leaves the agent
+      // waiting for the mc_execute outer timeout (120s) rather than getting a fast error.
+      // Convert to GoalNear at current XZ + target Y for deterministic failure on blocked paths.
+      // See: bug-issues/claude1_post_phase8_pathfinder_deadlock_20260402.md
+      if (goal && goal.constructor?.name === 'GoalY') {
+        const targetY = (goal as any).y ?? (goal as any).Y;
+        if (typeof targetY === 'number') {
+          const curPos = rawBot.entity.position;
+          logFn(`[pathfinderGoto] GoalY(${targetY}) converted to GoalNear(${curPos.x.toFixed(1)},${targetY},${curPos.z.toFixed(1)},2) — GoalY causes silent deadlock in complex terrain`);
+          goal = new goals.GoalNear(curPos.x, targetY, curPos.z, 2);
+        }
+      }
       try {
         return await gotoWithStuckDetection(goal, effectiveTimeoutMs, false);
       } catch (err) {
