@@ -283,7 +283,25 @@ export async function mc_execute(
       if (prop === 'goto') {
         // Replace goto with our safe wrapper.
         // Cap at MAX_PATHFINDER_TIMEOUT regardless of what the agent passes.
-        return (goal: any) => gotoWithStuckDetection(goal, MAX_PATHFINDER_TIMEOUT, false);
+        // Mirrors pathfinderGoto: first attempt with canDig=false, then canDig=true retry on noPath/timeout.
+        // Without the retry, bot.pathfinder.goto() in complex terrain (Nether/End) always fails
+        // on the first attempt with "No path to the goal!" even though canDig=true would succeed.
+        return async (goal: any) => {
+          try {
+            return await gotoWithStuckDetection(goal, MAX_PATHFINDER_TIMEOUT, false);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if ((msg.includes("No path") || msg.includes("no path") || msg.includes("Took to long") || msg.includes("Took too long") || msg.includes("Pathfinder stuck")) && !msg.toLowerCase().includes("goal was changed")) {
+              // Retry with canDig=true for complex terrain (Nether, End, caves)
+              try {
+                return await gotoWithStuckDetection(goal, MAX_PATHFINDER_TIMEOUT, true);
+              } finally {
+                try { if (rawBot.pathfinder?.movements) rawBot.pathfinder.movements.canDig = false; } catch { /* ignore */ }
+              }
+            }
+            throw err;
+          }
+        };
       }
       // Pass Symbol properties through without modification.
       if (typeof prop === 'symbol') return target[prop];
