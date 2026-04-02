@@ -7,7 +7,17 @@
  */
 const http = require('http');
 
-const code = process.argv.slice(2).join(' ');
+async function main() {
+let code = process.argv.slice(2).join(' ');
+if (!code && !process.stdin.isTTY) {
+  // Allow piping code via stdin: echo "..." | node scripts/mc-execute.cjs
+  const chunks = [];
+  await new Promise(r => {
+    process.stdin.on('data', d => chunks.push(d));
+    process.stdin.on('end', r);
+  });
+  code = Buffer.concat(chunks).toString().trim();
+}
 if (!code) {
   console.error('Usage: node scripts/mc-execute.cjs "<code>"');
   process.exit(1);
@@ -55,3 +65,5 @@ req.on('error', (e) => {
 
 req.write(body);
 req.end();
+}
+main().catch(e => { console.error(e.message); process.exit(1); });
