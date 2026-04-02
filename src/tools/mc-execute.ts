@@ -95,11 +95,14 @@ export async function mc_execute(
   const logFn = (message: unknown) => { if (logs.length < MAX_LOG_LINES) logs.push(String(message)); };
   const waitFn = (ms: number) => new Promise<void>((resolve, reject) => {
     if (aborted) { reject(new Error("Execution aborted")); return; }
-    const timer = setTimeout(() => {
+    // Use sandboxSetTimeout so the timer is tracked and cleared by clearAllTrackedTimers()
+    // on execution timeout/abort. Without this, a long wait() left mid-execution creates
+    // a zombie timer that fires after the sandbox has already finished, potentially calling
+    // resolve/reject on a stale Promise and causing confusing log output.
+    const timer = sandboxSetTimeout(() => {
       if (aborted) reject(new Error("Execution aborted"));
       else resolve();
     }, Math.min(ms, MAX_WAIT_MS));
-    // Store timer so it can be cleared (optional, not strictly needed)
     void timer;
   });
   const getMessagesFn = () => {
@@ -196,7 +199,7 @@ export async function mc_execute(
         if (result?.status === 'noPath' || result?.status === 'timeout') {
           rawBot.removeListener('path_update', onPathUpdate);
           cleanup();
-          clearTimeout(hardTimeoutId);
+          sandboxClearTimeout(hardTimeoutId);
           try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
           const errMsg = result.status === 'timeout'
             ? 'Took too long to decide path to goal!'
@@ -207,11 +210,15 @@ export async function mc_execute(
       rawBot.on('path_update', onPathUpdate);
 
       const cleanup = () => {
-        if (stuckCheckTimer !== null) { clearInterval(stuckCheckTimer); stuckCheckTimer = null; }
+        if (stuckCheckTimer !== null) { sandboxClearInterval(stuckCheckTimer); stuckCheckTimer = null; }
         rawBot.removeListener('path_update', onPathUpdate);
       };
 
-      stuckCheckTimer = setInterval(() => {
+      // Use sandboxSetInterval/setTimeout so these timers are tracked by clearAllTrackedTimers().
+      // Without this, when the mc_execute outer timeout fires first, these internal timers
+      // survive as zombies that later call rawBot.pathfinder.setGoal(null), interfering
+      // with the NEXT mc_execute call's pathfinder.
+      stuckCheckTimer = sandboxSetInterval(() => {
         const currentPos = rawBot.entity.position;
 
         // Detect first movement from start position (pathfinder started moving)
@@ -241,15 +248,15 @@ export async function mc_execute(
         }
       }, STUCK_INTERVAL);
 
-      const hardTimeoutId = setTimeout(() => {
+      const hardTimeoutId = sandboxSetTimeout(() => {
         cleanup();
         try { rawBot.pathfinder.setGoal(null); } catch { /* ignore */ }
         reject(new Error(`Pathfinder timeout after ${timeoutMs}ms`));
       }, timeoutMs);
 
       gotoPromise.then(
-        (val: unknown) => { cleanup(); clearTimeout(hardTimeoutId); resolve(val as void); },
-        (err: unknown) => { cleanup(); clearTimeout(hardTimeoutId); reject(err); }
+        (val: unknown) => { cleanup(); sandboxClearTimeout(hardTimeoutId); resolve(val as void); },
+        (err: unknown) => { cleanup(); sandboxClearTimeout(hardTimeoutId); reject(err); }
       );
     });
   };
