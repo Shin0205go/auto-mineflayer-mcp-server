@@ -49,6 +49,15 @@ export interface SafetyState {
   scan3DTime: number;       // snapshot timestamp Date.now()
 }
 
+/** Snapshot of bot state captured at the end of each mc_execute call. */
+export interface BotStateSnapshot {
+  hp: number;
+  food: number;
+  pos: { x: number; y: number; z: number };
+  dimension: string;
+  timestamp: number;
+}
+
 export interface ManagedBot {
   bot: Bot;
   username: string;
@@ -61,4 +70,5 @@ export interface ManagedBot {
   serverHasItemPickupDisabledTimestamp?: number;  // Timestamp when flag was set (ms since epoch)
   mcExecuteActive?: boolean;  // True while mc_execute is running code — background flee handlers should not override pathfinder
   safetyState?: SafetyState;  // AutoSafety state — readable by agent code via sandbox
+  lastStateSnapshot?: BotStateSnapshot;  // State at end of previous mc_execute — used by awareness() to detect anomalies
 }

@@ -9,6 +9,7 @@ import { botManager } from "../bot-manager/index.js";
 import { currentBotContext } from "../bot-manager/bot-core.js";
 import { getSurroundings } from "../bot-manager/bot-info.js";
 import { EDIBLE_FOOD_NAMES } from "../bot-manager/minecraft-utils.js";
+import type { BotStateSnapshot } from "../bot-manager/types.js";
 import pathfinderPkg from "mineflayer-pathfinder";
 import { Vec3 } from "vec3";
 
@@ -1209,10 +1210,41 @@ export async function mc_execute(
     // so agents can avoid redundant findBlock calls for common resources.
     awareness: () => {
       const base = getSurroundings(rawBot);
-      const ss = managed.safetyState;
-      if (!ss) return base;
-
       const lines: string[] = [base];
+
+      // === State anomaly detection: compare against last mc_execute snapshot ===
+      // Alerts the agent when HP, position, or dimension changed unexpectedly since
+      // the previous mc_execute call (e.g. server teleport, undetected death, world corruption).
+      const snap = managed.lastStateSnapshot;
+      if (snap) {
+        const anomalies: string[] = [];
+        const hpDelta = rawBot.health - snap.hp;
+        const currentDim = (rawBot.game as any)?.dimension ?? (rawBot as any).dimension ?? "overworld";
+        const p = rawBot.entity.position;
+        const dx = p.x - snap.pos.x, dy = p.y - snap.pos.y, dz = p.z - snap.pos.z;
+        const posDelta = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const snapAgeMs = Date.now() - snap.timestamp;
+
+        // Only report anomalies if snapshot is recent (last 5 min) and at session start
+        if (snapAgeMs < 300000) {
+          if (hpDelta <= -5) {
+            anomalies.push(`HP急減: ${snap.hp.toFixed(1)} → ${rawBot.health.toFixed(1)} (${hpDelta.toFixed(1)})`);
+          }
+          if (posDelta > 10) {
+            anomalies.push(`位置急変: (${snap.pos.x.toFixed(0)},${snap.pos.y.toFixed(0)},${snap.pos.z.toFixed(0)}) → (${p.x.toFixed(0)},${p.y.toFixed(0)},${p.z.toFixed(0)}) 差分${posDelta.toFixed(0)}m`);
+          }
+          if (currentDim !== snap.dimension) {
+            anomalies.push(`次元変更: ${snap.dimension} → ${currentDim}`);
+          }
+        }
+        if (anomalies.length > 0) {
+          lines.push(`\n## [警告] 前回mc_executeからの異常`);
+          for (const a of anomalies) lines.push(`- ${a}`);
+        }
+      }
+
+      const ss = managed.safetyState;
+      if (!ss) return lines.join("\n");
 
       // Append AutoSafety scan cache if it is recent (< 30 seconds old)
       const scanAge = Date.now() - ss.lastScanTime;
@@ -2544,6 +2576,17 @@ export async function mc_execute(
       // A tight findBlock loop or rapid setInterval would otherwise accumulate across
       // executions and eventually exhaust memory or trigger uncaughtException.
       clearAllTrackedTimers();
+
+      // Save state snapshot so awareness() can report anomalies on the next call.
+      try {
+        const p = rawBot.entity.position;
+        managed.lastStateSnapshot = {
+          hp: rawBot.health, food: rawBot.food,
+          pos: { x: p.x, y: p.y, z: p.z },
+          dimension: (rawBot.game as any)?.dimension ?? (rawBot as any).dimension ?? "overworld",
+          timestamp: Date.now(),
+        } satisfies BotStateSnapshot;
+      } catch { /* ignore snapshot errors */ }
 
       const parts: string[] = [];
       if (result !== undefined && result !== null) {
