@@ -887,31 +887,47 @@ export async function mc_execute(
       // Use sandboxSetTimeout so this timer is cancelled if mc_execute times out
       // before eating completes — prevents a zombie health listener from firing on
       // the next mc_execute call and falsely resolving an unrelated eat() call.
-      const eatDone = new Promise<boolean>(resolve => {
-        const onFoodChange = () => {
-          rawBot.removeListener("health" as any, onFoodChange);
+      // Also detect respawn: if the bot dies while eating, the 'respawn' event fires and
+      // the health event that would normally resolve this Promise is triggered by the
+      // respawn (full HP/food reset) rather than by actual eating. Without respawn detection,
+      // eat() returns { success } even though the bot died and teleported to spawn.
+      // (See: bug-issues/bot1_hp_recovery_teleport.md)
+      const eatResult = await new Promise<"eaten" | "timeout" | "died">((resolve) => {
+        let done = false;
+        const finish = (r: "eaten" | "timeout" | "died") => {
+          if (done) return;
+          done = true;
+          rawBot.removeListener("health" as any, onHealthChange);
+          rawBot.removeListener("respawn" as any, onRespawn);
           sandboxClearTimeout(eatTimeoutId);
-          resolve(true);
+          resolve(r);
         };
-        rawBot.on("health" as any, onFoodChange);
-        const eatTimeoutId = sandboxSetTimeout(() => {
-          rawBot.removeListener("health" as any, onFoodChange);
-          resolve(false);
-        }, 3500);
+        const onHealthChange = () => finish("eaten");
+        const onRespawn = () => finish("died");
+        rawBot.on("health" as any, onHealthChange);
+        rawBot.on("respawn" as any, onRespawn);
+        const eatTimeoutId = sandboxSetTimeout(() => finish("timeout"), 3500);
       });
-
-      const changed = await eatDone;
 
       // Stop eating
       rawBot.deactivateItem();
 
+      if (eatResult === "died") {
+        const newPos = rawBot.entity.position;
+        throw new Error(
+          `eat() aborted: bot died and respawned at (${Math.floor(newPos.x)},${Math.floor(newPos.y)},${Math.floor(newPos.z)}) during eating. ` +
+          `Death was likely from accumulated fall/combat damage, not from eating itself. ` +
+          `Recover HP before next eat() attempt.`
+        );
+      }
+
       const foodAfter = rawBot.food;
-      logFn(`[eat] ${itemName}: food ${foodBefore} → ${foodAfter}${changed ? "" : " (timeout)"}`);
+      logFn(`[eat] ${itemName}: food ${foodBefore} → ${foodAfter}${eatResult === "eaten" ? "" : " (timeout)"}`);
 
       // If food level did not change after timeout, eating failed (server did not respond).
       // This can happen when the server connection is stale or use_item packet was not processed.
       // Throw an error so the agent knows eating did not succeed rather than silently continuing.
-      if (!changed && foodAfter <= foodBefore) {
+      if (eatResult === "timeout" && foodAfter <= foodBefore) {
         throw new Error(`eat() timed out: ${itemName} was not consumed (food ${foodBefore} → ${foodAfter}). Server may not be responding to use_item packets.`);
       }
 
