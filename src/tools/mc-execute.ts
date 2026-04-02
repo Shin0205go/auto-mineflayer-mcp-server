@@ -962,6 +962,70 @@ export async function mc_execute(
       return `Escaped water. Now at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}) on ${finalFeet?.name ?? "unknown"}.`;
     },
 
+    // === waitForChunksToLoad — wait for surrounding chunks after /tp or dimension change ===
+    // After admin /tp to distant coordinates, the server sends the bot to the new position
+    // before chunk data arrives. bot.blockAt() returns null for all blocks until the chunk
+    // column is actually loaded (chunkColumnLoad event). This is NOT a code bug — it is a
+    // normal server/client timing issue that agents must handle explicitly.
+    //
+    // This helper waits until bot.blockAt() at the bot's current position returns a non-null
+    // block, polling via chunkColumnLoad events with a timeout fallback.
+    //
+    // Usage: await waitForChunksToLoad(timeoutMs?)
+    //   timeoutMs: max wait time in ms (default 10000 = 10 seconds)
+    // Returns: { loaded: boolean, blockAtFeet: string|null, waitedMs: number }
+    waitForChunksToLoad: async (timeoutMs: number = 10000): Promise<{ loaded: boolean; blockAtFeet: string | null; waitedMs: number }> => {
+      const startMs = Date.now();
+      const pos = rawBot.entity.position;
+
+      // Check if chunks are already loaded
+      const checkLoaded = (): boolean => {
+        const block = rawBot.blockAt(pos.floored());
+        return block !== null;
+      };
+
+      if (checkLoaded()) {
+        const b = rawBot.blockAt(pos.floored());
+        logFn(`[waitForChunksToLoad] Chunks already loaded at (${Math.floor(pos.x)},${Math.floor(pos.y)},${Math.floor(pos.z)}): ${b?.name ?? "null"}`);
+        return { loaded: true, blockAtFeet: b?.name ?? null, waitedMs: 0 };
+      }
+
+      logFn(`[waitForChunksToLoad] Waiting for chunks at (${Math.floor(pos.x)},${Math.floor(pos.y)},${Math.floor(pos.z)})...`);
+
+      // Wait for chunkColumnLoad events and check each time if our position is now loaded
+      const result = await new Promise<{ loaded: boolean; blockAtFeet: string | null; waitedMs: number }>(resolve => {
+        let resolved = false;
+
+        const onChunkLoad = () => {
+          if (resolved) return;
+          if (checkLoaded()) {
+            resolved = true;
+            rawBot.removeListener("chunkColumnLoad" as any, onChunkLoad);
+            const b = rawBot.blockAt(pos.floored());
+            const elapsed = Date.now() - startMs;
+            logFn(`[waitForChunksToLoad] Loaded after ${elapsed}ms: ${b?.name ?? "null"}`);
+            resolve({ loaded: true, blockAtFeet: b?.name ?? null, waitedMs: elapsed });
+          }
+        };
+
+        rawBot.on("chunkColumnLoad" as any, onChunkLoad);
+
+        sandboxSetTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            rawBot.removeListener("chunkColumnLoad" as any, onChunkLoad);
+            const b = rawBot.blockAt(pos.floored());
+            const stillNull = b === null;
+            const elapsed = Date.now() - startMs;
+            logFn(`[waitForChunksToLoad] Timeout after ${elapsed}ms — block: ${b?.name ?? "null"}`);
+            resolve({ loaded: !stillNull, blockAtFeet: b?.name ?? null, waitedMs: elapsed });
+          }
+        }, timeoutMs);
+      });
+
+      return result;
+    },
+
     // === Meta-cognition layer: observe → understand → act ===
     // awareness() — self-state + spatial snapshot (call before any action)
     // Appends AutoSafety periodic scan cache (ores, chests, water within 32 blocks)
