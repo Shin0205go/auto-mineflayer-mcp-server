@@ -1245,6 +1245,11 @@ export async function mc_execute(
       let stalled = false;
 
       const startY = Math.floor(rawBot.entity.position.y);
+      // Record starting dimension so we can abort if a dimension change is detected mid-descent.
+      // This prevents the bot from digging through purpur_block / end_stone in The End when
+      // a prior multiStagePathfind() or portal transition placed the bot in the wrong dimension.
+      const startDimension = (rawBot.game as any)?.dimension ?? (rawBot as any).dimension ?? "overworld";
+
       // Sanity check: if bot is already at or below target, nothing to do.
       if (startY <= targetY + 1) {
         const finalY = Math.floor(rawBot.entity.position.y);
@@ -1254,6 +1259,18 @@ export async function mc_execute(
 
       while (Math.floor(rawBot.entity.position.y) > targetY + 1 && attempts < maxDigAttempts) {
         attempts++;
+
+        // Dimension-change abort: if the bot is no longer in the starting dimension,
+        // a portal transition happened while descending (e.g. falling into an end_portal
+        // or a prior navigation sent the bot to The End / Nether).  Continuing to dig
+        // purpur_block or netherrack forever would never reach the overworld targetY.
+        const currentDimension = (rawBot.game as any)?.dimension ?? (rawBot as any).dimension ?? startDimension;
+        if (currentDimension !== startDimension) {
+          logFn(`[descendSafely] ABORT: dimension changed from "${startDimension}" to "${currentDimension}". Possible portal transit — stopping descent.`);
+          stalled = true;
+          break;
+        }
+
         const pos = rawBot.entity.position.floored();
         const blockBelow = rawBot.blockAt(pos.offset(0, -1, 0));
 
