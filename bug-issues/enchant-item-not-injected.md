@@ -59,10 +59,23 @@ log(JSON.stringify(result));
 Output: `Error: enchantItem is not defined`
 
 ## Fix Required
-- Verify that enchantItem is properly included in the ctx object definition
-- Check if there's a missing closing brace or syntax error that's creating a nested structure
-- Verify Object.keys(ctx) includes 'enchantItem' at runtime
-- Consider adding a console.log of ctx keys during sandbox construction to debug
+The code reviewer should:
+1. In `src/tools/mc-execute.ts`, verify that the ctx object at line 455 properly includes the enchantItem property
+2. Check if there's a syntax error or missing brace that's somehow excluding it from the ctx literal
+3. Add a debug log in the mc_execute function to print Object.keys(ctx) to console to verify which properties are actually included
+4. Likely culprit: Check around line 1855 where enchantItem closes — there may be a missing closing brace that's ending the ctx definition too early
+
+## Implementation Notes for Code Reviewer
+- enchantItem is defined at line 1717 and closes properly at 1855 with `},`
+- openChest at line 1878 comes AFTER enchantItem, which is correct
+- The ctx closing brace `};` is at line 2008
+- enchantItem should be between lines 1717-1855 in the ctx literal, which is correct
+- But Object.keys(ctx) is not picking it up at runtime (line 1936)
+
+## Workaround
+Agents cannot currently use enchantItem(). The raw openEnchantmentTable() API is available on the bot object, but the helper wrapper is needed due to window slot mapping complexity.
 
 ## Status
 Reported: 2026-04-02
+Blocking: enchanting feature cannot be tested
+Impact: High - enchanting is Phase 5 requirement for ender dragon progression
