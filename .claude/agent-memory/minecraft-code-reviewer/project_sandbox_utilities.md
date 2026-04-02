@@ -73,6 +73,21 @@ type: project
 - Was using raw Promise.race([rawBot.pathfinder.goto, timeout(8000)]) — no stuck detection.
 - Fixed to use gotoWithStuckDetection(..., 8000, false) for consistent cleanup and stuck abort.
 
+## Zombie timer fixes (fixed 2026-04-02 session 5)
+- gotoWithStuckDetection's stuckCheckTimer (setInterval) and hardTimeoutId (setTimeout) were created
+  with native timers, not tracked by clearAllTrackedTimers(). When mc_execute outer timeout fired first,
+  these zombies later called rawBot.pathfinder.setGoal(null), interfering with the NEXT mc_execute.
+  Fixed: use sandboxSetInterval/sandboxSetTimeout so they are cleaned up on sandbox exit.
+- wait() / waitFn used a native setTimeout (void timer). Long await wait(30000) interrupted by outer
+  timeout would leave zombie timer. Fixed: use sandboxSetTimeout.
+- digWithTimeout and consumeWithTimeout used native setTimeout for their race-against timers.
+  Fixed: use sandboxSetTimeout so they are tracked and cleared on sandbox exit.
+
+## bot.consume() airborne guard (fixed 2026-04-02 session 5)
+- bot.consume() at Y=135 (airborne) caused instant death on landing due to accumulated fall damage.
+  Fixed: consumeWithTimeout now rejects immediately when onGround=false, matching eat()'s guard.
+  Fixes bot1_food_death.md ("food consumption causes instant death").
+
 ## Known issues / fixes (updated 2026-04-02 session 2)
 - bot.placeBlock() still uses mineflayer's 5s blockUpdate timeout internally — use safePlaceBlock() or plantSeeds() instead
 - bot.recipesFor() often returns [] when no table passed — use recipesFor() wrapper
