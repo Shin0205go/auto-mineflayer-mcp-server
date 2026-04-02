@@ -508,7 +508,7 @@ export async function mc_execute(
     getMessages: getMessagesFn,
     // Pathfinder timeout wrapper utility (usage: await pathfinderGoto(goal, 45000))
     // On "No path" / "Took too long" failure, automatically retries once with canDig=true.
-    // On retry, thinkTimeout is temporarily doubled to give A* more time on complex terrain.
+    // On retry, thinkTimeout is capped to (timeoutMs - 3000) so A* finishes before the hard timeout.
     // timeoutMs is capped at MAX_PATHFINDER_TIMEOUT (60s) — passing 120000 won't cause a 120s hang.
     // Default 45s: A* path computation on high-altitude terrain (Y=100+) can take 20-30s,
     // and the previous 30s default was too short, causing false "stuck" detections.
