@@ -869,6 +869,12 @@ export async function mc_execute(
         throw new Error(`eat() called while airborne (onGround=false, Y=${rawBot.entity.position.y.toFixed(1)}). Land first — eating mid-fall causes fatal fall damage on landing.`);
       }
 
+      // Early exit if already full — activateItem with full food bar never fires the health
+      // event, so eat() would always timeout and throw a misleading error.
+      if (rawBot.food >= 20) {
+        return { item: food.name, foodBefore: rawBot.food, foodAfter: rawBot.food, alreadyFull: true };
+      }
+
       await rawBot.equip(food, "hand");
 
       const itemName = food.name;
