@@ -641,8 +641,18 @@ export async function mc_execute(
       const startY = startPos.y;
       const dyTotal = targetY !== undefined ? (targetY - startY) : 0;
 
+      // Record starting dimension so we can abort if the bot enters a portal mid-navigation
+      const multiStageStartDimension = (rawBot.game as any)?.dimension ?? (rawBot as any).dimension ?? "overworld";
+
       // Navigate each stage
       for (let i = 1; i <= numStages; i++) {
+        // Abort immediately if the dimension changed (e.g. bot walked into a portal)
+        const currentDimension = (rawBot.game as any)?.dimension ?? (rawBot as any).dimension ?? multiStageStartDimension;
+        if (currentDimension !== multiStageStartDimension) {
+          logFn(`[multiStagePathfind] ABORT: dimension changed from "${multiStageStartDimension}" to "${currentDimension}". Stopping navigation.`);
+          return;
+        }
+
         const frac = i / numStages;
         const wpX = startPos.x + dx * frac;
         const wpZ = startPos.z + dz * frac;
