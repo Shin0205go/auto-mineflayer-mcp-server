@@ -1211,16 +1211,21 @@ export async function mc_execute(
         const feetPos = rawBot.entity.position.floored();
         const groundPos = feetPos.offset(0, -1, 0);
 
-        const syncP = new Promise<void>(resolve => {
+        // Returns true if blockUpdate confirms placement, false on timeout (no block placed)
+        const syncP = new Promise<boolean>(resolve => {
+          let resolved = false;
           const handler = (_o: any, n: any) => {
             if (n.position.x === feetPos.x && n.position.y === feetPos.y && n.position.z === feetPos.z && n.name !== "air") {
               rawBot.removeListener("blockUpdate", handler);
-              resolve();
+              if (!resolved) { resolved = true; resolve(true); }
             }
           };
           rawBot.on("blockUpdate", handler);
           // Use sandboxSetTimeout so this timer is cancelled on mc_execute timeout
-          sandboxSetTimeout(() => { rawBot.removeListener("blockUpdate", handler); resolve(); }, 300);
+          sandboxSetTimeout(() => {
+            rawBot.removeListener("blockUpdate", handler);
+            if (!resolved) { resolved = true; resolve(false); }
+          }, 300);
         });
 
         await rawBot.lookAt(groundPos.offset(0.5, 0.5, 0.5), true);
@@ -1231,8 +1236,19 @@ export async function mc_execute(
           cursorX: 0.5, cursorY: 1.0, cursorZ: 0.5,
           insideBlock: false,
         });
-        await syncP;
-        placed++;
+        const blockPlaced = await syncP;
+        if (blockPlaced) {
+          placed++;
+        } else {
+          // Server did not confirm placement — verify via block lookup as fallback
+          const placedBlock = rawBot.blockAt(feetPos);
+          if (placedBlock && placedBlock.name !== "air" && placedBlock.name !== "cave_air") {
+            placed++;
+          } else {
+            logFn(`[pillarUp] Block placement not confirmed at (${feetPos.x},${feetPos.y},${feetPos.z}) — server may have rejected it`);
+            break; // Stop attempting if server is rejecting placements
+          }
+        }
 
         // Short wait for physics to settle (bot rises to stand on placed block)
         await waitFn(150);
@@ -1424,23 +1440,36 @@ export async function mc_execute(
             // Use safePlaceBlock logic (raw packet + sync)
             const bPos = base.position;
             await rawBot.lookAt(bPos.offset(0.5, 0.5, 0.5), true);
-            const syncP = new Promise<void>(resolve => {
+            // Returns true if blockUpdate confirms placement, false on timeout
+            const syncP = new Promise<boolean>(resolve => {
+              let resolved = false;
               const handler = (_o: any, n: any) => {
                 if (n.position.x === bPos.x && n.position.y === bPos.y + 1 && n.position.z === bPos.z && n.name !== "air") {
                   rawBot.removeListener("blockUpdate", handler);
-                  resolve();
+                  if (!resolved) { resolved = true; resolve(true); }
                 }
               };
               rawBot.on("blockUpdate", handler);
-              sandboxSetTimeout(() => { rawBot.removeListener("blockUpdate", handler); resolve(); }, 300);
+              sandboxSetTimeout(() => {
+                rawBot.removeListener("blockUpdate", handler);
+                if (!resolved) { resolved = true; resolve(false); }
+              }, 300);
             });
             (rawBot as any)._client.write("block_place", {
               location: { x: bPos.x, y: bPos.y, z: bPos.z },
               direction: 1, hand: 0,
               cursorX: 0.5, cursorY: 1.0, cursorZ: 0.5, insideBlock: false,
             });
-            await syncP;
-            filled++;
+            const blockFilled = await syncP;
+            if (blockFilled) {
+              filled++;
+            } else {
+              // Server did not confirm — check via blockAt fallback
+              const placedAbove = rawBot.blockAt(new Vec3(bPos.x, bPos.y + 1, bPos.z));
+              if (placedAbove && placedAbove.name !== "air" && placedAbove.name !== "cave_air") {
+                filled++;
+              }
+            }
           }
         }
       }
