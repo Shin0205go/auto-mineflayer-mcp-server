@@ -466,11 +466,61 @@ export async function mc_execute(
     return rawBot.recipesFor(itemId, metadata, count, null);
   };
 
+  // Wrap bot.placeBlock() with a raw-packet implementation to bypass the 5-second
+  // blockUpdate timeout in mineflayer's placeBlock().  The server sometimes delays
+  // or drops the blockUpdate ack for placements, causing "Event blockUpdate:(...) did
+  // not fire within timeout of 5000ms".  This wrapper mirrors safePlaceBlock() but
+  // intercepts the standard bot.placeBlock(referenceBlock, faceVec) call so agents
+  // who use bot.placeBlock() directly also benefit from the fix.
+  // Agents should prefer safePlaceBlock() from ctx, but this ensures the raw bot API
+  // is also reliable.
+  const placeBlockWithRawPacket = async (referenceBlock: any, faceVec: any): Promise<void> => {
+    const pos = referenceBlock.position;
+    const fv = faceVec || { x: 0, y: 1, z: 0 };
+    const direction = fv.y === 1 ? 1 : fv.y === -1 ? 0 : fv.x === 1 ? 5 : fv.x === -1 ? 4 : fv.z === 1 ? 3 : 2;
+
+    // Look at the block before placing (server rejects placements without facing)
+    try { await rawBot.lookAt(pos.offset(0.5, 0.5, 0.5), true); } catch { /* ignore */ }
+
+    // Wait for blockUpdate at the placement position (new block created above reference)
+    const placePos = pos.offset(fv.x, fv.y, fv.z);
+    const syncPromise = new Promise<void>(resolve => {
+      const onBlockUpdate = (oldBlock: any, newBlock: any) => {
+        if (newBlock.position.x === placePos.x &&
+            newBlock.position.y === placePos.y &&
+            newBlock.position.z === placePos.z &&
+            newBlock.name !== "air") {
+          rawBot.removeListener("blockUpdate", onBlockUpdate);
+          resolve();
+        }
+      };
+      rawBot.on("blockUpdate", onBlockUpdate);
+      // 500ms fallback — same generous window as safePlaceBlock
+      setTimeout(() => { rawBot.removeListener("blockUpdate", onBlockUpdate); resolve(); }, 500);
+    });
+
+    // Send raw block_place packet (avoids mineflayer's 5s blockUpdate wait)
+    (rawBot as any)._client.write("block_place", {
+      location: { x: pos.x, y: pos.y, z: pos.z },
+      direction,
+      hand: 0,
+      cursorX: 0.5,
+      cursorY: fv.y === 1 ? 1.0 : 0.5,
+      cursorZ: 0.5,
+      insideBlock: false,
+    });
+
+    await syncPromise;
+  };
+
   const botProxy = new Proxy(rawBot, {
     get(target: any, prop: string | symbol) {
       if (prop === 'pathfinder') return pathfinderProxy;
       // Wrap dig() with a hard timeout so a single stuck dig() doesn't block the sandbox.
       if (prop === 'dig') return digWithTimeout;
+      // Wrap placeBlock() with raw packet to bypass the 5-second blockUpdate timeout.
+      // Server sometimes delays or drops the blockUpdate ack, causing placement failures.
+      if (prop === 'placeBlock') return placeBlockWithRawPacket;
       // Wrap openContainer() to pre-activate the block and avoid windowOpen timeout.
       if (prop === 'openContainer') return openContainerWithPreActivate;
       // Wrap openFurnace() to pre-activate the block and avoid windowOpen timeout.
