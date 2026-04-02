@@ -33,11 +33,32 @@ Possible causes:
 4. Clarify current actual phase (briefing vs reality mismatch)
 5. Review prior session logs for context
 
+## Follow-up: Pathfinder Completely Broken (This Session)
+
+During this session's recovery attempts, **pathfinder.goto() is consistently failing**:
+- `GoalXZ`: "goal was changed" error multiple times
+- `GoalY`: "goal was changed" error
+- `GoalNear`: "goal was changed" error
+- Bot jumps to unexpected locations or gets stuck
+
+**Workaround attempts**:
+- Manual dig/block placement: Dig aborted
+- Water bucket placement: Event timeout
+- Simple walk: Works but can't navigate to target
+
+**Current Recovery Status**:
+- Claude1 at Y=109, trying to reach base at Y~89
+- Pathfinder is unreliable for any distance navigation
+- Bot CAN place/dig/walk manually, but pathfinder automation fails
+
 ## Status
 - [x] Reported
-- [ ] Needs investigation
-- [ ] Fix pending in code-reviewer agent
+- [x] Pathfinder bug identified and documented
+- [ ] Needs investigation by code-reviewer
+- [ ] Consider disabling pathfinder or reverting recent changes
+- [ ] Bot is safe but stranded
 
 ---
 Session: claude/mineflayer-mcp-setup-pqbsS
 Date: 2026-04-02
+Pathfinder Status: CRITICAL - recurring "goal was changed" errors

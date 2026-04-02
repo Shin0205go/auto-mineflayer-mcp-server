@@ -211,7 +211,8 @@ export class AutoSafety {
         if (!this.bot.pathfinder.goal) {
           goalHandle = safeSetGoal(this.bot,
             new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3),
-            { onAbort: (yDescent) => {
+            { managed: this.managed,
+              onAbort: (yDescent) => {
               console.error(`[AutoSafety] Creeper flee Y-descent abort: ${yDescent.toFixed(1)} blocks`);
             }}
           );
@@ -224,6 +225,9 @@ export class AutoSafety {
       clearInterval(creeperActiveCheck);
       clearTimeout(creeperTimeout);
       if (goalHandle) goalHandle.cleanup();
+      // Clear pathfinder goal to prevent Y-descent monitor from calling setGoal(null)
+      // after mc_execute registers goalChangedListener — same race as general flee.
+      try { this.bot.pathfinder.setGoal(null); } catch { /* ignore */ }
       this.bot.setControlState("sprint", false);
       this.bot.setControlState("forward", false);
       this.creeperFleeActive = false;
@@ -270,6 +274,7 @@ export class AutoSafety {
       const goalHandle = safeSetGoal(this.bot,
         new goals.GoalNear(fleeTarget.x, fleeTarget.y, fleeTarget.z, 3),
         { elevationAware: true,
+          managed: this.managed,
           onAbort: (yDescent) => {
             console.error(`[AutoSafety] General flee Y-descent abort: ${yDescent.toFixed(1)} blocks`);
           }
@@ -281,6 +286,11 @@ export class AutoSafety {
         clearInterval(fleeActiveCheck);
         clearTimeout(fleeTimeout);
         goalHandle.cleanup();
+        // Explicitly clear pathfinder goal so the Y-descent monitor (which may still be
+        // scheduled) does not call setGoal(null) AFTER mc_execute registers goalChangedListener.
+        // Without this, a 300ms Y-descent monitor macrotask fires right after the agent's
+        // first await, calls setGoal(null), and triggers "goal was changed" immediately.
+        try { this.bot.pathfinder.setGoal(null); } catch { /* ignore */ }
         this.generalFleeActive = false;
         this.updateState("general-flee", false, "generalFleeActive");
       };
