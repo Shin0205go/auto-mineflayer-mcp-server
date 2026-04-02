@@ -116,6 +116,18 @@ type: project
 - `waitForChunksToLoad(timeoutMs?)` — waits for chunkColumnLoad event confirming bot position chunk is loaded. Call after /tp or dimension change when bot.blockAt() returns null.
 - `resyncPhysics(timeoutMs?)` — sends a serverbound position_look packet and waits for forcedMove (server ack). Breaks rubber-band state where server continuously resets bot position to teleport coordinates. Symptom: position frozen, look/pathfinder don't work, velocity.y != 0 but X/Z never change. Added 2026-04-02.
 
+## Physics freeze auto-fix on dimension change (fixed 2026-04-02, commit 5eed37c)
+- Root cause: mineflayer physics.js fires `bot.on('respawn', ...)` → `shouldUsePhysics = false`.
+  shouldUsePhysics only resets to true when the server sends a clientbound `position` packet.
+  On some server versions this packet is delayed or never arrives after the_end→overworld
+  transition, leaving the bot completely frozen (setControlState/pathfinder/placeBlock all stop
+  working). Symptom: bot appears connected and reports correct position, but no movement input
+  has any effect. Evidence: bot1_TERMINAL_SYSTEM_DEADLOCK.md, bot1_water_trap_total_immobility.md.
+- Fix: `bot.on("spawn", ...)` dimension-change block in bot-core.ts now sends a `position_look`
+  packet 500ms after the dimension change. This prompts the server to respond with its own
+  `position` packet, triggering `forcedMove` and resetting `shouldUsePhysics = true`.
+  The 500ms delay allows the handshake to complete before the resync packet is sent.
+
 ## Known issues / fixes (updated 2026-04-02 session 2)
 - bot.placeBlock() still uses mineflayer's 5s blockUpdate timeout internally — use safePlaceBlock() or plantSeeds() instead
 - bot.recipesFor() often returns [] when no table passed — use recipesFor() wrapper
