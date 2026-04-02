@@ -603,6 +603,15 @@ export async function mc_execute(
           "[bot.recipes is undefined — use recipesFor('item_name') or bot.recipesFor(itemId, null, 1, table)]";
         return emptyRecipes;
       }
+      // bot.combat() does not exist in mineflayer — agents from older API versions may call it.
+      // Return a function that throws a helpful error pointing to the correct approach.
+      if (prop === 'combat') {
+        return () => { throw new Error(
+          "bot.combat() does not exist. To kill a mob: await bot.attack(entity); await collectDrops().\n" +
+          "Find entity: const mob = bot.nearestEntity(e => e.type === 'mob' && e.name === 'cow');\n" +
+          "Equip weapon: await bot.equip(sword, 'hand');"
+        ); };
+      }
       // Pass EventEmitter methods and _client through without bind() to preserve
       // the full EventEmitter chain and minecraft-protocol packet dispatch.
       if (typeof prop === 'string' && EVENT_EMITTER_PROPS.has(prop)) {
