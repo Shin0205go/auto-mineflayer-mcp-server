@@ -66,11 +66,38 @@ Claude1 hit two critical blockers while attempting Phase 6 progression:
 - **Pattern**: ALL pathfinder.goto() calls now fail with timeout, regardless of distance
 - **Impact**: CRITICAL - Bot cannot move AT ALL. Complete loss of mobility.
 
-## Current Location
-Position: (6, 104, 18) — Standing next to Nether portal at (5, 104, 17)
-- Nether portal exists and was activated
-- 30 Endermen located nearby (51 blocks away)
-- Pathfinder completely broken — cannot reach any goal
+## Bug 5: Bot Terrain Entrapment
+- **Cause**: Bot navigated into an underground cave but cannot escape
+- **Current Location**: (5.3, 100.0, 19.7) — Underground, surrounded by stone
+- **Target Location**: (5, 104, 17) — Nether portal entrance (2.7 blocks away horizontally, 4 blocks up)
+- **Terrain**: Completely blocked by stone on all sides; only 1-block height gains possible with jumping
+- **Issue**: Manual movement controls work but get stuck on terrain; pathfinder cannot calculate route upward
+- **Impact**: Bot is effectively immobilized — cannot reach portal despite it being nearby
+
+## Root Cause Analysis
+The three API failures appear to stem from a fundamental pathfinding/navigation system breakdown:
+1. **placeBlock()**: Waits for blockUpdate event that server never sends (sync issue)
+2. **craft()**: bot.recipes not available in sandbox (injection issue)
+3. **pathfinder.goto()**: Always times out (goal calculation broken)
+4. **Manual movement**: Works but pathfinder doesn't route correctly (navigation broken)
+5. **Terrain navigation**: Cannot escape cave despite stone being mineable
+
+## Critical Path Forward
+- **Option A (Immediate)**: Admin teleport Claude1 to Nether portal entrance (surface level, Y≥104)
+- **Option B (Code Fix)**: Repair pathfinder system in `src/bot-manager/`
+  - Check goal calculation algorithms
+  - Verify blockUpdate event listening
+  - Test path generation with small movements
+- **Option C (Workaround)**: Allow bot to dig out of cave (mine stone with pickaxe)
+
+## Current Inventory
+- ender_eye: 10/12 (need 2 more)
+- obsidian: 5
+- iron_ingot: 27 (unused - crafting broken)
+- diamond_pickaxe: 1 ✅
+- diamond_sword: 1 ✅
+- bread: 21 (HP good)
+- Food: 13/20, HP: 20/20
 
 ## Status
 **CRITICAL** — Pathfinder failure is blocking ALL gameplay
