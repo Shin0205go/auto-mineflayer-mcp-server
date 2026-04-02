@@ -1386,10 +1386,11 @@ export async function mc_execute(
 
       const inventoryBefore = rawBot.inventory.items().reduce((s: number, i: any) => s + i.count, 0);
 
-      // Wait up to 4s for drops to appear (server may delay spawning drop entities)
+      // Wait up to 4s for drops to appear (server may delay spawning drop entities).
+      // Use waitFn (which checks aborted flag) so we exit promptly on mc_execute timeout.
       let drops = findDrops();
       for (let t = 0; t < 8 && drops.length === 0; t++) {
-        await new Promise<void>(resolve => setTimeout(resolve, 500));
+        await waitFn(500);
         drops = findDrops();
       }
 
@@ -1418,7 +1419,7 @@ export async function mc_execute(
           } catch { /* item may have been picked up or pathfinder blocked */ }
         }
         // Wait up to 800ms for the server to confirm item pickup (server round-trip latency)
-        await new Promise<void>(resolve => setTimeout(resolve, 800));
+        await waitFn(800);
         collected++;
       }
 
@@ -1488,17 +1489,21 @@ export async function mc_execute(
 
         // Wait for smelting: 10s per item + 5s startup buffer.
         // Use targetOutputCount so pre-existing output does not cause early resolve.
+        // Use sandboxSetTimeout so this timer is cancelled if mc_execute times out —
+        // a zombie furnace "update" listener from a previous timed-out smeltItems()
+        // call would otherwise keep firing on subsequent executions.
         const waitMs = Math.min(count, inputItem.count) * 10000 + 5000;
         const smeltDone = new Promise<void>(resolve => {
           const check = () => {
             const out = furnace.outputItem();
             if (out && out.count >= targetOutputCount) {
               furnace.removeListener("update", check);
+              sandboxClearTimeout(smeltTimeoutId);
               resolve();
             }
           };
           furnace.on("update", check);
-          setTimeout(() => { furnace.removeListener("update", check); resolve(); }, waitMs);
+          const smeltTimeoutId = sandboxSetTimeout(() => { furnace.removeListener("update", check); resolve(); }, waitMs);
         });
         await smeltDone;
 
@@ -1814,12 +1819,12 @@ export async function mc_execute(
       // Recovery: bot.craft()'s grabResult() calls putAway(0) to collect the output, but
       // on laggy servers putAway(0) can arrive before the server confirms slot 0, leaving
       // the item stuck there.  Shift-click slot 0 to recover it.
-      await new Promise<void>(r => setTimeout(r, 300));
+      await waitFn(300);
       const resultSlot = rawBot.inventory.slots[0];
       if (resultSlot && resultSlot.count > 0) {
         try {
           await rawBot.clickWindow(0, 0, 1); // shift-click to move to inventory
-          await new Promise<void>(r => setTimeout(r, 400));
+          await waitFn(400);
           logFn(`[craftWithTable] Recovered ${resultSlot.name}×${resultSlot.count} from result slot`);
         } catch { /* ignore — may already have been moved */ }
       }
@@ -1869,11 +1874,11 @@ export async function mc_execute(
       // Step 4: Open the enchanting table
       if (rawBot.currentWindow) {
         try { rawBot.closeWindow(rawBot.currentWindow); } catch { /* ignore */ }
-        await new Promise<void>(r => setTimeout(r, 300));
+        await waitFn(300);
       }
 
       const table = await (rawBot as any).openEnchantmentTable(tableBlock);
-      await new Promise<void>(r => setTimeout(r, 500));
+      await waitFn(500);
       logFn(`[enchantItem] Window opened: type=${table.type}, slots=${table.slots.length}, item bot_slot=${itemToEnchant.slot}`);
 
       // Step 5: Place item in enchanting slot 0 using bot.clickWindow with the WINDOW slot.
@@ -1910,9 +1915,9 @@ export async function mc_execute(
         await (rawBot as any).clickWindow(itemWindowSlot, 0, 0);
       }
       // Place it in slot 0
-      await new Promise<void>(r => setTimeout(r, 300));
+      await waitFn(300);
       await (rawBot as any).clickWindow(0, 0, 0);
-      await new Promise<void>(r => setTimeout(r, 500));
+      await waitFn(500);
       logFn(`[enchantItem] Item placed: slot[0]=${table.slots[0]?.name ?? 'null'}`);
 
       // Step 5b: Place lapis in slot 1
@@ -1931,16 +1936,16 @@ export async function mc_execute(
         } else {
           await (rawBot as any).clickWindow(lapisWindowSlot, 0, 0);
         }
-        await new Promise<void>(r => setTimeout(r, 300));
+        await waitFn(300);
         await (rawBot as any).clickWindow(1, 0, 0);
-        await new Promise<void>(r => setTimeout(r, 500));
+        await waitFn(500);
         logFn(`[enchantItem] Lapis placed: slot[1]=${table.slots[1]?.name ?? 'null'}`);
       } else {
         logFn(`[enchantItem] Warning: no lapis_lazuli in inventory — enchantments may not appear`);
       }
 
       // Wait for server to send enchantment options (craft_progress_bar packets)
-      await new Promise<void>(r => setTimeout(r, 2000));
+      await waitFn(2000);
 
       // Step 6: Check if enchantment options are available
       const enchants = table.enchantments;
@@ -1949,7 +1954,7 @@ export async function mc_execute(
       const allNegative = enchants.every((e: any) => e.level < 0);
       if (allNegative) {
         // Item may not be in slot yet — wait a bit more
-        await new Promise<void>(r => setTimeout(r, 1500));
+        await waitFn(1500);
         logFn(`[enchantItem] Enchantments after extra wait: ${JSON.stringify(table.enchantments)}`);
       }
 
