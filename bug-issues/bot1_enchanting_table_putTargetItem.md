@@ -49,6 +49,20 @@ The mineflayer EnchantmentTable API appears to have an incompatibility or bug wh
 3. Consider alternative approach: use raw protocol packets instead of high-level API
 4. Check if window needs special permissions or if there's a race condition
 
+### Additional Findings
+- **Enchanting window opens successfully** but does not contain any enchantment options
+- Enchantments array shows: `[{level: -1}, {level: 0}, {level: 0}]` (unfilled)
+- This confirms the server waits for an item to be placed in slot 0 before sending options
+- All attempts to place items in the window fail with "invalid operation":
+  - `table.putTargetItem(pickaxe)` ❌
+  - `bot.moveSlotItem(42, 0)` ❌
+  - `window.mouseClick(35, 0)` ❌
+  - `window.shiftClick(pickaxe)` ❌
+  - `window.acceptClick({slot: 35, button: 0, mode: 0})` ❌
+  - `window.fillSlotWithItem()` ❌
+- **No bookshelves** found around enchanting table (offsets -1,0,1)
+- XP level: 20 ✓, Lapis: 64 ✓
+
 ### Code to Reproduce
 ```javascript
 const pos = new Vec3(5, 106, -5);
@@ -57,4 +71,14 @@ const table = await bot.openEnchantmentTable(et);
 await wait(1500);
 const pickaxe = bot.inventory.items().find(i => i.name === 'diamond_pickaxe');
 await table.putTargetItem(pickaxe);  // Fails: "invalid operation"
+
+// Window opens but no enchantments available:
+log(JSON.stringify(table.enchantments));  // [{level: -1}, {level: 0}, {level: 0}]
 ```
+
+### Hypothesis
+The mineflayer EnchantmentTable API has a bug where:
+1. It opens the window correctly
+2. But cannot send the "click on slot" packet the server requires to place items
+3. This is possibly a protocol version mismatch (1.20.x) or a regression in mineflayer's enchanting implementation
+4. The server-side sees the window as "read-only" or "invalid" and rejects all clicks
