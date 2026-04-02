@@ -38,7 +38,7 @@ bot.chat(msg)            // チャット送信
 bot.placeBlock(referenceBlock, faceVec)  // ブロック設置。faceVec=new Vec3(0,1,0)で上面に設置
 
 // Container/Furnace (重要: openContainer() は furnace に使えない)
-bot.openFurnace(furnaceBlock)     // かまどを開く (openContainer() は使わない)
+bot.openFurnace(furnaceBlock)     // かまどを開く (openContainer() は使わない)。activateBlock pre-activation 自動適用済み
 bot.openContainer(chestBlock)     // チェスト/ディスペンサー等を開く (furnace 不可, windowOpenタイムアウトあり→openChest()推奨)
 // furnace window: .putInput(itemType, null, count), .putFuel(itemType, null, count), .takeOutput(), .close()
 // 例: const fw = await bot.openFurnace(fb); await fw.putFuel(...); await fw.putInput(...); fw.close();
@@ -130,7 +130,7 @@ if (block) {
 // OK: craftWithTable() ヘルパー (推奨) — activateBlock+wait+craftを一括実行
 
 // 方法1: craftWithTable() ヘルパー (推奨)
-// クラフトテーブルに近づいてから呼ぶ (4ブロック以内)
+// クラフトテーブルに近づいてから呼ぶ (6ブロック以内)
 const result = await craftWithTable('bread', 1);
 log('Crafted: ' + JSON.stringify(result));  // { crafted: 'bread', count: 1, tableUsed: true }
 
