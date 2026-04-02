@@ -51,14 +51,33 @@ During this session's recovery attempts, **pathfinder.goto() is consistently fai
 - Pathfinder is unreliable for any distance navigation
 - Bot CAN place/dig/walk manually, but pathfinder automation fails
 
+## Critical Server Communication Issue
+
+**Block placement completely broken**:
+- All `bot.placeBlock()` calls timeout with: `Event blockUpdate did not fire within timeout`
+- Attempts at (2, 108, 7), (2, 109, 7), and others all fail the same way
+- Server not sending blockUpdate packets to bot
+- This may be server desync or network issue
+
+**Current Situation**:
+- Claude1 stranded at (2, 109, 7)
+- Cannot descend (pathfinder broken) or navigate up (block placement broken)
+- 134 entities nearby (mobs)
+- No admin players online
+- Bot is alive and responsive but functionally stuck
+
 ## Status
 - [x] Reported
-- [x] Pathfinder bug identified and documented
+- [x] Pathfinder bug + block placement bug documented
+- [x] Server communication issue identified
 - [ ] Needs investigation by code-reviewer
-- [ ] Consider disabling pathfinder or reverting recent changes
-- [ ] Bot is safe but stranded
+- [ ] Consider server restart or network diagnostics
+- [ ] Bot stuck - may need manual intervention
 
 ---
 Session: claude/mineflayer-mcp-setup-pqbsS
 Date: 2026-04-02
-Pathfinder Status: CRITICAL - recurring "goal was changed" errors
+CRITICAL ISSUES:
+1. Pathfinder: "goal was changed" errors
+2. Block Placement: blockUpdate timeout
+3. Bot Status: Stranded, cannot move
