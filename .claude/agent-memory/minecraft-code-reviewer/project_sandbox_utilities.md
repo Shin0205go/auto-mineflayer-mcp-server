@@ -101,6 +101,17 @@ type: project
   8 iterations. If still in water after Phase 3, returns honest message "Water pocket fully enclosed —
   admin teleport required" instead of generic "try digging sideways".
 
+## GoalY silent deadlock fix (fixed 2026-04-02, commit 326a886)
+- `GoalY(y)` only specifies a vertical target. pathfinder can silently "succeed" when the bot
+  rises 1 block during path computation (even while still deep underground), causing the agent to
+  believe navigation is still active while the Promise has already resolved. The agent then waits
+  for the outer mc_execute 120s timeout instead of getting a fast error.
+- Fixed: both `pathfinderProxy` (wraps `bot.pathfinder.goto()`) and `pathfinderGoto()` sandbox
+  helper now detect GoalY and convert it to `GoalNear(currentX, targetY, currentZ, 2)`. The
+  converted goal fails fast with "noPath" when the path is blocked, triggering canDig=true retry.
+- Root cause evidence: claude1_post_phase8_pathfinder_deadlock_20260402.md (bot at Y=74 underground,
+  GoalY(80), position unchanged for 120s with no error message).
+
 ## Known issues / fixes (updated 2026-04-02 session 2)
 - bot.placeBlock() still uses mineflayer's 5s blockUpdate timeout internally — use safePlaceBlock() or plantSeeds() instead
 - bot.recipesFor() often returns [] when no table passed — use recipesFor() wrapper
