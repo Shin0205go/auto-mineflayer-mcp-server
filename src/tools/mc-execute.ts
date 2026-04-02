@@ -174,11 +174,11 @@ export async function mc_execute(
 
     const gotoPromise = (rawBot.pathfinder.goto as any)(goal);
 
-    // Restore thinkTimeout after goto() starts (the promise holds the capped value
-    // internally; restoring early does not affect the in-progress computation).
-    try {
-      if (rawBot.pathfinder) (rawBot.pathfinder as any).thinkTimeout = prevThinkTimeout;
-    } catch { /* ignore */ }
+    // NOTE: thinkTimeout is NOT restored here.
+    // pathfinder reads bot.pathfinder.thinkTimeout dynamically on the first physicsTick
+    // AFTER setGoal() — restoring immediately (before that tick) would undo the cap and
+    // cause the pathfinder to compute for the full 20s while the hard timeout fires at 15s.
+    // thinkTimeout is restored inside cleanup() once path computation has started/finished.
 
     const STUCK_INTERVAL = 5000;
     const STUCK_THRESHOLD = 0.5;
@@ -226,6 +226,10 @@ export async function mc_execute(
       const cleanup = () => {
         if (stuckCheckTimer !== null) { sandboxClearInterval(stuckCheckTimer); stuckCheckTimer = null; }
         rawBot.removeListener('path_update', onPathUpdate);
+        // Restore thinkTimeout now that path computation is done (or timed out).
+        // This must happen in cleanup(), not immediately after goto() starts, because
+        // pathfinder reads thinkTimeout dynamically on the first physicsTick after setGoal().
+        try { if (rawBot.pathfinder) (rawBot.pathfinder as any).thinkTimeout = prevThinkTimeout; } catch { /* ignore */ }
       };
 
       // Use sandboxSetInterval/setTimeout so these timers are tracked by clearAllTrackedTimers().
@@ -843,7 +847,45 @@ export async function mc_execute(
       const finalInWater = isWater(finalFeet?.name);
 
       if (finalInWater) {
-        return `Still in water at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}). Try digging sideways or placing blocks to escape.`;
+        // Phase 3: Still in water (enclosed water trap). Try digging upward to escape.
+        // This handles cases where the water pocket is surrounded by solid blocks on all sides.
+        logFn(`[escapeWater] Still in water. Attempting upward dig escape.`);
+        const DIG_UP_ATTEMPTS = 8;
+        for (let i = 0; i < DIG_UP_ATTEMPTS; i++) {
+          const digPos = rawBot.entity.position.floored().offset(0, 1, 0);
+          const digBlock = rawBot.blockAt(digPos);
+          if (!digBlock || isWater(digBlock.name) || digBlock.name === 'air' || digBlock.name === 'cave_air') {
+            // Nothing solid to dig above — try holding jump to rise through water
+            rawBot.setControlState('jump', true);
+            await new Promise<void>(r => setTimeout(r, 400));
+            rawBot.setControlState('jump', false);
+          } else {
+            // Solid block above — dig it
+            try {
+              await digWithTimeout(digBlock);
+              logFn(`[escapeWater] Dug ${digBlock.name} at y=${digBlock.position.y}`);
+            } catch { /* ignore */ }
+            await new Promise<void>(r => setTimeout(r, 300));
+          }
+          // Check if we've escaped
+          const checkPos = rawBot.entity.position.floored();
+          const checkFeet = rawBot.blockAt(checkPos);
+          const checkHead = rawBot.blockAt(checkPos.offset(0, 1, 0));
+          if (!isWater(checkFeet?.name) && !isWater(checkHead?.name)) {
+            logFn(`[escapeWater] Escaped via upward dig at Y=${Math.floor(rawBot.entity.position.y)}`);
+            break;
+          }
+        }
+        rawBot.setControlState('jump', false);
+
+        // Re-check final state
+        const digEscapePos = rawBot.entity.position;
+        const digEscapeFeet = rawBot.blockAt(digEscapePos.floored());
+        const digEscapeInWater = isWater(digEscapeFeet?.name);
+        if (digEscapeInWater) {
+          return `Still in water at (${digEscapePos.x.toFixed(1)}, ${digEscapePos.y.toFixed(1)}, ${digEscapePos.z.toFixed(1)}). Water pocket fully enclosed — admin teleport required.`;
+        }
+        return `Escaped water via dig at (${digEscapePos.x.toFixed(1)}, ${digEscapePos.y.toFixed(1)}, ${digEscapePos.z.toFixed(1)}) on ${digEscapeFeet?.name ?? "unknown"}.`;
       }
 
       return `Escaped water. Now at (${finalPos.x.toFixed(1)}, ${finalPos.y.toFixed(1)}, ${finalPos.z.toFixed(1)}) on ${finalFeet?.name ?? "unknown"}.`;
@@ -1141,6 +1183,22 @@ export async function mc_execute(
     // 空洞1ブロックにつき300+200msかかっていた待機を大幅削減する。
     descendSafely: async (targetY: number, maxDigAttempts: number = 300) => {
       let attempts = 0;
+      // Stall detection: track Y every STALL_CHECK_INTERVAL iterations.
+      // If Y has not decreased by at least 0.5 blocks over STALL_WINDOW consecutive checks,
+      // abort — the bot is not making downward progress (broken world state, stuck, etc.).
+      const STALL_CHECK_INTERVAL = 5;
+      const STALL_WINDOW = 3; // 3 consecutive stall-checks = 15 attempts without progress
+      let stallCheckYHistory: number[] = [];
+      let stalled = false;
+
+      const startY = Math.floor(rawBot.entity.position.y);
+      // Sanity check: if bot is already at or below target, nothing to do.
+      if (startY <= targetY + 1) {
+        const finalY = Math.floor(rawBot.entity.position.y);
+        logFn(`[descendSafely] Already at target Y=${finalY} (target=${targetY}), no descent needed`);
+        return { reached: true, finalY };
+      }
+
       while (Math.floor(rawBot.entity.position.y) > targetY + 1 && attempts < maxDigAttempts) {
         attempts++;
         const pos = rawBot.entity.position.floored();
@@ -1193,9 +1251,35 @@ export async function mc_execute(
         }
 
         if (newY <= targetY + 1) break;
+
+        // Stall detection: every STALL_CHECK_INTERVAL attempts, record current Y.
+        // If the last STALL_WINDOW recorded Y values show no downward progress, abort.
+        if (attempts % STALL_CHECK_INTERVAL === 0) {
+          stallCheckYHistory.push(newY);
+          if (stallCheckYHistory.length > STALL_WINDOW) {
+            stallCheckYHistory.shift();
+          }
+          if (stallCheckYHistory.length === STALL_WINDOW) {
+            const oldest = stallCheckYHistory[0];
+            const newest = stallCheckYHistory[stallCheckYHistory.length - 1];
+            // No downward progress: newest Y >= oldest Y - 0.5 (not decreasing)
+            if (newest >= oldest - 0.5) {
+              logFn(`[descendSafely] STALL detected: Y stuck at ~${newY} for ${STALL_WINDOW * STALL_CHECK_INTERVAL} attempts. Aborting.`);
+              stalled = true;
+              break;
+            }
+          }
+          // Also detect upward drift: if current Y > startY + 3, something is very wrong
+          if (newY > startY + 3) {
+            logFn(`[descendSafely] ABORT: Y=${newY} increased above startY=${startY} — bot may be in wrong dimension or world state is broken`);
+            stalled = true;
+            break;
+          }
+        }
       }
       const finalY = Math.floor(rawBot.entity.position.y);
-      logFn(`[descendSafely] Done: Y=${finalY} (target=${targetY}, attempts=${attempts})`);
+      const reason = stalled ? " (stalled)" : attempts >= maxDigAttempts ? " (maxAttempts)" : "";
+      logFn(`[descendSafely] Done: Y=${finalY} (target=${targetY}, attempts=${attempts}${reason})`);
       return { reached: finalY <= targetY + 2, finalY };
     },
 
