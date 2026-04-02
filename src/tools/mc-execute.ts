@@ -1701,6 +1701,159 @@ export async function mc_execute(
       return { crafted: itemName, count: crafted, tableUsed: !!table };
     },
 
+    // === enchantItem — enchant an item at an enchanting table ===
+    // putTargetItem()/moveSlotItem() fail with "invalid operation" because they pass
+    // the raw bot inventory slot number (e.g. 42) to clickWindow(), but the enchanting
+    // window only has 38 slots (0-37).  Slot 42 > inventoryEnd(38) → assert fails.
+    //
+    // Fix: find the item's window slot by scanning currentWindow.slots directly,
+    // then call bot.clickWindow() with the window-relative slot index.
+    //
+    // Usage: await enchantItem(itemName, enchantChoice?)
+    //   itemName:      item to enchant (e.g. "diamond_pickaxe", "iron_sword")
+    //   enchantChoice: 0=cheapest, 1=medium, 2=most expensive (default 2)
+    //   enchantTableBlock: optional — if omitted, finds the nearest enchanting_table
+    // Returns: { enchanted: itemName, choice, level }
+    enchantItem: async (itemName: string, enchantChoice: number = 2, enchantTableBlock?: any) => {
+      // Step 1: Find enchanting table
+      const tableId = (rawBot.registry?.blocksByName as any)?.enchanting_table?.id;
+      const tableBlock = enchantTableBlock
+        ?? (tableId ? rawBot.findBlock({ matching: tableId, maxDistance: 6 }) : null);
+      if (!tableBlock) {
+        throw new Error("enchantItem: no enchanting_table within 6 blocks. Navigate closer first.");
+      }
+
+      // Step 2: Find the item in inventory
+      const itemToEnchant = rawBot.inventory.items().find((i: any) => i.name === itemName);
+      if (!itemToEnchant) {
+        throw new Error(`enchantItem: "${itemName}" not found in inventory`);
+      }
+
+      // Step 3: Open the enchanting table with windowOpen pre-activation
+      // (same pattern as openChest/smeltItems to avoid windowOpen timeout)
+      if (!rawBot.currentWindow) {
+        try {
+          const windowOpenPromise = new Promise<void>(resolve => {
+            const onWindow = () => {
+              rawBot.removeListener("windowOpen" as any, onWindow);
+              resolve();
+            };
+            rawBot.on("windowOpen" as any, onWindow);
+            setTimeout(() => {
+              rawBot.removeListener("windowOpen" as any, onWindow);
+              resolve();
+            }, 3000);
+          });
+          await rawBot.activateBlock(tableBlock);
+          await windowOpenPromise;
+        } catch { /* ignore — openEnchantmentTable will open it */ }
+      }
+
+      const table = await (rawBot as any).openEnchantmentTable(tableBlock);
+      logFn(`[enchantItem] Window opened: type=${table.type}, slots=${table.slots.length}`);
+
+      // Step 4: Find the item's WINDOW slot (not bot inventory slot).
+      // The enchanting window maps player inventory starting at window slot 2:
+      //   window slot 2-28  = bot.inventory slots 9-35  (main inventory)
+      //   window slot 29-37 = bot.inventory slots 36-44 (hotbar)
+      // Formula: windowSlot = botInventorySlot - 9 + 2 = botInventorySlot - 7
+      //
+      // However, prismarine-windows may differ by version so we scan window.slots
+      // directly to find the item by type match — more robust than formula.
+      const itemType = itemToEnchant.type;
+      let windowSlot = -1;
+      for (let s = 2; s < table.slots.length; s++) {
+        const slot = table.slots[s];
+        if (slot && slot.type === itemType) {
+          windowSlot = s;
+          break;
+        }
+      }
+      if (windowSlot === -1) {
+        // Fall back to formula if scan failed
+        windowSlot = itemToEnchant.slot - 7;
+        logFn(`[enchantItem] Scan found no match, using formula: botSlot=${itemToEnchant.slot} → windowSlot=${windowSlot}`);
+      }
+
+      if (windowSlot < 0 || windowSlot >= table.slots.length) {
+        table.close();
+        throw new Error(
+          `enchantItem: cannot map item to window slot ` +
+          `(botSlot=${itemToEnchant.slot}, windowSlot=${windowSlot}, windowSize=${table.slots.length}). ` +
+          `Move the item to main inventory (slots 9-35) and try again.`
+        );
+      }
+      logFn(`[enchantItem] Moving ${itemName} from windowSlot=${windowSlot} to slot 0`);
+
+      // Step 5: Move item into enchanting slot 0 via raw window_click packets.
+      // We bypass bot.moveSlotItem() which calls clickWindow(botSlot, 0, 0) — botSlot
+      // can exceed inventoryEnd(38) causing the "invalid operation" assert in Window.acceptClick.
+      //
+      // Raw window_click directly tells the server to pick up the item (click on windowSlot)
+      // then place it in slot 0 — no client-side acceptClick validation involved.
+      const writeWindowClick = (slot: number, button: number, mode: number, item: any) => {
+        const window = rawBot.currentWindow ?? rawBot.inventory;
+        const notchItem = item ? (rawBot as any).registry.Item?.toNotch?.(item) ?? { present: false } : { present: false };
+        // For 1.17.1+ (stateIdUsed), use stateId from window._stateId or bot._stateId
+        const stateId: number = (rawBot as any)._stateId ?? (window as any)._stateId ?? (window as any).stateId ?? 0;
+        (rawBot as any)._client.write('window_click', {
+          windowId: window.id,
+          stateId,
+          slot,
+          mouseButton: button,
+          mode,
+          changedSlots: [],
+          cursorItem: { present: false },
+        });
+      };
+
+      // Click to pick up item from its window slot (left click = take whole stack)
+      writeWindowClick(windowSlot, 0, 0, table.slots[windowSlot]);
+      // Small delay for server to process
+      await new Promise<void>(r => setTimeout(r, 200));
+      // Click slot 0 to place the item into the enchanting input
+      writeWindowClick(0, 0, 0, null);
+      // Wait for server to send enchantment options (craft_progress_bar packets)
+      await new Promise<void>(r => setTimeout(r, 1500));
+
+      // Step 6: Check if enchantment options are available
+      const enchants = table.enchantments;
+      logFn(`[enchantItem] Enchantments: ${JSON.stringify(enchants)}`);
+
+      const allNegative = enchants.every((e: any) => e.level < 0);
+      if (allNegative) {
+        // Item may not be in slot yet — wait a bit more
+        await new Promise<void>(r => setTimeout(r, 1500));
+        logFn(`[enchantItem] Enchantments after extra wait: ${JSON.stringify(table.enchantments)}`);
+      }
+
+      // Step 7: Apply enchantment
+      const choice = Math.min(Math.max(0, enchantChoice), 2);
+      const chosenEnchant = table.enchantments[choice];
+      if (!chosenEnchant || chosenEnchant.level <= 0) {
+        // Try to find any available slot
+        const availableChoice = table.enchantments.findIndex((e: any) => e.level > 0);
+        if (availableChoice === -1) {
+          table.close();
+          throw new Error(
+            `enchantItem: no enchantment options available. ` +
+            `Check: 1) XP level >= 3 for slot 0, 2) lapis lazuli in inventory, ` +
+            `3) bookshelves may boost max level. Enchantments: ${JSON.stringify(table.enchantments)}`
+          );
+        }
+        logFn(`[enchantItem] Choice ${choice} not available (level=${chosenEnchant?.level}), using choice ${availableChoice}`);
+        const result = await table.enchant(availableChoice);
+        table.close();
+        logFn(`[enchantItem] Enchanted ${itemName} with choice ${availableChoice}, level=${table.enchantments[availableChoice]?.level}`);
+        return { enchanted: itemName, choice: availableChoice, level: table.enchantments[availableChoice]?.level ?? -1 };
+      }
+
+      const result = await table.enchant(choice);
+      table.close();
+      logFn(`[enchantItem] Enchanted ${itemName} with choice ${choice}, level=${chosenEnchant.level}`);
+      return { enchanted: itemName, choice, level: chosenEnchant.level };
+    },
+
     // === openChest — reliable chest/barrel/shulker_box access ===
     // bot.openContainer() requires the windowOpen event within 20s or throws.
     // On laggy servers the window packet can be delayed, causing "Event windowOpen did
