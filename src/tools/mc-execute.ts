@@ -1724,97 +1724,89 @@ export async function mc_execute(
       }
 
       // Step 2: Find the item in inventory
-      const itemToEnchant = rawBot.inventory.items().find((i: any) => i.name === itemName);
+      let itemToEnchant = rawBot.inventory.items().find((i: any) => i.name === itemName);
       if (!itemToEnchant) {
         throw new Error(`enchantItem: "${itemName}" not found in inventory`);
       }
 
-      // Step 3: Open the enchanting table with windowOpen pre-activation
-      // (same pattern as openChest/smeltItems to avoid windowOpen timeout)
-      if (!rawBot.currentWindow) {
-        try {
-          const windowOpenPromise = new Promise<void>(resolve => {
-            const onWindow = () => {
-              rawBot.removeListener("windowOpen" as any, onWindow);
-              resolve();
-            };
-            rawBot.on("windowOpen" as any, onWindow);
-            setTimeout(() => {
-              rawBot.removeListener("windowOpen" as any, onWindow);
-              resolve();
-            }, 3000);
-          });
-          await rawBot.activateBlock(tableBlock);
-          await windowOpenPromise;
-        } catch { /* ignore — openEnchantmentTable will open it */ }
+      // Step 3: Get lapis reference (no pre-movement needed — window slot formula handles hotbar)
+      const lapisItem = rawBot.inventory.items().find((i: any) => i.name === 'lapis_lazuli');
+
+      // Step 4: Open the enchanting table
+      if (rawBot.currentWindow) {
+        try { rawBot.closeWindow(rawBot.currentWindow); } catch { /* ignore */ }
+        await new Promise<void>(r => setTimeout(r, 300));
       }
 
       const table = await (rawBot as any).openEnchantmentTable(tableBlock);
-      logFn(`[enchantItem] Window opened: type=${table.type}, slots=${table.slots.length}`);
+      await new Promise<void>(r => setTimeout(r, 500));
+      logFn(`[enchantItem] Window opened: type=${table.type}, slots=${table.slots.length}, item bot_slot=${itemToEnchant.slot}`);
 
-      // Step 4: Find the item's WINDOW slot (not bot inventory slot).
-      // The enchanting window maps player inventory starting at window slot 2:
-      //   window slot 2-28  = bot.inventory slots 9-35  (main inventory)
-      //   window slot 29-37 = bot.inventory slots 36-44 (hotbar)
-      // Formula: windowSlot = botInventorySlot - 9 + 2 = botInventorySlot - 7
+      // Step 5: Place item in enchanting slot 0 using bot.clickWindow with the WINDOW slot.
       //
-      // However, prismarine-windows may differ by version so we scan window.slots
-      // directly to find the item by type match — more robust than formula.
-      const itemType = itemToEnchant.type;
-      let windowSlot = -1;
-      for (let s = 2; s < table.slots.length; s++) {
-        const slot = table.slots[s];
-        if (slot && slot.type === itemType) {
-          windowSlot = s;
-          break;
+      // Root cause: mineflayer's putTargetItem/moveSlotItem passes the BOT inventory slot
+      // (e.g. 10) directly to clickWindow. But with an enchanting table open, the window
+      // has 2 extra slots (slots 0-1), so player inventory is offset:
+      //   enchanting window slot = bot_inventory_slot - 7
+      //   (bot slots 9-35 → window slots 2-28, bot slots 36-44 → window slots 29-37)
+      //
+      // clickWindow(10) with enchanting window open hits window.slots[10] = bot_slot_17 (flint),
+      // not the pickaxe at bot_slot_10 = window_slot_3.
+      //
+      // Fix: compute the window slot and use bot.clickWindow() directly.
+      const itemWindowSlot = itemToEnchant.slot - 7;
+      logFn(`[enchantItem] Moving item from window_slot=${itemWindowSlot} to slot 0`);
+
+      // Verify the window slot contains our item
+      const slotContent = table.slots[itemWindowSlot];
+      if (!slotContent || slotContent.type !== itemToEnchant.type) {
+        // Fallback: scan table.slots for the item
+        let foundSlot = -1;
+        for (let s = 2; s < table.slots.length; s++) {
+          if (table.slots[s]?.type === itemToEnchant.type) { foundSlot = s; break; }
         }
+        if (foundSlot !== -1) {
+          logFn(`[enchantItem] Formula failed, scan found item at window_slot=${foundSlot}`);
+          await (rawBot as any).clickWindow(foundSlot, 0, 0);
+        } else {
+          table.close();
+          throw new Error(`enchantItem: could not find ${itemName} in enchanting window (bot_slot=${itemToEnchant.slot})`);
+        }
+      } else {
+        await (rawBot as any).clickWindow(itemWindowSlot, 0, 0);
       }
-      if (windowSlot === -1) {
-        // Fall back to formula if scan failed
-        windowSlot = itemToEnchant.slot - 7;
-        logFn(`[enchantItem] Scan found no match, using formula: botSlot=${itemToEnchant.slot} → windowSlot=${windowSlot}`);
+      // Place it in slot 0
+      await new Promise<void>(r => setTimeout(r, 300));
+      await (rawBot as any).clickWindow(0, 0, 0);
+      await new Promise<void>(r => setTimeout(r, 500));
+      logFn(`[enchantItem] Item placed: slot[0]=${table.slots[0]?.name ?? 'null'}`);
+
+      // Step 5b: Place lapis in slot 1
+      if (lapisItem) {
+        const lapisWindowSlot = lapisItem.slot - 7;
+        const lapisSlotContent = table.slots[lapisWindowSlot];
+        if (!lapisSlotContent || lapisSlotContent.type !== lapisItem.type) {
+          let foundSlot = -1;
+          for (let s = 2; s < table.slots.length; s++) {
+            if (table.slots[s]?.type === lapisItem.type) { foundSlot = s; break; }
+          }
+          if (foundSlot !== -1) {
+            logFn(`[enchantItem] Lapis scan found at window_slot=${foundSlot}`);
+            await (rawBot as any).clickWindow(foundSlot, 0, 0);
+          }
+        } else {
+          await (rawBot as any).clickWindow(lapisWindowSlot, 0, 0);
+        }
+        await new Promise<void>(r => setTimeout(r, 300));
+        await (rawBot as any).clickWindow(1, 0, 0);
+        await new Promise<void>(r => setTimeout(r, 500));
+        logFn(`[enchantItem] Lapis placed: slot[1]=${table.slots[1]?.name ?? 'null'}`);
+      } else {
+        logFn(`[enchantItem] Warning: no lapis_lazuli in inventory — enchantments may not appear`);
       }
 
-      if (windowSlot < 0 || windowSlot >= table.slots.length) {
-        table.close();
-        throw new Error(
-          `enchantItem: cannot map item to window slot ` +
-          `(botSlot=${itemToEnchant.slot}, windowSlot=${windowSlot}, windowSize=${table.slots.length}). ` +
-          `Move the item to main inventory (slots 9-35) and try again.`
-        );
-      }
-      logFn(`[enchantItem] Moving ${itemName} from windowSlot=${windowSlot} to slot 0`);
-
-      // Step 5: Move item into enchanting slot 0 via raw window_click packets.
-      // We bypass bot.moveSlotItem() which calls clickWindow(botSlot, 0, 0) — botSlot
-      // can exceed inventoryEnd(38) causing the "invalid operation" assert in Window.acceptClick.
-      //
-      // Raw window_click directly tells the server to pick up the item (click on windowSlot)
-      // then place it in slot 0 — no client-side acceptClick validation involved.
-      const writeWindowClick = (slot: number, button: number, mode: number, item: any) => {
-        const window = rawBot.currentWindow ?? rawBot.inventory;
-        const notchItem = item ? (rawBot as any).registry.Item?.toNotch?.(item) ?? { present: false } : { present: false };
-        // For 1.17.1+ (stateIdUsed), use stateId from window._stateId or bot._stateId
-        const stateId: number = (rawBot as any)._stateId ?? (window as any)._stateId ?? (window as any).stateId ?? 0;
-        (rawBot as any)._client.write('window_click', {
-          windowId: window.id,
-          stateId,
-          slot,
-          mouseButton: button,
-          mode,
-          changedSlots: [],
-          cursorItem: { present: false },
-        });
-      };
-
-      // Click to pick up item from its window slot (left click = take whole stack)
-      writeWindowClick(windowSlot, 0, 0, table.slots[windowSlot]);
-      // Small delay for server to process
-      await new Promise<void>(r => setTimeout(r, 200));
-      // Click slot 0 to place the item into the enchanting input
-      writeWindowClick(0, 0, 0, null);
       // Wait for server to send enchantment options (craft_progress_bar packets)
-      await new Promise<void>(r => setTimeout(r, 1500));
+      await new Promise<void>(r => setTimeout(r, 2000));
 
       // Step 6: Check if enchantment options are available
       const enchants = table.enchantments;
