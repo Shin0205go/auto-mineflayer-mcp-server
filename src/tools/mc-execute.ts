@@ -378,7 +378,9 @@ export async function mc_execute(
             resolve();
           };
           rawBot.on("windowOpen" as any, onWindow);
-          setTimeout(() => {
+          // Use sandboxSetTimeout so this timer is cancelled on mc_execute timeout,
+          // preventing a zombie listener from interfering with the next execution.
+          sandboxSetTimeout(() => {
             rawBot.removeListener("windowOpen" as any, onWindow);
             resolve();
           }, 3000);
@@ -405,8 +407,10 @@ export async function mc_execute(
             resolve();
           };
           rawBot.on("windowOpen" as any, onWindow);
-          // 3000ms timeout: enough for laggy servers (matches openChest/openContainer)
-          setTimeout(() => {
+          // 3000ms timeout: enough for laggy servers (matches openChest/openContainer).
+          // Use sandboxSetTimeout so this timer is cancelled on mc_execute timeout,
+          // preventing a zombie listener from interfering with the next execution.
+          sandboxSetTimeout(() => {
             rawBot.removeListener("windowOpen" as any, onWindow);
             resolve();
           }, 3000);
@@ -495,8 +499,10 @@ export async function mc_execute(
         }
       };
       rawBot.on("blockUpdate", onBlockUpdate);
-      // 500ms fallback — same generous window as safePlaceBlock
-      setTimeout(() => { rawBot.removeListener("blockUpdate", onBlockUpdate); resolve(); }, 500);
+      // 500ms fallback — same generous window as safePlaceBlock.
+      // Use sandboxSetTimeout so this timer is cancelled if mc_execute times out,
+      // preventing a zombie listener/resolver from interfering with the next execution.
+      sandboxSetTimeout(() => { rawBot.removeListener("blockUpdate", onBlockUpdate); resolve(); }, 500);
     });
 
     // Send raw block_place packet (avoids mineflayer's 5s blockUpdate wait)
@@ -703,8 +709,10 @@ export async function mc_execute(
           }
         };
         rawBot.on("blockUpdate", onBlockUpdate);
-        // Timeout: resolve anyway after 300ms
-        setTimeout(() => {
+        // Timeout: resolve anyway after 300ms.
+        // Use sandboxSetTimeout so this timer is cancelled if mc_execute times out,
+        // preventing a zombie listener/resolver from interfering with the next execution.
+        sandboxSetTimeout(() => {
           rawBot.removeListener("blockUpdate", onBlockUpdate);
           resolve();
         }, 300);
@@ -851,7 +859,7 @@ export async function mc_execute(
 
       let surfaced = false;
       for (let i = 0; i < 25; i++) {
-        await new Promise<void>(r => setTimeout(r, 200));
+        await waitFn(200);
         const check = rawBot.blockAt(rawBot.entity.position.floored().offset(0, 1, 0));
         if (!isWater(check?.name)) {
           surfaced = true;
@@ -920,7 +928,7 @@ export async function mc_execute(
           if (!digBlock || isWater(digBlock.name) || digBlock.name === 'air' || digBlock.name === 'cave_air') {
             // Nothing solid to dig above — try holding jump to rise through water
             rawBot.setControlState('jump', true);
-            await new Promise<void>(r => setTimeout(r, 400));
+            await waitFn(400);
             rawBot.setControlState('jump', false);
           } else {
             // Solid block above — dig it
@@ -928,7 +936,7 @@ export async function mc_execute(
               await digWithTimeout(digBlock);
               logFn(`[escapeWater] Dug ${digBlock.name} at y=${digBlock.position.y}`);
             } catch { /* ignore */ }
-            await new Promise<void>(r => setTimeout(r, 300));
+            await waitFn(300);
           }
           // Check if we've escaped
           const checkPos = rawBot.entity.position.floored();
@@ -1196,7 +1204,7 @@ export async function mc_execute(
 
         // Jump first so the bot rises above the block it will stand on
         rawBot.setControlState("jump", true);
-        await new Promise<void>(r => setTimeout(r, 250));
+        await waitFn(250);
         rawBot.setControlState("jump", false);
 
         // Place block at feet level using raw packet (avoids 5s blockUpdate timeout)
@@ -1211,7 +1219,8 @@ export async function mc_execute(
             }
           };
           rawBot.on("blockUpdate", handler);
-          setTimeout(() => { rawBot.removeListener("blockUpdate", handler); resolve(); }, 300);
+          // Use sandboxSetTimeout so this timer is cancelled on mc_execute timeout
+          sandboxSetTimeout(() => { rawBot.removeListener("blockUpdate", handler); resolve(); }, 300);
         });
 
         await rawBot.lookAt(groundPos.offset(0.5, 0.5, 0.5), true);
@@ -1226,7 +1235,7 @@ export async function mc_execute(
         placed++;
 
         // Short wait for physics to settle (bot rises to stand on placed block)
-        await new Promise<void>(r => setTimeout(r, 150));
+        await waitFn(150);
       }
 
       const finalY = Math.floor(rawBot.entity.position.y);
@@ -1296,7 +1305,7 @@ export async function mc_execute(
             logFn(`[descendSafely] Dug ${blockBelow.name} at y=${blockBelow.position.y}`);
           } catch(e) { /* ignore */ }
           // After dig, bot may fall automatically — give physics time to settle
-          await new Promise<void>(r => setTimeout(r, 200));
+          await waitFn(200);
         } else {
           // 下が空洞/水/溶岩 → 自由落下させる。
           // sneak を解除して sneak+forward で端から踏み出す。
@@ -1304,7 +1313,7 @@ export async function mc_execute(
           rawBot.setControlState('sneak', false);
           // 端にいる可能性があるため前進して確実に落下させる
           rawBot.setControlState('forward', true);
-          await new Promise<void>(r => setTimeout(r, 100));
+          await waitFn(100);
           rawBot.setControlState('forward', false);
 
           // Wait for the bot to land (onGround) or up to 2 seconds for a deep drop
@@ -1313,7 +1322,7 @@ export async function mc_execute(
           const FALL_POLL_MS = 50;
           let waited = 0;
           while (waited < FALL_WAIT_MS) {
-            await new Promise<void>(r => setTimeout(r, FALL_POLL_MS));
+            await waitFn(FALL_POLL_MS);
             waited += FALL_POLL_MS;
             if ((rawBot.entity as any).onGround) break;
             // Also break if we've reached target
@@ -1423,7 +1432,7 @@ export async function mc_execute(
                 }
               };
               rawBot.on("blockUpdate", handler);
-              setTimeout(() => { rawBot.removeListener("blockUpdate", handler); resolve(); }, 300);
+              sandboxSetTimeout(() => { rawBot.removeListener("blockUpdate", handler); resolve(); }, 300);
             });
             (rawBot as any)._client.write("block_place", {
               location: { x: bPos.x, y: bPos.y, z: bPos.z },
@@ -1540,8 +1549,9 @@ export async function mc_execute(
               resolve();
             };
             rawBot.on("windowOpen" as any, onWindow);
-            // 3000ms timeout: matches openChest for consistency on laggy servers
-            setTimeout(() => {
+            // 3000ms timeout: matches openChest for consistency on laggy servers.
+            // Use sandboxSetTimeout so this timer is cancelled on mc_execute timeout.
+            sandboxSetTimeout(() => {
               rawBot.removeListener("windowOpen" as any, onWindow);
               resolve();
             }, 3000);
@@ -1641,8 +1651,9 @@ export async function mc_execute(
           }
         };
         rawBot.on("blockUpdate", handler);
-        // Fallback: resolve after 500ms even if no blockUpdate arrives
-        setTimeout(() => { rawBot.removeListener("blockUpdate", handler); resolve(); }, 500);
+        // Fallback: resolve after 500ms even if no blockUpdate arrives.
+        // Use sandboxSetTimeout so this timer is cancelled on mc_execute timeout.
+        sandboxSetTimeout(() => { rawBot.removeListener("blockUpdate", handler); resolve(); }, 500);
       });
 
       (rawBot as any)._client.write("block_place", {
@@ -1695,8 +1706,9 @@ export async function mc_execute(
           }
         };
         rawBot.on("blockUpdate", handler);
-        // Fallback: resolve after 600ms even if no blockUpdate arrives
-        setTimeout(() => {
+        // Fallback: resolve after 600ms even if no blockUpdate arrives.
+        // Use sandboxSetTimeout so this timer is cancelled on mc_execute timeout.
+        sandboxSetTimeout(() => {
           rawBot.removeListener("blockUpdate", handler);
           // Re-read block from world state as fallback
           const current = rawBot.blockAt(fPos);
@@ -1745,7 +1757,8 @@ export async function mc_execute(
           }
         };
         rawBot.on("blockUpdate", handler);
-        setTimeout(() => {
+        // Use sandboxSetTimeout so this timer is cancelled on mc_execute timeout.
+        sandboxSetTimeout(() => {
           rawBot.removeListener("blockUpdate", handler);
           const current = rawBot.blockAt(tPos);
           resolve(current?.name ?? "unknown");
@@ -1877,8 +1890,9 @@ export async function mc_execute(
                 resolve();
               };
               rawBot.on("windowOpen" as any, onWindow);
-              // 3000ms timeout: matches openChest for consistency on laggy servers
-              setTimeout(() => {
+              // 3000ms timeout: matches openChest for consistency on laggy servers.
+              // Use sandboxSetTimeout so this timer is cancelled on mc_execute timeout.
+              sandboxSetTimeout(() => {
                 rawBot.removeListener("windowOpen" as any, onWindow);
                 resolve();
               }, 3000);
@@ -2098,8 +2112,9 @@ export async function mc_execute(
               resolve();
             };
             rawBot.on("windowOpen" as any, onWindow);
-            // 3000ms timeout: enough for laggy servers (was 1500ms, increased for reliability)
-            setTimeout(() => {
+            // 3000ms timeout: enough for laggy servers (was 1500ms, increased for reliability).
+            // Use sandboxSetTimeout so this timer is cancelled on mc_execute timeout.
+            sandboxSetTimeout(() => {
               rawBot.removeListener("windowOpen" as any, onWindow);
               resolve();
             }, 3000);
