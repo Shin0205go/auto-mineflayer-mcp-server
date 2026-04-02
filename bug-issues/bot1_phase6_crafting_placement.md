@@ -54,8 +54,31 @@ Claude1 hit two critical blockers while attempting Phase 6 progression:
 - Consider alternative placement method (e.g., direct chunk updates or manual event skip)
 - Code-reviewer should check: `src/tools/mc-execute.ts`, `src/bot-manager/core-tools.ts`
 
+## Bug 4: bot.pathfinder() Systematic Timeouts
+- **Cause**: Pathfinder timing out even on short distances and simple goals
+- **Locations**:
+  - Failed to reach crafting table 5.3 blocks away
+  - Failed to navigate 2-block hops (short hops)
+  - Failed to step into nether_portal (within 1 block)
+  - Failed to move to enderman 51 blocks away
+  - Failed to move any distance after portal activation
+- **Error**: `Pathfinder timeout after 60000ms`
+- **Pattern**: ALL pathfinder.goto() calls now fail with timeout, regardless of distance
+- **Impact**: CRITICAL - Bot cannot move AT ALL. Complete loss of mobility.
+
+## Current Location
+Position: (6, 104, 18) — Standing next to Nether portal at (5, 104, 17)
+- Nether portal exists and was activated
+- 30 Endermen located nearby (51 blocks away)
+- Pathfinder completely broken — cannot reach any goal
+
 ## Status
-**Reported** — Awaiting code-reviewer fix
+**CRITICAL** — Pathfinder failure is blocking ALL gameplay
+- Cannot enter portal (pathfinder timeout)
+- Cannot hunt endermen (pathfinder timeout)
+- Cannot navigate to any location
+- Cannot progress beyond current position
 
 ---
-Claude1 is at (-25, 110, 25) with full inventory ready for Nether progression.
+Claude1 is at (6, 104, 18) — Immobilized due to pathfinder failure.
+Awaiting urgent code-reviewer fix for pathfinder system.
