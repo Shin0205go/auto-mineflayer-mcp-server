@@ -591,9 +591,9 @@ export async function mc_execute(
         "golden_apple", "enchanted_golden_apple",
         "cooked_beef", "cooked_porkchop", "cooked_mutton", "cooked_chicken",
         "cooked_rabbit", "cooked_cod", "cooked_salmon",
-        "bread", "baked_potato", "pumpkin_pie", "cookie", "pumpkin_pie",
+        "bread", "baked_potato", "pumpkin_pie", "cookie",
         "golden_carrot", "melon_slice", "sweet_berries", "glow_berries",
-        "apple", "carrot", "baked_potato", "potato", "beetroot", "dried_kelp",
+        "apple", "carrot", "potato", "beetroot", "dried_kelp",
         "mushroom_stew", "rabbit_stew", "beetroot_soup", "suspicious_stew",
         "chorus_fruit",
         "raw_beef", "raw_porkchop", "raw_mutton", "raw_chicken",
@@ -1063,8 +1063,10 @@ export async function mc_execute(
 
         if (blockBelow && !isAirLike(blockBelow.name)) {
           // 固体ブロックがある → 掘る
+          // digWithTimeout (15s) を使用して無限ハングを防ぐ。
+          // rawBot.dig() を直接呼ぶとbot.dig()のラッパーが適用されずタイムアウトなしでハングする。
           try {
-            await rawBot.dig(blockBelow);
+            await digWithTimeout(blockBelow);
             logFn(`[descendSafely] Dug ${blockBelow.name} at y=${blockBelow.position.y}`);
           } catch(e) { /* ignore */ }
           // After dig, bot may fall automatically — give physics time to settle
