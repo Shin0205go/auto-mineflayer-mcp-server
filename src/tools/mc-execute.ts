@@ -140,10 +140,24 @@ export async function mc_execute(
       if (rawBot.pathfinder?.movements) {
         rawBot.pathfinder.movements.canDig = allowDig;
         (rawBot.pathfinder.movements as any).liquidCost = 10000;
-        // canDig=true (retry) の場合: 大きな降下を許可して垂直ナビゲーションを可能にする
-        // maxDropDown=4: 4ブロック落下 = 1.5HP ダメージ (許容範囲; 1ブロック≒0.5HP)
-        // canDig=false (初回) は maxDropDown=1 のまま (安全優先)
-        rawBot.pathfinder.movements.maxDropDown = allowDig ? 4 : 1;
+        // maxDropDown controls how many blocks pathfinder will route the bot to fall in one step.
+        // canDig=false (initial attempt): use maxDropDown=1 to avoid fall damage on normal terrain.
+        //   1-block steps = no fall damage (Minecraft: >3 blocks = damage).
+        // canDig=true (retry after noPath/timeout): allow larger drops so pathfinder can find a
+        //   route through complex terrain (caves, cliffs). Scale by current Y:
+        //   - Y > 100: allow up to 6 blocks (elevated terrain, large drops common)
+        //   - Y > 70:  allow up to 4 blocks (mid-elevation terrain)
+        //   - Y <= 70: allow 4 blocks (underground caves)
+        //   This is a technical parameter, not agent logic — pathfinder needs it to compute routes.
+        //   Without this, GoalNear(x, 62, z) from Y=86 produces "noPath" with maxDropDown=4
+        //   because the A* search can't bridge the 24-block Y gap in the allowed step sizes.
+        if (allowDig) {
+          const currentY = rawBot.entity.position.y;
+          const dropAllowance = currentY > 100 ? 6 : 4;
+          rawBot.pathfinder.movements.maxDropDown = dropAllowance;
+        } else {
+          rawBot.pathfinder.movements.maxDropDown = 1;
+        }
       }
     } catch { /* ignore */ }
 
@@ -372,6 +386,34 @@ export async function mc_execute(
     return rawBot.openContainer(block);
   };
 
+  // Wrap bot.openFurnace() to pre-activate the block before opening.
+  // Without pre-activation, openFurnace() fails with "Event windowOpen did not fire within
+  // timeout of 20000ms" ~40% of the time (same issue as openContainer).
+  // The smeltItems() sandbox helper already does this, but agents that call bot.openFurnace()
+  // directly (e.g. from CLAUDE.md examples) hit this bug.
+  // This wrapper is identical to openContainerWithPreActivate but calls openFurnace() at the end.
+  const openFurnaceWithPreActivate = async (block: any) => {
+    if (block && !rawBot.currentWindow) {
+      try {
+        const windowOpenPromise = new Promise<void>(resolve => {
+          const onWindow = () => {
+            rawBot.removeListener("windowOpen" as any, onWindow);
+            resolve();
+          };
+          rawBot.on("windowOpen" as any, onWindow);
+          // 3000ms timeout: enough for laggy servers (matches openChest/openContainer)
+          setTimeout(() => {
+            rawBot.removeListener("windowOpen" as any, onWindow);
+            resolve();
+          }, 3000);
+        });
+        await rawBot.activateBlock(block);
+        await windowOpenPromise;
+      } catch { /* ignore activateBlock errors — openFurnace will open it */ }
+    }
+    return rawBot.openFurnace(block);
+  };
+
   // Wrap bot.consume() with a 5-second timeout (Rule A: entity_status packet can be delayed
   // indefinitely on laggy servers). Without this, bot.consume() hangs forever.
   // The eat() helper in ctx is preferred and handles food selection + health event detection,
@@ -427,6 +469,9 @@ export async function mc_execute(
       if (prop === 'dig') return digWithTimeout;
       // Wrap openContainer() to pre-activate the block and avoid windowOpen timeout.
       if (prop === 'openContainer') return openContainerWithPreActivate;
+      // Wrap openFurnace() to pre-activate the block and avoid windowOpen timeout.
+      // Same race condition as openContainer: server sends windowOpen only after activateBlock.
+      if (prop === 'openFurnace') return openFurnaceWithPreActivate;
       // Wrap consume() with a hard timeout — entity_status packet can be delayed indefinitely.
       if (prop === 'consume') return consumeWithTimeout;
       // Wrap recipesFor() to automatically include nearby crafting table for 3x3 recipes.
