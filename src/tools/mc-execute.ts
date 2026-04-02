@@ -591,6 +591,17 @@ export async function mc_execute(
       // Wrap recipesFor() to automatically include nearby crafting table for 3x3 recipes.
       // Without this, bread/bucket/tools return [] even when standing next to a crafting table.
       if (prop === 'recipesFor') return recipesForWithTable;
+      // bot.recipes does not exist in mineflayer — agents sometimes try bot.recipes.find(...)
+      // which throws "Cannot read properties of undefined (reading 'find')".
+      // Return an empty array with a descriptive toString() so the error is informative.
+      // The correct API is: const recipes = recipesFor('item_name')  (sandbox helper)
+      //   or: const recipes = bot.recipesFor(itemId, null, 1, craftingTableBlock)
+      if (prop === 'recipes') {
+        const emptyRecipes: any[] = [];
+        (emptyRecipes as any).toString = () =>
+          "[bot.recipes is undefined — use recipesFor('item_name') or bot.recipesFor(itemId, null, 1, table)]";
+        return emptyRecipes;
+      }
       // Pass EventEmitter methods and _client through without bind() to preserve
       // the full EventEmitter chain and minecraft-protocol packet dispatch.
       if (typeof prop === 'string' && EVENT_EMITTER_PROPS.has(prop)) {
