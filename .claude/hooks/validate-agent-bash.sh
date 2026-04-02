@@ -30,8 +30,20 @@ if echo "$CMD" | grep -qE '^(git|npm)(\s|$)'; then
   exit 0
 fi
 
+# Block admin-chat.cjs with admin commands (/, /give, /tp, /fill, /setblock, /place, /execute, /locate, /summon, /kill, /gamemode, /gamerule)
+# Agents must NOT use admin powers — harness principle: agents play the game, not cheat it
+if echo "$CMD" | grep -q 'admin-chat\.cjs'; then
+  # Extract the message argument (everything after admin-chat.cjs)
+  MSG=$(echo "$CMD" | sed 's/.*admin-chat\.cjs[[:space:]]*//')
+  if echo "$MSG" | grep -qE '"[[:space:]]*/|'"'"'[[:space:]]*/|^[[:space:]]*/'; then
+    echo "BLOCKED: Agents must not use admin commands via admin-chat.cjs. Chat messages only (no leading '/'). Got: $MSG" >&2
+    exit 2
+  fi
+  exit 0
+fi
+
 # Allow Minecraft CLI scripts
-if echo "$CMD" | grep -qE '(scripts/mc-execute\.cjs|scripts/mc-connect\.cjs|scripts/admin-chat\.cjs|BOT_USERNAME=|MC_TIMEOUT=)'; then
+if echo "$CMD" | grep -qE '(scripts/mc-execute\.cjs|scripts/mc-connect\.cjs|BOT_USERNAME=|MC_TIMEOUT=)'; then
   exit 0
 fi
 
