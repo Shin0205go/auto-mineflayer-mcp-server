@@ -834,10 +834,9 @@ export async function mc_execute(
               (rawBot.pathfinder.movements as any).liquidCost = 10000;
             }
             const goal = new goals.GoalNear(landX, Math.round(afterSwimPos.y), landZ, 1);
-            await Promise.race([
-              (rawBot.pathfinder.goto as any)(goal),
-              new Promise<void>((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000))
-            ]);
+            // Use gotoWithStuckDetection for stuck detection + proper timeout.
+            // rawBot.pathfinder.goto() bypasses pathfinderProxy and has no stuck detection.
+            await gotoWithStuckDetection(goal, 8000, false);
           } catch { /* ignore pathfinder errors — we're on surface, which is the main goal */ }
         }
       }
