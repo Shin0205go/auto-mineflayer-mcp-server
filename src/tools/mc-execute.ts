@@ -382,6 +382,26 @@ export async function mc_execute(
     ]);
   };
 
+  // Wrap bot.recipesFor() to automatically include a nearby crafting table.
+  // Direct calls to rawBot.recipesFor(id, meta, count, null) only return 2x2 recipes.
+  // Items like bread, bucket, and most tools require a 3x3 crafting table recipe.
+  // Without the table argument, recipesFor() always returns [] for those items,
+  // causing "no recipe found" errors even when a crafting table is nearby.
+  // This wrapper mirrors the sandbox recipesFor() helper but intercepts bot.recipesFor()
+  // calls directly so agents who call bot.recipesFor() also get 3x3 recipes.
+  const recipesForWithTable = (itemId: number, metadata: any = null, count: number = 1, table: any = null) => {
+    // If agent explicitly passes a table (4th arg), use it directly.
+    if (table !== null) return rawBot.recipesFor(itemId, metadata, count, table);
+    // Otherwise auto-find a nearby crafting table (within 6 blocks)
+    const tableId = (rawBot.registry?.blocksByName as any)?.crafting_table?.id;
+    const nearbyTable = tableId ? rawBot.findBlock({ matching: tableId, maxDistance: 6 }) : null;
+    if (!nearbyTable) return rawBot.recipesFor(itemId, metadata, count, null);
+    // Prefer 3x3 (with table) results; fall back to 2x2 if table gives nothing
+    const withTable = rawBot.recipesFor(itemId, metadata, count, nearbyTable);
+    if (withTable.length > 0) return withTable;
+    return rawBot.recipesFor(itemId, metadata, count, null);
+  };
+
   const botProxy = new Proxy(rawBot, {
     get(target: any, prop: string | symbol) {
       if (prop === 'pathfinder') return pathfinderProxy;
@@ -391,6 +411,9 @@ export async function mc_execute(
       if (prop === 'openContainer') return openContainerWithPreActivate;
       // Wrap consume() with a hard timeout — entity_status packet can be delayed indefinitely.
       if (prop === 'consume') return consumeWithTimeout;
+      // Wrap recipesFor() to automatically include nearby crafting table for 3x3 recipes.
+      // Without this, bread/bucket/tools return [] even when standing next to a crafting table.
+      if (prop === 'recipesFor') return recipesForWithTable;
       // Pass EventEmitter methods and _client through without bind() to preserve
       // the full EventEmitter chain and minecraft-protocol packet dispatch.
       if (typeof prop === 'string' && EVENT_EMITTER_PROPS.has(prop)) {
