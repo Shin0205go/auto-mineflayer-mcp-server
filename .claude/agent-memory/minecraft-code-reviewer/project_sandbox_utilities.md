@@ -112,6 +112,10 @@ type: project
 - Root cause evidence: claude1_post_phase8_pathfinder_deadlock_20260402.md (bot at Y=74 underground,
   GoalY(80), position unchanged for 120s with no error message).
 
+## Position / Physics sync
+- `waitForChunksToLoad(timeoutMs?)` — waits for chunkColumnLoad event confirming bot position chunk is loaded. Call after /tp or dimension change when bot.blockAt() returns null.
+- `resyncPhysics(timeoutMs?)` — sends a serverbound position_look packet and waits for forcedMove (server ack). Breaks rubber-band state where server continuously resets bot position to teleport coordinates. Symptom: position frozen, look/pathfinder don't work, velocity.y != 0 but X/Z never change. Added 2026-04-02.
+
 ## Known issues / fixes (updated 2026-04-02 session 2)
 - bot.placeBlock() still uses mineflayer's 5s blockUpdate timeout internally — use safePlaceBlock() or plantSeeds() instead
 - bot.recipesFor() often returns [] when no table passed — use recipesFor() wrapper
